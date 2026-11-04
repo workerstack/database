@@ -39,6 +39,7 @@ const columns = getTableColumns(
 		big: blob("big", { mode: "bigint" }),
 		blobby: customType<{ data: string; driverData: Uint8Array }>({ dataType: () => "blob" })("blobby"),
 		count: integer("count"),
+		decimal: numeric("decimal"),
 		meta: text("meta", { mode: "json" }),
 		name: text("name"),
 		score: real("score"),
@@ -303,5 +304,14 @@ describe("a customType key's cursor value (AB2 of area B; sibling: QL5's blob)",
 		expect(boundCarried(pgItems.a, "a,b")).toBe("a,b")
 		expect(boundCarried(pgItems.a, 0.1)).toBe(0.1)
 		expect(boundCarried(columns.blobby, "1")).toBe("1")
+	})
+})
+
+/* B2-4 of area B: a SQLite numeric() key bound as read carries an integer value as its integer class's bigint */
+describe("a SQLite numeric() key's cursor value (B2-4 of area B; sibling: libsql's intMode string)", () => {
+	it("takes the text drizzle reads and the number a list carries for it, and no other text column that number", () => {
+		for (const value of ["0.1", "2", 2n, 0.1]) expect(fits("decimal", value), String(value)).toBe(true)
+		expect(fits("decimal", true)).toBe(false)
+		for (const value of [2n, 0.1]) expect(fits("name", value), String(value)).toBe(false)
 	})
 })
