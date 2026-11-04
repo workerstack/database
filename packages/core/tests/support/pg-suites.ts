@@ -14,6 +14,7 @@ export const PG_INTEGRATION = [
 	"tests/integration/postgres/**/*.test.ts",
 	"tests/integration/codegen/json-stored-document.test.ts",
 	"tests/integration/codegen/pg-arrays.test.ts",
+	"tests/integration/codegen/pg-ip.test.ts",
 	"tests/integration/codegen/pg-plain-json.test.ts",
 	"tests/integration/codegen/pg-schemas.test.ts",
 	"tests/integration/codegen/pg-types.test.ts",
