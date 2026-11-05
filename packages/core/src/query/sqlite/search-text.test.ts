@@ -73,3 +73,26 @@ describe("searchText on Cyrillic marks", () => {
 		expect(searchText("ё́ж")).toBe("ёж")
 	})
 })
+
+describe("searchText: the _search column's writer, which likeSearch reads with (Q14)", () => {
+	/* U31: vowel points and tatweel are optional and not typed, as Latin accents are */
+	it("drops Hebrew niqqud and cantillation, Arabic harakat and tatweel, keeping the letters", () => {
+		expect(searchText("שָׁלוֹם")).toBe(searchText("שלום"))
+		expect(searchText("مُحَمَّد")).toBe("محمد")
+		expect(searchText("مـحـمـد")).toBe("محمد")
+		expect(searchText("الْقُرْآن")).toBe(searchText("القرآن"))
+	})
+
+	it("folds case, diacritics and compatibility forms, and joins the parts it is given", () => {
+		expect(searchText("Évaluation", null, "Crème Brûlée", undefined)).toBe("evaluation creme brulee")
+		expect(searchText("ＦＩＬＥ ﬁx")).toBe("file fix")
+		expect(searchText()).toBe("")
+	})
+
+	it("folds the Latin letters NFKD leaves whole to their ASCII spelling, and keeps other scripts", () => {
+		expect(searchText("Straße ẞ Æon Œuvre Øre Łódź Đurđevac Ðór Þing ıi ĸ ŋ ŧ ħ")).toBe(
+			"strasse ss aeon oeuvre ore lodz durdevac dor thing ii k n t h",
+		)
+		expect(searchText("日本語 Ελλάδα Москва")).toBe("日本語 ελλαδα москва")
+	})
+})
