@@ -3,7 +3,8 @@
  * builder can type a user table with: operators of its own, contains, ordered text, ISO dates
  */
 import { describe, expect, it } from "vitest"
-import { parseFilterNumber, validateFilter } from "./filter-validate.ts"
+import { parseFilterNumber } from "./filter-typed.ts"
+import { validateFilter } from "./filter-validate.ts"
 
 /** The least normal double, 2^-1022 */
 const MIN_NORMAL = 2 ** -1022

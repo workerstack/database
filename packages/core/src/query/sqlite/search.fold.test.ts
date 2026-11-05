@@ -5,7 +5,7 @@
  * lowercase is the final sigma: toLowerCase writes Σ as ς at a word end and σ elsewhere.
  */
 import { describe, expect, it } from "vitest"
-import { searchText } from "./search.ts"
+import { searchText } from "./search-text.ts"
 
 /** Every scalar value, surrogates left out */
 function* scalars(): Generator<string> {

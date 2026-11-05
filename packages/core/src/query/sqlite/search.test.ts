@@ -10,8 +10,8 @@ import {
 	buildFtsWhereWithSpellfix,
 	likeSearch,
 	sanitizeFtsTerm,
-	searchText,
 } from "./search.ts"
+import { searchText } from "./search-text.ts"
 
 const dialect = new (SQLiteDialect as unknown as new () => {
 	sqlToQuery: (sql: SQL) => { params: unknown[]; sql: string }
