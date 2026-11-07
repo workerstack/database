@@ -127,8 +127,10 @@ type FieldMeta = {
 	isPrimaryKey: boolean
 	/** the name the generated DTO imports a c.json column's schema under, null for any other column */
 	jsonSchemaName: string | null
-	/** the names the field's generated schema uses and must import (a c.json schema) */
+	/** the names the field's generated schema uses and must import: a c.json schema, or the zod schema a text or number column's `schema` key names */
 	schemaImports: ImportRef[]
+	/** the input JSON Schema of the zod schema a text or number column's `schema` key names, self-contained and without `$schema`, which the generated DTOs publish beside it; null for any other column. The schema's import is the field's one `schemaImports` entry */
+	schemaJson: Readonly<Record<string, unknown>> | null
 	/** a Postgres array's declared dimensions; 0 or absent for a column of one value */
 	dimensions?: number | undefined
 	/** whether a Postgres array's elements may be null, as its drizzle type declares; false or absent otherwise */

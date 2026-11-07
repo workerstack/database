@@ -1,5 +1,7 @@
-/** What the runtime reader reads of a c helper's own record: its constraints and an enum's state machine, as JSON */
-import type { SnapshotComb } from "./snapshot-types.ts"
+/** What the runtime reader reads of a c helper's own record: its constraints, a column schema and an enum's state machine, as JSON */
+import * as z from "zod"
+import type { CombColumnMeta } from "../../meta/column.ts"
+import type { ModuleExport, SnapshotComb } from "./snapshot-types.ts"
 
 const STRING_LIST = (value: unknown): value is string[] =>
 	Array.isArray(value) && value.every((item) => typeof item === "string")
@@ -19,6 +21,72 @@ function constraintsOf(raw: unknown, at: string): Record<string, boolean | numbe
 		constraints[key] = value
 	}
 	return constraints
+}
+
+/** The packages a schema found nowhere might have been in, as its error names them; empty when every module loaded */
+const skipped = (unloaded: readonly string[]): string =>
+	unloaded.length === 0 ? "" : ` (${unloaded.join(", ")} would not load on their own)`
+
+/* the helpers whose `schema` key names a zod schema the generated DTOs pipe the value into; on any other the key stays a constraint, which the constraint check refuses by name */
+// lookup-table: the c helpers that take a column schema
+const SCHEMA_KINDS: ReadonlySet<string> = /* @__PURE__ */ new Set(["integer", "real", "text"])
+
+const DEFS = "#/$defs/"
+
+/**
+ * `node` with each `$ref` replaced by the entry of `defs` it points at, its sibling keywords kept:
+ * zod files a schema carrying an `id` under the root's `$defs`, a pointer that would dangle once the
+ * literal sits in another document's `allOf`. Every `$ref` zod writes points into `$defs`, as
+ * `cycles: "throw"` leaves no reference back to the root
+ */
+function inlined(node: unknown, defs: Readonly<Record<string, unknown>>): unknown {
+	if (Array.isArray(node)) return node.map((each) => inlined(each, defs))
+	if (typeof node !== "object" || node === null) return node
+	const { $ref, ...rest } = node as Record<string, unknown>
+	const own = Object.fromEntries(Object.entries(rest).map(([key, value]) => [key, inlined(value, defs)]))
+	if ($ref === undefined) return own
+	const name = ($ref as string).slice(DEFS.length).replaceAll("~1", "/").replaceAll("~0", "~")
+	return { ...(inlined(defs[name], defs) as object), ...own }
+}
+
+/** The input JSON Schema of a zod schema as a self-contained literal, `$schema` dropped; an error naming the column when zod has none */
+function inputJsonOf(schema: z.ZodType, at: string): Readonly<Record<string, unknown>> {
+	let json: Record<string, unknown>
+	try {
+		json = z.toJSONSchema(schema, { cycles: "throw", io: "input" }) as Record<string, unknown>
+	} catch (error) {
+		throw new Error(
+			`${at}: the schema its schema key is given has no JSON Schema form (zod: ${(error as Error).message}); comb publishes every DTO rule`,
+			{ cause: error },
+		)
+	}
+	const { $defs, $schema: _dropped, ...root } = json
+	return inlined(root, ($defs ?? {}) as Record<string, unknown>) as Record<string, unknown>
+}
+
+/**
+ * A helper's constraints with its `schema` key read: on a text or number column, taken out for the
+ * export that holds it and its input JSON Schema; on any other helper, kept as `true` for the
+ * constraint check to refuse. An error naming the column for a value that is no zod schema, and
+ * for one no module exports, naming the modules that would not load (`unloaded`)
+ */
+function columnSchemaOf(
+	meta: CombColumnMeta,
+	at: string,
+	{ locate, unloaded }: { locate: (value: unknown) => ModuleExport | null; unloaded: readonly string[] },
+): Pick<SnapshotComb, "schema" | "schemaJson"> & { constraints: Record<string, unknown> } {
+	const { schema: declared, ...constraints } = (meta.constraints ?? {}) as Record<string, unknown>
+	if (declared === undefined) return { constraints, schema: null, schemaJson: null }
+	if (!SCHEMA_KINDS.has(meta.kind))
+		return { constraints: { ...constraints, schema: true }, schema: null, schemaJson: null }
+	if (typeof declared !== "object" || declared === null || !("_zod" in declared))
+		throw new Error(`${at}: the constraint schema is no zod schema; comb's DTOs are zod 4, so the schema must be one`)
+	const schema = locate(declared)
+	if (schema === null)
+		throw new Error(
+			`${at}: no module of the project exports the schema its schema key is given${skipped(unloaded)}; export it, above the table that names it, so the generated DTOs can import it`,
+		)
+	return { constraints, schema, schemaJson: inputJsonOf(declared as z.ZodType, at) }
 }
 
 /* the keys a c.enum's state machine has; values, which docs/state-machines.md §4 holds in the same const, read from c.enum's second argument */
@@ -141,4 +209,4 @@ function refuseJsonDocument(
 		)
 }
 
-export { constraintsOf, refuseJsonDocument, statesOf, STRING_LIST }
+export { columnSchemaOf, constraintsOf, refuseJsonDocument, skipped, statesOf, STRING_LIST }

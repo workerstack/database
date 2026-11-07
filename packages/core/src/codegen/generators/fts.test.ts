@@ -47,6 +47,7 @@ function makeField(overrides: Partial<FieldMeta> & { name: string }): FieldMeta 
 		sqlType: "text",
 		unique: null,
 		schemaImports: [],
+		schemaJson: null,
 		sqlName: overrides.sqlName ?? overrides.name,
 		enumValues: null,
 		states: null,
