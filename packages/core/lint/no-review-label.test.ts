@@ -49,6 +49,7 @@ describe("comb/no-review-label", () => {
 		const fixture = {
 			"packages/core/src/a.ts":
 				"/* D1, FTS5, RE2, SHA256, ES2022, INT8 (P0001); see meta-contract §8.2 */\nexport const a = 'UTF8'\n",
+			"packages/core/src/zones.ts": "// the zone GMT0\nexport const zones = ['Etc/GMT0', `GMT0 UTC`]\n",
 			"packages/core/src/a.test.ts": "/* KC2 of r22b */\nexport const t = '(F50)'\n",
 			"packages/core/tests/b.ts": "/* KC2 of r22b */\nexport const b = 1\n",
 			"packages/core/src/cli/__fixtures__/c.ts": "/* KC2 of r22b */\nexport const c = 1\n",

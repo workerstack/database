@@ -62,6 +62,10 @@ describe("reviewLabels beyond a qualified label", () => {
 		).toEqual(["5.3", "27.17", "8.4b", "plan 14's 5.4b", "0005 of r22b", "r22b", ".tmp/grunt/r21/p1.log"])
 	})
 
+	it("still takes an ID shaped like a real name it is not", () => {
+		expect(reviewLabels("GMT1; GM0; GMT0a; (MT0)")).toEqual(["GMT1", "GM0", "GMT0a", "MT0"])
+	})
+
 	it("follows a label across a comment's line break", () => {
 		expect(reviewLabels("kept (KT7 of\n * r22b)")).toEqual(["KT7 of r22b"])
 		expect(reviewLabels("kept KT7 of\n// r22b")).toEqual(["KT7 of r22b"])
@@ -69,6 +73,8 @@ describe("reviewLabels beyond a qualified label", () => {
 
 	it("leaves real names and prose alone", () => {
 		expect(reviewLabels("D1, FTS5, RE2, SHA256, ES2022, UTF8, INT4, TS2306, (P0001), (XX000)")).toEqual([])
+		/* the IANA time zone GMT0 and its Etc/ form */
+		expect(reviewLabels("the zones GMT0 and Etc/GMT0 (GMT0)")).toEqual([])
 		expect(
 			reviewLabels(
 				"meta-contract §8.2; TypeScript 5.4 and 5.7; version 0.12; durations (1500ms, 1.5s, 1min); D1's and RE2's rules; 2.5 of them",
