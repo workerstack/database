@@ -19,7 +19,6 @@
 		"./src/sqlite/d1/error-handler.ts",
 		"./src/sqlite/d1/session.ts",
 		"./src/sqlite/d1/sharding/index.ts",
-		"./src/sqlite/patterns.ts",
 		"./src/states.ts",
 		"./src/types.ts"
 	]

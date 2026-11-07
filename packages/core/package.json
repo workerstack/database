@@ -124,11 +124,6 @@
 			"types": "./types/typescript-floor-types.d.ts",
 			"default": "./src/sqlite/d1/sharding/index.ts"
 		},
-		"./sqlite/patterns": {
-			"types@>=5.7": "./types/sqlite/patterns.d.ts",
-			"types": "./types/typescript-floor-types.d.ts",
-			"default": "./src/sqlite/patterns.ts"
-		},
 		"./states": {
 			"types@>=5.7": "./types/states.d.ts",
 			"types": "./types/typescript-floor-types.d.ts",

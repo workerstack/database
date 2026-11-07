@@ -224,6 +224,7 @@ declare function readCombQueryMeta(jsonSchema: unknown, options?: ReadOptions): 
 export { isRecord, type ReadOptions, readCombEntityMeta, readCombMeta, readCombQueryMeta };
 
 // codegen/analyzer-types.d.ts
+import type { IntegerFormat, TextFormat } from "../formats/catalog.ts";
 import type { CombColumnKind } from "../meta/column.ts";
 /**
  * TableMeta — serializable intermediate format produced by TableAnalyzer.
@@ -235,6 +236,8 @@ type FieldConstraintsMeta = {
     autogenerate: boolean;
     /** the generated DTOs take only an email address */
     email: boolean;
+    /** the standard the value is held to: a text's or an enum's text format, an integer's integer format; null when none is declared */
+    format: TextFormat | IntegerFormat | null;
     /** an https URL or a data:image/ URI */
     imageUri: boolean;
     /** the generated DTOs lowercase the text before they check it */
@@ -346,8 +349,10 @@ type FieldMeta = {
     isPrimaryKey: boolean;
     /** the name the generated DTO imports a c.json column's schema under, null for any other column */
     jsonSchemaName: string | null;
-    /** the names the field's generated schema uses and must import (a c.json schema) */
+    /** the names the field's generated schema uses and must import: a c.json schema, or the zod schema a text or number column's `schema` key names */
     schemaImports: ImportRef[];
+    /** the input JSON Schema of the zod schema a text or number column's `schema` key names, self-contained and without `$schema`, which the generated DTOs publish beside it; null for any other column. The schema's import is the field's one `schemaImports` entry */
+    schemaJson: Readonly<Record<string, unknown>> | null;
     /** a Postgres array's declared dimensions; 0 or absent for a column of one value */
     dimensions?: number | undefined;
     /** whether a Postgres array's elements may be null, as its drizzle type declares; false or absent otherwise */
@@ -482,6 +487,58 @@ declare function readUniqueIndexes(raw: unknown): UniqueIndexMeta[] | "invalid";
 declare function readPartialUniqueIndexes(raw: unknown): PartialUniqueIndexMeta[] | "invalid";
 export { isRecord, isStringArray, readPartialUniqueIndexes, readUniqueIndexes };
 
+// formats/catalog.d.ts
+/** The ids `c.text` and `c.enum` take as `format`, sorted by code unit */
+export declare const TEXT_FORMATS: readonly ["base64url", "bcp47", "e164", "iana-time-zone", "ip", "ipv4", "ipv6", "iso3166-1-alpha-2", "iso3166-1-alpha-3", "iso4217", "iso639-1", "kebab-slug", "pkce-s256-challenge", "rfc1123-hostname", "semver", "sha256-hex", "sha512-hex", "srgb-hex", "srgb-hex-alpha", "ulid", "uts35-ca", "uts35-fw", "uts35-hc", "uts35-ms", "uts35-mu", "uts35-nu", "uuid", "uuid-v4", "uuid-v7"];
+/** The ids `c.integer` takes as `format`, sorted by code unit */
+export declare const INTEGER_FORMATS: readonly ["iso8601-month", "iso8601-weekday"];
+/** A text format's id */
+export type TextFormat = (typeof TEXT_FORMATS)[number];
+/** An integer format's id */
+export type IntegerFormat = (typeof INTEGER_FORMATS)[number];
+/** The registry predicate a text format's value must also satisfy */
+type Member = "isIanaTimeZone" | "isIso3166Alpha2" | "isIso3166Alpha3" | "isIso4217" | "isIso639Alpha2";
+/** What a text format checks, after its transforms, on the value its DTO is given */
+export type FormatSpec = {
+    /** The standard and the release it follows, as a person reads it */
+    readonly standard: string;
+    /** The anchored pattern the value matches, portable to RE2 and JavaScript's `u` flag */
+    readonly source: string;
+    /** The fewest characters a value has */
+    readonly min: number;
+    /** The most characters a value has, or null when the format sets no cap and a column declares one */
+    readonly max: number | null;
+    /** The transforms that run, in order, before the check */
+    readonly transform: readonly ("lowercase" | "trim" | "uppercase")[];
+    /** The pinned registry the value must belong to, by its predicate's name, or null when the source is the whole rule */
+    readonly member: Member | null;
+    /** A value of the format as written, which the format takes and a generated DTO publishes as its example */
+    readonly example: string;
+};
+/** The range an integer format's value lies in */
+export type IntegerSpec = {
+    /** The standard that numbers the values, as a person reads it */
+    readonly standard: string;
+    /** The least value */
+    readonly min: number;
+    /** The greatest value */
+    readonly max: number;
+};
+/** Every text format's spec, by id */
+export declare const FORMATS: {
+    readonly [F in TextFormat]: FormatSpec;
+};
+/** Every integer format's range, by id */
+export declare const INTEGER_SPECS: {
+    readonly [F in IntegerFormat]: IntegerSpec;
+};
+/**
+ * Whether `format` takes `value` exactly as written, its transforms not run: within the format's
+ * length bounds, matching its source, and a member of its registry when it names one. Never throws.
+ */
+export declare function formatTakes(format: TextFormat, value: string): boolean;
+export {};
+
 // meta/column.d.ts
 /**
  * What a `c` helper records on the column it builds, for codegen to read at runtime: the helper's
@@ -505,10 +562,16 @@ declare function withCombColumn<B>(builder: B, meta: {
 }): B;
 /** The comb metadata a built column (or its builder) carries; undefined for a column no `c` helper built */
 declare function combColumnMeta(column: unknown): CombColumnMeta | undefined;
-/** A c.enum's options as its column's record: the flags its constraints, the rest its state machine, none when it names no state */
+/**
+ * A c.enum's options as its column's record: its constraints (the flags, its `format`, and a `schema`
+ * a JavaScript caller passes, kept for codegen to refuse by name), the rest its state machine, none
+ * when it names no state
+ */
 declare function enumMeta(values: readonly string[], options?: {
+    format?: string | undefined;
     nomutate?: boolean | undefined;
     private?: boolean | undefined;
+    schema?: unknown;
     tenant?: boolean | undefined;
 }): {
     [K in keyof CombColumnMeta]: CombColumnMeta[K] | undefined;
