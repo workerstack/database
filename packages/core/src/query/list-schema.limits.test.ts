@@ -325,3 +325,30 @@ describe("a malformed order is an issue on order (QL7 of r22b; sibling: the publ
 		)
 	})
 })
+
+/* QL6: a whole number past maxPage is page_too_deep at every magnitude, not a field issue past 2^53 or invalid_page near 1e308 */
+describe("the page bound (QL6)", () => {
+	it("answers a page past maxPage page_too_deep whatever its size or spelling", async () => {
+		const schema = createListQuerySchema({ sort: ["id"] })
+		const cases: [unknown, string][] = [
+			["10001", "10001"],
+			["99999999999999999999", "99999999999999999999"],
+			["9007199254740993", "9007199254740993"],
+			[1e21, "1e+21"],
+			["1".padEnd(400, "0"), `1${"0".repeat(23)}…`],
+			["9".repeat(5000), `${"9".repeat(24)}…`],
+		]
+		for (const [page, shown] of cases) {
+			const thrown = expect.objectContaining({
+				cause: `page ${shown} is past 10000; page further by cursor`,
+				errorKey: "page_too_deep",
+				status: 400,
+			})
+			expect(() => schema.safeParse({ page }), String(page).slice(0, 12)).toThrow(thrown)
+			await expect(schema["~standard"].validate({ page })).rejects.toThrow(thrown)
+		}
+		/* a number that is no whole number stays invalid_page, whatever its size */
+		for (const page of [Number.POSITIVE_INFINITY, Number.NaN, 1.5])
+			expect(() => schema.safeParse({ page })).toThrow(expect.objectContaining({ errorKey: "invalid_page" }))
+	})
+})

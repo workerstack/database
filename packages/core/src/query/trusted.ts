@@ -84,10 +84,15 @@ function invalidPage(page: unknown): CombError {
 	})
 }
 
+/** The most digits of a page past `maxPage` its message names */
+const PAGE_SHOWN = 24
+
 /** The 400 for a page past `maxPage`, from a list schema or from a list no schema bounded */
-function pageTooDeep(page: number, maxPage: number): CombError {
+function pageTooDeep(page: number | string, maxPage: number): CombError {
+	/* a page of any size reaches here as digits, so the message keeps the front of it, not all */
+	const shown = String(page)
 	return new CombError({
-		cause: `page ${page} is past ${maxPage}; page further by cursor`,
+		cause: `page ${shown.length > PAGE_SHOWN ? `${shown.slice(0, PAGE_SHOWN)}…` : shown} is past ${maxPage}; page further by cursor`,
 		errorKey: combErrorKeys.PAGE_TOO_DEEP,
 		status: "bad_request",
 	})

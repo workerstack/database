@@ -24,7 +24,6 @@ import {
 	selectQueryFieldFor,
 	sortDirectionEnum,
 } from "./schema-params.ts"
-import { pageTooDeep } from "./trusted.ts"
 import type { ListQueryConfig, ListQueryLimits, ListQueryOutput, OutputStableShape } from "./schema-types.ts"
 import { validateSelectWithConfig } from "./select-validate.ts"
 import type { FieldType } from "./types.ts"
@@ -178,7 +177,6 @@ function createListQuerySchema<
 
 	const { maxLimit = PAGINATION_DEFAULTS.maxLimit, maxPage = PAGINATION_DEFAULTS.maxPage } = config.pagination ?? {}
 	const piped = schema.transform((data, ctx): ExtendedOutput => {
-		if (data.page !== undefined && data.page > maxPage) throw pageTooDeep(data.page, maxPage)
 		/* Optional params exist on `data` only when advertised above. */
 		const optional = data as {
 			filter?: string | undefined

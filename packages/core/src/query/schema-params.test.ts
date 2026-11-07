@@ -50,13 +50,13 @@ describe("a limit or page of more digits than its maximum", () => {
 		}
 	})
 
-	it("takes a page at maxPage's digits, refuses padding one digit past them as invalid_page, and keeps a deeper page for maxPage's page_too_deep", () => {
+	it("takes a page at maxPage's digits, refuses padding one digit past them as invalid_page, and a deeper page as page_too_deep", () => {
 		const page = pageSchemaFor(undefined)
 		expect(page.parse("00005")).toBe(5)
 		expect(page.parse("10000")).toBe(10_000)
 		for (const raw of ["000005", `${"0".repeat(20_000)}2`])
 			expect(() => page.parse(raw), raw.slice(0, 8)).toThrow(expect.objectContaining({ errorKey: "invalid_page" }))
-		expect(page.parse("100000")).toBe(100_000)
+		expect(() => page.parse("100000")).toThrow(expect.objectContaining({ errorKey: "page_too_deep" }))
 	})
 })
 
