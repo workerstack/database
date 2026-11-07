@@ -4,7 +4,7 @@
  *
  * - `field.op.value`: one condition; `,` joins conditions with AND
  * - `or(...)`, `and(...)`: groups, nestable
- * - `in.(a,b)`, `nin.(a,b)`: lists
+ * - `in.(a,b)`, `nin.(a,b)`: lists; `in.()` is the one empty list, and a comma beside no member is malformed
  * - `"..."`: a quoted value may hold `,` `(` `)` and `.`; `\"` and `\\` escape inside it
  * - `@name`: a computed field
  */
@@ -31,24 +31,41 @@ const FILTER_OPERATORS: readonly [FilterOperator, ...FilterOperator[]] = [
 /** An operator and the `.` after it; longest first, so `neq.` is not read as `ne` then `q.` */
 const OPERATOR_PATTERN = /^(contains|ilike|like|neq|gte|lte|nin|eq|ne|gt|lt|in|is)\./
 
+/** What a refused filter is told: this alone when no more is known, else this and the reason */
+const SYNTAX = "Invalid filter syntax"
+
 class FilterParser {
 	private pos = 0
-	private malformed = false
+	/** Why the input is untrustworthy, the first reason met; null while every term parsed */
+	private failure: string | null = null
 	private readonly input: string
+	/** Whitespace the caller's string held before the input: positions are told in the caller's string */
+	private readonly offset: number
 
-	constructor(input: string) {
+	constructor(input: string, offset: number) {
 		this.input = input
+		this.offset = offset
 	}
 
-	/** True when any term could not be parsed: the input is not trustworthy. */
-	get hadError(): boolean {
-		return this.malformed
+	/** Why any term could not be parsed, or null: the input is not trustworthy while this is set. */
+	get error(): string | null {
+		return this.failure
+	}
+
+	/** Mark the input malformed; the first reason stays */
+	private fail(reason: string = SYNTAX): void {
+		this.failure ??= reason
+	}
+
+	/** Mark a comma beside no member, told by where the member should stand */
+	private failEmptyMember(at: number): void {
+		this.fail(`${SYNTAX}: empty member at position ${at + this.offset}`)
 	}
 
 	parse(): FilterAST {
 		const root = this.parseGroup("and")
 		/* a stray ")" stops the top-level group early; anything left is unparsed */
-		if (this.pos < this.input.length) this.malformed = true
+		if (this.pos < this.input.length) this.fail()
 		return { root }
 	}
 
@@ -66,18 +83,26 @@ class FilterParser {
 			this.skipWhitespace()
 			if (this.peek() !== ",") break
 			this.pos++
+			/* a comma owes a member: a group that ends on one holds an empty member */
+			if (this.skipWhitespace() >= this.input.length || this.peek() === ")") {
+				this.failEmptyMember(this.pos)
+				break
+			}
 		}
 		return group
 	}
 
 	/** One condition into `group`; a term it cannot read is skipped and marks the input malformed */
 	private parseTerm(group: FilterGroup): void {
+		const start = this.pos
 		const condition = this.parseCondition()
 		if (condition) {
 			group.conditions.push(condition)
 			return
 		}
-		this.malformed = true
+		/* a term that starts at its comma is an empty member, beside another comma or leading the group */
+		if (this.input[start] === ",") this.failEmptyMember(start)
+		else this.fail()
 		while (this.pos < this.input.length && this.peek() !== "," && this.peek() !== ")") this.pos++
 	}
 
@@ -113,14 +138,21 @@ class FilterParser {
 		const values: string[] = []
 		while (this.skipWhitespace() < this.input.length && this.peek() !== ")") {
 			const quoted = this.peek() === '"'
+			const at = this.pos
 			const value = this.readValue()
+			/* a bare member with nothing in it stands beside a comma; only a quoted one may be empty */
 			if (quoted || value !== "") values.push(value)
+			else this.failEmptyMember(at)
 			/* a quoted member ends at its quote: only a comma or the list's end may follow */
 			if (quoted && this.skipWhitespace() < this.input.length && this.peek() !== "," && this.peek() !== ")") {
-				this.malformed = true
+				this.fail()
 				return values
 			}
-			if (this.peek() === ",") this.pos++
+			if (this.peek() === ",") {
+				this.pos++
+				/* a comma owes a member: `in.(x,)` holds an empty one, `in.()` is the only empty list */
+				if (this.skipWhitespace() >= this.input.length || this.peek() === ")") this.failEmptyMember(this.pos)
+			}
 		}
 		this.expect(")")
 		return values
@@ -135,7 +167,7 @@ class FilterParser {
 		const start = this.pos
 		while (this.pos < this.input.length && this.peek() !== "," && this.peek() !== ")") this.pos++
 		const value = this.input.slice(start, this.pos).trim()
-		if (value.includes("(")) this.malformed = true
+		if (value.includes("(")) this.fail()
 		return value
 	}
 
@@ -152,7 +184,7 @@ class FilterParser {
 			value += this.peek()
 		}
 		/* an unterminated quote */
-		this.malformed = true
+		this.fail()
 		return value
 	}
 
@@ -167,7 +199,7 @@ class FilterParser {
 	/** A group that is never closed leaves the input unbalanced: reject it. */
 	private expect(char: string): void {
 		if (this.peek() === char) this.pos++
-		else this.malformed = true
+		else this.fail()
 	}
 
 	/** Step past whitespace; returns the new position */
@@ -178,15 +210,25 @@ class FilterParser {
 }
 
 /**
+ * The AST of a non-blank filter string, or why it cannot be read, in words for a caller to show: a
+ * filter the parser does not fully understand is refused, never reduced to "no filter", which
+ * would widen the result to the whole table on a typo.
+ */
+function readFilter(input: string): { ast: FilterAST } | { error: string } {
+	const parser = new FilterParser(input.trim(), input.length - input.trimStart().length)
+	const ast = parser.parse()
+	return parser.error === null ? { ast } : { error: parser.error }
+}
+
+/**
  * The AST of a filter string, or null when there is none or any part of it cannot be read: a
  * filter the parser does not fully understand is refused, never reduced to "no filter", which
  * would widen the result to the whole table on a typo.
  */
 function parseFilter(input: string | null | undefined): FilterAST | null {
 	if (!input || input.trim() === "") return null
-	const parser = new FilterParser(input.trim())
-	const ast = parser.parse()
-	return parser.hadError ? null : ast
+	const read = readFilter(input)
+	return "ast" in read ? read.ast : null
 }
 
-export { FILTER_OPERATORS, parseFilter }
+export { FILTER_OPERATORS, parseFilter, readFilter }

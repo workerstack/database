@@ -11,6 +11,20 @@ function recorder() {
 	return { ctx: ctx as unknown as z.RefinementCtx, issues }
 }
 
+/* QL14: a comma beside no member is an issue on filter naming where, not a filter with the member dropped */
+describe("filterAstOf — an empty member", () => {
+	it.each([
+		["n.eq.1,", 7],
+		["n.in.(1,,2)", 8],
+	])("is an issue on filter for %j", (filter, position) => {
+		const { ctx, issues } = recorder()
+		expect(filterAstOf(filter, { fields: { n: "number" as const }, limits: FILTER_LIMITS }, ctx)).toBeNull()
+		expect(issues).toEqual([
+			{ message: `Invalid filter syntax: empty member at position ${position}`, path: ["filter"] },
+		])
+	})
+})
+
 describe("filterAstOf", () => {
 	const param = { fields: { n: "number" as const }, limits: FILTER_LIMITS }
 
