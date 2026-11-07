@@ -57,3 +57,36 @@ describe("c column metadata", () => {
 		expect(combColumnMeta({ config: {} })).toBeUndefined()
 	})
 })
+
+/* plan 24: an enum's format and schema are constraints, never part of its state machine */
+describe("c.enum format and schema", () => {
+	const CYCLES = ["h12", "h23"] as const
+	const start = { initial: "h23" } as const
+
+	it("keeps format among the constraints and out of the states", () => {
+		const table = getTableColumns(
+			pgTable("t", {
+				cycle: c.enum("cycle", CYCLES, { format: "uts35-hc" }),
+				staged: c.enum("staged", CYCLES, { ...start, format: "uts35-hc", nomutate: true }),
+				unset: c.enum("unset", CYCLES, { format: undefined }),
+			}),
+		)
+		expect(combColumnMeta(table.cycle)).toEqual({ constraints: { format: "uts35-hc" }, kind: "enum", values: CYCLES })
+		expect(combColumnMeta(table.staged)).toEqual({
+			constraints: { format: "uts35-hc", nomutate: true },
+			kind: "enum",
+			states: start,
+			values: CYCLES,
+		})
+		expect(combColumnMeta(table.unset)).toEqual({ kind: "enum", values: CYCLES })
+	})
+
+	it("keeps a schema a JavaScript caller passes among the constraints, for codegen to refuse by name", () => {
+		const given = z.enum(CYCLES)
+		// @ts-expect-error c.enum takes no schema: its values are its rule
+		const cycle = c.enum("cycle", CYCLES, { schema: given })
+		const meta = combColumnMeta(getTableColumns(pgTable("t", { cycle })).cycle)
+		expect(meta).toEqual({ constraints: { schema: given }, kind: "enum", values: CYCLES })
+		expect(meta?.constraints?.["schema"]).toBe(given)
+	})
+})
