@@ -1,6 +1,6 @@
 /**
  * comb's one cleanup rule: what a run makes outside itself (a scratch
- * directory, a replay database) is held here until the run lets it go, and SIGINT or SIGTERM runs
+ * directory, a replay database) is held here until the run lets it go, and a stop signal runs
  * every step still held before the process ends as the signal would. A scratch directory is named
  * for the process that made it, so a later run removes one a killed process left at once, by
  * whether that process still runs.
@@ -17,8 +17,16 @@ type Step = (signal: NodeJS.Signals) => unknown
 // per-process-constant: what this process holds now
 const held = /* @__PURE__ */ new Set<Step>()
 
-/* the signals a held step runs on: a Ctrl-C, and what a supervisor, a container stop or a CI step timeout sends */
-const SIGNALS = ["SIGINT", "SIGTERM"] as const
+/**
+ * The signals a held step runs on: every one whose default action ends the process and that a
+ * terminal or a supervisor sends. A Ctrl-C (SIGINT), a Ctrl-\ (SIGQUIT), a container stop or a CI
+ * step timeout (SIGTERM), and a terminal's hangup, as an SSH drop sends it (SIGHUP): a child in a
+ * group of its own gets none of them from the terminal, so comb's forward is its only signal.
+ */
+export const STOP_SIGNALS = ["SIGHUP", "SIGINT", "SIGQUIT", "SIGTERM"] as const
+
+/** One of STOP_SIGNALS */
+export type StopSignal = (typeof STOP_SIGNALS)[number]
 
 // per-process-constant: the steps a signal is running, so a step's own work goes on while what it stops waits
 const inStep = /* @__PURE__ */ new AsyncLocalStorage<true>()
@@ -77,7 +85,7 @@ function stop(signal: NodeJS.Signals): void {
 		gate = undefined
 		if (process.listenerCount(signal) > 1) return current.let()
 		/* both gone before the signal comes again, so it ends the process, and what waits for this stop waits on */
-		for (const each of SIGNALS) process.off(each, stop)
+		for (const each of STOP_SIGNALS) process.off(each, stop)
 		process.kill(process.pid, signal)
 	})
 }
@@ -101,11 +109,11 @@ export function pastStop(): Promise<void> {
 }
 
 /**
- * Hold `step` until the release this returns, so SIGINT and SIGTERM run it before the process ends.
+ * Hold `step` until the release this returns, so a stop signal runs it before the process ends.
  * The listener is read from the process, not remembered: a host that removed every listener gets it back.
  */
 export function hold(step: Step): () => void {
-	for (const signal of SIGNALS) if (!process.listeners(signal).includes(stop)) process.on(signal, stop)
+	for (const signal of STOP_SIGNALS) if (!process.listeners(signal).includes(stop)) process.on(signal, stop)
 	held.add(step)
 	return () => void held.delete(step)
 }
@@ -199,7 +207,7 @@ export type Scratch = { dir: string; remove(): void }
 
 /**
  * A new directory under the temp directory that only this user can open (0700), named `prefix`, this
- * process's pid and host mark, and removed by `remove`, or by SIGINT or SIGTERM before it. A
+ * process's pid and host mark, and removed by `remove`, or by a stop signal before it. A
  * process's first scratch of a prefix sweeps what killed runs left.
  */
 export function scratchDir(prefix: string): Scratch {

@@ -12,6 +12,7 @@ import {
 	onSignals,
 	SCRATCH_STALE_MS,
 	scratchDir,
+	STOP_SIGNALS,
 	sweepScratch,
 } from "./cleanup.ts"
 
@@ -171,7 +172,11 @@ describe("scratchDir", () => {
 describe("a signal (S2, KC5 and PA4 of r22)", () => {
 	const kill = stubKill()
 
-	it.each([["SIGINT"], ["SIGTERM"]] as const)(
+	it("answers every signal whose default action ends the process and that a terminal or a supervisor sends (PA3 of r23)", () => {
+		expect([...STOP_SIGNALS].sort()).toEqual(["SIGHUP", "SIGINT", "SIGQUIT", "SIGTERM"])
+	})
+
+	it.each(STOP_SIGNALS.map((signal) => [signal]))(
 		"on %s runs every held step once, then ends the process by it again",
 		async (signal) => {
 			const steps = [vi.fn(), vi.fn(async () => undefined)]
