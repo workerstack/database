@@ -97,3 +97,26 @@ describe("select nested past the parser's depth bound (S-L2)", () => {
 		])
 	})
 })
+
+/* QL13: a wildcard expanded before the check dropped the unknown field beside it, and the select answered 200 */
+describe("an undeclared field beside a wildcard", () => {
+	const config = { relationFields: { author: ["name"] }, relations: ["author"], scalars: ["id", "title"] }
+	const issuesOf = (select: string) => {
+		const issues: string[] = []
+		const ctx = { addIssue: (issue: { message: string }) => issues.push(issue.message) } as unknown as z.RefinementCtx
+		validateSelectWithConfig(select, config, ctx)
+		return issues
+	}
+
+	it("is reported at the root and in a relation, as it is alone", () => {
+		expect(issuesOf("secret")).toEqual(["Unknown field: secret"])
+		expect(issuesOf("*,secret")).toEqual(["Unknown field: secret"])
+		expect(issuesOf("secret,*")).toEqual(["Unknown field: secret"])
+		expect(issuesOf("author(*,age)")).toEqual(["Unknown author field: age"])
+		expect(issuesOf("*,nope,author(*,age,name)")).toEqual(["Unknown field: nope", "Unknown author field: age"])
+	})
+
+	it("leaves a declared or computed name beside a wildcard alone", () => {
+		expect(issuesOf("*,id,@score,author(*,name,@rank)")).toEqual([])
+	})
+})
