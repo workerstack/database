@@ -87,6 +87,21 @@ describe("aliasSchemaImports", () => {
 	})
 })
 
+/* plan 24: a text or number column's schema is imported and aliased as a c.json one is, and stays no c.json type */
+describe("aliasSchemaImports on a scalar column's schema", () => {
+	it("aliases its import and leaves the field's jsonSchemaName null", () => {
+		const order = project("/app/schemas.ts", "comb")
+		const scalar = { jsonSchemaName: null, name: "order", schemaImports: [order], schemaJson: { type: "string" } }
+		const input = {
+			...analysis([["user", []]]),
+			tables: [{ fields: [scalar], varName: "user" }],
+		} as unknown as AnalysisResult
+		const result = aliasSchemaImports(input, "/app")
+		expect(namesOf(result)).toEqual([[[null, "combFromSchemas", "comb"]]])
+		expect(result.imports.jsonSchemaImports).toEqual(new Set(["combFromSchemas"]))
+	})
+})
+
 /* the reviewer's reading of F1: generated output is byte-identical wherever the project is checked out */
 /** One table importing a root module's `profile` and a lib module's, under `root` */
 const layout = (root: string): Array<[string, ImportRef[]]> => [

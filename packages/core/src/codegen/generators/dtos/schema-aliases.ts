@@ -1,5 +1,6 @@
 /**
- * The local names an entity file imports its c.json schemas under. A
+ * The local names an entity file imports its column schemas under, a c.json column's and a text or
+ * number column's alike. A
  * schema is its module's export, so two modules' `profile` are two imports: an export name more than
  * one module gives, or one a generated file declares itself, is imported under an alias that names
  * its module, `profileFromWorkSchemas`, numbered on if that is taken too. Which names keep their own
@@ -37,7 +38,7 @@ function moduleWord(ref: ImportRef, root: string): string {
 }
 
 /**
- * The analysis with each c.json schema import under a local name of its own in every file it is
+ * The analysis with each column schema import under a local name of its own in every file it is
  * imported into; `root` the project's, which a module's path is taken from
  */
 function aliasSchemaImports(analysis: AnalysisResult, root: string): AnalysisResult {
@@ -83,7 +84,8 @@ function aliasSchemaImports(analysis: AnalysisResult, root: string): AnalysisRes
 			if (ref === undefined) return field
 			return {
 				...field,
-				jsonSchemaName: names.get(keyed(ref)) as string,
+				/* a text or number column's schema is piped into, never a c.json column's type */
+				jsonSchemaName: field.jsonSchemaName === null ? null : (names.get(keyed(ref)) as string),
 				schemaImports: field.schemaImports.map(named),
 			}
 		}),
