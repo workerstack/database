@@ -14,7 +14,7 @@ import {
 import { FILTER_OPERATORS } from "./filter-parse.ts"
 import { PAGINATION_DEFAULTS } from "./schema-limits.ts"
 import type { FieldsConfig, PaginationConfig } from "./schema-types.ts"
-import { invalidPage } from "./trusted.ts"
+import { invalidPage, pageTooDeep } from "./trusted.ts"
 import type { FieldSelection, FilterAST, FilterGroup, ParsedFields } from "./types.ts"
 
 /** The `select` param for an endpoint of these fields, its text and examples theirs */
@@ -88,10 +88,17 @@ function fromDigits(raw: unknown, max: number): unknown {
 	return DECIMAL_DIGITS.test(raw) && !padded ? Number(raw) : Number.NaN
 }
 
-/** `raw` as a page, a whole number from 1; anything else is invalid_page, as the builders answer it */
+/**
+ * `raw` as a page, a whole number from 1 to `maxPage`: past it, whatever its size, is `page_too_deep`,
+ * decided here on the digits before any number the schema could refuse exists; anything else is
+ * invalid_page, as the builders answer it. A digit string past 1e308 reads as Infinity: it is whole
+ */
 function pageFrom(raw: unknown, maxPage: number): unknown {
 	const page = fromDigits(raw, maxPage)
-	if (typeof page !== "number" || !Number.isInteger(page) || page < 1) throw invalidPage(raw)
+	const isDigits = typeof raw === "string"
+	if (typeof page !== "number" || page < 1 || !(Number.isInteger(page) || (isDigits && page === Infinity)))
+		throw invalidPage(raw)
+	if (page > maxPage) throw pageTooDeep(isDigits ? raw.replace(/^0+/, "") : page, maxPage)
 	return page
 }
 
@@ -147,8 +154,8 @@ function limitSchemaFor(pagination: PaginationConfig | undefined): z.ZodDefault<
 /**
  * The `page` param: decimal digits or a number, a whole number from 1. Neither bound is a field
  * error, which would give one condition two contracts: a page that is no whole number from 1 is
- * `invalid_page`, and maxPage, published but not checked here, is the list schema's
- * `page_too_deep`, each as an unbounded list answers it
+ * `invalid_page`, and one past maxPage is `page_too_deep` at any size, each as an unbounded list
+ * answers it
  */
 function pageSchema(maxPage: number): z.ZodOptional<CountParam> {
 	const page = z
