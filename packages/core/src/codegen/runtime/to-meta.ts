@@ -173,19 +173,21 @@ function fieldOf(column: SnapshotColumn, { file, table, tables }: Build): FieldM
 			`${place}: comb has no rule for a ${column.columnType} column (${column.dataType}); build it with a c helper, or as drizzle ${TYPED_COLUMNS[table.dialect]}`,
 		)
 	const filled = isFilled(column, kind)
+	const facts = combFactsOf(column)
 	const constraints = fieldConstraintsOf(column.comb?.constraints ?? {}, {
 		fieldName: column.key,
 		filled,
 		helper: kind,
 		measure: measuredBy(column, kind),
 		place,
+		values: facts.enumValues,
 	})
 	if (constraints.mutable && column.foreignKey === null && kind !== "ref")
 		throw new Error(`${place}: mutable lets a reference move on update, and ${column.key} references nothing`)
 	if (constraints.relation !== null && column.foreignKey === null)
 		throw new Error(`${place}: relation names the relation of a key, and ${column.key} references nothing`)
 	return {
-		...combFactsOf(column),
+		...facts,
 		autoIncrement: column.autoIncrement,
 		columnType: column.columnType,
 		combKind: kind,

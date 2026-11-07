@@ -11,6 +11,7 @@ function makeField(overrides: Partial<FieldMeta> & { name: string }): FieldMeta 
 		constraints: {
 			autogenerate: false,
 			email: false,
+			format: null,
 			imageUri: false,
 			lowercase: false,
 			max: null,
