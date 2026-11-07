@@ -1,6 +1,6 @@
 /**
- * PA4 of r22: a Postgres apply stopped by SIGINT or SIGTERM to comb's pid alone, as a supervisor, a
- * container stop or a CI step timeout sends it, while Atlas applies. comb passes the signal to Atlas,
+ * PA4 of r22, PA3 of r23: a Postgres apply stopped by SIGHUP, SIGINT, SIGQUIT or SIGTERM to comb's pid
+ * alone, as a dropped SSH session, a Ctrl-C, a supervisor, a container stop or a CI step timeout sends it, while Atlas applies. comb passes the signal to Atlas,
  * waits for it to end, reads the history once and says what was applied and what was not, then ends
  * as the signal would: no Atlas left running, nothing after the stopped file recorded, and no
  * scratch left. The Atlas here is the real one behind a stand-in that holds the second apply call
@@ -17,10 +17,11 @@ import {
 	rmSync,
 	writeFileSync,
 } from "node:fs"
-import { tmpdir } from "node:os"
+import { constants, tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { hashDir } from "../../../src/migrate/core/atlas-dir.ts"
+import { STOP_SIGNALS } from "../../../src/migrate/core/cleanup.ts"
 import { run } from "../../../src/migrate/core/process.ts"
 import { recordWhole, running, runs, type Seen, see, send } from "../../support/pid.ts"
 import { withScratchDb } from "../support/pg.ts"
@@ -129,11 +130,9 @@ async function until(done: () => boolean, what: string): Promise<void> {
 	}
 }
 
-describe("a Postgres apply stopped by a signal while Atlas applies (PA4 of r22)", () => {
-	it.each([
-		["SIGINT", 130],
-		["SIGTERM", 143],
-	] as const)(
+describe("a Postgres apply stopped by a signal while Atlas applies (PA4 of r22, PA3 of r23)", () => {
+	/* a shell reports a process a signal ended as 128 plus its number */
+	it.each(STOP_SIGNALS.map((signal) => [signal, 128 + constants.signals[signal]] as const))(
 		"on %s passes it to Atlas, says once what was applied, records nothing after, and ends as the signal would",
 		async (signal, code) => {
 			const [dir, bin, tmp] = [join(root, "m"), join(root, "bin"), join(root, "tmp")]

@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileS
 import { devNull, tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { STOP_SIGNALS } from "./cleanup.ts"
 import { ATLAS_RANGE, run, runPeer } from "./process.ts"
 import { onBun } from "../../../tests/support/runtime.ts"
 import { recordWhole, running, runs } from "../../../tests/support/pid.ts"
@@ -265,7 +266,7 @@ describe("run, asynchronous (PA4 of r22)", () => {
 
 /** A child that writes `ready` once it listens, then waits; on a signal it writes which to `got` and ends by it */
 const SIGNALLED = (ready: string, got: string) =>
-	`for (const s of ['SIGINT', 'SIGTERM']) process.on(s, () => { require('fs').writeFileSync(${JSON.stringify(got)}, s); process.kill(process.pid, 'SIGKILL') }); ${recordWhole(ready, "String(process.pid)")}; setInterval(() => {}, 1000)`
+	`for (const s of ${JSON.stringify(STOP_SIGNALS)}) process.on(s, () => { require('fs').writeFileSync(${JSON.stringify(got)}, s); process.kill(process.pid, 'SIGKILL') }); ${recordWhole(ready, "String(process.pid)")}; setInterval(() => {}, 1000)`
 
 describe("run under a signal (PA4 of r22)", () => {
 	const kill = stubKill()
@@ -275,7 +276,7 @@ describe("run under a signal (PA4 of r22)", () => {
 	})
 	afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
-	it.each([["SIGINT"], ["SIGTERM"]] as const)(
+	it.each(STOP_SIGNALS.map((signal) => [signal]))(
 		"on %s passes the signal to the child, waits for its end, and only then ends comb, its caller never resumed",
 		async (signal) => {
 			const [ready, got] = [join(dir, "ready"), join(dir, "got")]
