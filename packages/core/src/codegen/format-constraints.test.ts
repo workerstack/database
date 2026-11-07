@@ -4,7 +4,7 @@ import { formatOf } from "./format-constraints.ts"
 
 const at = "/fixture/db.core.tables.ts: fixture.f"
 
-/** A thunk that reads a column written as `source`, as codegen reads it */
+/** A thunk that reads a column written as `source`, as codegen reads it; a refusal below is asserted whole, so a word past it fails */
 const reading = (source: string) => () => fieldOf("f", source).constraints
 
 const TEXT_IDS =
@@ -26,7 +26,7 @@ describe("a format's id: one the helper's kind knows", () => {
 		['c.integer("f", { format: "iso4217" })', `c.integer takes no format "iso4217"; integer formats: ${INTEGER_IDS}`],
 		['c.integer("f", { format: "iso-8601" })', `comb knows no format "iso-8601"; integer formats: ${INTEGER_IDS}`],
 	])("refuses %s", (source, said) => {
-		expect(reading(source)).toThrow(`${at}: ${said}`)
+		expect(reading(source)).toThrow(new Error(`${at}: ${said}`))
 	})
 })
 
@@ -50,7 +50,7 @@ describe("a text format: it sets the case, the trim and the length", () => {
 		['c.text("f", { format: "bcp47", max: 1 })', "max 1 is below bcp47's min length 2: no value is both"],
 		['c.text("f", { format: "bcp47", min: 1 })', "min 1 is below bcp47's min length 2: the format holds it"],
 	])("refuses %s", (source, said) => {
-		expect(reading(source)).toThrow(`${at}: ${said}`)
+		expect(reading(source)).toThrow(new Error(`${at}: ${said}`))
 	})
 
 	it.each([
@@ -75,7 +75,7 @@ describe("an integer format: it sets the range", () => {
 		['c.integer("f", { format: "iso8601-month", min: 13 })', "min 13 is past iso8601-month's 12: no value is both"],
 		['c.integer("f", { format: "iso8601-month", max: 0 })', "max 0 is below iso8601-month's 1: no value is both"],
 	])("refuses %s", (source, said) => {
-		expect(reading(source)).toThrow(`${at}: ${said}`)
+		expect(reading(source)).toThrow(new Error(`${at}: ${said}`))
 	})
 
 	it("takes a range inside the format's, as declared", () => {
@@ -103,7 +103,7 @@ describe("an enum format: each value one the standard writes", () => {
 			'"europe/paris" is no iana-time-zone value',
 		],
 	])("refuses %s", (source, said) => {
-		expect(reading(source)).toThrow(`${at}: ${said}`)
+		expect(reading(source)).toThrow(new Error(`${at}: ${said}`))
 	})
 
 	it.each([

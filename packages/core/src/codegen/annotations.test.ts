@@ -270,7 +270,7 @@ describe("each c helper takes only the keys its constraint type names (CD9 of r2
 	})
 })
 
-/* plan 24: fieldConstraintsOf returns a column's format; format-constraints.test.ts holds what it refuses */
+/* plan 24: fieldConstraintsOf returns a column's format; format-constraints.test.ts holds what it refuses. Each refusal is asserted whole, so formatOf's longer text cannot stand in for the key check's */
 describe("parseFieldConstraints: a column's format and schema", () => {
 	const at = "/fixture/db.core.tables.ts: fixture.f"
 
@@ -290,7 +290,7 @@ describe("parseFieldConstraints: a column's format and schema", () => {
 		['c.ref("f", { schema: z.string() }).references(() => user.id)', "c.ref takes no schema"],
 		['c.enum("f", ["a"], { schema: z.enum(["a"]) })', "c.enum takes no schema"],
 	])("refuses %s", (source, said) => {
-		expect(() => parseFieldConstraints(source)).toThrow(`${at}: ${said}`)
+		expect(() => parseFieldConstraints(source)).toThrow(new Error(`${at}: ${said}`))
 	})
 
 	it("takes a format beside a narrowing pattern", () => {
