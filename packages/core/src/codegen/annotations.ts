@@ -5,6 +5,7 @@
  */
 import type { CombColumnKind } from "../meta/column.ts"
 import type { ConstantValue, FieldConstraintsMeta } from "./analyzer-types.ts"
+import { formatOf } from "./format-constraints.ts"
 import { patternLiteral } from "./utils/pattern.ts"
 
 /** Field constraints extracted from type arguments */
@@ -163,10 +164,13 @@ const DROPPED: Readonly<Record<string, { keys: readonly string[]; said: string; 
 	url: { keys: ["lowercase", "uppercase"], said: "it is kept as written, but for its trim", what: "a url" },
 }
 
-/** Refuses a second kind, or a key the one declared would drop, each of which a reader of the tables file believes holds */
+/** Refuses a second kind, a format beside a kind, or a key the one declared would drop, each of which a reader of the tables file believes holds */
 function refuseKinds(constraints: Readonly<Record<string, ConstantValue>>, place: string): void {
 	const [kind, second] = KINDS.filter((each) => constraints[each] === true)
 	if (second !== undefined) throw new Error(`${place}: ${kind} and ${second} contradict; declare one`)
+	/* a format is a text's whole rule, as a kind is */
+	if (kind !== undefined && constraints["format"] !== undefined)
+		throw new Error(`${place}: format and ${kind} contradict; declare one`)
 	const dropped = DROPPED[kind as string]
 	const key = dropped?.keys.find((each) => constraints[each] === true)
 	if (key !== undefined) throw new Error(`${place}: ${dropped?.what} takes no ${key}: ${dropped?.said}`)
@@ -228,7 +232,7 @@ function refuseMalformed(
 /**
  * A column's declared constraints, checked and with comb's defaults applied. Throws on a key the
  * helper does not take, a value of the wrong type, two keys that contradict, or bounds no value
- * meets, each message prefixed with `place`
+ * meets, or a format the helper cannot hold, each message prefixed with `place`
  */
 export function fieldConstraintsOf(
 	constraints: Readonly<Record<string, ConstantValue>>,
@@ -238,6 +242,7 @@ export function fieldConstraintsOf(
 		helper,
 		measure,
 		place,
+		values,
 	}: {
 		/** the column's property name; one starting with `_` is private */
 		fieldName: string
@@ -249,9 +254,12 @@ export function fieldConstraintsOf(
 		measure: "length" | "value"
 		/** where the column is declared, as each error message names it */
 		place: string
+		/** the column's enum values, each of which a c.enum's format must take; null when it has none */
+		values: readonly string[] | null
 	},
 ): FieldConstraints {
 	refuseMalformed(constraints, { helper, measure, place })
+	const format = formatOf(constraints, { helper, place, values })
 	const relation = constraints["relation"]
 
 	const autogenerate = filled ? constraints["autogenerate"] !== false : constraints["autogenerate"] === true
@@ -259,6 +267,7 @@ export function fieldConstraintsOf(
 	return {
 		autogenerate,
 		email: constraints["email"] === true,
+		format,
 		imageUri: constraints["imageUri"] === true,
 		lowercase: constraints["lowercase"] === true,
 		max: typeof constraints["max"] === "number" ? constraints["max"] : null,

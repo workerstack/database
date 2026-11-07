@@ -1,3 +1,4 @@
+import type { IntegerFormat, TextFormat } from "../formats/catalog.ts"
 import type { CombColumnKind } from "../meta/column.ts"
 /**
  * TableMeta — serializable intermediate format produced by TableAnalyzer.
@@ -10,6 +11,8 @@ type FieldConstraintsMeta = {
 	autogenerate: boolean
 	/** the generated DTOs take only an email address */
 	email: boolean
+	/** the standard the value is held to: a text's or an enum's text format, an integer's integer format; null when none is declared */
+	format: TextFormat | IntegerFormat | null
 	/** an https URL or a data:image/ URI */
 	imageUri: boolean
 	/** the generated DTOs lowercase the text before they check it */

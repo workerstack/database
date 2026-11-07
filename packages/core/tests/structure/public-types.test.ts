@@ -72,6 +72,11 @@ const ELSEWHERE: Record<string, readonly Elsewhere[]> = {
 	],
 	"./codegen": [
 		{
+			from: ".",
+			names: ["IntegerFormat", "TextFormat"],
+			why: "the format ids a field's constraints carry; the root exports them beside the registry predicates",
+		},
+		{
 			from: "./meta",
 			names: ["CombEntityMeta", "CombEntityMetaInput", "CombStatesMeta"],
 			why: "the meta record deriveEntityMeta derives; ./meta is the record's subpath",
@@ -91,6 +96,11 @@ const ELSEWHERE: Record<string, readonly Elsewhere[]> = {
 		},
 	],
 	"./codegen/generators": [
+		{
+			from: ".",
+			names: ["IntegerFormat", "TextFormat"],
+			why: "the format ids a field's constraints carry; the root exports them beside the registry predicates",
+		},
 		{
 			from: "./codegen",
 			names: [
