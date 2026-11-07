@@ -7,7 +7,7 @@
 import { DatabaseSync } from "node:sqlite"
 import { afterEach, describe, expect, it } from "vitest"
 import { runCli } from "../../../src/cli/index.ts"
-import { ADD, APP_WRITE, holdExclusive, holdLock, otherRun, TABLE } from "../../support/busy.ts"
+import { ADD, APP_WRITE, DRIZZLE_HISTORY, holdExclusive, holdLock, otherRun, SEED, TABLE } from "../../support/busy.ts"
 import { migrate, type ScopeProject, scopeProject } from "../../../src/migrate/__fixtures__/pragma-scope.ts"
 import { sqliteRows } from "../support/migrate-project.ts"
 
@@ -45,6 +45,29 @@ describe("migrate apply on a libsql file another process holds the write lock of
 		expect(run.code, run.text).toBe(0)
 		expect(run.text).toContain("Skip (applied by another run): 0002_add.sql")
 		expect(await history(made.db)).toEqual([["0001_t.sql"], ["0002_add.sql"]])
+	})
+})
+
+/* SL2 of r23: a history drizzle's migrator made has no UNIQUE name, so the second run's record could not refuse the file */
+describe("migrate apply on a drizzle-made history another process applied a file of while it waited", () => {
+	it("skips the file, and it runs once", async () => {
+		const made = await scopeProject("libsql", TABLE)
+		projects.push(made)
+		expect((await migrate(made.dir, "apply")).code).toBe(0)
+		const raw = new DatabaseSync(made.db)
+		raw.exec(DRIZZLE_HISTORY)
+		raw.close()
+		await made.write(SEED)
+		const holder = await holdLock(made.db, otherRun("0002_seed.sql", SEED["0002_seed.sql"]), 1500)
+		const run = await migrate(made.dir, "apply")
+		expect(await holder.done).toBe(0)
+		expect(run.code, run.text).toBe(0)
+		expect(run.text).toContain("Skip (applied by another run): 0002_seed.sql")
+		expect(await sqliteRows(`file:${made.db}`, "SELECT v FROM t")).toEqual([[5]])
+		expect(await sqliteRows(`file:${made.db}`, "SELECT name FROM __drizzle_migrations ORDER BY name")).toEqual([
+			["0001_t.sql"],
+			["0002_seed.sql"],
+		])
 	})
 })
 

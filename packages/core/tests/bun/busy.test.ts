@@ -6,7 +6,7 @@
  */
 import { Database } from "bun:sqlite"
 import { afterEach, describe, expect, it } from "bun:test"
-import { ADD, APP_WRITE, holdLock, otherRun, TABLE } from "../support/busy.ts"
+import { ADD, APP_WRITE, DRIZZLE_HISTORY, holdLock, otherRun, SEED, TABLE } from "../support/busy.ts"
 import { migrate, type ScopeProject, scopeProject } from "../../src/migrate/__fixtures__/pragma-scope.ts"
 
 const projects: ScopeProject[] = []
@@ -50,6 +50,39 @@ describe("migrate apply on a bun:sqlite file another process holds the write loc
 		expect(run.code).toBe(0)
 		expect(run.text).toContain("Skip (applied by another run): 0002_add.sql")
 		expect(history(made.db)).toEqual([["0001_t.sql"], ["0002_add.sql"]])
+	})
+})
+
+/* SL2 of r23 on bun:sqlite (sibling: tests/integration/libsql/busy.test.ts) */
+describe("migrate apply on a drizzle-made history another process applied a file of while it waited", () => {
+	it("skips the file, and it runs once", async () => {
+		const made = await scopeProject("bun-sqlite", TABLE)
+		projects.push(made)
+		expect((await migrate(made.dir, "apply")).code).toBe(0)
+		const raw = new Database(made.db)
+		raw.exec(DRIZZLE_HISTORY)
+		raw.close()
+		await made.write(SEED)
+		const holder = await holdLock(made.db, otherRun("0002_seed.sql", SEED["0002_seed.sql"]), 1500)
+		const run = await migrate(made.dir, "apply")
+		expect(await holder.done).toBe(0)
+		expect(run.code, run.text).toBe(0)
+		expect(run.text).toContain("Skip (applied by another run): 0002_seed.sql")
+		const read = new Database(made.db, { readonly: true })
+		try {
+			expect(read.query("SELECT v FROM t").values()).toEqual([[5]])
+		} finally {
+			read.close()
+		}
+		const names = new Database(made.db, { readonly: true })
+		try {
+			expect(names.query("SELECT name FROM __drizzle_migrations ORDER BY name").values()).toEqual([
+				["0001_t.sql"],
+				["0002_seed.sql"],
+			])
+		} finally {
+			names.close()
+		}
 	})
 })
 
