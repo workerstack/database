@@ -252,3 +252,17 @@ describe("an explicit undefined limit means the default (KT1; sibling: `NaN` and
 		)
 	})
 })
+
+describe("validateFilter — an empty member (QL14)", () => {
+	it.each([
+		["a.eq.x,", 7],
+		["a.eq.x,,a.eq.y", 7],
+		["a.in.(x,,y)", 8],
+		["a.nin.(,)", 7],
+	])("refuses %j and names the position of the empty member", (filter, position) => {
+		expect(validateFilter(filter, { a: "string" })).toEqual({
+			errors: [`Invalid filter syntax: empty member at position ${position}`],
+			valid: false,
+		})
+	})
+})

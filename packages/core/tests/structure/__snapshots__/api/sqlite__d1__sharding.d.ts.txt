@@ -1846,7 +1846,7 @@ export { FILTER_LIMITS, limitsOver, OPERATORS_BY_TYPE, validateFilter, type Filt
  *
  * - `field.op.value`: one condition; `,` joins conditions with AND
  * - `or(...)`, `and(...)`: groups, nestable
- * - `in.(a,b)`, `nin.(a,b)`: lists
+ * - `in.(a,b)`, `nin.(a,b)`: lists; `in.()` is the one empty list, and a comma beside no member is malformed
  * - `"..."`: a quoted value may hold `,` `(` `)` and `.`; `\"` and `\\` escape inside it
  * - `@name`: a computed field
  */
@@ -1854,12 +1854,22 @@ import type { FilterAST, FilterOperator } from "./types.ts";
 /** Every operator the filter grammar parses; `validateFilter` holds each field to its type's */
 declare const FILTER_OPERATORS: readonly [FilterOperator, ...FilterOperator[]];
 /**
+ * The AST of a non-blank filter string, or why it cannot be read, in words for a caller to show: a
+ * filter the parser does not fully understand is refused, never reduced to "no filter", which
+ * would widen the result to the whole table on a typo.
+ */
+declare function readFilter(input: string): {
+    ast: FilterAST;
+} | {
+    error: string;
+};
+/**
  * The AST of a filter string, or null when there is none or any part of it cannot be read: a
  * filter the parser does not fully understand is refused, never reduced to "no filter", which
  * would widen the result to the whole table on a typo.
  */
 declare function parseFilter(input: string | null | undefined): FilterAST | null;
-export { FILTER_OPERATORS, parseFilter };
+export { FILTER_OPERATORS, parseFilter, readFilter };
 
 // query/filter-typed.d.ts
 import type { FieldType, FilterCondition, FilterOperator } from "./types.ts";

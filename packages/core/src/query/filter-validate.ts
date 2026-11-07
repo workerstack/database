@@ -3,7 +3,7 @@
  * every value typed as its field declares, so SQL generation binds numbers as numbers and
  * booleans as booleans, and computed resolvers receive the declared type.
  */
-import { parseFilter } from "./filter-parse.ts"
+import { readFilter } from "./filter-parse.ts"
 import { type CheckedField, typedValue } from "./filter-typed.ts"
 import { patternOf } from "./like.ts"
 import type { FieldType, FilterAST, FilterCondition, FilterGroup, FilterOperator } from "./types.ts"
@@ -201,8 +201,9 @@ function validateFilter(
 	const fields = checkedFields(allowedFields)
 	const caps = limitsOver("validateFilter", FILTER_LIMITS, limits)
 	if (!filterString || filterString.trim() === "") return null
-	const ast = parseFilter(filterString)
-	if (!ast) return { errors: ["Invalid filter syntax"], valid: false }
+	const read = readFilter(filterString)
+	if ("error" in read) return { errors: [read.error], valid: false }
+	const ast = read.ast
 
 	const check: Check = { errors: [], fields, limits: caps }
 	const shape = checkGroup(ast.root, check, 0)
