@@ -13,10 +13,13 @@ type Report = (message: string) => void
 /** A relation by name, and the config that declares its fields */
 type Relation = { fieldsConfig: FieldsConfig; name: string }
 
-/** Report every name in `scalars` that `allowed` lacks; computed `@` fields are the handler's */
+/**
+ * Report every name in `scalars` that `allowed` lacks; computed `@` fields are the handler's, and `*`
+ * is no name: it expands to `allowed` after this check, so a name beside it is held to `allowed` too
+ */
 function checkScalars(scalars: readonly string[], allowed: ReadonlySet<string>, report: Report): void {
 	for (const field of scalars) {
-		if (!allowed.has(field) && !field.startsWith("@")) report(field)
+		if (field !== "*" && !allowed.has(field) && !field.startsWith("@")) report(field)
 	}
 }
 
@@ -30,9 +33,9 @@ function checkRelation(selection: FieldSelection, { fieldsConfig, name }: Relati
 
 	const relationFields = fieldsConfig.relationFields ?? {}
 	const allowed = new Set(Object.hasOwn(relationFields, name) ? relationFields[name] : [])
+	checkScalars(selection.scalars, allowed, (field) => report(`Unknown ${name} field: ${field}`))
 	/* expand nested wildcard to all allowed fields */
 	if (selection.scalars.includes("*")) selection.scalars = [...allowed]
-	checkScalars(selection.scalars, allowed, (field) => report(`Unknown ${name} field: ${field}`))
 }
 
 /** The parsed selection, checked against `fieldsConfig`; null when there is none or it does not parse */
@@ -54,9 +57,9 @@ function validateSelectWithConfig(
 		return null
 	}
 
+	checkScalars(parsed.root.scalars, new Set(fieldsConfig.scalars), (field) => report(`Unknown field: ${field}`))
 	/* Handle * wildcard at top level — expand to all scalars */
 	if (parsed.root.scalars.includes("*")) parsed.root.scalars = [...fieldsConfig.scalars]
-	checkScalars(parsed.root.scalars, new Set(fieldsConfig.scalars), (field) => report(`Unknown field: ${field}`))
 
 	const relations = new Set(fieldsConfig.relations ?? [])
 	/* parseSelect stores a selection for every embed, never null */
