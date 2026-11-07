@@ -205,16 +205,51 @@ function publicRunSites(exports: Exports): string[] {
 	return [...new Set(sites)].sort()
 }
 
-/** The section's one paragraph opening "`a`, `b` … return a promise:", and that clause, up to its colon */
-function promiseParagraph(section: string): { clause: string; paragraph: string } {
+/**
+ * The section's one paragraph opening "`a`, `b` … return a promise:", and that clause, up to its colon,
+ * when it is `required`; otherwise the section holds none, as no paragraph may claim a change the
+ * release did not make, and both are empty
+ */
+function promiseParagraph(section: string, required: boolean): { clause: string; paragraph: string } {
 	const lines = [...section.matchAll(/^ *(`[^:\n]*? returns? a promise[^:\n]*):.*$/gm)]
-	expect(lines, 'one "… return a promise:" sentence in the section').toHaveLength(1)
+	const expected = required
+		? 'one "… return a promise:" sentence'
+		: 'no "… return a promise:" sentence, as none became one'
+	expect(lines, `${expected} in the section`).toHaveLength(required ? 1 : 0)
 	return { clause: lines[0]?.[1] ?? "", paragraph: lines[0]?.[0] ?? "" }
 }
 
-/** The backticked names in the section's one "`a`, `b` … return a promise:" clause, sorted */
-const promised = (section: string): string[] =>
-	[...promiseParagraph(section).clause.matchAll(/`([^`]+)`/g)].map((match) => match[1] as string).sort()
+/** The backticked names in the section's "`a`, `b` … return a promise:" clause, sorted; none when it needs none */
+const promised = (section: string, required: boolean): string[] =>
+	[...promiseParagraph(section, required).clause.matchAll(/`([^`]+)`/g)].map((match) => match[1] as string).sort()
+
+/**
+ * What the newest section's async paragraph names since the release: each public callable, and member
+ * of a public type, that returned no promise there and returns one now (`became`), and every public
+ * place that takes a `Run` when `Run`, or a type or function taking one, changed since then (`sites`,
+ * of `all` the places now); the paragraph is required when either names anything
+ */
+function asyncChange(now: Exports): { all: string[]; became: string[]; required: boolean; sites: string[] } {
+	const became = becamePromises(RELEASED.exports)
+	const changed = differing(RELEASED.exports, now)
+	const all = publicRunSites(now)
+	const touched = changed.includes("Run") || all.some((site) => changed.includes(site.split(/[.(]/)[0] as string))
+	const sites = touched ? all : []
+	return { all, became, required: became.length > 0 || sites.length > 0, sites }
+}
+
+describe("the async paragraph an upgrade section holds", () => {
+	const holding =
+		"1. **Await each.** Two calls changed.\n\n   `f` and `g` return a promise: await each. **Fix:** await them."
+	const none = "1. **Read less.** It reads less. **Fix:** none."
+
+	it("is one, naming what became a promise, when one did, and absent when none did", () => {
+		expect(promised(holding, true)).toEqual(["f", "g"])
+		expect(() => promiseParagraph(none, true)).toThrow('one "… return a promise:" sentence')
+		expect(() => promiseParagraph(holding, false)).toThrow('no "… return a promise:" sentence')
+		expect(promiseParagraph(none, false)).toEqual({ clause: "", paragraph: "" })
+	})
+})
 
 /** The backticked names on the section's one `label:` line, sorted; `none.` names none */
 function listed(section: string, label: string): string[] {
@@ -314,19 +349,20 @@ describe("the newest upgrade section's exports", () => {
 		).toEqual([])
 	})
 
-	/* D5-1 of the area D round-five review: the async paragraph left out exportDrizzleSchema and named a bare run */
-	it("names, in its async paragraph, exactly the public callables that return a promise since then", () => {
-		const became = becamePromises(RELEASED.exports).filter((name) => !name.includes("."))
-		expect(released ? [] : promised(section), `became promises since ${RELEASED.version}`).toEqual(became)
+	/* D5-1 of the area D round-five review: the async paragraph left out exportDrizzleSchema and named a bare run;
+	   p24: 0.22 made nothing async, and the paragraph 0.21's change required was demanded of it */
+	it("names, in its async paragraph, exactly the public callables that return a promise since then, and holds none when none does", () => {
+		const { became, required } = asyncChange(now)
+		const callables = became.filter((name) => !name.includes("."))
+		expect(released ? [] : promised(section, required), `became promises since ${RELEASED.version}`).toEqual(callables)
 	})
 
-	/* D6-4 of the area D round-six review: a runner an embedder passes, `CliIo.run`, became async too */
+	/* D6-4 of the area D round-six review: a runner an embedder passes, `CliIo.run`, became async too; the released
+	   snapshot holds that promise since 0.21.0, so only the naming is guarded */
 	it("names in that paragraph each member of a public type that returns a promise since then", () => {
-		const became = becamePromises(RELEASED.exports).filter((name) => name.includes("."))
-		/* only the unreleased section guards it: once released, the snapshot holds CliIo.run's promise */
-		expect(released || became.includes("CliIo.run"), `CliIo.run among ${JSON.stringify(became)}`).toBe(true)
-		const paragraph = released ? "" : promiseParagraph(section).paragraph
-		expect(became.filter((name) => !paragraph.includes(`\`${name}\``))).toEqual([])
+		const { became, required } = asyncChange(now)
+		const paragraph = released ? "" : promiseParagraph(section, required).paragraph
+		expect(became.filter((name) => name.includes(".") && !paragraph.includes(`\`${name}\``))).toEqual([])
 	})
 })
 
@@ -336,10 +372,10 @@ describe("the newest upgrade section's async paragraph", () => {
 	const released = isReleased(version)
 
 	/* G1-5 of the G1 read: the async paragraph named three of the six places a runner is passed */
-	it("names in that paragraph each public place that takes a `Run`, which returns a promise now", () => {
-		const sites = publicRunSites(now)
-		expect(sites).toContain("CliIo.run")
-		const paragraph = released ? "" : promiseParagraph(section).paragraph
+	it("names in that paragraph each public place that takes a `Run`, when `Run` or a place taking one changed since then", () => {
+		const { all, required, sites } = asyncChange(now)
+		expect(all).toContain("CliIo.run")
+		const paragraph = released ? "" : promiseParagraph(section, required).paragraph
 		expect(released ? [] : sites.filter((site) => !paragraph.includes(`\`${site}\``))).toEqual([])
 	})
 })
