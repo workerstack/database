@@ -90,3 +90,46 @@ describe("a SQLite file splits where SQLite ends a statement (SL2; sibling: libs
 		)
 	})
 })
+
+const NBSP = "\u00a0"
+
+/** The columns of table t in the database at `file` */
+function columns(file: string): string[] {
+	const db = new DatabaseSync(file)
+	try {
+		return db
+			.prepare("SELECT name FROM pragma_table_info('t')")
+			.all()
+			.map((row) => String(row.name))
+	} finally {
+		db.close()
+	}
+}
+
+describe("a statement keeps the spaces SQLite reads as part of a name (SL4)", () => {
+	describe.each(Object.keys(DRIVERS))("applied through %s", (driver) => {
+		it("adds the column SQLite adds, a no-break space and all", async () => {
+			const sql = `CREATE TABLE t (id INTEGER PRIMARY KEY);\nALTER TABLE t ADD COLUMN c${NBSP};\n`
+			const whole = path.join(DIR, `nbsp-whole-${driver.replace(/\W/g, "")}.db`)
+			const own = new DatabaseSync(whole)
+			own.exec(sql)
+			own.close()
+			const split = path.join(DIR, `nbsp-split-${driver.replace(/\W/g, "")}.db`)
+			await (DRIVERS[driver] as (typeof DRIVERS)[string])(split, splitSqlStatements(sql))
+			expect(columns(whole)).toEqual(["id", `c${NBSP}`])
+			expect(columns(split)).toEqual(["id", `c${NBSP}`])
+		})
+
+		it("refuses a statement that starts with one, as SQLite does", async () => {
+			const sql = `CREATE TABLE t (id INTEGER PRIMARY KEY);\nINSERT INTO t VALUES (1);${NBSP}INSERT INTO t VALUES (2);\n`
+			const own = new DatabaseSync(path.join(DIR, `nbsp-err-whole-${driver.replace(/\W/g, "")}.db`))
+			expect(() => own.exec(sql)).toThrow(/syntax error/)
+			own.close()
+			const split = path.join(DIR, `nbsp-err-split-${driver.replace(/\W/g, "")}.db`)
+			await expect((DRIVERS[driver] as (typeof DRIVERS)[string])(split, splitSqlStatements(sql))).rejects.toThrow(
+				/syntax error|unrecognized token/,
+			)
+			expect(columns(split)).toEqual([])
+		})
+	})
+})

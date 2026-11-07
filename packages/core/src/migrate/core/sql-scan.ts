@@ -67,9 +67,15 @@ function readCode(reading: Reading, text: string): string[] {
 	return done
 }
 
+/* SQLITE_SPACE's whitespace at either end of a statement */
+const SQLITE_EDGE_SPACE = /^[\t\n\f\r ]+|[\t\n\f\r ]+$/g
+
 /** The statement read so far, reset for the next; empty when it held no code */
 function finish(reading: Reading): string {
-	const statement = reading.code.replace(/;/g, "").trim() === "" ? "" : reading.text.trim()
+	const statement =
+		reading.code.replace(/;/g, "").replace(SQLITE_EDGE_SPACE, "") === ""
+			? ""
+			: reading.text.replace(SQLITE_EDGE_SPACE, "")
 	reading.code = ""
 	reading.state = 0
 	reading.text = ""
