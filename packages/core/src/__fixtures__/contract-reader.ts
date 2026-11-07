@@ -5,6 +5,7 @@
  * verdict (C1, C2 of r22).
  */
 import { isCidr } from "../cidr.ts"
+import { FORMATS, formatTakes, INTEGER_SPECS, type TextFormat } from "../formats/catalog.ts"
 import { isStorableText } from "../storable-text.ts"
 
 /** Each `x-comb-transform` value as §2.1 defines it */
@@ -23,15 +24,32 @@ const STATED = ["x-comb-maxLength", "x-comb-maximum", "x-comb-minLength", "x-com
 export const CONTRACT_KEYS: readonly string[] = [
 	...STATED,
 	"x-comb-cidr",
+	"x-comb-format",
 	"x-comb-maxBytes",
 	"x-comb-maxUtf8Bytes",
 	"x-comb-rectangular",
+	"x-comb-schema",
 	"x-comb-text",
 	"x-comb-transform",
 	"x-comb-url",
 ]
 
 const utf8 = (value: string): number => new TextEncoder().encode(value).length
+
+/** Whether `format` is a text format's id */
+const isTextFormat = (format: string): format is TextFormat => Object.hasOwn(FORMATS, format)
+
+/**
+ * Whether a text, its transforms applied, is a value of the format `format` names, as §2.1 defines
+ * it: its pattern and length, and its registry where it names one, which no pattern states. An
+ * integer format's range is its published bounds, so a text holds no rule of it; an id §2.1 does not
+ * list throws, as a strict reader refuses one
+ */
+export function takesFormat(format: string, rewritten: string): boolean {
+	if (isTextFormat(format)) return formatTakes(format, rewritten)
+	if (Object.hasOwn(INTEGER_SPECS, format)) return true
+	throw new Error(`the contract defines no format ${format}`)
+}
 
 /** Whether every sub-array of each level of `value`, across the whole level, has one length */
 function isRectangular(value: unknown[]): boolean {
@@ -68,6 +86,8 @@ function takesText(schema: Schema, value: string): boolean {
 function takesRewritten(schema: Schema, rewritten: string): boolean {
 	const points = [...rewritten].length
 	if (schema["x-comb-text"] !== undefined && !isStorableText(rewritten)) return false
+	const format = schema["x-comb-format"]
+	if (typeof format === "string" && !takesFormat(format, rewritten)) return false
 	if (typeof schema["minLength"] === "number" && points < schema["minLength"]) return false
 	if (typeof schema["maxLength"] === "number" && points > schema["maxLength"]) return false
 	const textBytes = schema["x-comb-maxUtf8Bytes"]

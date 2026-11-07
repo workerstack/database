@@ -10,6 +10,7 @@ import addFormats from "ajv-formats"
 import { RE2JS } from "re2js"
 import { afterAll, describe, expect, it } from "vitest"
 import * as z from "zod"
+import { takesFormat } from "../../src/__fixtures__/contract-reader.ts"
 import { cleanGeneratedDtos, generatedDtos } from "../integration/support/dtos.ts"
 
 afterAll(() => cleanGeneratedDtos())
@@ -30,6 +31,9 @@ const PATTERNED = [
 	"local3",
 	"at0",
 	"span3",
+	"currency",
+	"tag",
+	"hourCycle",
 ]
 
 /* the declared patterns: a code point but a line break, a class, a property escape with and without u
@@ -43,7 +47,10 @@ const DECLARED = `
 	label: c.text("label", { name: true }),
 	image: c.text("image", { imageUri: true }),
 	mail: c.text("mail", { email: true }),
-	site: c.text("site", { url: true }),`
+	site: c.text("site", { url: true }),
+	currency: c.text("currency", { format: "iso4217" }),
+	tag: c.text("tag", { format: "bcp47" }),
+	hourCycle: c.text("hour_cycle", { format: "uts35-hc" }),`
 
 const PG = `import { bigint, bit, cidr, date, inet, interval, macaddr, macaddr8, numeric, time, timestamp, uuid } from "drizzle-orm/pg-core"
 export const parent = pgTable("parent", { id: c.id("par") })
@@ -283,13 +290,18 @@ const annotationsOf = (node: unknown): string[] =>
 /*
  * AA10, A2-2 of r22: a reader checks `format` too, with every format ajv-formats 3 defines, in
  * Ajv's default strict mode, which refuses a format it does not know; comb's `x-` keys are
- * annotations it declares. What it takes: the field's transforms applied, then the schema
+ * annotations it declares, but `x-comb-format`, whose registry a reader checks as §2.1 says. What it
+ * takes: the field's transforms applied, then the schema
  */
 function readerOf(field: Node, defs: unknown, re2 = false): (value: string) => boolean {
 	const ajv = addFormats(
 		new Ajv2020({ logger: false, validateFormats: true, ...(re2 ? { code: { regExp: re2Engine } } : {}) }),
 	)
-	for (const key of new Set(annotationsOf({ defs, field }))) ajv.addKeyword(key)
+	ajv.addKeyword({
+		keyword: "x-comb-format",
+		validate: (format: string, data: unknown) => typeof data !== "string" || takesFormat(format, data),
+	})
+	for (const key of new Set(annotationsOf({ defs, field }))) if (key !== "x-comb-format") ajv.addKeyword(key)
 	const validate = ajv.compile({ ...field, $defs: defs ?? {} })
 	const transforms = (field["x-comb-transform"] as string[] | undefined) ?? []
 	return (value) =>

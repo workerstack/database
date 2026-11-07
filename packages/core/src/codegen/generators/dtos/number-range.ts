@@ -1,6 +1,7 @@
 /** The range a number column holds and the bounds a written one takes, which the DTO checks and the manifest states. */
 import type { FieldMeta } from "../../analyzer-types.ts"
 import type { FieldConstraints } from "../../annotations.ts"
+import { INTEGER_SPECS, type IntegerFormat } from "../../../formats/catalog.ts"
 import type { Build } from "./build-types.ts"
 
 /* Postgres stores c.integer in int4 */
@@ -49,14 +50,32 @@ export function integerRange(field: FieldMeta, dialect: Build["dialect"]): Range
 	return field.dataType === "number int16" ? INT2 : SAFE
 }
 
+/** Whether `format` is an integer format's id, which an integer column's format always is: codegen refused any other */
+const isIntegerFormat = (format: FieldConstraints["format"]): format is IntegerFormat =>
+	format !== null && Object.hasOwn(INTEGER_SPECS, format)
+
+/**
+ * The bounds a written number is declared to: its own, joined with its integer format's range, the
+ * tighter of each pair winning
+ */
+export function declaredBounds({ format, max, min }: FieldConstraints): { max: number | null; min: number | null } {
+	if (!isIntegerFormat(format)) return { max, min }
+	const spec = INTEGER_SPECS[format]
+	return {
+		max: max === null ? spec.max : Math.min(max, spec.max),
+		min: min === null ? spec.min : Math.max(min, spec.min),
+	}
+}
+
 /** A declared bound clamped to the column's, the column's where none is declared */
 export const clamp = (declared: number | null, bound: number, pick: (a: number, b: number) => number): number =>
 	declared === null ? bound : pick(declared, bound)
 
 /** Refuses an integer's bounds, clamped to what the column holds, that leave no integer: every write would be refused */
 export function refuseNoInteger(name: string, annotations: FieldConstraints, range: Range): void {
-	const min = clamp(annotations.min, range.min, Math.max)
-	const max = clamp(annotations.max, range.max, Math.min)
+	const declared = declaredBounds(annotations)
+	const min = clamp(declared.min, range.min, Math.max)
+	const max = clamp(declared.max, range.max, Math.min)
 	if (Math.ceil(min) > Math.floor(max))
 		throw new Error(`${name}: its bounds min ${min} and max ${max} leave no integer the column holds; widen them`)
 }
@@ -67,7 +86,7 @@ export function refuseNoInteger(name: string, annotations: FieldConstraints, ran
  * none on a boolean or a timestamp comb fills
  */
 export function numberRules(field: FieldMeta, dialect: Build["dialect"]): { max: number | null; min: number | null } {
-	const { max, min } = field.constraints
+	const { max, min } = declaredBounds(field.constraints)
 	const kind = field.combKind
 	if (kind === "boolean" || kind === "createdAt" || kind === "updatedAt" || kind === "deletedAt")
 		return { max: null, min: null }

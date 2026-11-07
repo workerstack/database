@@ -1,7 +1,9 @@
 /** The Zod expression of a text column: its kind, transforms and bounds, by schema type. */
+import { regexes } from "zod"
 import type { FieldConstraints } from "../../annotations.ts"
 import type { FieldMeta } from "../../analyzer-types.ts"
 import { type Base, type Build, plain } from "./build-types.ts"
+import { formatCheck, sourceLiteral, textFormatOf, tighterBounds } from "./text-format.ts"
 import { STORABLE_TEXT_RULE } from "../../../storable-text.ts"
 import { isMutative } from "./schema-type.ts"
 import { regexExpression } from "../../utils/pattern.ts"
@@ -44,9 +46,17 @@ const ID_LENGTH = { maxLength: 48, minLength: 1 }
  */
 function isIdText(annotations: FieldConstraints, field: FieldMeta): boolean {
 	const untargetedRef = field.combKind === "ref" && field.foreignKey === null
-	const declares = field.length !== null || annotations.min !== null || annotations.max !== null
+	const declares =
+		field.length !== null ||
+		annotations.min !== null ||
+		annotations.max !== null ||
+		annotations.format !== null ||
+		field.schemaJson !== null
 	return (field.combKind === "id" || field.foreignKey?.toId === true || untargetedRef) && !declares
 }
+
+/** The lesser of two upper bounds, either of which may be none */
+const lesser = (a: number | null, b: number | null): number | null => (a === null ? b : b === null ? a : Math.min(a, b))
 
 /* the shortest value each format admits, measured from its check in a test: an address
    such as a@b.cc, and https:// with one character after it, or alone as an imageUri's prefix */
@@ -65,6 +75,12 @@ const floorOf = ({ email, imageUri, url }: FieldConstraints): number =>
 function textRange(annotations: FieldConstraints, field: FieldMeta): TextRange {
 	if (isIdText(annotations, field)) return { max: ID_LENGTH.maxLength, min: ID_LENGTH.minLength }
 	const max = annotations.max ?? field.length
+	/* a format's range is its values': the tighter of it and the declared one, no floor of a required text's 1 */
+	const format = textFormatOf(annotations)
+	if (format !== null) {
+		const min = Math.max(annotations.min ?? 0, format.spec.min)
+		return { max: lesser(max, format.spec.max), min: min === 0 ? null : min }
+	}
 	const floor = floorOf(annotations)
 	if (floor > 0) return { max, min: Math.max(annotations.min ?? 0, floor) }
 	return { max, min: annotations.min ?? (field.isNotNull ? 1 : null) }
@@ -97,6 +113,9 @@ const CHAIN: Record<Transform, string> = {
  */
 export function transformsOf(annotations: FieldConstraints, mutative: boolean): Transform[] {
 	if (!mutative) return []
+	/* a format sets its own trim and case: codegen refused a declared one beside it */
+	const format = textFormatOf(annotations)
+	if (format !== null) return [...format.spec.transform]
 	if (annotations.url) return ["trim", "strip-tab-newline"]
 	if (annotations.email) return ["trim", "lowercase"]
 	const casing: Transform[] = annotations.lowercase ? ["lowercase"] : annotations.uppercase ? ["uppercase"] : []
@@ -155,6 +174,8 @@ function textKeys(build: Build): Record<string, unknown> {
 	const transform = transformKey(annotations, mutative)
 	if (isIdText(annotations, field)) return mutative ? { ...transform, ...GUARD_KEY } : stated(ID_LENGTH)
 	if (!mutative) return readKeys(build)
+	/* a format's source admits no U+0000 or surrogate, so it takes no text guard */
+	if (annotations.format !== null) return { ...transform, "x-comb-format": annotations.format }
 	if (annotations.email) return transform
 	return annotations.url ? { ...transform, ...URL_KEY, ...GUARD_KEY } : { ...transform, ...GUARD_KEY }
 }
@@ -179,7 +200,11 @@ function textBounds(build: Build, range: TextRange): string {
 		return held === null ? "" : `.max(${held})`
 	}
 	if (annotations.email) return emailBounds(annotations, range)
-	return rangeChecks(range) + writeChecks(annotations)
+	const format = textFormatOf(annotations)
+	if (format === null) return rangeChecks(range) + writeChecks(annotations)
+	/* the format's check first, then a declared bound tighter than its, as zod's own check, and a declared pattern */
+	const pattern = annotations.pattern === null ? "" : `.regex(${regexExpression(annotations.pattern)})`
+	return formatCheck(format, annotations.pattern !== null) + rangeChecks(tighterBounds(range, format.spec)) + pattern
 }
 
 /**
@@ -229,6 +254,28 @@ export function textRules(annotations: FieldConstraints, field: FieldMeta): Text
 	const range = textRange(annotations, field)
 	const declared = annotations.pattern === null ? [] : [annotations.pattern]
 	if (isIdText(annotations, field)) return { ...range, patterns: [ID_PATTERN] }
+	const format = textFormatOf(annotations)
+	/* the format's source first, as its check runs before the declared pattern's */
+	if (format !== null) return { ...range, patterns: [sourceLiteral(format.spec.source), ...declared] }
 	const kind = [annotations.url ? HTTPS : null, annotations.name ? NAME : null, annotations.imageUri ? IMAGE : null]
 	return { ...range, patterns: [...declared, ...kind.filter((each) => each !== null)] }
+}
+
+/** A regex literal's source, as zod publishes it */
+const sourceOf = (literal: string): string => literal.slice(1, literal.lastIndexOf("/"))
+
+/**
+ * The `allOf` a written text's own chain publishes: the pattern of each of two or more regexes, as
+ * zod writes them in the order they are checked, z.email()'s first, or a format's source beside a
+ * declared pattern. A schema's `allOf`, written over the chain's, carries these first
+ */
+export function chainAllOf(build: Build): Array<{ pattern: string }> {
+	const { annotations, field } = build
+	if (!isMutative(build.schemaType) || isIdText(annotations, field)) return []
+	/* a format's source as its check publishes it beside a declared pattern: the catalog's */
+	const format = textFormatOf(annotations)
+	if (format !== null) return annotations.pattern === null ? [] : [{ pattern: format.spec.source }]
+	const { patterns } = textRules(annotations, field)
+	const chain = [...(annotations.email ? [regexes.email.source] : []), ...patterns.map(sourceOf)]
+	return chain.length > 1 ? chain.map((pattern) => ({ pattern })) : []
 }
