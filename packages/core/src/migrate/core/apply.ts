@@ -24,17 +24,37 @@ const TABLE = `(
       hash_v INTEGER
     )`
 
-/** Whether a unique index of comb's history holds its hash alone, as comb's table did before 0.13 */
-export async function hashUnique(conn: Connection): Promise<boolean> {
+/** Whether a unique index of comb's history holds `column` alone */
+async function uniqueOn(conn: Connection, column: string): Promise<boolean> {
 	const list = await conn.execute("PRAGMA index_list(__drizzle_migrations)")
 	const unique = list.rows.filter((row) => Number(row[list.columns.indexOf("unique")]) === 1)
 	for (const index of unique) {
 		const name = String(index[list.columns.indexOf("name")])
 		const info = await conn.execute(`PRAGMA index_info("${name.replaceAll('"', '""')}")`)
 		const columns = info.rows.map((row) => String(row[info.columns.indexOf("name")]))
-		if (columns.length === 1 && columns[0] === "hash") return true
+		if (columns.length === 1 && columns[0] === column) return true
 	}
 	return false
+}
+
+/** Whether a unique index of comb's history holds its hash alone, as comb's table did before 0.13 */
+export const hashUnique = (conn: Connection): Promise<boolean> => uniqueOn(conn, "hash")
+
+/**
+ * A name recorded once, whoever made the table: a history drizzle's migrator made gains `name` by ALTER
+ * and no UNIQUE with it, so nothing would refuse a second run's record of a file the first applied.
+ * Refused, naming the files, when the history already holds one twice
+ */
+async function keepNameUnique(conn: Connection): Promise<void> {
+	if (await uniqueOn(conn, "name")) return
+	const twice = await conn.execute(
+		"SELECT name FROM __drizzle_migrations WHERE name IS NOT NULL GROUP BY name HAVING count(*) > 1 ORDER BY name",
+	)
+	if (twice.rows.length > 0)
+		throw new Error(
+			`__drizzle_migrations records ${twice.rows.map((row) => String(row[0])).join(", ")} more than once, so comb cannot keep a file from being recorded twice: delete the extra rows of each (keep the first), then run it again`,
+		)
+	await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS __drizzle_migrations_name ON __drizzle_migrations (name)")
 }
 
 /**
@@ -55,7 +75,7 @@ export async function ensureMigrationsTable(
 	/* a history 0.20 or earlier wrote gains it too, every row it holds left without it */
 	if (!has("hash_v")) await conn.execute("ALTER TABLE __drizzle_migrations ADD COLUMN hash_v INTEGER")
 	/* a history from before 0.13 holds each hash once: rebuilt, in one batch, with every row and id kept */
-	if (!(await hashUnique(conn))) return
+	if (!(await hashUnique(conn))) return keepNameUnique(conn)
 	/* a history made without AUTOINCREMENT has no counter; its largest id is where the new one starts */
 	const sequenced = await conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'sqlite_sequence'")
 	const counted =
@@ -151,7 +171,8 @@ class Unconfirmed extends Error {}
  * record it wrote says it ran, so a retry reads the history first and runs nothing again.
  * When no read of `history` answers after a batch that failed transiently, the failure is an Unconfirmed.
  * The record goes first, so a batch whose file another run recorded while it waited for the lock
- * fails on the name at once and runs nothing; the history then says so, and it is that run's.
+ * fails on the name's unique index at once and runs nothing (ensureMigrationsTable keeps one on every
+ * history, whoever made the table); the history then says so, and it is that run's.
  * Returns who applied it.
  */
 export async function applyRecorded(

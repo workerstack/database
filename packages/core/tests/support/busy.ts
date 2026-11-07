@@ -44,8 +44,16 @@ export const ADD = { "0002_add.sql": "ALTER TABLE t ADD COLUMN w INTEGER;\n" }
 /** What the holder writes under its lock: an app's row */
 export const APP_WRITE = "INSERT INTO t (v) VALUES (99)"
 
-/** What the holder writes under its lock: 0002 applied and recorded, as a second runner's apply does */
-export function otherRun(): string {
-	const sql = ADD["0002_add.sql"]
-	return `${sql}INSERT INTO __drizzle_migrations (hash, created_at, name) VALUES ('${generateMigrationHash(sql)}', 1, '0002_add.sql')`
+/** What the holder writes under its lock: `name` applied and recorded, as a second runner's apply does */
+export function otherRun(name = "0002_add.sql", sql = ADD["0002_add.sql"]): string {
+	return `${sql}INSERT INTO __drizzle_migrations (hash, created_at, name) VALUES ('${generateMigrationHash(sql)}', 1, '${name}')`
 }
+
+/** 0002 of a drizzle-made history's race: a seed, which running twice shows as two rows */
+export const SEED = { "0002_seed.sql": "-- comb:allow-unsafe: seed\n\nINSERT INTO t (v) VALUES (5);\n" }
+
+/** The history as drizzle's migrator makes it and comb's ALTER leaves it: `name` and `hash_v` with no UNIQUE */
+export const DRIZZLE_HISTORY = `ALTER TABLE __drizzle_migrations RENAME TO comb_history;
+CREATE TABLE __drizzle_migrations (id SERIAL PRIMARY KEY, hash text NOT NULL, created_at numeric, name TEXT, hash_v INTEGER);
+INSERT INTO __drizzle_migrations (id, hash, created_at, name, hash_v) SELECT id, hash, created_at, name, hash_v FROM comb_history;
+DROP TABLE comb_history;`
