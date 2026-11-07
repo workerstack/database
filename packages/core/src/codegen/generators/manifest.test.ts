@@ -167,6 +167,46 @@ describe("entity manifest — a text column's kind and transforms", () => {
 	})
 })
 
+/* a reader that runs no TypeScript learns the format a column is checked against and the schema it names */
+describe("entity manifest — a column's format and schema", () => {
+	const { entity } = manifestFixture()
+	const SCHEMAS = `import * as z from "zod"
+export const currencyCode = z.string().length(3)
+export const evenMinutes = z.int().multipleOf(2)
+export const Profile = z.object({ bio: z.string() })
+`
+	const columnsOf = async (body: string) =>
+		Object.fromEntries(
+			(
+				await entity("item", `${SCHEMAS}export const item = createTable("item", { id: c.id("itm"), ${body} })`)
+			).columns.map((column) => [column.name, column]),
+		)
+
+	it("states null for both when the column declares neither", async () => {
+		const { note } = await columnsOf('note: c.text("note")')
+		expect([note!.format, note!.schema]).toEqual([null, null])
+	})
+
+	it("states the format id a column declares", async () => {
+		const { currency, weekday } = await columnsOf(
+			'currency: c.text("currency", { format: "iso4217" }), weekday: c.integer("weekday", { format: "iso8601-weekday" })',
+		)
+		expect([currency!.format, weekday!.format]).toEqual(["iso4217", "iso8601-weekday"])
+	})
+
+	it("states the export name of the schema a text or number column declares", async () => {
+		const { code, slot } = await columnsOf(
+			'code: c.text("code", { schema: currencyCode }), slot: c.integer("slot", { schema: evenMinutes })',
+		)
+		expect([code!.schema, slot!.schema]).toEqual(["currencyCode", "evenMinutes"])
+	})
+
+	it("states no schema on a c.json column, whose schema the manifest already describes", async () => {
+		const { doc } = await columnsOf('doc: c.json("doc", Profile)')
+		expect(doc!.schema).toBeNull()
+	})
+})
+
 describe("entity manifest — agreement with the schema stamp", () => {
 	const { analyzed, entity } = manifestFixture()
 
