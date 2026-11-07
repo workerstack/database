@@ -34,15 +34,21 @@ describe("numberRules", () => {
 		},
 		{
 			dialect: "sqlite",
-			name: "an integer format's range, plan 24",
+			name: "a weekday format's range (plan 24)",
 			raw: 'c.integer("f", { format: "iso8601-weekday" })',
 			rules: { max: 7, min: 1 },
 		},
 		{
 			dialect: "postgres",
-			name: "an integer format's range under a tighter declared max",
+			name: "a month format under a declared max",
 			raw: 'c.integer("f", { format: "iso8601-month", max: 6 })',
 			rules: { max: 6, min: 1 },
+		},
+		{
+			dialect: "sqlite",
+			name: "a month format over a declared min",
+			raw: 'c.integer("f", { format: "iso8601-month", min: 3 })',
+			rules: { max: 12, min: 3 },
 		},
 		{
 			dialect: "sqlite",
