@@ -57,6 +57,24 @@ describe("a SQLite file splits where SQLite ends a statement (SL2; sibling: libs
 	})
 })
 
+describe("a statement is trimmed of SQLite's whitespace alone (SL4)", () => {
+	const NBSP = "\u00a0"
+
+	it.each([
+		["a no-break space ends a name", `ALTER TABLE t ADD COLUMN c${NBSP};`, [`ALTER TABLE t ADD COLUMN c${NBSP}`]],
+		[
+			"a no-break space after a ; starts the next statement",
+			`SELECT 1;${NBSP}SELECT 2`,
+			["SELECT 1", `${NBSP}SELECT 2`],
+		],
+		["an ideographic space before a statement", "\u3000SELECT 1", ["\u3000SELECT 1"]],
+		["a statement of only a no-break space is a statement", `SELECT 1;${NBSP};`, ["SELECT 1", NBSP]],
+		["SQLite's own space around a statement", " \t\n\f\rSELECT 1 \r\f\n\t;", ["SELECT 1"]],
+	])("keeps %s", (_, sql, expected) => {
+		expect(splitSqlStatements(sql)).toEqual(expected)
+	})
+})
+
 describe("normalizeSql", () => {
 	it.each([
 		["CREATE   TABLE\n\tt (a)", "CREATE TABLE t (a)"],
