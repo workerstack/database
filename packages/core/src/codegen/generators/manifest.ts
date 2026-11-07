@@ -7,7 +7,8 @@
  */
 import path from "node:path"
 import { deriveEntityMeta, publishedPartialUniqueIndexes, publishedUniqueIndexes, writesOf } from "../entity-meta.ts"
-import type { FieldMeta, TableMeta } from "../analyzer-types.ts"
+import type { FieldMeta, ImportRef, TableMeta } from "../analyzer-types.ts"
+import type { IntegerFormat, TextFormat } from "../../formats/catalog.ts"
 import { writeGenJsonFile } from "../utils/fs.ts"
 import type { GeneratorContext } from "./context-types.ts"
 import { qualifiedName } from "../utils/table-name.ts"
@@ -57,6 +58,10 @@ type ManifestColumn = {
 	min: number | null
 	/** Every regex a written text must match, its kind's and the declared one, as JavaScript regex literals; a plain Postgres type's rule is its `kind` and `sqlType`'s */
 	patterns: string[]
+	/** The standard format a written value is checked against (`iso4217`, `iso8601-weekday`), by its id; null when the column declares none */
+	format: TextFormat | IntegerFormat | null
+	/** The export name of the zod schema a text or number column declares, which a write runs after the column's own rules; null when none, and on a c.json column, whose schema is its value's shape rather than a rule beside it */
+	schema: string | null
 	/** A text column's format, null for any other */
 	textKind: "email" | "imageUri" | "name" | "password" | "url" | null
 	/** The rewrites a written value takes before `min`, `max` and `patterns` bind it, in order: the DTO's own list (meta-contract §2.1) */
@@ -177,6 +182,7 @@ function toColumn(field: FieldMeta, dialect: GeneratorContext["dialect"]): Manif
 	const { max, maxBytes, min, patterns } = writeRules(field, dialect)
 	return {
 		enumValues: field.enumValues,
+		format: constraints.format,
 		/* what the write bodies do, read off the rule the DTOs and the stamp read, a private column's too */
 		generated: !writesOf(field).create,
 		immutable: !writesOf(field).update,
@@ -188,6 +194,8 @@ function toColumn(field: FieldMeta, dialect: GeneratorContext["dialect"]): Manif
 		notNull: field.isNotNull,
 		patterns,
 		primaryKey: field.isPrimaryKey,
+		/* a text or number column's schema is the field's one import; a c.json column's import is its value's shape, with no schemaJson */
+		schema: field.schemaJson === null ? null : (field.schemaImports[0] as ImportRef).imported,
 		textKind: textKindOf(constraints),
 		transform: transformsOf(constraints, true),
 		private: constraints.private,

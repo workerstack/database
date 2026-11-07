@@ -701,7 +701,12 @@ reader joins through the manifest alone. A composite foreign key is one relation
 per column, each carrying the whole key as `key: { columns, refColumns }`, paired by position, so
 a reader joins on every column together rather than on independent pairs. Per column it carries the helper that
 declared it, its `sqlType`, the column's SQL type with its modifier as drizzle writes it (`timestamp(3) with time zone`, `interval day`, `numeric(3, -2)`), an array's that of its element, beside its `dimensions` (0 for a column of one value, 2 for `integer[][]`) and `nullElements`, whether a written element may be null, as the column's drizzle type declares it (false for a column of one value), the bounds a write takes and enum values, `textKind` (`"email"`, `"url"`, `"imageUri"`,
-`"password"`, `"name"`, or null), `transform`, the list the DTO publishes as `x-comb-transform`
+`"password"`, `"name"`, or null), `format`, the id of the standard format a write checks the
+value against (`"iso4217"`, `"iso8601-weekday"`), as `x-comb-format` publishes it (§2.1), or null
+when the column declares none, `schema`, the export name of the zod schema a text or number column
+declares, which a write runs after the column's own rules and whose published part is
+`x-comb-schema`'s (§2.1), or null when none and on a `c.json` column, whose schema is its value's
+shape rather than a rule beside it, `transform`, the list the DTO publishes as `x-comb-transform`
 (§2.1), and `generated`, `immutable` and `private` flags. `min`, `max`, `patterns` and `maxBytes`
 are what the create DTO enforces, not what the column declares, from `writeRules`, which reads
 the rules the DTO's builders read: a text's declared bounds with comb's own (a required text's 1, a
