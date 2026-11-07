@@ -31,6 +31,8 @@ import type {
 	EnumOptions,
 	IntegerConstraints,
 	JsonConstraints,
+	RealConstraints,
+	RefConstraints,
 	TextConstraints,
 	TimestampConstraints,
 } from "../sqlite/constraints.ts"
@@ -100,9 +102,9 @@ export type PgColumns = {
 		_constraints?: JsonConstraints,
 	) => Set$Type<PgJsonbBuilder, z.infer<TSchema>>
 	/** a floating-point number, stored as double precision */
-	real: (name: string, _constraints?: IntegerConstraints) => PgDoublePrecisionBuilder
+	real: (name: string, _constraints?: RealConstraints) => PgDoublePrecisionBuilder
 	/** a text foreign key; chain `.references()` to name the column it points at */
-	ref: (name: string, _constraints?: TextConstraints) => Text
+	ref: (name: string, _constraints?: RefConstraints) => Text
 	/** the auto-incrementing 4-byte `serial` primary key `id`, filled by the database */
 	serialId: () => SetIsPrimaryKey<PgSerialBuilder>
 	/**
@@ -158,11 +160,11 @@ export const c: PgColumns = {
 		withCombColumn(jsonb(name).$type<z.infer<TSchema>>(), { constraints, kind: "json", schema }),
 
 	/* Floating point (double precision) */
-	real: (name: string, constraints?: IntegerConstraints) =>
+	real: (name: string, constraints?: RealConstraints) =>
 		withCombColumn(doublePrecision(name), { constraints, kind: "real" }),
 
 	/* Foreign key reference - use with .references() */
-	ref: (name: string, constraints?: TextConstraints) => withCombColumn(text(name), { constraints, kind: "ref" }),
+	ref: (name: string, constraints?: RefConstraints) => withCombColumn(text(name), { constraints, kind: "ref" }),
 
 	/* Auto-increment integer primary key */
 	serialId: () => withCombColumn(serial("id").primaryKey(), { kind: "serialId" }),

@@ -2,8 +2,10 @@
  * Type-safe column constraint definitions
  * These exist only in the type system and are completely erased at runtime
  */
+import type * as z from "zod"
+import type { IntegerFormat, TextFormat } from "../formats/catalog.ts"
 
-/* Base constraints shared across column types */
+/** What every helper's constraints take: the DTO, mutation, privacy, relation and tenant flags */
 type BaseConstraints = {
 	/** Field is filled by comb or the database: generated create and update DTOs leave it out */
 	autogenerate?: boolean | undefined
@@ -86,13 +88,86 @@ type StringValidationConstraints = {
 export type TextConstraints = BaseConstraints &
 	StringTransformConstraints &
 	NumericRangeConstraints &
-	StringValidationConstraints
+	StringValidationConstraints & {
+		/**
+		 * The standard a written text holds: the generated DTOs run the format's trim and case, then hold the
+		 * value to its pattern and, where it names one, its pinned registry, and publish the id as `x-comb-format`.
+		 * A value it refuses is one zod `invalid_format` issue carrying the id, worded by zod's locale. One of:
+		 * - `base64url`: RFC 4648 §5 base64url, unpadded; `dGVzdA`; pattern only
+		 * - `bcp47`: BCP 47 language tag, RFC 5646 §2.1 well-formed; `zh-Hant-TW`; pattern only
+		 * - `e164`: ITU-T E.164 phone number, + and up to 15 digits; `+385911234567`; pattern only
+		 * - `iana-time-zone`: IANA time zone name, tzdata 2026f; `Europe/Zagreb`; registry
+		 * - `ip`: IPv4 dotted quad or IPv6 address, RFC 4291 §2.2; `2001:db8::1`; pattern only
+		 * - `ipv4`: IPv4 address, dotted quad without leading zeros; `192.0.2.1`; pattern only
+		 * - `ipv6`: IPv6 address, RFC 4291 §2.2; `2001:db8::1`; pattern only
+		 * - `iso3166-1-alpha-2`: ISO 3166-1 alpha-2 country code, Debian iso-codes v4.20.1; `HR`; registry
+		 * - `iso3166-1-alpha-3`: ISO 3166-1 alpha-3 country code, Debian iso-codes v4.20.1; `HRV`; registry
+		 * - `iso4217`: ISO 4217 alphabetic currency code, SIX list 2026-09-17; `EUR`; registry
+		 * - `iso639-1`: ISO 639-1 language code, Debian iso-codes v4.20.1; `hr`; registry
+		 * - `kebab-slug`: kebab-case slug, lowercase letters and digits joined by single hyphens; `spring-sale-2026`; pattern only
+		 * - `pkce-s256-challenge`: RFC 7636 §4.2 PKCE SHA-256 code challenge; `E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM`; pattern only
+		 * - `rfc1123-hostname`: RFC 1123 §2.1 host name; `api.example.com`; pattern only
+		 * - `semver`: Semantic Versioning 2.0.0 version; `1.4.0-rc.1`; pattern only
+		 * - `sha256-hex`: SHA-256 digest, FIPS 180-4, lowercase hex; `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`; pattern only
+		 * - `sha512-hex`: SHA-512 digest, FIPS 180-4, lowercase hex; `cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e`; pattern only
+		 * - `srgb-hex`: sRGB color as #rrggbb, CSS Color 4; `#1e90ff`; pattern only
+		 * - `srgb-hex-alpha`: sRGB color with alpha as #rrggbbaa, CSS Color 4; `#1e90ff80`; pattern only
+		 * - `ulid`: ULID, Crockford base32 in lowercase; `01hzy3k8q2m4n5p6r7s8t9v0wx`; pattern only
+		 * - `uts35-ca`: UTS #35 calendar (ca) key value, CLDR 49; `gregory`; pattern only
+		 * - `uts35-fw`: UTS #35 first day of the week (fw) key value, CLDR 49; `mon`; pattern only
+		 * - `uts35-hc`: UTS #35 hour cycle (hc) key value, CLDR 49; `h23`; pattern only
+		 * - `uts35-ms`: UTS #35 measurement system (ms) key value, CLDR 49; `metric`; pattern only
+		 * - `uts35-mu`: UTS #35 measurement unit (mu) key value, CLDR 49; `celsius`; pattern only
+		 * - `uts35-nu`: UTS #35 numbering system (nu) key value, CLDR 49; `latn`; pattern only
+		 * - `uuid`: RFC 9562 UUID, lowercase hex; `0f8fad5b-d9cb-469f-a165-70867728950e`; pattern only
+		 * - `uuid-v4`: RFC 9562 UUID version 4, lowercase hex; `0f8fad5b-d9cb-469f-a165-70867728950e`; pattern only
+		 * - `uuid-v7`: RFC 9562 UUID version 7, lowercase hex; `01890a5d-ac96-774b-bcce-b302099a8057`; pattern only
+		 */
+		format?: TextFormat | undefined
+		/**
+		 * An exported zod schema the generated DTOs pipe the value into after every other rule, on the
+		 * transformed value; its issues reach the caller as zod yields them, and its input JSON Schema is
+		 * published beside `x-comb-schema`. Codegen imports it as it imports a `c.json` schema, so export it
+		 * from a module of its own, or above the table that names it
+		 */
+		schema?: z.ZodType<string, string> | undefined
+	}
 
 /**
- * Integer/numeric column constraints
+ * Floating-point column constraints: its bounds, and an exported zod schema its value is piped into
  * Closed record - only these properties allowed
  */
-export type IntegerConstraints = BaseConstraints & NumericRangeConstraints
+export type RealConstraints = BaseConstraints &
+	NumericRangeConstraints & {
+		/**
+		 * An exported zod schema the generated DTOs pipe the value into after its bounds; its issues reach
+		 * the caller as zod yields them, and its input JSON Schema is published beside `x-comb-schema`.
+		 * Codegen imports it as it imports a `c.json` schema, so export it from a module of its own, or
+		 * above the table that names it
+		 */
+		schema?: z.ZodType<number, number> | undefined
+	}
+
+/**
+ * Integer column constraints: a real's, and the standard `format` that numbers its values
+ * Closed record - only these properties allowed
+ */
+export type IntegerConstraints = RealConstraints & {
+	/**
+	 * The standard that numbers the value: its range bounds the generated DTOs, the tighter of it and a
+	 * declared `min` or `max` winning, and they publish the id as `x-comb-format`. One of:
+	 * - `iso8601-month`: ISO 8601 month number, 1 January to 12 December; `3`
+	 * - `iso8601-weekday`: ISO 8601 §3.2.2 weekday number, 1 Monday to 7 Sunday; `1`
+	 */
+	format?: IntegerFormat | undefined
+}
+
+/**
+ * Foreign key column constraints: a text's but `format` and `schema`, as the value is another
+ * table's key, held to that key's own rules
+ * Closed record - only these properties allowed
+ */
+export type RefConstraints = Omit<TextConstraints, "format" | "schema">
 
 /**
  * JSON column constraints
@@ -126,6 +201,45 @@ export type EnumStates<TState extends string = string> = {
 	transitions?: { readonly [K in TState]?: readonly TState[] | undefined } | undefined
 }
 
-/** What `c.enum` takes beside its values: its state machine, and the `nomutate`, `private` and `tenant` flags every helper takes */
+/**
+ * What `c.enum` takes beside its values: its state machine, the `nomutate`, `private` and `tenant`
+ * flags every helper takes, and the standard `format` its values are written in, which codegen holds
+ * each value to and publishes as `x-comb-format`
+ */
 export type EnumOptions<TState extends string = string> = EnumStates<TState> &
-	Pick<BaseConstraints, "nomutate" | "private" | "tenant">
+	Pick<BaseConstraints, "nomutate" | "private" | "tenant"> & {
+		/**
+		 * The standard the values are written in: codegen refuses a value the format does not take as written,
+		 * and the DTOs publish the id as `x-comb-format`; the values stay the rule. One of:
+		 * - `base64url`: RFC 4648 §5 base64url, unpadded; `dGVzdA`; pattern only
+		 * - `bcp47`: BCP 47 language tag, RFC 5646 §2.1 well-formed; `zh-Hant-TW`; pattern only
+		 * - `e164`: ITU-T E.164 phone number, + and up to 15 digits; `+385911234567`; pattern only
+		 * - `iana-time-zone`: IANA time zone name, tzdata 2026f; `Europe/Zagreb`; registry
+		 * - `ip`: IPv4 dotted quad or IPv6 address, RFC 4291 §2.2; `2001:db8::1`; pattern only
+		 * - `ipv4`: IPv4 address, dotted quad without leading zeros; `192.0.2.1`; pattern only
+		 * - `ipv6`: IPv6 address, RFC 4291 §2.2; `2001:db8::1`; pattern only
+		 * - `iso3166-1-alpha-2`: ISO 3166-1 alpha-2 country code, Debian iso-codes v4.20.1; `HR`; registry
+		 * - `iso3166-1-alpha-3`: ISO 3166-1 alpha-3 country code, Debian iso-codes v4.20.1; `HRV`; registry
+		 * - `iso4217`: ISO 4217 alphabetic currency code, SIX list 2026-09-17; `EUR`; registry
+		 * - `iso639-1`: ISO 639-1 language code, Debian iso-codes v4.20.1; `hr`; registry
+		 * - `kebab-slug`: kebab-case slug, lowercase letters and digits joined by single hyphens; `spring-sale-2026`; pattern only
+		 * - `pkce-s256-challenge`: RFC 7636 §4.2 PKCE SHA-256 code challenge; `E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM`; pattern only
+		 * - `rfc1123-hostname`: RFC 1123 §2.1 host name; `api.example.com`; pattern only
+		 * - `semver`: Semantic Versioning 2.0.0 version; `1.4.0-rc.1`; pattern only
+		 * - `sha256-hex`: SHA-256 digest, FIPS 180-4, lowercase hex; `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`; pattern only
+		 * - `sha512-hex`: SHA-512 digest, FIPS 180-4, lowercase hex; `cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e`; pattern only
+		 * - `srgb-hex`: sRGB color as #rrggbb, CSS Color 4; `#1e90ff`; pattern only
+		 * - `srgb-hex-alpha`: sRGB color with alpha as #rrggbbaa, CSS Color 4; `#1e90ff80`; pattern only
+		 * - `ulid`: ULID, Crockford base32 in lowercase; `01hzy3k8q2m4n5p6r7s8t9v0wx`; pattern only
+		 * - `uts35-ca`: UTS #35 calendar (ca) key value, CLDR 49; `gregory`; pattern only
+		 * - `uts35-fw`: UTS #35 first day of the week (fw) key value, CLDR 49; `mon`; pattern only
+		 * - `uts35-hc`: UTS #35 hour cycle (hc) key value, CLDR 49; `h23`; pattern only
+		 * - `uts35-ms`: UTS #35 measurement system (ms) key value, CLDR 49; `metric`; pattern only
+		 * - `uts35-mu`: UTS #35 measurement unit (mu) key value, CLDR 49; `celsius`; pattern only
+		 * - `uts35-nu`: UTS #35 numbering system (nu) key value, CLDR 49; `latn`; pattern only
+		 * - `uuid`: RFC 9562 UUID, lowercase hex; `0f8fad5b-d9cb-469f-a165-70867728950e`; pattern only
+		 * - `uuid-v4`: RFC 9562 UUID version 4, lowercase hex; `0f8fad5b-d9cb-469f-a165-70867728950e`; pattern only
+		 * - `uuid-v7`: RFC 9562 UUID version 7, lowercase hex; `01890a5d-ac96-774b-bcce-b302099a8057`; pattern only
+		 */
+		format?: TextFormat | undefined
+	}

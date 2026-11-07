@@ -11,6 +11,7 @@ import { patternLiteral } from "./utils/pattern.ts"
 export type FieldConstraints = FieldConstraintsMeta
 
 /* the keys of each constraint type in src/sqlite/constraints.ts, which tests/types/constraint-keys.typetest.ts holds them to */
+/* a timestamp's keys: its bounds and the flags every helper takes */
 export const NUMBER_KEYS = [
 	"autogenerate",
 	"max",
@@ -21,9 +22,35 @@ export const NUMBER_KEYS = [
 	"relation",
 	"tenant",
 ] as const
+/* a real's keys: a timestamp's, and the zod schema its value is piped into */
+export const REAL_KEYS = [
+	"autogenerate",
+	"max",
+	"min",
+	"mutable",
+	"nomutate",
+	"private",
+	"relation",
+	"schema",
+	"tenant",
+] as const
+/* an integer's keys: a real's, and the standard format that numbers its values */
+export const INTEGER_KEYS = [
+	"autogenerate",
+	"format",
+	"max",
+	"min",
+	"mutable",
+	"nomutate",
+	"private",
+	"relation",
+	"schema",
+	"tenant",
+] as const
 export const JSON_KEYS = ["autogenerate", "maxBytes", "mutable", "nomutate", "private", "relation", "tenant"] as const
-export const ENUM_KEYS = ["nomutate", "private", "tenant"] as const
-export const TEXT_KEYS = [
+export const ENUM_KEYS = ["format", "nomutate", "private", "tenant"] as const
+/* a foreign key's keys: a text's but format and schema, as its value is another table's key */
+export const REF_KEYS = [
 	"autogenerate",
 	"email",
 	"imageUri",
@@ -42,6 +69,27 @@ export const TEXT_KEYS = [
 	"uppercase",
 	"url",
 ] as const
+export const TEXT_KEYS = [
+	"autogenerate",
+	"email",
+	"format",
+	"imageUri",
+	"lowercase",
+	"max",
+	"min",
+	"mutable",
+	"name",
+	"nomutate",
+	"password",
+	"pattern",
+	"private",
+	"relation",
+	"schema",
+	"tenant",
+	"trim",
+	"uppercase",
+	"url",
+] as const
 
 type Keys = typeof NUMBER_KEYS
 type None = readonly []
@@ -53,10 +101,10 @@ export type ConstraintKeys = {
 	readonly deletedAt: Keys
 	readonly enum: typeof ENUM_KEYS
 	readonly id: None
-	readonly integer: Keys
+	readonly integer: typeof INTEGER_KEYS
 	readonly json: typeof JSON_KEYS
-	readonly real: Keys
-	readonly ref: typeof TEXT_KEYS
+	readonly real: typeof REAL_KEYS
+	readonly ref: typeof REF_KEYS
 	readonly serialId: None
 	readonly text: typeof TEXT_KEYS
 	readonly timestamp: Keys
@@ -70,10 +118,10 @@ export const CONSTRAINT_KEYS: ConstraintKeys = {
 	deletedAt: NUMBER_KEYS,
 	enum: ENUM_KEYS,
 	id: [],
-	integer: NUMBER_KEYS,
+	integer: INTEGER_KEYS,
 	json: JSON_KEYS,
-	real: NUMBER_KEYS,
-	ref: TEXT_KEYS,
+	real: REAL_KEYS,
+	ref: REF_KEYS,
 	serialId: [],
 	text: TEXT_KEYS,
 	timestamp: NUMBER_KEYS,

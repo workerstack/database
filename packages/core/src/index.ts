@@ -1,4 +1,9 @@
 export { isCidr } from "./cidr.ts"
+export type { IntegerFormat, TextFormat } from "./formats/catalog.ts"
+export { isIanaTimeZone } from "./formats/iana-time-zone.ts"
+export { isIso3166Alpha2, isIso3166Alpha3 } from "./formats/iso3166-1.ts"
+export { isIso4217 } from "./formats/iso4217.ts"
+export { isIso639Alpha2 } from "./formats/iso639-1.ts"
 export { jsonValue } from "./json-value.ts"
 export { CombError } from "./error.ts"
 export {

@@ -21,6 +21,8 @@ import type {
 	EnumOptions,
 	IntegerConstraints,
 	JsonConstraints,
+	RealConstraints,
+	RefConstraints,
 	TextConstraints,
 	TimestampConstraints,
 } from "./constraints.ts"
@@ -67,9 +69,9 @@ export type SqliteColumns = {
 		_constraints?: JsonConstraints,
 	) => $Type<SQLiteTextJsonBuilder, z.infer<TSchema>>
 	/** a floating-point REAL */
-	real: (name: string, _constraints?: IntegerConstraints) => SQLiteRealBuilder
+	real: (name: string, _constraints?: RealConstraints) => SQLiteRealBuilder
 	/** a TEXT foreign key; chain `.references()` to name the column it points at */
-	ref: (name: string, _constraints?: TextConstraints) => Text
+	ref: (name: string, _constraints?: RefConstraints) => Text
 	/** the auto-incrementing INTEGER primary key `id`, filled by the database */
 	serialId: () => IsPrimaryKey<HasDefault<NotNull<SQLiteIntegerBuilder>>>
 	/** a TEXT column; a declared `max` also becomes its declared length */
@@ -122,10 +124,10 @@ export const c: SqliteColumns = {
 		withCombColumn(text(name, { mode: "json" }).$type<z.infer<TSchema>>(), { constraints, kind: "json", schema }),
 
 	/* Floating point */
-	real: (name: string, constraints?: IntegerConstraints) => withCombColumn(real(name), { constraints, kind: "real" }),
+	real: (name: string, constraints?: RealConstraints) => withCombColumn(real(name), { constraints, kind: "real" }),
 
 	/* Foreign key reference - use with .references() */
-	ref: (name: string, constraints?: TextConstraints) => withCombColumn(text(name), { constraints, kind: "ref" }),
+	ref: (name: string, constraints?: RefConstraints) => withCombColumn(text(name), { constraints, kind: "ref" }),
 
 	/* Auto-increment integer primary key */
 	serialId: () =>

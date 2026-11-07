@@ -26,6 +26,8 @@ const ALLOWED: Record<string, string> = {
 		"the timestamp names PgColumns' deletedAt takes, which a consumer writes as literals",
 	"DeletedAtName (sqlite/columns.d.ts)":
 		"the timestamp names SqliteColumns' deletedAt takes, which a consumer writes as literals",
+	"INTEGER_FORMATS (formats/catalog.d.ts)":
+		"the array IntegerFormat is read from, named through typeof; a consumer names the ids as IntegerFormat",
 	"NumericRangeConstraints (sqlite/constraints.d.ts)":
 		"a fragment TextConstraints composes; a consumer names TextConstraints, as the column factories take it",
 	"OptionalShape (query/list-schema.d.ts)": "the optional half of ListQueryShape; a consumer names ListQueryShape",
@@ -39,6 +41,8 @@ const ALLOWED: Record<string, string> = {
 		"a fragment TextConstraints composes; a consumer names TextConstraints, as the column factories take it",
 	"StringValidationConstraints (sqlite/constraints.d.ts)":
 		"a fragment TextConstraints composes; a consumer names TextConstraints, as the column factories take it",
+	"TEXT_FORMATS (formats/catalog.d.ts)":
+		"the array TextFormat is read from, named through typeof; a consumer names the ids as TextFormat",
 	"Text (pg/columns.d.ts)": "one member's builder in PgColumns, which a consumer names whole",
 	"Text (sqlite/columns.d.ts)": "one member's builder in SqliteColumns, which a consumer names whole",
 	"typed (password-text.d.ts)":
@@ -118,12 +122,19 @@ const ELSEWHERE: Record<string, readonly Elsewhere[]> = {
 	],
 	"./pg/columns": [
 		{
+			from: ".",
+			names: ["IntegerFormat", "TextFormat"],
+			why: "the format ids a column's constraints take; the root exports them beside the registry predicates",
+		},
+		{
 			from: "./sqlite/constraints",
 			names: [
 				"EnumOptions",
 				"EnumStates",
 				"IntegerConstraints",
 				"JsonConstraints",
+				"RealConstraints",
+				"RefConstraints",
 				"TextConstraints",
 				"TimestampConstraints",
 			],
@@ -165,12 +176,19 @@ const ELSEWHERE: Record<string, readonly Elsewhere[]> = {
 	],
 	"./sqlite/columns": [
 		{
+			from: ".",
+			names: ["IntegerFormat", "TextFormat"],
+			why: "the format ids a column's constraints take; the root exports them beside the registry predicates",
+		},
+		{
 			from: "./sqlite/constraints",
 			names: [
 				"EnumOptions",
 				"EnumStates",
 				"IntegerConstraints",
 				"JsonConstraints",
+				"RealConstraints",
+				"RefConstraints",
 				"TextConstraints",
 				"TimestampConstraints",
 			],
@@ -182,6 +200,13 @@ const ELSEWHERE: Record<string, readonly Elsewhere[]> = {
 			from: ".",
 			names: ["CombDatabaseErrorKey", "CombError", "ConstraintMap", "ConstraintMapEntry", "StatusKey", "combErrorKeys"],
 			why: "the error every handler throws, the keys it answers with and the constraint map every classifier reads; the root exports them once for all",
+		},
+	],
+	"./sqlite/constraints": [
+		{
+			from: ".",
+			names: ["IntegerFormat", "TextFormat"],
+			why: "the format ids a column's constraints take; the root exports them beside the registry predicates",
 		},
 	],
 	"./sqlite/d1/bookmark": [
@@ -199,6 +224,11 @@ const ELSEWHERE: Record<string, readonly Elsewhere[]> = {
 		},
 	],
 	"./sqlite/d1/sharding": [
+		{
+			from: ".",
+			names: ["IntegerFormat", "TextFormat"],
+			why: "the format ids a column's constraints take; the root exports them beside the registry predicates",
+		},
 		{
 			from: "./query",
 			names: [
@@ -238,6 +268,8 @@ const ELSEWHERE: Record<string, readonly Elsewhere[]> = {
 				"EnumStates",
 				"IntegerConstraints",
 				"JsonConstraints",
+				"RealConstraints",
+				"RefConstraints",
 				"TextConstraints",
 				"TimestampConstraints",
 			],

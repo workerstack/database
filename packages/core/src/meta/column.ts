@@ -45,19 +45,32 @@ function combColumnMeta(column: unknown): CombColumnMeta | undefined {
 	return config?.[COMB_COLUMN] as CombColumnMeta | undefined
 }
 
-/** A c.enum's options as its column's record: the flags its constraints, the rest its state machine, none when it names no state */
+/** `record` without the keys set to undefined, as a key set to undefined is one left out */
+function defined(record: Readonly<Record<string, unknown>>): Record<string, unknown> {
+	return Object.fromEntries(Object.entries(record).filter(([, value]) => value !== undefined))
+}
+
+/**
+ * A c.enum's options as its column's record: its constraints (the flags, its `format`, and a `schema`
+ * a JavaScript caller passes, kept for codegen to refuse by name), the rest its state machine, none
+ * when it names no state
+ */
 function enumMeta(
 	values: readonly string[],
-	options: { nomutate?: boolean | undefined; private?: boolean | undefined; tenant?: boolean | undefined } = {},
+	options: {
+		format?: string | undefined
+		nomutate?: boolean | undefined
+		private?: boolean | undefined
+		schema?: unknown
+		tenant?: boolean | undefined
+	} = {},
 ): { [K in keyof CombColumnMeta]: CombColumnMeta[K] | undefined } {
-	const { nomutate, private: hidden, tenant, ...given } = options
-	const flags = { nomutate, private: hidden, tenant }
-	const flagged = Object.values(flags).some((flag) => flag !== undefined)
-	/* a state set to undefined is one left out */
-	const states = Object.fromEntries(Object.entries(given).filter(([, value]) => value !== undefined))
-	const whole = !flagged && Object.keys(states).length === Object.keys(options).length
+	const { format, nomutate, private: hidden, schema, tenant, ...rest } = options
+	const constraints = defined({ format, nomutate, private: hidden, schema, tenant })
+	const states = defined(rest)
+	const whole = Object.keys(constraints).length === 0 && Object.keys(states).length === Object.keys(options).length
 	return {
-		constraints: flagged ? flags : undefined,
+		constraints: Object.keys(constraints).length === 0 ? undefined : constraints,
 		kind: "enum",
 		/* a machine given alone is kept as the very object passed, as assertTransition takes it too */
 		states: Object.keys(states).length === 0 ? undefined : whole ? options : states,
