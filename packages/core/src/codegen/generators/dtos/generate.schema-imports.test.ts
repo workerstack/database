@@ -20,6 +20,7 @@ import { c } from "@lovrozagar/comb/sqlite/columns"
 import { profile as homeProfile } from "./home/schemas.ts"
 import { profile as workProfile } from "./work/schemas.ts"
 import { _str as tag, combMeta as note, z as zone } from "./named/schemas.ts"
+import { comb as order, evenMinutes } from "./scalar/schemas.ts"
 export const account = sqliteTable("account", {
 	id: c.id("acc"),
 	home: c.json("home", homeProfile).notNull(),
@@ -27,6 +28,9 @@ export const account = sqliteTable("account", {
 	tag: c.json("tag", tag).notNull(),
 	note: c.json("note", note).notNull(),
 	zone: c.json("zone", zone).notNull(),
+	order: c.text("order", { schema: order, trim: true }),
+	slot: c.integer("slot", { schema: evenMinutes }),
+	currency: c.text("currency", { format: "iso4217" }),
 })
 `
 
@@ -34,6 +38,8 @@ const MODULES: Record<string, string> = {
 	"home/schemas.ts": 'import * as z from "zod"\nexport const profile = z.object({ street: z.string() })\n',
 	"named/schemas.ts":
 		'import * as zod from "zod"\nexport const _str = zod.object({ t: zod.string() })\nexport const combMeta = zod.object({ n: zod.number() })\nexport const z = zod.object({ tz: zod.string() })\n',
+	"scalar/schemas.ts":
+		'import * as z from "zod"\nexport const comb = z.enum(["iso", "dmy", "mdy"])\nexport const evenMinutes = z.int().refine((value) => value % 2 === 0, { error: "Must be even" })\n',
 	"work/schemas.ts": 'import * as z from "zod"\nexport const profile = z.object({ desk: z.number() })\n',
 }
 
@@ -65,5 +71,31 @@ describe("generated DTOs: each c.json column's own schema", () => {
 		expect(create({ home, note: { n: 1 }, tag: { t: "x" }, work, zone: { tz: "UTC" } })).toBe(true)
 		expect(create({ home, note: { n: "one" }, tag: { t: "x" }, work, zone: { tz: "UTC" } })).toBe(false)
 		expect(create({ home, note: { n: 1 }, tag: { t: 1 }, work, zone: { tz: "UTC" } })).toBe(false)
+	})
+})
+
+/* plan 24: a text or number column's schema is imported as a c.json one is, aliased away from comb's own namespace */
+describe("generated DTOs: a text or number column's schema and a format", () => {
+	const row = { ...NAMED, home: { street: "Main" }, work: { desk: 4 } }
+	const parsed = (fields: Record<string, unknown>) =>
+		account["accountDtoCreateSchema"]?.safeParse({ ...row, ...fields })
+
+	it("imports the schema from its module under a name apart from comb's, beside comb's namespace", () => {
+		const file = fs.readFileSync(path.join(dir, "dtos", "account", "index.gen.ts"), "utf8").split("\n")
+		expect(file).toContain('import { comb as combFromScalarSchemas, evenMinutes } from "../../scalar/schemas"')
+		expect(file).toContain('import * as comb from "@lovrozagar/comb"')
+	})
+
+	it("pipes each value into its schema after comb's rules, and holds the format", () => {
+		expect(parsed({ currency: " eur ", order: " iso ", slot: 4 })?.data).toMatchObject({
+			currency: "EUR",
+			order: "iso",
+			slot: 4,
+		})
+		expect(parsed({ order: "x" })?.success).toBe(false)
+		expect(parsed({ slot: 3 })?.error?.issues).toEqual([{ code: "custom", message: "Must be even", path: ["slot"] }])
+		expect(parsed({ currency: "HRK" })?.error?.issues).toEqual([
+			{ code: "invalid_format", format: "iso4217", message: "Invalid iso4217", origin: "string", path: ["currency"] },
+		])
 	})
 })

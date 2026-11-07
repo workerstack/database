@@ -2,6 +2,8 @@ import { fixtureRoot } from "../__fixtures__/temp.ts"
 import fs from "node:fs"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import * as z from "zod"
+import { tableOf } from "../__fixtures__/runtime.ts"
 import { generateOrm } from "./orm.ts"
 import { testContext } from "./__fixtures__/context.ts"
 
@@ -119,5 +121,28 @@ describe("generateOrm — refusals", () => {
 	])("refuses %j by name and writes nothing", (config, message) => {
 		expect(() => generate(config)).toThrow(message)
 		expect(fs.existsSync(path.join(tmpDir, "orm.gen.ts"))).toBe(false)
+	})
+})
+
+/* plan 24: a text or number column's schema is a DTO rule; the client types its tables from the tables module alone */
+describe("generateOrm — a column schema", () => {
+	it("imports no text or number column's schema", () => {
+		const dateOrder = z.enum(["iso", "dmy"])
+		const table = tableOf("user", { order: 'c.text("order", { schema: dateOrder })' }, { scope: { dateOrder } })
+		expect(table.fields[0]?.schemaImports.map((ref) => ref.imported)).toEqual(["dateOrder"])
+		const tablesPath = path.join(tmpDir, "db.core.tables.ts")
+		fs.writeFileSync(tablesPath, "")
+		const ctx = testContext([table], { cwd: tmpDir, dbName: "core", tablesPath })
+		generateOrm(ctx, { dialect: "sqlite", driver: "d1", output: "orm.gen.ts" })
+		const imports = fs
+			.readFileSync(path.join(tmpDir, "orm.gen.ts"), "utf-8")
+			.split("\n")
+			.filter((line) => line.startsWith("import"))
+		expect(imports).toEqual([
+			'import type { AnyD1Database } from "drizzle-orm/d1"',
+			'import { drizzle } from "drizzle-orm/d1"',
+			'import { relations } from "./db.core.relations.gen"',
+			'import type * as coreDbSchema from "./db.core.tables"',
+		])
 	})
 })

@@ -13,6 +13,7 @@ import { STORABLE_TEXT_RULE } from "../../../storable-text.ts"
 import {
 	boundCode,
 	clamp,
+	declaredBounds,
 	integerRange,
 	isInteger,
 	isNumeric,
@@ -21,7 +22,7 @@ import {
 	type Range,
 	SAFE,
 } from "./number-range.ts"
-import { stated, textBase, textRules } from "./text-schema.ts"
+import { chainAllOf, stated, textBase, textRules } from "./text-schema.ts"
 
 /** A builder's answer: its base, or `undefined` when the column is not its kind */
 type Built = Base | undefined
@@ -30,12 +31,14 @@ type Built = Base | undefined
  * A c.enum, a pgEnum or an enum text column, its values read at runtime and written out; a state
  * column's create takes its machine's `initial` alone, the value a row starts at
  */
-function enumBase({ element, field, schemaType }: Build): Built {
+function enumBase({ annotations, element, field, schemaType }: Build): Built {
 	if (field.enumValues === null) return undefined
+	/* the values are the rule, each one codegen checked against the format; the format is what they mean */
+	const keys = annotations.format === null ? {} : { "x-comb-format": annotations.format }
 	const initial = field.states?.initial ?? null
 	if (schemaType === "create" && initial !== null && element !== true)
-		return plain(`z.literal(${JSON.stringify(initial)})`)
-	return plain(`z.enum(${JSON.stringify(field.enumValues)})`)
+		return plain(`z.literal(${JSON.stringify(initial)})`, keys)
+	return plain(`z.enum(${JSON.stringify(field.enumValues)})`, keys)
 }
 
 /* no engine stores U+0000 or a lone UTF-16 surrogate as sent: jsonb refuses both, Postgres text
@@ -101,8 +104,11 @@ function integerOf(annotations: FieldConstraints, range: Range, schemaType: Sche
 			`z.number().int().min(${boundCode(range.min)}).max(${boundCode(range.max)})`,
 			stated({ maximum: annotations.max, minimum: annotations.min }),
 		)
+	/* an integer format's range is a declared bound, and its id what the number means */
+	const { max, min } = declaredBounds(annotations)
 	return plain(
-		`z.number().int().min(${boundCode(clamp(annotations.min, range.min, Math.max))}).max(${boundCode(clamp(annotations.max, range.max, Math.min))})`,
+		`z.number().int().min(${boundCode(clamp(min, range.min, Math.max))}).max(${boundCode(clamp(max, range.max, Math.min))})`,
+		annotations.format === null ? {} : { "x-comb-format": annotations.format },
 	)
 }
 
@@ -217,13 +223,30 @@ export const generateFieldSchema = (
 	options: FieldSchemaOptions,
 ): string | null => fieldSchemaOf(field, schemaType, options)?.code ?? null
 
-/** The Zod base of a column of one value: the first builder's that takes it, else text */
+/** The Zod base of a column of one value: the first builder's that takes it, else text, piped into its schema */
 function baseOf(build: Build): Base {
 	for (const builder of BUILDERS) {
 		const base = builder(build)
-		if (base !== undefined) return base
+		if (base !== undefined) return piped(build, base, [])
 	}
-	return textBase(build)
+	return piped(build, textBase(build), chainAllOf(build))
+}
+
+/**
+ * `base` piped into the schema a text or number column declares, after every rule of comb's, so
+ * the schema reads the rewritten value and its issues reach the caller as it yields them; a read
+ * never refuses a stored row, so it takes none. zod publishes a pipe's input side, the base, so the
+ * schema's own input JSON Schema is published in an `allOf` after the chain's (`own`), which that
+ * `allOf` is written over, and its export's name is a key. The `allOf` is on the code, not the
+ * keys: a nullable's keys also sit beside its `anyOf`, where the schema's `type` would refuse the
+ * null the field takes
+ */
+function piped(build: Build, base: Base, own: readonly unknown[]): Base {
+	const { field, schemaType } = build
+	const [ref] = field.schemaImports
+	if (!isMutative(schemaType) || field.schemaJson === null || ref === undefined) return base
+	const code = `${base.code}.pipe(${ref.name})${metaOf({ allOf: [...own, field.schemaJson] })}`
+	return { ...base, code, keys: { ...base.keys, "x-comb-schema": ref.imported } }
 }
 
 /** What a written value of a column is held to: its bounds and the regexes it must match */

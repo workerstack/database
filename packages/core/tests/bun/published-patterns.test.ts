@@ -17,6 +17,8 @@ const DECLARED = `export const row = sqliteTable("row", {
 	other: c.text("other", { pattern: "/^[^\\\\P{L}\\\\p{Nd}]$/u" }),
 	label: c.text("label", { name: true }),
 	accented: c.text("accented", { pattern: "/^[é😀]€$/u" }),
+	locale: c.text("locale", { format: "bcp47" }),
+	numbering: c.text("numbering", { format: "uts35-nu" }),
 })`
 
 /** Each field's published patterns, keyed by field, from the create DTO's JSON Schema under Bun */

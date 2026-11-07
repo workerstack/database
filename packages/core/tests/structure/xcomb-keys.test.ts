@@ -11,6 +11,7 @@ import { afterAll, describe, expect, it } from "vitest"
 import * as z from "zod"
 import * as root from "../../src/index.ts"
 import { CONTRACT_KEYS, CONTRACT_TRANSFORMS, contractReader } from "../../src/__fixtures__/contract-reader.ts"
+import { FORMATS, INTEGER_SPECS } from "../../src/formats/catalog.ts"
 import { cleanGeneratedDtos, generatedDtos } from "../integration/support/dtos.ts"
 
 afterAll(() => cleanGeneratedDtos())
@@ -26,6 +27,21 @@ function definedKeys(): string[] {
 		return [...head.matchAll(/`(x-comb-[A-Za-z0-9]+)`/g)].map(([, key]) => key as string)
 	})
 }
+
+/** Each id the `x-comb-format` bullet of §2.1 lists, one sub-bullet each, with the text after it */
+function definedFormats(): Array<[string, string]> {
+	const bullet = FIELD_KEYS.split(/\n(?=- )/).find((each) => each.startsWith("- `x-comb-format`:")) ?? ""
+	return [...bullet.matchAll(/^ {2}- `([\w-]+)`: (.+)$/gm)].map(([, id, text]) => [id as string, text as string])
+}
+
+/** The sub-bullet §2.1 gives each format, from the catalog: its standard, and the registry a reader checks */
+const catalogFormats = (): Array<[string, string]> => [
+	...Object.entries(FORMATS).map(([id, spec]): [string, string] => [
+		id,
+		`${spec.standard}.${spec.member === null ? "" : ` Registry: \`${spec.member}\`.`}`,
+	]),
+	...Object.entries(INTEGER_SPECS).map(([id, spec]): [string, string] => [id, `${spec.standard}.`]),
+]
 
 /** The transforms §2.1 defines, one sub-bullet each */
 const definedTransforms = (): string[] =>
@@ -49,8 +65,14 @@ const PG = `import { cidr, inet, integer, interval, json, jsonb, macaddr, numeri
 import * as z from "zod"
 export const Doc = z.object({ a: z.string() })
 export const Reg = z.object({ b: z.string() }).meta({ id: "XcombKeysReg" })
+export const DateOrder = z.enum(["iso", "dmy", "mdy"])
 export const row = pgTable("row", {
 	id: c.id("row"),
+	currency: c.text("currency", { format: "iso4217" }),
+	tag: c.text("tag", { format: "bcp47" }),
+	pay: c.enum("pay", ["USD", "EUR"], { format: "iso4217" }),
+	weekStart: c.integer("week_start", { format: "iso8601-weekday" }),
+	order: c.text("order", { schema: DateOrder, trim: true }),
 	title: c.text("title", { max: 50, min: 2, trim: true }),
 	upper: c.text("upper", { uppercase: true }),
 	lower: c.text("lower", { lowercase: true, max: 20 }),
@@ -83,8 +105,14 @@ export const row = pgTable("row", {
 const SQLITE = `import { integer, real, text } from "drizzle-orm/sqlite-core"
 import * as z from "zod"
 export const Doc = z.object({ a: z.string() })
+export const DateOrder = z.enum(["iso", "dmy", "mdy"])
 export const row = sqliteTable("row", {
 	id: c.id("row"),
+	currency: c.text("currency", { format: "iso4217" }),
+	tag: c.text("tag", { format: "bcp47" }),
+	pay: c.enum("pay", ["USD", "EUR"], { format: "iso4217" }),
+	weekStart: c.integer("week_start", { format: "iso8601-weekday" }),
+	order: c.text("order", { schema: DateOrder, trim: true }),
 	title: c.text("title", { max: 50, min: 2, trim: true }),
 	mail: c.text("mail", { email: true }),
 	upper: c.text("upper", { uppercase: true }),
@@ -163,6 +191,28 @@ describe("the x-comb keys comb publishes (C1, C2; siblings: codegen's transforms
 		expect([...found.transforms].filter((name) => !definedTransforms().includes(name))).toEqual([])
 		expect(keys.toSorted()).toEqual([...CONTRACT_KEYS].toSorted())
 		expect(definedTransforms().toSorted()).toEqual(Object.keys(CONTRACT_TRANSFORMS).toSorted())
+	})
+
+	it("lists, under x-comb-format, every format with its standard and the registry a reader must check", () => {
+		expect(definedFormats()).toEqual(catalogFormats())
+	})
+
+	it("read as §2.1 defines them, take on a written format text what its parse takes", async () => {
+		const values = [...PROBES, " eur ", "EUR", "HRK", "eu", "AB1", "en-HR", "en_HR", " zh-Hant-TW ", "x", null]
+		for (const [dialect, tables] of [
+			["postgres", PG],
+			["sqlite", SQLITE],
+		] as const) {
+			const create = (await generatedDtos(`xcomb-formats-${dialect}`, tables, { dialect }))["row"]?.[
+				"rowDtoCreateSchema"
+			] as z.ZodObject
+			const properties = published(create)["properties"] as Record<string, Record<string, unknown>>
+			for (const key of ["currency", "tag"])
+				for (const value of values)
+					expect(contractReader(properties[key] ?? {}, value), `${dialect} ${key} on ${JSON.stringify(value)}`).toBe(
+						(create.shape[key] as z.ZodType).safeParse(value).success,
+					)
+		}
 	})
 
 	it("finds the root exports that build a schema, passwordText and storableText among them", () => {

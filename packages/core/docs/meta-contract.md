@@ -166,6 +166,55 @@ no `anyOf` walk. A nullable trimmed text with a `max` of 9, as codegen publishes
 - `x-comb-rectangular`: `true` on a multidimensional array: every sub-array of one level, across the
   whole level, has the same length, as Postgres stores an array: `[[1, 2], [3, 4]]` is one,
   `[[1, 2], [3]]` is not.
+- `x-comb-format`: the standard a written value is held to, by its id, on a text, an enum or an
+  integer. On a text, the value after its `x-comb-transform` matches the published `pattern` and
+  length bounds; where the id below names a registry, it is also a member of that pinned registry,
+  which no pattern states, so a reader must check it, with the predicate named, which
+  `@lovrozagar/comb` exports, or with the release named (`HRK` matches `^[A-Z]{3}$` and is no
+  `iso4217` value: withdrawn in 2023). A text failing it gets zod's `invalid_format` issue with the
+  id as its `format` and no message of comb's, so a zod locale or error map words it. On an enum the
+  listed values are the rule, each one the format takes, and the id is what they mean; every DTO of
+  an enum publishes it, as each holds the values. On an integer the published `minimum` and
+  `maximum` are the standard's range, or a declared one inside it. A read of a text or an integer
+  publishes none. The ids, each with its standard and release:
+  - `base64url`: RFC 4648 §5 base64url, unpadded.
+  - `bcp47`: BCP 47 language tag, RFC 5646 §2.1 well-formed.
+  - `e164`: ITU-T E.164 phone number, + and up to 15 digits.
+  - `iana-time-zone`: IANA time zone name, tzdata 2026f. Registry: `isIanaTimeZone`.
+  - `ip`: IPv4 dotted quad or IPv6 address, RFC 4291 §2.2.
+  - `ipv4`: IPv4 address, dotted quad without leading zeros.
+  - `ipv6`: IPv6 address, RFC 4291 §2.2.
+  - `iso3166-1-alpha-2`: ISO 3166-1 alpha-2 country code, Debian iso-codes v4.20.1. Registry: `isIso3166Alpha2`.
+  - `iso3166-1-alpha-3`: ISO 3166-1 alpha-3 country code, Debian iso-codes v4.20.1. Registry: `isIso3166Alpha3`.
+  - `iso4217`: ISO 4217 alphabetic currency code, SIX list 2026-09-17. Registry: `isIso4217`.
+  - `iso639-1`: ISO 639-1 language code, Debian iso-codes v4.20.1. Registry: `isIso639Alpha2`.
+  - `kebab-slug`: kebab-case slug, lowercase letters and digits joined by single hyphens.
+  - `pkce-s256-challenge`: RFC 7636 §4.2 PKCE SHA-256 code challenge.
+  - `rfc1123-hostname`: RFC 1123 §2.1 host name.
+  - `semver`: Semantic Versioning 2.0.0 version.
+  - `sha256-hex`: SHA-256 digest, FIPS 180-4, lowercase hex.
+  - `sha512-hex`: SHA-512 digest, FIPS 180-4, lowercase hex.
+  - `srgb-hex`: sRGB color as #rrggbb, CSS Color 4.
+  - `srgb-hex-alpha`: sRGB color with alpha as #rrggbbaa, CSS Color 4.
+  - `ulid`: ULID, Crockford base32 in lowercase.
+  - `uts35-ca`: UTS #35 calendar (ca) key value, CLDR 49.
+  - `uts35-fw`: UTS #35 first day of the week (fw) key value, CLDR 49.
+  - `uts35-hc`: UTS #35 hour cycle (hc) key value, CLDR 49.
+  - `uts35-ms`: UTS #35 measurement system (ms) key value, CLDR 49.
+  - `uts35-mu`: UTS #35 measurement unit (mu) key value, CLDR 49.
+  - `uts35-nu`: UTS #35 numbering system (nu) key value, CLDR 49.
+  - `uuid`: RFC 9562 UUID, lowercase hex.
+  - `uuid-v4`: RFC 9562 UUID version 4, lowercase hex.
+  - `uuid-v7`: RFC 9562 UUID version 7, lowercase hex.
+  - `iso8601-month`: ISO 8601 month number, 1 January to 12 December.
+  - `iso8601-weekday`: ISO 8601 §3.2.2 weekday number, 1 Monday to 7 Sunday.
+- `x-comb-schema`: the export name of the zod schema a written text or number is piped into after
+  every other rule, on the value as rewritten; its issues reach the caller as the schema yields
+  them. The `allOf` beside it is the schema's published part: its input JSON Schema, last, after
+  the patterns of the field's own chain when that has two or more. A refine in the schema publishes
+  nothing, so a rule it states only as a refine is one the producer alone runs: a reader may take a
+  value the producer then refuses. On a nullable field the `allOf` sits on the non-null member
+  alone, as its `type` would refuse the null the field takes. A read publishes none.
 - `x-comb-minLength`, `x-comb-maxLength`, `x-comb-minimum`, `x-comb-maximum`: on a read, the
   declared bounds it states without enforcing them, so a stored row past one still reads.
 
