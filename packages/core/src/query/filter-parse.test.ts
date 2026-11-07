@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { FILTER_OPERATORS, parseFilter } from "./filter-parse.ts"
+import { FILTER_OPERATORS, parseFilter, readFilter } from "./filter-parse.ts"
 
 const value = (input: string) => parseFilter(input)?.root.conditions[0]?.value
 
@@ -249,9 +249,10 @@ describe("parseFilter — quoted values and whitespace (Q-L1, Q-L2)", () => {
 		})
 	})
 
-	it("keeps an empty quoted list member and drops an empty bare one", () => {
-		expect(value('title.in.("",a,)')).toEqual(["", "a"])
-		expect(value("title.in.(a,,b)")).toEqual(["a", "b"])
+	it("keeps an empty quoted list member", () => {
+		expect(value('title.in.("",a)')).toEqual(["", "a"])
+		expect(value("title.in.()")).toEqual([])
+		expect(value("title.in.( )")).toEqual([])
 	})
 
 	it("refuses an unterminated quote", () => {
@@ -277,5 +278,33 @@ describe("parseFilter — a quoted list member (Q-N2)", () => {
 		expect(parseFilter('tag.in.("a" "b")')).toBeNull()
 		expect(parseFilter('tag.in.("a", "b")')?.root.conditions[0]?.value).toEqual(["a", "b"])
 		expect(parseFilter('tag.in.("a" )')?.root.conditions[0]?.value).toEqual(["a"])
+	})
+})
+
+/* QL14: a comma that ends a group or a list, or sits beside another, holds an empty member the grammar dropped */
+describe("parseFilter — an empty member (QL14)", () => {
+	const CASES: Array<[string, number]> = [
+		["a.eq.x,", 7],
+		["or(a.eq.x,)", 10],
+		["and(a.eq.x, )", 12],
+		["a.eq.x,,a.eq.y", 7],
+		[",a.eq.x", 0],
+		["a.in.(,)", 6],
+		["a.nin.(,)", 7],
+		["a.in.(x,,y)", 8],
+		["a.in.(x, )", 9],
+		["a.in.(,x)", 6],
+		['a.in.("",x,)', 11],
+		["  a.eq.x,", 9],
+	]
+
+	it.each(CASES)("refuses %j as an empty member at position %i", (input, position) => {
+		expect(parseFilter(input)).toBeNull()
+		expect(readFilter(input)).toEqual({ error: `Invalid filter syntax: empty member at position ${position}` })
+	})
+
+	it("keeps in.() the only empty list, and a quoted empty member a member", () => {
+		expect(readFilter("a.in.()")).toEqual({ ast: parseFilter("a.in.()") })
+		expect(value('a.in.("",x)')).toEqual(["", "x"])
 	})
 })
