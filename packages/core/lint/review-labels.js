@@ -8,8 +8,8 @@
 const GAP = String.raw`(?:[ \t]+|[ \t]*\n[ \t]*(?:\*(?!\/)|\/\/)?[ \t]*)`
 
 /* real names a finding's ID would match: Cloudflare D1, SQLite FTS5, Go's RE2, a hash, a standard,
- * an encoding, a Postgres integer type, a TypeScript diagnostic, a SQLSTATE */
-const NAMES = String.raw`(?!(?:D1|FTS\d|RE2|SHA\d+|ES\d{4}|UTF\d+|INT\d+|TS\d{4}|P0001|XX000)\b)`
+ * an encoding, a Postgres integer type, a TypeScript diagnostic, a SQLSTATE, the IANA time zone GMT0 */
+const NAMES = String.raw`(?!(?:D1|FTS\d|RE2|SHA\d+|ES\d{4}|UTF\d+|INT\d+|TS\d{4}|P0001|XX000|GMT0)\b)`
 
 /** One finding's ID: an optional `letter-` prefix, letters, a number, an optional `-number` and an
  * optional letter (QL2, N-S5, AB4-7, P1a) */
