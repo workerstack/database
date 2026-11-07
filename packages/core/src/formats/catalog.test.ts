@@ -97,6 +97,15 @@ const CASES: {
 	},
 }
 
+/* each text id's example as the `format?` keys' JSDoc in src/sqlite/constraints.ts lists it: `- \`id\`: standard; \`example\`; …` */
+const DOCUMENTED: ReadonlyMap<string, string> = new Map(
+	[
+		...readFileSync(new URL("../sqlite/constraints.ts", import.meta.url), "utf8").matchAll(
+			/^\s*\* - `([a-z0-9-]+)`: [^;\n]+; `([^`]+)`; (?:registry|pattern only)$/gmu,
+		),
+	].map(([, id, example]) => [id as string, example as string]),
+)
+
 const sorted = (list: readonly string[]): string[] => [...list].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
 
 describe("the format ids", () => {
@@ -126,6 +135,12 @@ describe.each(TEXT_FORMATS)("the %s format", (format) => {
 		for (const value of [...CASES[format].takes, ...CASES[format].refuses]) {
 			expect(re2.test(value), value).toBe(unicode.test(value))
 		}
+	})
+
+	/* a generated DTO publishes it, so it must pass the format's own rule as written */
+	it("has an example the format takes as written, the one the format key's JSDoc lists", () => {
+		expect(formatTakes(format, spec.example)).toBe(true)
+		expect(spec.example).toBe(DOCUMENTED.get(format))
 	})
 
 	it("trims, then applies at most one case transform", () => {

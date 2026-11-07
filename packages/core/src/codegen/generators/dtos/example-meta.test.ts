@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest"
-import { parseField } from "../../__fixtures__/runtime.ts"
-import type { FieldMeta } from "../../analyzer-types.ts"
+import * as z from "zod"
+import { INTEGER_FORMATS, TEXT_FORMATS } from "../../../formats/catalog.ts"
+import * as comb from "../../../index.ts"
+import { fieldOf, parseField } from "../../__fixtures__/runtime.ts"
+import type { FieldMeta, ImportsMeta } from "../../analyzer-types.ts"
 import { generateExampleMeta, SHARED_META_KEYS, SHARED_META_VALUES } from "./example-meta.ts"
+import { generateFieldSchema } from "./field-schema.ts"
 
 const field = (raw: string, overrides: Partial<FieldMeta> = {}): FieldMeta => ({
 	...parseField("f", raw),
@@ -120,5 +124,69 @@ describe("generateExampleMeta: a Postgres array column (F49)", () => {
 		expect(code('c.text("f")', { dimensions: 1 })).toBeNull()
 		expect(code('c.text("f")', { dimensions: undefined })).toBe(code('c.text("f")'))
 		expect(code('c.text("f")')).not.toBeNull()
+	})
+})
+
+const dateOrder = z.enum(["iso", "dmy", "mdy"])
+const evenMinutes = z.int().refine((value) => value % 2 === 0, { error: "Must be even" })
+
+/** The written field `raw` declares, as its create DTO's generated code builds it, with the example it publishes */
+function createdOf(raw: string): { examples: unknown; schema: z.ZodType } {
+	const imports: ImportsMeta = { enumImports: new Map(), identifiers: new Map(), jsonSchemaImports: new Set() }
+	const generated = generateFieldSchema(fieldOf("f", raw), "create", { imports }) as string
+	const schema = new Function("z", "comb", "_m", `return ${generated}`)(z, comb, {}) as z.ZodType
+	const published = z.toJSONSchema(schema, { io: "input" }) as {
+		anyOf?: Array<{ examples?: unknown }>
+		examples?: unknown
+	}
+	return { examples: published.examples ?? published.anyOf?.[0]?.examples, schema }
+}
+
+/* plan 24: a generated example passes the field's own published rule, so a format field's is its standard's */
+describe("generateExampleMeta: a format column's example", () => {
+	it("is the text format's own example, written in the standard's form", () => {
+		expect(generateExampleMeta(parseField("f", 'c.text("f", { format: "iso4217" })'))).toEqual({
+			code: '.meta({ examples: ["EUR"] })',
+			needsSharedMeta: false,
+		})
+	})
+
+	it("is left out where the column's own bounds refuse the format's example", () => {
+		expect(generateExampleMeta(parseField("f", 'c.text("f", { format: "bcp47", max: 5 })'))).toBeNull()
+		expect(generateExampleMeta(parseField("f", 'c.text("f", { format: "bcp47", min: 11 })'))).toBeNull()
+	})
+
+	it("lies in an integer format's range, joined with the declared bounds", () => {
+		expect(code('c.integer("f", { format: "iso8601-weekday" })')).toBe(".meta({ examples: [4] })")
+		expect(code('c.integer("f", { format: "iso8601-weekday", max: 3 })')).toBe(".meta({ examples: [2] })")
+		expect(code('c.integer("f", { format: "iso8601-month", min: 9 })')).toBe(".meta({ examples: [10] })")
+	})
+
+	it("is published on a nullable format field's member, and its DTO takes it", () => {
+		const { examples, schema } = createdOf('c.text("f", { format: "iso4217" })')
+		expect(examples).toEqual(["EUR"])
+		expect(schema.parse("EUR")).toBe("EUR")
+	})
+
+	it.each([
+		...TEXT_FORMATS.map((format) => `c.text("f", { format: ${JSON.stringify(format)} }).notNull()`),
+		...INTEGER_FORMATS.map((format) => `c.integer("f", { format: ${JSON.stringify(format)} }).notNull()`),
+	])("passes the field's own DTO: %s", (raw) => {
+		const { examples, schema } = createdOf(raw)
+		expect(Array.isArray(examples) && examples.length === 1, JSON.stringify(examples)).toBe(true)
+		expect(schema.safeParse((examples as unknown[])[0]).success).toBe(true)
+	})
+})
+
+/* plan 24: a column schema's rule may be a refine its published JSON Schema does not state, so comb knows no value it takes */
+describe("generateExampleMeta: a schema'd column", () => {
+	it("gets no example of comb's", () => {
+		for (const raw of [
+			'c.text("f", { schema: dateOrder })',
+			'c.text("f", { format: "iso4217", schema: dateOrder })',
+			'c.integer("f", { schema: evenMinutes })',
+			'c.real("f", { schema: evenMinutes })',
+		])
+			expect(generateExampleMeta(fieldOf("f", raw, { scope: { dateOrder, evenMinutes } })), raw).toBeNull()
 	})
 })
