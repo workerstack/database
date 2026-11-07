@@ -3,6 +3,9 @@
  * objects over inline ones.
  */
 import type { FieldMeta } from "../../analyzer-types.ts"
+import { declaredBounds } from "./number-range.ts"
+import { textFormatOf } from "./text-format.ts"
+import { textRules } from "./text-schema.ts"
 
 const EXAMPLE_ULID = "01h5a3g8k9m2n4p6q8r0t2v4x6"
 const ALPHANUMERIC_CYCLE = "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0"
@@ -66,10 +69,12 @@ const NO_EXAMPLE_KINDS: ReadonlySet<string> = /* @__PURE__ */ new Set([
 ])
 
 /* sensitive or structured values get no example: the schema says enough, the value would leak */
-function hasNoExample({ combKind, constraints, dataType, dimensions, foreignKey }: FieldMeta): boolean {
+function hasNoExample({ combKind, constraints, dataType, dimensions, foreignKey, schemaJson }: FieldMeta): boolean {
 	/* a pattern decides what the value looks like, which no generic example can know; an array's
 	 * example would be its element's, of the wrong shape */
 	if (constraints.private || constraints.password || constraints.pattern !== null || foreignKey !== null) return true
+	/* a schema's rule may be a refine its published JSON Schema does not state, so comb knows no value it takes */
+	if (schemaJson !== null) return true
 	if ((dimensions ?? 0) > 0) return true
 	if (combKind === null) return dataType === "object json"
 	return NO_EXAMPLE_KINDS.has(combKind)
@@ -83,7 +88,8 @@ const SHARED_NUMBER = { integer: 42, real: 0.5, timestamp: 1_711_468_800_000 }
  * or the one bound it misses
  */
 function midpoint(field: FieldMeta, key: keyof typeof SHARED_NUMBER): ExampleResult {
-	const { max, min } = field.constraints
+	/* an integer format's range is a declared bound, as the DTO checks it */
+	const { max, min } = declaredBounds(field.constraints)
 	const fits = (value: number) => (min === null || value >= min) && (max === null || value <= max)
 	if (fits(SHARED_NUMBER[key])) return shared(key)
 	/* an integer's example is an integer within its bounds, a fractional bound rounded inward */
@@ -120,6 +126,19 @@ function textExample({ constraints: { max, min } }: FieldMeta): ExampleResult {
 	return inline(JSON.stringify(cycleOf(max !== null && max < word ? max : (min as number))))
 }
 
+/**
+ * A text format's example, the catalog's value of its standard as written, which its DTO takes;
+ * none where the column's own range, its declared bounds and length, leaves it out
+ */
+function formatExample(field: FieldMeta): ExampleResult | null | undefined {
+	const format = textFormatOf(field.constraints)
+	if (format === null) return undefined
+	const { max, min } = textRules(field.constraints, field)
+	const { length } = format.spec.example
+	if ((max !== null && length > max) || (min !== null && length < min)) return null
+	return inline(JSON.stringify(format.spec.example))
+}
+
 /** A rule's answer: an example, `null` for none at all, `undefined` when the field is not its kind */
 type Rule = (field: FieldMeta) => ExampleResult | null | undefined
 
@@ -146,6 +165,7 @@ const RULES: Rule[] = [
 	/* a state column's example is the value a row starts at, which its create alone takes */
 	({ enumValues, states }) =>
 		enumValues !== null && enumValues.length > 0 ? inline(JSON.stringify(states?.initial ?? enumValues[0])) : undefined,
+	formatExample,
 	(field) =>
 		field.combKind === "integer" || field.combKind === "real" || field.combKind === "timestamp"
 			? midpoint(field, field.combKind)

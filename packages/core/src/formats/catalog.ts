@@ -77,6 +77,8 @@ export type FormatSpec = {
 	readonly transform: readonly ("lowercase" | "trim" | "uppercase")[]
 	/** The pinned registry the value must belong to, by its predicate's name, or null when the source is the whole rule */
 	readonly member: Member | null
+	/** A value of the format as written, which the format takes and a generated DTO publishes as its example */
+	readonly example: string
 }
 
 /** The range an integer format's value lies in */
@@ -118,6 +120,19 @@ const BASE64URL = "[A-Za-z0-9_-]"
 /* whole quads, then two or three characters: a length of 1 mod 4 encodes no byte string */
 const UNPADDED = `^(?:${BASE64URL}{4})*(?:${BASE64URL}{2,3})?$`
 
+/* the examples too long for their format's row, the digests of no bytes among them */
+const PHONE = "+385911234567"
+const ZONE = "Europe/Zagreb"
+const IPV6 = "2001:db8::1"
+const PKCE_CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+const RGBA = "#1e90ff80"
+const ULID = "01hzy3k8q2m4n5p6r7s8t9v0wx"
+const UUID_V7 = "01890a5d-ac96-774b-bcce-b302099a8057"
+const SHA256_EMPTY = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+const SHA512_EMPTY =
+	"cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e"
+const UUID_V4 = "0f8fad5b-d9cb-469f-a165-70867728950e"
+
 /* the standards whose names would widen a row past the line */
 const COUNTRY_2 = "ISO 3166-1 alpha-2 country code, Debian iso-codes v4.20.1"
 const COUNTRY_3 = "ISO 3166-1 alpha-3 country code, Debian iso-codes v4.20.1"
@@ -125,6 +140,10 @@ const CURRENCY = "ISO 4217 alphabetic currency code, SIX list 2026-09-17"
 const LANGUAGE_CODE = "ISO 639-1 language code, Debian iso-codes v4.20.1"
 const CHALLENGE = "RFC 7636 §4.2 PKCE SHA-256 code challenge"
 const SLUG = "kebab-case slug, lowercase letters and digits joined by single hyphens"
+const ADDRESS = "IPv4 dotted quad or IPv6 address, RFC 4291 §2.2"
+const DIGEST_256 = "SHA-256 digest, FIPS 180-4, lowercase hex"
+const DIGEST_512 = "SHA-512 digest, FIPS 180-4, lowercase hex"
+const COLOR_ALPHA = "sRGB color with alpha as #rrggbbaa, CSS Color 4"
 
 /** One row of the table: a spec's fields in the order a reader scans them */
 type Row = readonly [
@@ -134,10 +153,12 @@ type Row = readonly [
 	max: number | null,
 	transform: Transforms,
 	member: Member | null,
+	example: string,
 ]
 
 /** The spec a row states */
-const spec = ([standard, source, min, max, transform, member]: Row): FormatSpec => ({
+const spec = ([standard, source, min, max, transform, member, example]: Row): FormatSpec => ({
+	example,
 	max,
 	member,
 	min,
@@ -147,14 +168,23 @@ const spec = ([standard, source, min, max, transform, member]: Row): FormatSpec 
 })
 
 /** RFC 9562's 8-4-4-4-12 layout in lowercase hex, its version digit and variant digit given */
-const uuid = (standard: string, version: string, variant: string): FormatSpec =>
-	spec([standard, `^${HEX}{8}-${HEX}{4}-${version}${HEX}{3}-${variant}${HEX}{3}-${HEX}{12}$`, 36, 36, LOWERCASE, null])
+const uuid = (standard: string, [version, variant]: [string, string], example: string): FormatSpec =>
+	spec([
+		standard,
+		`^${HEX}{8}-${HEX}{4}-${version}${HEX}{3}-${variant}${HEX}{3}-${HEX}{12}$`,
+		36,
+		36,
+		LOWERCASE,
+		null,
+		example,
+	])
 
 /** A UTS #35 key's spec: an alternation of CLDR's values, the whole rule, bounded by the shortest and longest */
-function uts35(key: string, values: readonly string[]): FormatSpec {
+function uts35(key: string, values: readonly string[], example: string): FormatSpec {
 	const lengths = values.map((value) => value.length)
 	const standard = `UTS #35 ${key} key value, CLDR 49`
-	return spec([standard, `^(?:${values.join("|")})$`, Math.min(...lengths), Math.max(...lengths), LOWERCASE, null])
+	const [min, max] = [Math.min(...lengths), Math.max(...lengths)]
+	return spec([standard, `^(?:${values.join("|")})$`, min, max, LOWERCASE, null, example])
 }
 
 /** Every text format's spec, built in a function so importing the module runs nothing */
@@ -162,37 +192,37 @@ function specs(): { readonly [F in TextFormat]: FormatSpec } {
 	const ipv4 = ipv4Source()
 	const ipv6 = strictIpv6Source()
 	return {
-		base64url: spec(["RFC 4648 §5 base64url, unpadded", UNPADDED, 0, null, TRIM, null]),
+		base64url: spec(["RFC 4648 §5 base64url, unpadded", UNPADDED, 0, null, TRIM, null, "dGVzdA"]),
 		/* RFC 5646 §4.4.1's 35 is the buffer an implementation must hold, not a cap on a tag */
-		bcp47: spec(["BCP 47 language tag, RFC 5646 §2.1 well-formed", `^${LANGTAG}$`, 2, null, TRIM, null]),
-		e164: spec(["ITU-T E.164 phone number, + and up to 15 digits", "^\\+[1-9][0-9]{1,14}$", 3, 16, TRIM, null]),
-		"iana-time-zone": spec(["IANA time zone name, tzdata 2026f", ZONE_NAME, 1, 64, TRIM, "isIanaTimeZone"]),
-		ip: spec(["IPv4 dotted quad or IPv6 address, RFC 4291 §2.2", `^(?:${ipv4}|${ipv6})$`, 2, 45, LOWERCASE, null]),
-		ipv4: spec(["IPv4 address, dotted quad without leading zeros", `^${ipv4}$`, 7, 15, TRIM, null]),
-		ipv6: spec(["IPv6 address, RFC 4291 §2.2", `^(?:${ipv6})$`, 2, 45, LOWERCASE, null]),
-		"iso3166-1-alpha-2": spec([COUNTRY_2, "^[A-Z]{2}$", 2, 2, UPPERCASE, "isIso3166Alpha2"]),
-		"iso3166-1-alpha-3": spec([COUNTRY_3, "^[A-Z]{3}$", 3, 3, UPPERCASE, "isIso3166Alpha3"]),
-		iso4217: spec([CURRENCY, "^[A-Z]{3}$", 3, 3, UPPERCASE, "isIso4217"]),
-		"iso639-1": spec([LANGUAGE_CODE, "^[a-z]{2}$", 2, 2, LOWERCASE, "isIso639Alpha2"]),
-		"kebab-slug": spec([SLUG, "^[a-z0-9]+(?:-[a-z0-9]+)*$", 1, 128, TRIM, null]),
-		"pkce-s256-challenge": spec([CHALLENGE, `^${BASE64URL}{43}$`, 43, 43, TRIM, null]),
-		"rfc1123-hostname": spec(["RFC 1123 §2.1 host name", HOSTNAME, 1, 253, LOWERCASE, null]),
-		semver: spec(["Semantic Versioning 2.0.0 version", `^${SEMVER}$`, 5, 256, TRIM, null]),
-		"sha256-hex": spec(["SHA-256 digest, FIPS 180-4, lowercase hex", `^${HEX}{64}$`, 64, 64, LOWERCASE, null]),
-		"sha512-hex": spec(["SHA-512 digest, FIPS 180-4, lowercase hex", `^${HEX}{128}$`, 128, 128, LOWERCASE, null]),
-		"srgb-hex": spec(["sRGB color as #rrggbb, CSS Color 4", `^#${HEX}{6}$`, 7, 7, LOWERCASE, null]),
-		"srgb-hex-alpha": spec(["sRGB color with alpha as #rrggbbaa, CSS Color 4", `^#${HEX}{8}$`, 9, 9, LOWERCASE, null]),
+		bcp47: spec(["BCP 47 language tag, RFC 5646 §2.1 well-formed", `^${LANGTAG}$`, 2, null, TRIM, null, "zh-Hant-TW"]),
+		e164: spec(["ITU-T E.164 phone number, + and up to 15 digits", "^\\+[1-9][0-9]{1,14}$", 3, 16, TRIM, null, PHONE]),
+		"iana-time-zone": spec(["IANA time zone name, tzdata 2026f", ZONE_NAME, 1, 64, TRIM, "isIanaTimeZone", ZONE]),
+		ip: spec([ADDRESS, `^(?:${ipv4}|${ipv6})$`, 2, 45, LOWERCASE, null, IPV6]),
+		ipv4: spec(["IPv4 address, dotted quad without leading zeros", `^${ipv4}$`, 7, 15, TRIM, null, "192.0.2.1"]),
+		ipv6: spec(["IPv6 address, RFC 4291 §2.2", `^(?:${ipv6})$`, 2, 45, LOWERCASE, null, IPV6]),
+		"iso3166-1-alpha-2": spec([COUNTRY_2, "^[A-Z]{2}$", 2, 2, UPPERCASE, "isIso3166Alpha2", "HR"]),
+		"iso3166-1-alpha-3": spec([COUNTRY_3, "^[A-Z]{3}$", 3, 3, UPPERCASE, "isIso3166Alpha3", "HRV"]),
+		iso4217: spec([CURRENCY, "^[A-Z]{3}$", 3, 3, UPPERCASE, "isIso4217", "EUR"]),
+		"iso639-1": spec([LANGUAGE_CODE, "^[a-z]{2}$", 2, 2, LOWERCASE, "isIso639Alpha2", "hr"]),
+		"kebab-slug": spec([SLUG, "^[a-z0-9]+(?:-[a-z0-9]+)*$", 1, 128, TRIM, null, "spring-sale-2026"]),
+		"pkce-s256-challenge": spec([CHALLENGE, `^${BASE64URL}{43}$`, 43, 43, TRIM, null, PKCE_CHALLENGE]),
+		"rfc1123-hostname": spec(["RFC 1123 §2.1 host name", HOSTNAME, 1, 253, LOWERCASE, null, "api.example.com"]),
+		semver: spec(["Semantic Versioning 2.0.0 version", `^${SEMVER}$`, 5, 256, TRIM, null, "1.4.0-rc.1"]),
+		"sha256-hex": spec([DIGEST_256, `^${HEX}{64}$`, 64, 64, LOWERCASE, null, SHA256_EMPTY]),
+		"sha512-hex": spec([DIGEST_512, `^${HEX}{128}$`, 128, 128, LOWERCASE, null, SHA512_EMPTY]),
+		"srgb-hex": spec(["sRGB color as #rrggbb, CSS Color 4", `^#${HEX}{6}$`, 7, 7, LOWERCASE, null, "#1e90ff"]),
+		"srgb-hex-alpha": spec([COLOR_ALPHA, `^#${HEX}{8}$`, 9, 9, LOWERCASE, null, RGBA]),
 		/* Crockford's base32 in lowercase, as generateUlid writes it; the first character holds 3 bits */
-		ulid: spec(["ULID, Crockford base32 in lowercase", "^[0-7][0-9a-hjkmnp-tv-z]{25}$", 26, 26, LOWERCASE, null]),
-		"uts35-ca": uts35("calendar (ca)", CALENDARS),
-		"uts35-fw": uts35("first day of the week (fw)", FIRST_DAYS),
-		"uts35-hc": uts35("hour cycle (hc)", HOUR_CYCLES),
-		"uts35-ms": uts35("measurement system (ms)", MEASUREMENT_SYSTEMS),
-		"uts35-mu": uts35("measurement unit (mu)", MEASUREMENT_UNITS),
-		"uts35-nu": uts35("numbering system (nu)", NUMBERING_SYSTEMS),
-		uuid: uuid("RFC 9562 UUID, lowercase hex", HEX, HEX),
-		"uuid-v4": uuid("RFC 9562 UUID version 4, lowercase hex", "4", "[89ab]"),
-		"uuid-v7": uuid("RFC 9562 UUID version 7, lowercase hex", "7", "[89ab]"),
+		ulid: spec(["ULID, Crockford base32 in lowercase", "^[0-7][0-9a-hjkmnp-tv-z]{25}$", 26, 26, LOWERCASE, null, ULID]),
+		"uts35-ca": uts35("calendar (ca)", CALENDARS, "gregory"),
+		"uts35-fw": uts35("first day of the week (fw)", FIRST_DAYS, "mon"),
+		"uts35-hc": uts35("hour cycle (hc)", HOUR_CYCLES, "h23"),
+		"uts35-ms": uts35("measurement system (ms)", MEASUREMENT_SYSTEMS, "metric"),
+		"uts35-mu": uts35("measurement unit (mu)", MEASUREMENT_UNITS, "celsius"),
+		"uts35-nu": uts35("numbering system (nu)", NUMBERING_SYSTEMS, "latn"),
+		uuid: uuid("RFC 9562 UUID, lowercase hex", [HEX, HEX], UUID_V4),
+		"uuid-v4": uuid("RFC 9562 UUID version 4, lowercase hex", ["4", "[89ab]"], UUID_V4),
+		"uuid-v7": uuid("RFC 9562 UUID version 7, lowercase hex", ["7", "[89ab]"], UUID_V7),
 	}
 }
 
