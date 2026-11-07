@@ -1,16 +1,16 @@
 /**
  * The runtime reader: load the tables module, find every drizzle table it exports, and read each
  * as drizzle built it (getTableConfig) and as comb's `c` helpers recorded it (combColumnMeta).
- * Objects a generated file must import, a c.json schema or a c.enum values array, are located by
- * identity among the exports of the project modules the tables module loads.
+ * Objects a generated file must import, a c.json schema or a text or number column's schema, are
+ * located by identity among the exports of the project modules the tables module loads.
  */
 import { Column, getTableColumns, is, type SQL, type Table } from "drizzle-orm"
 import { ExtraConfigColumn, getTableConfig as pgConfig, IndexedColumn, PgDialect, PgTable } from "drizzle-orm/pg-core"
 import { getTableConfig as sqliteConfig, SQLiteDialect, SQLiteTable } from "drizzle-orm/sqlite-core"
 import { byCodeUnit } from "../utils/order.ts"
-import { combColumnMeta } from "../../meta/column.ts"
+import { combColumnMeta, type CombColumnMeta } from "../../meta/column.ts"
 import { dimensionsOf, filledByDefault, type ReadColumn, unnamedUnique } from "./read-column.ts"
-import { constraintsOf, refuseJsonDocument, statesOf, STRING_LIST } from "./read-comb.ts"
+import { columnSchemaOf, constraintsOf, refuseJsonDocument, skipped, statesOf, STRING_LIST } from "./read-comb.ts"
 import type { ElementNulls } from "./element-types.ts"
 import type {
 	ModuleExport,
@@ -52,29 +52,41 @@ type Context = {
 	unloaded: readonly string[]
 }
 
+/** Where `value` is exported, the first of `exportsHolding`; null when nowhere, or when nothing was given */
+const locate = (value: unknown, context: Context): ModuleExport | null =>
+	value === undefined ? null : (exportsHolding(value, context.loaded, context.tablesPath)[0] ?? null)
+
+/** Where a c.json column's schema is exported; an error naming the column when nowhere, or for a schema that is no stored document */
+function jsonSchemaOf(
+	meta: CombColumnMeta,
+	column: ReadColumn,
+	{ at, context }: { at: string; context: Context },
+): ModuleExport | null {
+	if (meta.kind !== "json") return null
+	const schema = locate(meta.schema, context)
+	if (schema === null)
+		throw new Error(
+			`${at}: no module of the project exports the schema its c.json is given${skipped(context.unloaded)}; export it, so the generated DTOs can import it`,
+		)
+	refuseJsonDocument(meta.schema, at, {
+		filled: filledByDefault(column),
+		notNull: column.notNull && !column.dimensions,
+	})
+	return schema
+}
+
 function combOf(column: ReadColumn, at: string, context: Context): SnapshotComb | null {
 	const meta = combColumnMeta(column)
 	if (meta === undefined) return null
-	const located = (value: unknown) =>
-		value === undefined ? null : (exportsHolding(value, context.loaded, context.tablesPath)[0] ?? null)
 	if (meta.values !== undefined && !STRING_LIST(meta.values)) throw new Error(`${at}: c.enum takes an array of strings`)
-	const schema = located(meta.schema)
-	if (meta.kind === "json" && schema === null) {
-		const skipped = context.unloaded.length === 0 ? "" : ` (${context.unloaded.join(", ")} would not load on their own)`
-		throw new Error(
-			`${at}: no module of the project exports the schema its c.json is given${skipped}; export it, so the generated DTOs can import it`,
-		)
-	}
-	if (meta.kind === "json")
-		refuseJsonDocument(meta.schema, at, {
-			filled: filledByDefault(column),
-			notNull: column.notNull && !column.dimensions,
-		})
+	const own = columnSchemaOf(meta, at, { locate: (value) => locate(value, context), unloaded: context.unloaded })
+	const schema = own.schema ?? jsonSchemaOf(meta, column, { at, context })
 	return {
-		constraints: constraintsOf(meta.constraints, at),
+		constraints: constraintsOf(own.constraints, at),
 		kind: meta.kind,
 		prefix: meta.prefix ?? null,
 		schema,
+		schemaJson: own.schemaJson,
 		states: statesOf(meta.states, at, column),
 		values: meta.values === undefined ? null : [...meta.values],
 	}

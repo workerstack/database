@@ -14,8 +14,10 @@ type SnapshotComb = {
 	constraints: Record<string, boolean | number | string>
 	kind: string
 	prefix: string | null
-	/** where the exact zod schema a c.json column was given is exported; null when nowhere */
+	/** where the exact zod schema a c.json column, or a text or number column's `schema` key, was given is exported; null when none was given */
 	schema: ModuleExport | null
+	/** a text or number column's schema as its input JSON Schema, self-contained (each `$defs` entry inlined) and `$schema` dropped; null on c.json and when undeclared */
+	schemaJson: Readonly<Record<string, unknown>> | null
 	states: { initial: string | null; terminal: string[] | null; transitions: Record<string, string[]> | null } | null
 	values: string[] | null
 }

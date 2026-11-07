@@ -106,6 +106,115 @@ export const note = sqliteTable("note", { id: c.id("not"), prefs: c.json("prefs"
 	})
 })
 
+/* plan 24: a text or number column's `schema`, located as a c.json schema is and carried as its input JSON Schema */
+const SCHEMA_TABLES = `${HEAD}import * as z from "zod"
+import { dateOrder, positive } from "./schemas.ts"
+export const evenMinutes = z.int().refine((value) => value % 2 === 0, { error: "Must be even" })
+export const code = z.string().min(2).meta({ id: "comb/Code~1" })
+export const codeOrNone = z.union([code, z.literal("none")])
+export const note = sqliteTable("note", {
+	id: c.id("not"),
+	dateOrder: c.text("date_order", { schema: dateOrder, trim: true }),
+	slot: c.integer("slot", { min: 0, schema: evenMinutes }),
+	ratio: c.real("ratio", { schema: positive }),
+	code: c.text("code", { schema: code }),
+	codeOrNone: c.text("code_or_none", { schema: codeOrNone }),
+	ownerId: c.ref("owner_id", { schema: dateOrder }),
+})
+`
+
+/** Where a fixture file of `dir` exports `name` */
+const exportAt = (module: string, name: string) => ({ external: false, module: path.join(dir, module), name })
+
+/** The error for an unexported column schema, the packages that would not load named by `skipped` */
+const unexported = (skipped: string) =>
+	`users.dateOrder: no module of the project exports the schema its schema key is given${skipped}; export it, above the table that names it, so the generated DTOs can import it`
+
+describe("readTables: a text or number column's schema, located", () => {
+	it("in the tables module or a module it imports, with its input JSON Schema, self-contained", async () => {
+		const tables = write({
+			"db.core.tables.ts": SCHEMA_TABLES,
+			"schemas.ts": `import * as z from "zod"\nexport const dateOrder = z.enum(["iso", "dmy", "mdy"])\nexport const positive = z.number().positive()\n`,
+		})
+		const { tables: read } = await readTables(tables)
+		const comb = Object.fromEntries((read[0]?.columns ?? []).map((column) => [column.key, column.comb]))
+		expect(comb["dateOrder"]).toMatchObject({
+			constraints: { trim: true },
+			schema: exportAt("schemas.ts", "dateOrder"),
+			schemaJson: { enum: ["iso", "dmy", "mdy"], type: "string" },
+		})
+		expect(comb["slot"]).toMatchObject({
+			constraints: { min: 0 },
+			schema: exportAt("db.core.tables.ts", "evenMinutes"),
+			schemaJson: { maximum: Number.MAX_SAFE_INTEGER, minimum: Number.MIN_SAFE_INTEGER, type: "integer" },
+		})
+		expect(comb["ratio"]).toMatchObject({
+			schema: exportAt("schemas.ts", "positive"),
+			schemaJson: { exclusiveMinimum: 0, type: "number" },
+		})
+		/* a schema zod files under $defs by its id is inlined: a $ref into the literal's own root would dangle in an allOf */
+		expect(comb["code"]?.schemaJson).toEqual({ minLength: 2, type: "string" })
+		expect(comb["codeOrNone"]?.schemaJson).toEqual({
+			anyOf: [
+				{ minLength: 2, type: "string" },
+				{ const: "none", type: "string" },
+			],
+		})
+		/* a helper that takes no schema keeps the key, so the constraint check names it; nothing is located */
+		expect(comb["ownerId"]).toMatchObject({ constraints: { schema: true }, schema: null, schemaJson: null })
+		expect(comb["id"]).toMatchObject({ schema: null, schemaJson: null })
+	})
+})
+
+describe("readTables: a text or number column's schema, refused", () => {
+	it("when inline, so no module exports it, naming the packages that would not load", async () => {
+		const tables = write({
+			"db.core.tables.ts": `${HEAD}import * as z from "zod"
+import { other } from "./other.ts"
+export const users = sqliteTable("users", { dateOrder: c.text("date_order", { schema: z.enum(["iso", other]) }) })
+`,
+			"other.ts": `export const other = "dmy"\n`,
+		})
+		await expect(readTables(tables)).rejects.toThrow(unexported(""))
+		await expect(readTables(tables, failingOn)).rejects.toThrow(
+			unexported(` (${path.join(dir, "other.ts")}, zod would not load on their own)`),
+		)
+	})
+
+	it("when it is no zod schema", async () => {
+		const plain = write({
+			"db.core.tables.ts": `${HEAD}export const parser = { parse() {} }
+export const users = sqliteTable("users", { dateOrder: c.text("date_order", { schema: parser }) })
+`,
+		})
+		await expect(readTables(plain)).rejects.toThrow(
+			"users.dateOrder: the constraint schema is no zod schema; comb's DTOs are zod 4, so the schema must be one",
+		)
+	})
+
+	it("when zod gives it no JSON Schema form, with zod's own message", async () => {
+		const custom = write({
+			"db.core.tables.ts": `${HEAD}import * as z from "zod"
+export const anything = z.custom()
+export const users = sqliteTable("users", { dateOrder: c.text("date_order", { schema: anything }) })
+`,
+		})
+		await expect(readTables(custom)).rejects.toThrow(
+			"users.dateOrder: the schema its schema key is given has no JSON Schema form (zod: Custom types cannot be represented in JSON Schema); comb publishes every DTO rule",
+		)
+	})
+
+	it("when exported below its table, the module failing to load with its own error", async () => {
+		const tables = write({
+			"db.core.tables.ts": `${HEAD}import * as z from "zod"
+export const users = sqliteTable("users", { dateOrder: c.text("date_order", { schema: late }) })
+export const late = z.enum(["iso"])
+`,
+		})
+		await expect(readTables(tables)).rejects.toThrow(/^Cannot access 'late' before initialization/)
+	})
+})
+
 /** A namespace exporting one table `t` of `columns` */
 const oneTable = (columns: Record<string, unknown>) => ({ t: sqliteTable("t", columns as never) })
 

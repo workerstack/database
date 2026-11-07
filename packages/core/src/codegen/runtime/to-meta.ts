@@ -141,14 +141,15 @@ const TYPED_COLUMNS = {
 /** What a column's `c` helper recorded, as FieldMeta names it; a plain drizzle column's own enum values */
 function combFactsOf(
 	column: SnapshotColumn,
-): Pick<FieldMeta, "enumValues" | "jsonSchemaName" | "prefix" | "schemaImports" | "states"> {
+): Pick<FieldMeta, "enumValues" | "jsonSchemaName" | "prefix" | "schemaImports" | "schemaJson" | "states"> {
 	const comb = column.comb
 	const schema = comb?.schema ?? null
 	return {
 		enumValues: comb?.values ?? column.enumValues,
-		jsonSchemaName: schema?.name ?? null,
+		jsonSchemaName: comb?.kind === "json" ? (schema as ModuleExport).name : null,
 		prefix: comb?.prefix ?? null,
 		schemaImports: schema === null ? [] : [importOf(schema)],
+		schemaJson: comb?.schemaJson ?? null,
 		states: comb?.states ?? null,
 	}
 }

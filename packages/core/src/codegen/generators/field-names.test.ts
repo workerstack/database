@@ -49,6 +49,7 @@ function field(name: string): FieldMeta {
 		length: null,
 		name,
 		schemaImports: [],
+		schemaJson: null,
 		sqlName: name,
 	}
 }

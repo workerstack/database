@@ -95,6 +95,24 @@ describe("toAnalysis: references and schemas", () => {
 			{ from: "./db.core.tables", imported: "prefs", name: "prefs", path: "/fixture/db.core.tables.ts" },
 		])
 		expect(own?.jsonSchemaName).toBe("prefs")
+		expect(own?.schemaJson).toBeNull()
+	})
+
+	it("imports a text or number column's schema as a c.json one, with its JSON Schema and no c.json name", () => {
+		const dateOrder = z.enum(["iso", "dmy"])
+		const analysis = analyzeNamespace(
+			{ t: sqliteTable("t", { d: c.text("d", { schema: dateOrder, trim: true } as never), n: c.text("n") }) },
+			{ dateOrder },
+		)
+		const [field, plain] = analysis.tables[0]?.fields ?? []
+		expect(field).toMatchObject({
+			constraints: { trim: true },
+			jsonSchemaName: null,
+			schemaImports: [{ from: "./schemas", imported: "dateOrder", name: "dateOrder", path: "/fixture/schemas.ts" }],
+			schemaJson: { enum: ["iso", "dmy"], type: "string" },
+		})
+		expect(plain).toMatchObject({ schemaImports: [], schemaJson: null })
+		expect(analysis.imports.jsonSchemaImports).toEqual(new Set(["dateOrder"]))
 	})
 
 	it("marks a reference to a c.id key, and reads drizzle's own length for a plain column", () => {
@@ -122,6 +140,7 @@ describe("toAnalysis: a schema a package exports", () => {
 				kind: "json",
 				prefix: null,
 				schema: { external: true, module: "@app/schemas", name: "prefs" },
+				schemaJson: null,
 				states: null,
 				values: null,
 			},
