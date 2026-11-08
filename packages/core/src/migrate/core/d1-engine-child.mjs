@@ -9,10 +9,12 @@
  * Then each file as wrangler sends it, the file and the history row it appends, through wrangler's
  * `splitSqlQuery`, in one batch. D1 resolves a function in a trigger body, a view or a generated
  * column only when a statement uses it, so EXPLAIN then compiles each view, and each table's INSERT,
- * UPDATE and DELETE, the file made or changed. What D1 refuses comes back in D1's own words.
+ * UPDATE and DELETE, the file made or changed; a view takes only the writes its INSTEAD OF triggers fire
+ * on (trigger-write.mjs). What D1 refuses comes back in D1's own words.
  */
 import { readFileSync } from "node:fs"
 import { pathToFileURL } from "node:url"
+import { EVENTS, quote, triggerEvent, writeOf } from "./trigger-write.mjs"
 
 /**
  * @typedef {{ all(): Promise<{ results?: Array<Record<string, unknown>> | undefined }> }} D1Statement
@@ -26,9 +28,6 @@ import { pathToFileURL } from "node:url"
  * @typedef {import("./d1-engine-child.d.mts").ProofInput} ProofInput
  * @typedef {import("./d1-engine-child.d.mts").ProofResult} ProofResult
  */
-
-/** @param {string} name */
-const quote = (name) => `"${name.replaceAll('"', '""')}"`
 
 /**
  * D1's own words for a failure: the cause wrangler's client wraps, when there is one
@@ -87,7 +86,8 @@ async function isRowTable(db, table) {
  * @returns {Promise<string[]>}
  */
 async function probes(db, before) {
-	const changed = [...(await master(db))].filter(([key, object]) => before.get(key)?.sql !== object.sql)
+	const after = [...(await master(db))]
+	const changed = after.filter(([key, object]) => before.get(key)?.sql !== object.sql)
 	const views = changed.filter(([, object]) => object.type === "view").map(([, object]) => object.table)
 	const tables = new Set(changed.filter(([, object]) => object.type === "trigger").map(([, object]) => object.table))
 	for (const [, object] of changed)
@@ -96,14 +96,30 @@ async function probes(db, before) {
 	const writes = []
 	for (const table of tables) {
 		const { results = [] } = await db.prepare(`PRAGMA table_xinfo(${quote(table)})`).all()
-		const columns = results.filter((row) => row["hidden"] === 0).map((row) => quote(String(row["name"])))
-		writes.push(
-			`EXPLAIN INSERT INTO ${quote(table)} DEFAULT VALUES`,
-			`EXPLAIN UPDATE ${quote(table)} SET ${columns.map((column) => `${column} = ${column}`).join(", ")}`,
-			`EXPLAIN DELETE FROM ${quote(table)}`,
-		)
+		const columns = results.filter((row) => row["hidden"] === 0).map((row) => String(row["name"]))
+		for (const event of eventsOf(after, table)) writes.push(`EXPLAIN ${writeOf(table, event, columns)}`)
 	}
 	return [...views.map((view) => `EXPLAIN SELECT * FROM ${quote(view)}`), ...writes]
+}
+
+/**
+ * `name` as SQLite compares names, ASCII letters folded alone: a trigger's tbl_name is spelled as its ON clause was
+ * @param {string} name
+ */
+const fold = (name) => name.replace(/[A-Z]/g, (letter) => letter.toLowerCase())
+
+/**
+ * The writes `table` takes in the schema `objects`: a table every one, a view each its triggers fire on
+ * @param {ReadonlyArray<[string, SchemaObject]>} objects
+ * @param {string} table
+ */
+function eventsOf(objects, table) {
+	const on = objects.filter(([, object]) => fold(object.table) === fold(table))
+	if (!on.some(([, object]) => object.type === "view")) return EVENTS
+	const fired = new Set(
+		on.filter(([, object]) => object.type === "trigger").map(([, object]) => triggerEvent(object.sql)),
+	)
+	return EVENTS.filter((event) => fired.has(event))
 }
 
 /**

@@ -181,6 +181,46 @@ describe("prove: what D1 applies and then cannot run", () => {
 	)
 })
 
+/* SD2 of r23: a write through a view compiles only for an event an INSTEAD OF trigger on it fires on, and D1 runs a
+   view written for some events alone */
+describe("prove: a view written through INSTEAD OF triggers", () => {
+	const VIEW = `${LIVE}\nCREATE VIEW tv AS SELECT id, v FROM t;`
+	const ON_TV = {
+		delete: "CREATE TRIGGER tv_del INSTEAD OF DELETE ON tv BEGIN DELETE FROM t WHERE id = old.id; END;",
+		insert: "CREATE TRIGGER tv_ins INSTEAD OF INSERT ON tv BEGIN INSERT INTO t (v) VALUES (new.v); END;",
+		update: "CREATE TRIGGER tv_upd INSTEAD OF UPDATE ON tv BEGIN UPDATE t SET v = new.v WHERE id = old.id; END;",
+	}
+
+	it.each([
+		["INSERT", [ON_TV.insert]],
+		["UPDATE", [ON_TV.update]],
+		["DELETE", [ON_TV.delete]],
+		["INSERT and UPDATE", [ON_TV.insert, ON_TV.update]],
+		["every", [ON_TV.insert, ON_TV.update, ON_TV.delete]],
+	])(
+		"passes triggers for %s event of a view",
+		async (_, triggers) => {
+			expect(await proven([{ name: "1_tv.sql", sql: triggers.join("\n") }], { schema: VIEW })).toBeUndefined()
+		},
+		120_000,
+	)
+
+	it.each([
+		["INSERT", 'INSERT INTO "tv" DEFAULT VALUES', ON_TV.insert.replace("VALUES (new.v)", "VALUES (power(new.v, 2))")],
+		["UPDATE", 'UPDATE "tv" SET "id" = "id", "v" = "v"', ON_TV.update.replace("v = new.v", "v = power(new.v, 2)")],
+		["DELETE", 'DELETE FROM "tv"', ON_TV.delete.replace("BEGIN DELETE", "BEGIN SELECT power(old.v, 2); DELETE")],
+	])(
+		"refuses an INSTEAD OF %s trigger whose body D1 cannot run, naming the write through the view",
+		async (_, write, sql) => {
+			const refused = await proven([{ name: "1_tv.sql", sql }], { schema: VIEW })
+			expect(refused).toMatch(/^1_tv\.sql: D1 applies this file, then refuses /)
+			expect(refused).toContain(`then refuses ${write}: `)
+			expect(refused).toMatch(/not authorized to use function: power/)
+		},
+		120_000,
+	)
+})
+
 /* AC2-2 of area C round 2: workerd crashes compiling this DELETE ("other side closed"), though D1 runs the DELETE */
 describe("prove when comb's local D1 crashes on a probe", () => {
 	it("compiles the probe again alone on a fresh copy, and passes the file D1 then runs", async () => {

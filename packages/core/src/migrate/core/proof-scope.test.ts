@@ -118,6 +118,24 @@ describe("observable: what the scoped copy creates and seeds", () => {
 		]
 		expect([...observable(objects, [{ sql: "SELECT 1;" }], "D1_Migrations").seeded]).toEqual(["d1_migrations"])
 	})
+
+	/* SD1 of r23: a file that drops a view leaves each view and trigger reading it unable to run */
+	it("creates each view and trigger that reads a view a file names, so the proof compiles them after it", () => {
+		const objects = [
+			table("t", "CREATE TABLE t (id INTEGER PRIMARY KEY, a TEXT)"),
+			view("v", "CREATE VIEW v AS SELECT id, a FROM t"),
+			view("v2", "CREATE VIEW v2 AS SELECT a FROM v"),
+			{
+				name: "t_ai",
+				sql: "CREATE TRIGGER t_ai AFTER INSERT ON t BEGIN SELECT a FROM v; END",
+				table: "t",
+				type: "trigger",
+			},
+			view("other", "CREATE VIEW other AS SELECT id FROM t"),
+		]
+		const scope = observable(objects, [{ sql: "DROP VIEW v;" }], "h")
+		expect(scope.objects.map(({ name }) => name)).toEqual(["t", "v", "v2", "t_ai"])
+	})
 })
 
 /** `meta`, then 400 tables in chains of ten, each referencing the one before */

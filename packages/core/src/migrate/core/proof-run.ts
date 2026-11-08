@@ -12,7 +12,8 @@
  * Seeded rows cannot meet every predicate a file holds, so what each statement writes is read from
  * SQLite itself as it runs (proof-engine.ts): an update of a column that was there before, a
  * delete, a trigger fired or a temp shadow is unsafe whichever rows it meets, and a backfill of the
- * file's own columns is cautious. A file the copy cannot run is unproven, and unproven is unsafe.
+ * file's own columns is cautious. A file the copy cannot run is unproven, and unproven is unsafe. A
+ * file that leaves a view or trigger unable to run is refused outright (proof-readers.ts).
  */
 import { isMirror, mirrorFindings, mirrorRows } from "./proof-mirror.ts"
 import { type LocalDb, openScratch, type ScratchEngine } from "../drivers/local-db.ts"
@@ -21,6 +22,7 @@ import { notEngineTables } from "./engine-tables.ts"
 import { compare, type Shape } from "./proof-compare.ts"
 import { type Copy, copyOf, buildCopy, creatable, jsonColumns, type LiveObject, liveObjects } from "./proof-copy.ts"
 import { applyToCopy, engineFindings } from "./proof-engine.ts"
+import { refuseBrokenReaders, schemaOf } from "./proof-readers.ts"
 import { quote } from "./proof-seed.ts"
 import { observable } from "./proof-scope.ts"
 import { asciiFold } from "./sql-code.ts"
@@ -174,7 +176,10 @@ function snapshotAfter(db: Copy["db"]): Map<string, Shape> | string {
 	}
 }
 
-/** The proof of a file that applied as `run`, from the copy's tables and mirrored rows before it and its tables after */
+/**
+ * The proof of file `name`, which applied as `run`, from the copy's tables, mirrored rows and schema before it and its
+ * tables after; throws, naming the file, when it leaves a view or trigger unable to run, which no approval overrides
+ */
 function appliedProof(
 	copy: Copy,
 	run: ReturnType<typeof applyToCopy>,
@@ -182,8 +187,17 @@ function appliedProof(
 		after,
 		before,
 		mirrors,
-	}: { after: Map<string, Shape>; before: Map<string, Shape>; mirrors: ReturnType<typeof mirrorRows> },
+		name,
+		schema,
+	}: {
+		after: Map<string, Shape>
+		before: Map<string, Shape>
+		mirrors: ReturnType<typeof mirrorRows>
+		name: string
+		schema: ReturnType<typeof schemaOf>
+	},
 ): Proof {
+	named(name, () => refuseBrokenReaders(copy.db, schema))
 	const found = compare(copy.db, new Map([...before].filter(([table]) => !copy.unproven.has(table))), after)
 	const steps = engineFindings(run.steps, run.start)
 	return {
@@ -228,7 +242,7 @@ async function provePending(
 				proofs.set(name, failedProof(copy, failed))
 				continue
 			}
-			let [before, mirrors] = [snapshot(copy.db), mirrorRows(copy.db)]
+			let [before, mirrors, schema] = [snapshot(copy.db), mirrorRows(copy.db), schemaOf(copy.db)]
 			let run = named(name, () => applyToCopy(copy.db, sql))
 			const retry = run.error === undefined ? undefined : await reseeded(objects, applied, making)
 			if (retry !== undefined) {
@@ -263,7 +277,7 @@ async function provePending(
 				failed = `an earlier pending file, ${name}, left a table SQLite cannot read, so this one is unproven`
 				continue
 			}
-			proofs.set(name, appliedProof(copy, run, { after, before, mirrors }))
+			proofs.set(name, appliedProof(copy, run, { after, before, mirrors, name, schema }))
 		}
 	} finally {
 		copy.db.close()
