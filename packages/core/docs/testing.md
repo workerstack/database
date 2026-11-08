@@ -21,6 +21,9 @@ packages/core/
   tests/bun/                       bun:test only: bun:sqlite and Bun.SQL parity (`bun run test:bun`)
   tests/e2e/*.e2e.test.ts          the comb binary on scratch apps (`bun run test:e2e`)
   tests/consumers/                 the packed tarball in fresh projects (`bun run test:consumers`)
+  tests/differential/              generated lists and D1 proof cases, the tip against the published
+                                   releases and the engine itself (`bun run test:differential`);
+                                   its bun:sqlite twin is tests/bun/differential-lists.test.ts
 ```
 
 - Every source file has `<name>.test.ts` beside it. `tests/structure/sibling-test.test.ts` enforces that; its `KNOWN_MISSING` list may only shrink.
@@ -38,18 +41,28 @@ One run of the Postgres suites at a time holds the test server: the `postgres` p
 
 Every test run is in UTC, as CI's runners are: the vitest configs set `TZ` before their workers fork, and `bunfig.toml` preloads `tests/bun/support/utc.ts` for the bun suites, whatever the shell's `TZ`. A time-zone-dependent expectation then fails locally as it would in CI (`tests/structure/workflows.test.ts` holds the pins). The suites that turn a `Date` into a key or a bound run a second time in Asia/Kathmandu (UTC+05:45), as the vitest projects `unit (Asia/Kathmandu)`, `integration (Asia/Kathmandu)` and `postgres (Asia/Kathmandu)`, listed in `tests/support/off-utc.ts`; a value that shifts with the time zone fails there though it passes in UTC.
 
-| Gate               | Runs                                                                                                                                                                                                                          | In CI                          |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| `fmt:check`        | oxfmt over the tree                                                                                                                                                                                                           | `check`                        |
-| `lint`             | oxlint with the comb plugin, every rule at `error`                                                                                                                                                                            | `check`                        |
-| `typecheck`        | `tsc --noEmit` over `src`, `tests` and `lint`, the type tests included                                                                                                                                                        | `check`                        |
-| `test`             | vitest projects `unit`, `integration` and `postgres`: needs `atlas` on `PATH`, `COMB_TEST_PG_URL`, and the pinned sqld (`tests/support/sqld.ts`) and Atlas v1.2.0 (`tests/support/atlas-floor.ts`) under `~/.cache/comb-test` | `test`, as `test:coverage`     |
-| `typecheck:strict` | `tsc -p tsconfig.strict.json` over `src` with every flag a consumer may set                                                                                                                                                   | `check`                        |
-| `test:bun`         | `bun test tests/bun`, with its own coverage gate; needs `COMB_TEST_PG_URL`                                                                                                                                                    | `test`                         |
-| `test:e2e`         | `vitest.e2e.config.ts`: needs `atlas` and `wrangler` on `PATH`, and `COMB_TEST_PG_URL` for Postgres                                                                                                                           | `e2e`, with a Postgres service |
-| `test:consumers`   | `vitest.consumers.config.ts`: needs the npm registry                                                                                                                                                                          | `consumers`, Node 22.12 and 24 |
+| Gate                | Runs                                                                                                                                                                                                                          | In CI                          |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| `fmt:check`         | oxfmt over the tree                                                                                                                                                                                                           | `check`                        |
+| `lint`              | oxlint with the comb plugin, every rule at `error`                                                                                                                                                                            | `check`                        |
+| `typecheck`         | `tsc --noEmit` over `src`, `tests` and `lint`, the type tests included                                                                                                                                                        | `check`                        |
+| `test`              | vitest projects `unit`, `integration` and `postgres`: needs `atlas` on `PATH`, `COMB_TEST_PG_URL`, and the pinned sqld (`tests/support/sqld.ts`) and Atlas v1.2.0 (`tests/support/atlas-floor.ts`) under `~/.cache/comb-test` | `test`, as `test:coverage`     |
+| `typecheck:strict`  | `tsc -p tsconfig.strict.json` over `src` with every flag a consumer may set                                                                                                                                                   | `check`                        |
+| `test:bun`          | `bun test tests/bun`, with its own coverage gate; needs `COMB_TEST_PG_URL`                                                                                                                                                    | `test`                         |
+| `test:e2e`          | `vitest.e2e.config.ts`: needs `atlas` and `wrangler` on `PATH`, and `COMB_TEST_PG_URL` for Postgres                                                                                                                           | `e2e`, with a Postgres service |
+| `test:consumers`    | `vitest.consumers.config.ts`: needs the npm registry                                                                                                                                                                          | `consumers`, Node 22.12 and 24 |
+| `test:differential` | `vitest.differential.config.ts` and `tests/bun/differential-lists.test.ts`: needs the npm registry and `atlas` on `PATH`                                                                                                      | `differential`                 |
 
 The e2e suites (`sqlite`, `d1`, `fts`, `postgres`) run the real binary under bun against a scratch app: `migrate diff` through real Atlas and drizzle-kit, `migrate apply` to libsql, to D1 through `wrangler --local`, and to Postgres through Atlas, `migrate status`, and `codegen`. `postgres.e2e.test.ts` makes its target and dev databases on `COMB_TEST_PG_URL` and drops them; without the URL it fails, locally as in CI. The consumer cells pack comb, install the tarball into a fresh project twice (required peers only, then every peer, each at comb's peer range), import every subpath under bun and `tsx`, bundle with Vite and wrangler, and compile every subpath with `tsc` in a `bundler` and a `nodenext` project.
+
+## Differential suites
+
+`tests/differential/` checks a rule over generated inputs where the other suites pin examples. Each case is built by the tip and by the published releases, each installed from npm into a box of its own under `~/.cache/comb-test/diff/<version>` (`support/oracles.ts`), and judged against the engine:
+
+- **Lists** (`lists.test.ts` on libsql and D1 local, the bun:sqlite twin in `tests/bun/`): a walk by cursor or page serves every row the filter selects exactly once, in the engine's own `ORDER BY`, projected to `select`, or stops at a refusal its mode allows. Tip, 0.21.0 and 0.20.1.
+- **D1 proof** (`proof.test.ts`): `comb migrate check --yes` on an approved file passes exactly the files D1 local applies and that leave every view readable, every table writable, and each view event an INSTEAD OF trigger takes writable. Tip and 0.21.0; 0.20.1 predates the D1 engine proof.
+
+A run walks the fixed seeds (`support/random.ts`) and one fresh seed, both printed; `COMB_DIFFERENTIAL_SEEDS=4,17` replays exactly those seeds, and a long list of them runs the generator wide locally. `expectations.ts` names each known failure by its finding and the versions it fails on. A failure on the tip that no entry expects fails the run. So does an expected failure no fixed seed shows. Each entry the tip still fails is a test titled `known red on the tip: <id>`; the commit that fixes it moves `"tip"` from that entry's `failsOn` to its `passesOn`, and the test fails until it does.
 
 ## Mutation harness
 
