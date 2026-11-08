@@ -1290,6 +1290,8 @@ What changes for a project on 0.21. Before deploying it:
 
 3. **Install `@workerstack/database` in place of `@lovrozagar/comb`.** The package moved to the workerstack org and the old name gets no new releases; `@workerstack/database@0.21.0` is `@lovrozagar/comb@0.21.0` under the new name, so you can switch before taking 0.22. The `comb` CLI, `comb.config.ts`, `CombError` and the migration tables keep their names. Generated DTOs and entities import from the package by name, so files generated on the old name still import `@lovrozagar/comb`. **Fix:** run `bun remove @lovrozagar/comb && bun add @workerstack/database`, replace every `@lovrozagar/comb` import prefix with `@workerstack/database`, and rerun `comb codegen`.
 
+3. **Expect a path of the wrong kind refused by name.** `comb migrate diff <database> <name>` refuses a name holding `/` or `\`, or `.` or `..` alone, with its usage, where Atlas failed on a file it could not open in comb's scratch directory. `--tables`, or comb.config.ts `tables`, naming a directory is refused as `tables <path> is a directory, not a file`, where loading it failed with `EISDIR`. A d1 provider's `wranglerConfig` naming a directory is refused as `wranglerConfig <path> is a directory, not a file`, where comb said the config binds no such database. **Fix:** give a diff a name alone, point `tables` at the module that exports the tables, and point `wranglerConfig` at the wrangler.json, wrangler.jsonc or wrangler.toml itself.
+
 ## Upgrading to 0.21
 
 What changes for a project on 0.20. Before deploying it:

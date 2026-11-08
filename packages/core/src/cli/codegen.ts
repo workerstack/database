@@ -249,7 +249,7 @@ async function generate(
 /** The databases a codegen run covers: the one --tables names, or those comb.config.ts declares */
 async function databases(positionals: readonly string[], tables: string | undefined, io: CliIo): Promise<Database[]> {
 	if (tables !== undefined) {
-		const tablesPath = tablesFile(io.cwd, tables)
+		const tablesPath = tablesFile(io.cwd, tables, "--tables")
 		return [{ db: { tables }, direct: true, exportNamespace: undefined, generators: DIRECT, name: "", tablesPath }]
 	}
 	const config = await loadCombConfig(io.cwd)
@@ -263,7 +263,7 @@ async function databases(positionals: readonly string[], tables: string | undefi
 		exportNamespace: namespaces.get(name),
 		generators: db.generators ?? GENERATORS,
 		name,
-		tablesPath: tablesFile(io.cwd, db.tables),
+		tablesPath: tablesFile(io.cwd, db.tables, "tables"),
 	}))
 }
 

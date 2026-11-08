@@ -14,6 +14,7 @@ import { connectD1, wranglerFlags } from "../migrate/drivers/d1.ts"
 import type { D1ProviderConfig } from "../migrate/types.ts"
 import type { ParsedArgs } from "./args.ts"
 import { type MigrateTarget, refuseNoDir } from "./migrate-target.ts"
+import { refuseNotFile } from "./file-path.ts"
 import { checkPassed, CliError, type CliContext, type MigrateOutcome } from "./output.ts"
 
 type D1Mode = "apply" | "baseline" | "check" | "status"
@@ -27,7 +28,10 @@ function d1Config(request: D1Request, resolved: MigrateTarget | undefined): { co
 	if (resolved?.provider.type === "d1") {
 		if (args.options["local"] !== undefined)
 			throw new CliError("--local applies without comb.migrate.config.ts; set local: true on its d1 provider")
-		const wranglerConfig = resolved.provider.wranglerConfig ?? findWranglerConfig(resolved.configDir)
+		const configured = resolved.provider.wranglerConfig
+		const fix = `point ${db}'s d1 provider at its wrangler.json, wrangler.jsonc or wrangler.toml`
+		if (configured !== undefined) refuseNotFile(configured, "wranglerConfig", fix)
+		const wranglerConfig = configured ?? findWranglerConfig(resolved.configDir)
 		if (wranglerConfig === undefined)
 			throw new CliError(`no wrangler config next to comb.migrate.config.ts; set wranglerConfig on ${db}'s d1 provider`)
 		return { config: { ...resolved.provider, wranglerConfig }, dir: resolved.migrationsDir }
