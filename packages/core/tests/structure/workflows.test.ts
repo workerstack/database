@@ -288,6 +288,36 @@ describe("ci.yml's suite jobs", () => {
 	})
 })
 
+/*
+ * Plan 25's 2.6: the differential suites (vitest.differential.config.ts and their bun:sqlite twin) run in a job of
+ * their own, beside the others with no `needs`, on Linux, in time for the plan's 3-minute budget per job, and in no
+ * other job: `test:bun` leaves the twin out, and vitest.config.ts includes none of tests/differential.
+ */
+describe("ci.yml's differential job", () => {
+	const jobs = ciJobs(readFileSync(join(WORKFLOWS, "ci.yml"), "utf8"))
+	const CORE = join(ROOT, "packages/core")
+	const scripts = (JSON.parse(readFileSync(join(CORE, "package.json"), "utf8")) as { scripts: Record<string, string> })
+		.scripts
+
+	it("runs test:differential on Linux, needing no other job, with a timeout that catches a hang", () => {
+		const runners = jobs.filter((job) => scriptsOf(job.lines).includes("test:differential"))
+		expect(runners.map(({ name, runsOn }) => [name, runsOn])).toEqual([["differential", "ubuntu-latest"]])
+		const lines = (runners[0] as { lines: string }).lines
+		expect(scriptsOf(lines)).toEqual(["test:differential"])
+		expect(lines).not.toMatch(/^ {4}needs:/m)
+		expect(Number(/^ {4}timeout-minutes: (\d+)$/m.exec(lines)?.[1])).toBeLessThanOrEqual(6)
+	})
+
+	it("is the only job that runs the differential suites", () => {
+		expect(scripts["test:differential"]).toBe(
+			"vitest run --config vitest.differential.config.ts && bun test tests/bun/differential-lists.test.ts",
+		)
+		expect(scripts["test:bun"]).toContain("--path-ignore-patterns=tests/bun/differential-lists.test.ts")
+		expect(readFileSync(join(CORE, "vitest.config.ts"), "utf8")).not.toContain("tests/differential")
+		expect(globSync("tests/differential/**/*.test.ts", { cwd: CORE }).length).toBeGreaterThan(0)
+	})
+})
+
 /* plan 21 5.0: the remote libsql suites need the pinned sqld, which only the test job's own step provides */
 describe("ci.yml's sqld", () => {
 	const jobs = ciJobs(readFileSync(join(WORKFLOWS, "ci.yml"), "utf8"))

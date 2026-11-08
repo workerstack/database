@@ -71,6 +71,7 @@
 		"test:bun": "bun run --filter @workerstack/database test:bun",
 		"test:consumers": "bun run --filter @workerstack/database test:consumers",
 		"test:coverage": "bun run --filter @workerstack/database test:coverage",
+		"test:differential": "bun run --filter @workerstack/database test:differential",
 		"test:e2e": "bun --filter @workerstack/database test:e2e",
 		"test:watch": "bun run --filter @workerstack/database test:watch",
 		"typecheck": "bun run --filter @workerstack/database type:check",
@@ -95,7 +96,8 @@
 			"typecheck:strict",
 			"test:bun",
 			"test:e2e",
-			"test:consumers"
+			"test:consumers",
+			"test:differential"
 		],
 		"ci": [
 			"fmt:check",
@@ -105,7 +107,8 @@
 			"typecheck:strict",
 			"test:bun",
 			"test:e2e",
-			"test:consumers"
+			"test:consumers",
+			"test:differential"
 		]
 	}
 }
