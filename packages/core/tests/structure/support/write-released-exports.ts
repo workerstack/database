@@ -31,8 +31,8 @@ const snapshots = Object.fromEntries(
 		.sort()
 		.map((path) => [path.slice(API.length + 1), git("show", `v${version}:${path}`)]),
 )
-const response = await fetch(`https://registry.npmjs.org/@workerstack/database/-/comb-${version}.tgz`)
-if (!response.ok) throw new Error(`comb ${version}: the registry answered ${response.status}`)
+const response = await fetch(`https://registry.npmjs.org/@workerstack/database/-/database-${version}.tgz`)
+if (!response.ok) throw new Error(`@workerstack/database ${version}: the registry answered ${response.status}`)
 /* unpacked inside the package, so the release's declarations resolve its dependencies */
 const dir = mkdtempSync(join(import.meta.dirname, "../../..", ".tmp-released-"))
 try {
