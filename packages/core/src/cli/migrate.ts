@@ -15,7 +15,7 @@ import {
 import { migrateApply, needPeers } from "./migrate-apply.ts"
 import { type MigrateTarget, refuseBlank, refuseNoDir, resolveMigrateTarget } from "./migrate-target.ts"
 import { refusePathName } from "./file-path.ts"
-import { CliError, type CliContext } from "./output.ts"
+import { CliError, type CliContext, ShowHelp } from "./output.ts"
 import { scratchDir } from "../migrate/core/cleanup.ts"
 
 const DRIZZLE_CONFIG = `import { defineConfig } from "drizzle-kit"
@@ -101,7 +101,7 @@ function migrateInit(argv: readonly string[], io: CliContext): void {
  * database's dialect, directory and drizzle config come from it; without, it is SQLite in
  * ./atlas-migrations.
  */
-async function migrateDiff(argv: readonly string[], io: CliContext): Promise<void> {
+async function runDiff(argv: readonly string[], io: CliContext): Promise<void> {
 	const args = parseArgs(argv, "migrate diff")
 	/* parseArgs refuses a diff that names no database */
 	const [db, name] = args.positionals as [string, (string | undefined)?]
@@ -232,7 +232,25 @@ function reportDrift(db: string, files: readonly string[], io: CliContext): neve
 		io.out(`-- ${path.basename(file)}`)
 		io.out(fs.readFileSync(file, "utf8"))
 	}
-	throw new CliError(`${db} has drifted from its migrations: comb migrate diff ${db} would write the SQL above`)
+	throw new Drifted(`${db} has drifted from its migrations: comb migrate diff ${db} would write the SQL above`)
+}
+
+/** A dry run's refusal for drift, which exits 1 */
+class Drifted extends CliError {}
+
+/**
+ * `migrate diff`. A dry run is a drift gate, so it exits 1 for drift alone, and 2 for every failure
+ * that kept it from checking, the argv's own refusal among them: --dry-run is read from argv, as
+ * the CLI reads --json, so that refusal knows it is a dry run's
+ */
+async function migrateDiff(argv: readonly string[], io: CliContext): Promise<void> {
+	if (!argv.includes("--dry-run")) return runDiff(argv, io)
+	try {
+		await runDiff(argv, io)
+	} catch (error) {
+		if (error instanceof Drifted || error instanceof ShowHelp) throw error
+		throw new CliError(error instanceof Error ? error.message : String(error), 2, { cause: error })
+	}
 }
 
 export async function cmdMigrate(argv: readonly string[], io: CliContext, help: string): Promise<void> {
