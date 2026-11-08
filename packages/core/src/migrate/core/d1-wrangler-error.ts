@@ -1,7 +1,9 @@
 /**
- * What a failed `wrangler d1 migrations apply` says, read for the refusal comb gives.
+ * What a failed `wrangler d1 migrations apply` says, read for the refusal comb gives, and the refusal
+ * of a run whose table records other than the files comb checked.
  */
 import { LOCKER } from "../drivers/d1-lock.ts"
+import { Refused } from "./refused.ts"
 
 type Ran = { stderr: string; stdout: string }
 
@@ -22,4 +24,25 @@ export function applyFailure(ran: Ran, locked: boolean): string {
 	return locked
 		? `the local D1 database was locked by ${LOCKER} while wrangler applied: let it finish and rerun`
 		: wranglerError(ran)
+}
+
+/** Refuse a failed run, or one whose table gained (`added`) other than the `names` checked, naming a file never checked */
+export function refuseUnlike(
+	ran: { code: number; stderr: string; stdout: string },
+	{ added, locked, names, table }: { added: string[]; locked: boolean; names: string[]; table: string },
+): void {
+	const unchecked = added.filter((name) => !names.includes(name))
+	const rest = names.filter((name) => !added.includes(name))
+	const also =
+		unchecked.length === 0
+			? ""
+			: `; wrangler also applied ${unchecked.join(", ")}, which comb never checked and holds no hash for: check each against git, then run comb migrate baseline <db> --hashes`
+	const now = { applied: added, pending: rest }
+	if (ran.code !== 0) throw new Refused(`wrangler d1 migrations apply failed: ${applyFailure(ran, locked)}${also}`, now)
+	if (unchecked.length > 0 || rest.length > 0) {
+		throw new Refused(
+			`wrangler recorded ${added.join(", ") || "nothing"} in ${table}, where comb checked ${names.join(", ")}; wrangler said: ${wranglerError(ran)}${also}`,
+			now,
+		)
+	}
 }

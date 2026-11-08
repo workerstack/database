@@ -6,8 +6,10 @@
  */
 import { chainText } from "../../error-chain.ts"
 import type { Connection } from "../types.ts"
+import { pastStop } from "./cleanup.ts"
 import { HASH_VERSION } from "./parse.ts"
 import { Refused } from "./refused.ts"
+import { whileStoppable } from "./stopped.ts"
 import { isTransient } from "./transient.ts"
 import { type RetryOptions, withRetry } from "./utils.ts"
 
@@ -228,24 +230,42 @@ export async function applyEach(
 	{ history, print, retry }: ApplyOptions & { print: (line: string) => void },
 ): Promise<void> {
 	const names = migrations.map(({ filename }) => filename)
-	for (const [at, migration] of migrations.entries()) {
-		print(`Apply: ${migration.filename}`)
-		try {
-			const conn = await open()
-			try {
-				if ((await applyRecorded(conn, migration, { history, retry })) === "another run")
-					print(`Skip (applied by another run): ${migration.filename}`)
-			} finally {
-				await conn.close()
-			}
-		} catch (error) {
-			const done = names.slice(0, at)
-			if (done.length > 0) print(`Applied before the failure: ${done.join(", ")}`)
-			/* withRetry throws an Error, whatever the batch threw; so does a connection that would not open */
-			const message = (error as Error).message
-			if (error instanceof Unconfirmed)
-				throw new Refused(message, { applied: done, pending: names.slice(at + 1), unknown: [migration.filename] })
-			throw new Refused(message, { applied: done, pending: names.slice(at) })
-		}
+	/* the files that committed, and the batch under way, which a stop waits for: it commits or fails whole */
+	let done = 0
+	let batching: Promise<unknown> = Promise.resolve()
+	const read = async () => {
+		await batching.catch(() => {
+			// reason: a batch that failed committed nothing, which the count it left already says
+		})
+		return { applied: names.slice(0, done), pending: names.slice(done) }
 	}
+	await whileStoppable({ names, print, read }, async () => {
+		for (const [at, migration] of migrations.entries()) {
+			/* a stop parks the run here, whichever connection the next file would open */
+			await pastStop()
+			print(`Apply: ${migration.filename}`)
+			try {
+				const conn = await open()
+				try {
+					/* counted with the batch, so a stop that waited for it reads the count it made */
+					const batch = applyRecorded(conn, migration, { history, retry }).then((who) => {
+						done++
+						return who
+					})
+					batching = batch
+					if ((await batch) === "another run") print(`Skip (applied by another run): ${migration.filename}`)
+				} finally {
+					await conn.close()
+				}
+			} catch (error) {
+				const applied = names.slice(0, at)
+				if (applied.length > 0) print(`Applied before the failure: ${applied.join(", ")}`)
+				/* withRetry throws an Error, whatever the batch threw; so does a connection that would not open */
+				const message = (error as Error).message
+				if (error instanceof Unconfirmed)
+					throw new Refused(message, { applied, pending: names.slice(at + 1), unknown: [migration.filename] })
+				throw new Refused(message, { applied, pending: names.slice(at) })
+			}
+		}
+	})
 }
