@@ -2,12 +2,14 @@
  * The replay's transactions and the reads around them (pg-replay.ts): a file's or comb's own
  * statement's transaction, refused before its COMMIT when this backend's counts show it wrote past
  * its database, and the server's shared catalogs read as committed around it and around
- * every bare statement, a change there the file's when it is to an object the file names;
+ * every bare statement, a change there the file's when it is to the replay's own database, or to an
+ * object the file names beside a statement that can run code comb cannot read;
  * a `txmode none` file's statement in a transaction of its own first, bare only when
  * Postgres runs it outside a block alone.
  */
 import { adopt, bareAgain, type Run } from "./pg-replay-roles.ts"
-import { added, type Snapshot, snapshot, snapshotChanges, subscriptionsIn } from "./pg-server-snapshot.ts"
+import { type Hidden, runsHidden } from "./pg-replay-hidden.ts"
+import { type Snapshot, snapshot, snapshotChanges, subscriptionsIn } from "./pg-server-snapshot.ts"
 import {
 	type Change,
 	catalogsOf,
@@ -31,12 +33,13 @@ async function begin(run: Run): Promise<void> {
 }
 
 /**
- * Where a replayed transaction or bare statement is: its file's name and the names it spells, the
- * statement, if bare, and what a refusal stops; told each role the transaction adds that the replay
- * adopts
+ * Where a replayed transaction or bare statement is: its file's name and the names it spells, what
+ * its statements so far can run that comb cannot read (`hidden`), the statement, if bare, and what a
+ * refusal stops; told each role the transaction adds that the replay adopts
  */
 type At = {
 	adopted?: ((role: string) => void) | undefined
+	hidden: Hidden
 	name: string
 	names: ReadonlySet<string>
 	sent: string | undefined
@@ -46,52 +49,52 @@ type At = {
 /* the words that name devUrl's role in a file, as namesIn folds them: CURRENT_USER and its kin */
 const SESSION_ROLE = ["current_role", "current_user", "session_user", "user"]
 
-/**
- * The server's shared catalogs read as committed against the last read: a change since to an object
- * the file `name` names (`names`), while `sent` or the whole file ran, is refused, and a role or
- * database it added is the cleanup's; a change to any other is another session's. The
- * replay's own database is the file's whatever it spells, as only this replay runs in it, and is
- * the cleanup's too. `read` is that read when the caller took it
- */
-async function window(run: Run, at: At, read?: Snapshot): Promise<void> {
-	strayed(run, at, read ?? (await snapshot(run.admin)))
+/** The objects the file `names`, devUrl's role among them where it names that by keyword */
+function spelled(run: Run, names: ReadonlySet<string>): Set<string> {
+	const its = new Set(names)
+	if (SESSION_ROLE.some((word) => names.has(word))) its.add(run.role)
+	return its
 }
 
 /**
- * window's verdict on `now`, the server's shared catalogs as committed after the file or `sent`,
- * against the last read; kept apart from window's await, as v8 miscounts a branch after an await
+ * The server's shared catalogs read as committed against the last read: a change since to the
+ * replay's own database, or to what it holds, is the file's, as only this replay runs in it, and the
+ * cleanup drops it. A change to an object the file names is the file's when its statements so far
+ * can run code comb cannot read (pg-replay-hidden.ts), the one way a change past the database gets by
+ * the counts, and is refused, but no cleanup drops it: Postgres keeps no creator for a role or a
+ * database, and another session may have made it. A change to any other object, or beside statements
+ * that run only what their parse says, is another session's. `read` is that read when the caller took it
  */
-function strayed(run: Run, { name, names, sent, stops }: At, now: Snapshot): void {
-	const its = new Set([...names, run.database])
-	if (SESSION_ROLE.some((word) => names.has(word))) its.add(run.role)
-	const changes = snapshotChanges(run.seen, now, its)
-	const { databases, roles, slots } = added(run.seen, now, its)
+async function window(run: Run, at: At, read?: Snapshot): Promise<void> {
+	const now = read ?? (await snapshot(run.admin))
+	strayed(run, { ...at, hid: await hides(run, at, now) }, now)
+}
+
+/* whether a change in `now` to an object the file names may be the file's, as its statements can run code comb cannot read */
+const hides = (run: Run, { hidden, names }: At, now: Snapshot): boolean | Promise<boolean> =>
+	snapshotChanges(run.seen, now, spelled(run, names)).length > 0 && runsHidden(run.sql, hidden)
+
+/**
+ * window's verdict on `now`, the server's shared catalogs as committed after the file or `sent`,
+ * against the last read, the objects the file names counted when it `hid` code comb cannot read;
+ * kept apart from window's await, as v8 miscounts a branch after an await
+ */
+function strayed(run: Run, { hid, name, names, sent, stops }: At & { hid: boolean }, now: Snapshot): void {
+	const replays = new Set([run.database])
+	const changes = snapshotChanges(run.seen, now, hid ? new Set([...spelled(run, names), ...replays]) : replays)
+	const own = new Set(snapshotChanges(run.seen, now, replays))
 	const within = subscriptionsIn(run.seen, now, run.database)
 	run.seen = now
 	if (changes.length === 0) return
-	run.strays.databases.push(...databases)
-	run.strays.roles.push(...roles)
-	run.strays.slots.push(...slots)
-	const own = `database ${run.database} `
-	const strays = [
-		...roles.map((role) => `role ${role}`),
-		...databases.map((database) => `database ${database} unless a session is in it`),
-		...slots.map((slot) => `replication slot ${slot} unless a session holds it`),
-	]
-	const replays =
-		changes.some((change) => change.startsWith(own)) || within.length > 0
+	const dropped =
+		own.size > 0
 			? `; comb drops the database it replays in${within.length === 0 ? "" : `, and ${within.join(", ")} in it`}`
 			: ""
-	const dropped = `${strays.length === 0 ? "" : `; comb drops ${strays.join(", ")}, which the file added`}${replays}`
-	/* the read is committed, so a change it shows to an object the file did not add stays */
-	const dropping = new Set([
-		...roles.map((role) => `role ${role} added`),
-		...databases.map((d) => `database ${d} added`),
-		...slots.map((slot) => `replication slot ${slot} added`),
-		...within.map((subject) => `${subject} added`),
-	])
-	const kept = changes.filter((change) => !dropping.has(change) && !change.startsWith(own))
-	const left = kept.length === 0 ? "" : `; devUrl's server keeps ${kept.join(", ")}, which comb cannot undo`
+	const kept = changes.filter((change) => !own.has(change))
+	const left =
+		kept.length === 0
+			? ""
+			: `; comb leaves ${kept.join(", ")} on devUrl's server, as another session may have made ${kept.length === 1 ? "that change" : "those changes"}: undo there each that is the file's`
 	throw new ReplayFailed(
 		`${name}: devUrl's server changed past the database the replay runs in while ${sent === undefined ? "the file" : JSON.stringify(sent)} ran: ${changes.join(", ")}. A change made there, from inside a DO block, a function, EXECUTE or CALL, or over a second connection such as dblink's, apply would make on the target's server, so comb refuses the file; write the change as a statement of its own, which the replay leaves out and apply runs${dropped}${left}; ${stops}`,
 	)

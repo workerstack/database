@@ -87,7 +87,7 @@ async function swept(fail: (query: string) => boolean = () => false) {
 	const said: string[] = []
 	await sweep(admin.sql, now, {
 		into: () => fake().sql,
-		leave: ({ swept: again, what }, error) => said.push(`${what}: ${(error as Error).message}, ${again}`),
+		leave: (left, error) => said.push(`${left}: ${(error as Error).message}`),
 	})
 	return {
 		dropped: admin.sent.filter((query) => query.startsWith("DROP") || query.includes("pg_terminate_backend")),
@@ -95,12 +95,12 @@ async function swept(fail: (query: string) => boolean = () => false) {
 	}
 }
 
-/** What cleanUp says of `what`, a drop dev refused as in use, and `then`, who drops it */
-const unsaid = (what: string, then: string): string =>
-	`comb could not drop ${what}, which a replay left on devUrl's server: in use; ${then}`
+/** What cleanUp says of `what`, a drop dev refused as in use, which the next sweep takes */
+const unsaid = (what: string): string =>
+	`comb could not drop ${what}, which a replay left on devUrl's server: in use; the next check or apply that reaches that server drops it`
 
 describe("cleanUp", () => {
-	it("says each drop it could not make, and drops the next: what the replay made the next sweep takes, what its window added none does", async () => {
+	it("says each drop it could not make, and drops the next, which the next sweep takes", async () => {
 		const admin = fake((query) =>
 			/^(?:DROP|SELECT pg_drop)/.test(query)
 				? coded("55006", "in use")
@@ -115,20 +115,12 @@ describe("cleanUp", () => {
 			created: ["made"],
 			database: "comb_replay_db",
 			sql: fake().sql,
-			strays: { databases: ["stray_db"], roles: ["stray_role"], slots: ["stray_slot"] },
 		}
 		await cleanUp(run as unknown as Parameters<typeof cleanUp>[0], {
 			into: () => fake().sql,
 			leave: leaving((line) => said.push(line), failed),
 		})
-		const next = "the next check or apply that reaches that server drops it"
-		expect(said).toEqual([
-			unsaid("replication slot stray_slot", "drop it there"),
-			unsaid("database comb_replay_db", next),
-			unsaid("role made", next),
-			unsaid("database stray_db", "drop it there"),
-			unsaid("role stray_role", "drop it there"),
-		])
+		expect(said).toEqual([unsaid("database comb_replay_db"), unsaid("role made")])
 	})
 })
 
@@ -152,7 +144,7 @@ describe("sweep", () => {
 		const { dropped, said } = await swept((query) => query.includes("9_111"))
 		expect(dropped).toContain('DROP DATABASE IF EXISTS "comb_replay_7_444_dddddddd"')
 		expect(dropped).toContain('DROP ROLE IF EXISTS "dead"')
-		expect(said).toEqual(["database comb_replay_9_111_aaaaaaaa: database is being accessed by other users, true"])
+		expect(said).toEqual(["database comb_replay_9_111_aaaaaaaa: database is being accessed by other users"])
 	})
 })
 
@@ -339,7 +331,7 @@ function holding(database: string, fail: (query: string) => boolean = () => fals
 	const said: string[] = []
 	const drops: Drops = {
 		into: (into) => (opened.push(into), inside.sql),
-		leave: ({ swept: again, what }, error) => said.push(`${what}: ${(error as Error).message}, ${again}`),
+		leave: (left, error) => said.push(`${left}: ${(error as Error).message}`),
 	}
 	return { admin, drops, inside, opened, said }
 }
@@ -358,7 +350,6 @@ describe("the drops of a database that holds a subscription or a logical slot, w
 			created: [],
 			database: "comb_replay_db",
 			sql: fake().sql,
-			strays: { databases: [], roles: [], slots: [] },
 		}
 		await cleanUp(run as unknown as Parameters<typeof cleanUp>[0], at.drops)
 		expect({ inside: at.inside.sent, opened: at.opened, said: at.said }).toEqual({
@@ -390,7 +381,7 @@ describe("the drops of a database that holds a subscription or a logical slot, w
 			(query) => query.startsWith("DROP SUBSCRIPTION") || query.startsWith("SELECT pg_drop"),
 		)
 		await sweep(at.admin.sql, now, at.drops)
-		expect(at.said).toEqual(["subscription s: in use, true", "replication slot l: in use, true"])
+		expect(at.said).toEqual(["subscription s: in use", "replication slot l: in use"])
 		const none = fake((query) =>
 			query.startsWith("SELECT datname") ? [{ datname: "comb_replay_9_111_aaaaaaaa" }] : [],
 		)

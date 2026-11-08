@@ -1,11 +1,12 @@
 /**
  * The shared test server's catalogs, read and written under one reader-writer lock (AE6 of r22). A
  * check's replay reads devUrl's server's shared catalogs around every file and bare statement, and
- * takes a change there for the file's when it is to a name the file spells (pg-replay.ts). So a
- * write of another test, in another file, worker or run, that lands inside the replay's reads, to a
- * name the file spells, is refused as the file's: an every-role setting is about `all`, which any
- * file holding `DISCARD ALL`, `GRANT ALL` or `UNION ALL` spells, and probe-settings.test.ts's
- * `ALTER ROLE ALL SET` refused replay-session.test.ts's `DISCARD ALL` file that way.
+ * takes a change there for the file's when it is to a name the file spells and the file can run code
+ * comb cannot read, a DO block, a CALL, an EXECUTE or a function outside pg_catalog (pg-replay.ts).
+ * So a write of another test, in another file, worker or run, that lands inside such a replay's
+ * reads, to a name its file spells, is refused as the file's: an every-role setting is about `all`,
+ * which any file holding `DISCARD ALL`, `GRANT ALL` or `UNION ALL` spells, and probe-settings.test.ts's
+ * `ALTER ROLE ALL SET` refused a DO block's file that spells ALL that way (server-lock.test.ts).
  *
  * Every test of the Postgres projects holds the lock shared while it runs (server-lock.setup.ts),
  * so no check runs outside it, whoever starts one. A test that writes a shared catalog row to a name

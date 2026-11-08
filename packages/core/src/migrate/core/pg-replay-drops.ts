@@ -4,8 +4,8 @@
  * which the next replay or apply sweeps. Postgres drops no database that holds a subscription or a
  * logical slot, so both go first, and only from the replay databases it drops: a subscription from
  * a session in its database, the only one that can name it. A drop that fails never decides the
- * verdict, and is said, never left unsaid: what it left, dev's error, and whether a later sweep takes it, as a
- * stray of a refused window carries no tag a sweep finds. The replay database is dropped WITH
+ * verdict, and is said, never left unsaid: what it left and dev's error, which a later sweep takes. The
+ * replay database is dropped WITH
  * (FORCE), so a backend that came in after the cleanup ended the others cannot hold it.
  */
 import { sqlIdentifier } from "../../codegen/utils/case.ts"
@@ -24,14 +24,11 @@ async function settle(step: () => Promise<unknown>): Promise<void> {
 	}
 }
 
-/** What a drop that failed left on devUrl's server, a database, role or slot by name, and whether a later sweep takes it */
-type Left = { swept: boolean; what: string }
-
-/** How a drop that failed is said: what it `left`, with dev's error */
-type Leave = (left: Left, error: unknown) => void
+/** How a drop that failed is said: what it left on devUrl's server, a database, role or slot by name, with dev's error */
+type Leave = (left: string, error: unknown) => void
 
 /** `drop` run, a failure `leave`d: cleaning up never replaces the replay's verdict, and never leaves something unsaid */
-async function dropOr(leave: Leave, left: Left, drop: () => Promise<unknown>): Promise<void> {
+async function dropOr(leave: Leave, left: string, drop: () => Promise<unknown>): Promise<void> {
 	try {
 		await drop()
 	} catch (error) {
@@ -45,9 +42,9 @@ type Drops = { into: (database: string) => Sql; leave: Leave }
 
 /** A `leave` that prints, `failed` naming devUrl in dev's error */
 function leaving(print: (line: string) => void, failed: Parameters<typeof failureOf>[1]): Leave {
-	return ({ swept, what }, error) =>
+	return (left, error) =>
 		print(
-			`comb could not drop ${what}, which a replay left on devUrl's server: ${failureOf(error, failed)}; ${swept ? "the next check or apply that reaches that server drops it" : "drop it there"}`,
+			`comb could not drop ${left}, which a replay left on devUrl's server: ${failureOf(error, failed)}; the next check or apply that reaches that server drops it`,
 		)
 }
 
@@ -80,14 +77,13 @@ async function emptyDatabase(admin: Sql, database: string, { into, leave }: Drop
 	if (subscriptions.length > 0) {
 		const sql = into(database)
 		try {
-			for (const name of subscriptions)
-				await dropOr(leave, { swept: true, what: `subscription ${name}` }, () => dropSubscription(sql, name))
+			for (const name of subscriptions) await dropOr(leave, `subscription ${name}`, () => dropSubscription(sql, name))
 		} finally {
 			await settle(() => sql.end({ timeout: 0 }))
 		}
 	}
 	for (const slot of (holds?.["slots"] ?? []) as string[])
-		await dropOr(leave, { swept: true, what: `replication slot ${slot}` }, () => dropSlot(admin, slot))
+		await dropOr(leave, `replication slot ${slot}`, () => dropSlot(admin, slot))
 }
 
 /**
@@ -132,11 +128,9 @@ async function sweep(admin: Sql, now: number, drops: Drops): Promise<void> {
 		await settle(() => emptyDatabase(admin, name, drops))
 		/* Postgres drops no template, which a committing DO can make the replay's database */
 		if (template) await settle(() => admin.unsafe(`ALTER DATABASE ${sqlIdentifier(name)} IS_TEMPLATE false`, []))
-		await dropOr(leave, { swept: true, what: `database ${name}` }, () =>
-			admin.unsafe(`DROP DATABASE IF EXISTS ${sqlIdentifier(name)}`, []),
-		)
+		await dropOr(leave, `database ${name}`, () => admin.unsafe(`DROP DATABASE IF EXISTS ${sqlIdentifier(name)}`, []))
 	}
-	for (const role of roles) await dropOr(leave, { swept: true, what: `role ${role}` }, () => dropRole(admin, role))
+	for (const role of roles) await dropOr(leave, `role ${role}`, () => dropRole(admin, role))
 }
 
 /* why comb loads postgres.js in an apply */
@@ -196,10 +190,10 @@ async function sweepDev(
 
 /**
  * `run`'s cleanup, each drop that fails `leave`d: its connection closed, a query in flight with it,
- * any backend still in its database ended, the slots a refused window added, which a drop waits on,
- * the database's subscriptions and slots, which keep it from its drop, the database made no
- * template and dropped, forcing out a backend that came in since, each role it made, and that
- * window's roles and idle databases, which no sweep takes
+ * any backend still in its database ended, the database's subscriptions and slots, which keep it
+ * from its drop, the database made no template and dropped, forcing out a backend that came in
+ * since, and each role it made or adopted. It drops nothing else a refused window saw, as Postgres
+ * keeps no creator for a role, a database or a slot, and another session may have made it
  */
 async function cleanUp(run: Run, drops: Drops): Promise<void> {
 	const { leave } = drops
@@ -210,21 +204,12 @@ async function cleanUp(run: Run, drops: Drops): Promise<void> {
 			[run.database],
 		),
 	)
-	for (const slot of run.strays.slots)
-		await dropOr(leave, { swept: false, what: `replication slot ${slot}` }, () => dropSlot(run.admin, slot))
 	await settle(() => emptyDatabase(run.admin, run.database, drops))
 	await settle(() => run.admin.unsafe(`ALTER DATABASE ${run.database} IS_TEMPLATE false`, []))
-	await dropOr(leave, { swept: true, what: `database ${run.database}` }, () =>
+	await dropOr(leave, `database ${run.database}`, () =>
 		run.admin.unsafe(`DROP DATABASE IF EXISTS ${run.database} WITH (FORCE)`, []),
 	)
-	for (const role of run.created)
-		await dropOr(leave, { swept: true, what: `role ${role}` }, () => dropMade(run.admin, role))
-	for (const name of run.strays.databases)
-		await dropOr(leave, { swept: false, what: `database ${name}` }, () =>
-			run.admin.unsafe(`DROP DATABASE IF EXISTS ${sqlIdentifier(name)}`, []),
-		)
-	for (const role of run.strays.roles)
-		await dropOr(leave, { swept: false, what: `role ${role}` }, () => dropRole(run.admin, role))
+	for (const role of run.created) await dropOr(leave, `role ${role}`, () => dropMade(run.admin, role))
 }
 
 export { cleanUp, type Drops, dropMade, dropOr, dropRole, dropSlot, type Leave, leaving, settle, sweep, sweepDev }

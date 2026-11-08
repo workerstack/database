@@ -3,11 +3,10 @@
  * catalog query: Postgres, not a model of it, decides what a cascade, a rename or a
  * move leaves, and the two sides compare as one read of two databases.
  *
- * The replay runs as Atlas applies: each file on a session of its own, as apply
- * gives each file an Atlas call, and in a transaction of its own, a `--
- * atlas:txmode none` file statement by statement, each in a transaction of its own first and bare,
- * as Atlas sends it, where Postgres runs it only so, in a database
- * made for it and dropped after (pg-replay-database.ts). One transaction for the whole history
+ * The replay runs as Atlas applies: each file on a session of its own, as apply gives each file an
+ * Atlas call, and in a transaction of its own, a `-- atlas:txmode none` file statement by statement,
+ * each in a transaction of its own first and bare, as Atlas sends it, where Postgres runs it only
+ * so, in a database made for it and dropped after (pg-replay-database.ts). One transaction for the whole history
  * filled Postgres's lock table and left a seed's deferred trigger events pending, and devUrl's own
  * database lent the history what it held. Committed, a statement whose scope is the server or
  * another database would outlive the replay on devUrl's server, the target's own when they share
@@ -29,19 +28,19 @@
  * Bare runs only a statement a block refuses (an outside-only class, a DO block or CALL that
  * commits), one only a block runs (a LOCK, a SAVEPOINT, a cursor not held) and the file's own
  * block, and a change one makes past its database has committed when the read sees it: the refusal
- * names what devUrl's server keeps. The read is the server's, another session's work in it too, so
- * a change there is the file's only when the role, database or other object it is to is one the
- * file names: a name it spells, unquoted and folded as Postgres folds it, quoted and exact, or
- * inside a string a DO body, dblink_exec or format() may run (namesIn in sql-code.ts). That change
- * is refused, naming it, and a role it added is dropped with the cleanup, as is a database it added
- * that no session is in; a change to any other object is another session's and passes. A name the
- * file builds at run time, by concatenation, from a query, or in a function another file defines,
- * is none it spells, so comb neither refuses nor drops that change. A role's password reads from
- * pg_authid alone, so a password a bare statement changes is seen by a superuser's devUrl only.
+ * names what devUrl's server keeps. The read is the server's, another session's work in it too, and
+ * Postgres keeps no creator for a role or a database, so a change there is the file's only beside a
+ * statement that can run code comb cannot read (pg-replay-hidden.ts), and only when it is to an
+ * object the file names: a name it spells, unquoted and folded as Postgres folds it, quoted and
+ * exact, or inside a string a DO body, dblink_exec or format() may run (namesIn in sql-code.ts).
+ * That change is refused, naming it, and left, as another session may have made it; any other is
+ * another session's and passes. A name the file builds at run time, by concatenation, from a query,
+ * or in a function another file defines, is none it spells, so comb does not refuse that change. A
+ * role's password reads from pg_authid alone, so a bare statement's is seen by a superuser's only.
  *
- * A SIGINT or a SIGTERM, a Ctrl-C or a cancelled CI job, skips a `finally`, so either runs the
- * replay's cleanup first, once, and then ends the process as the signal would; a run
- * killed past it is swept by the next replay or apply on the server.
+ * A SIGINT or a SIGTERM, a Ctrl-C or a cancelled CI job, skips a `finally`, so either runs the replay's
+ * cleanup first, once, and then ends the process as the signal would; a run killed past it is swept
+ * by the next replay or apply on the server.
  */
 import { sqlIdentifier } from "../../codegen/utils/case.ts"
 import { type PgTarget, refuseUrlProblems } from "./atlas-target.ts"
@@ -65,6 +64,7 @@ import { prepareSnapshot, snapshot } from "./pg-server-snapshot.ts"
 import { refuseUncounted } from "./pg-server-writes.ts"
 import { pgRead } from "./pg-split.ts"
 import { namesIn } from "./sql-code.ts"
+import { nothingHidden, readStatement } from "./pg-replay-hidden.ts"
 
 /** A history file as baseline reads it */
 type HistoryFile = { name: string; sql: string }
@@ -92,12 +92,14 @@ async function replayFile(run: Run, { name, sql: text }: HistoryFile, replay: Re
 	const inFile = !outsideTransaction(text)
 	const file = {
 		adopted: (role: string) => replay.adopted?.(name, role),
+		hidden: nothingHidden(),
 		name,
 		names: namesIn(text),
 		stops: replay.stops,
 	}
 	const statements = pgRead(text).statements.map(({ sent, tree }) => ({
 		sent,
+		tree,
 		...(tree === undefined ? { node: {}, type: "" } : (([type, node]) => ({ node, type }))(nodeOf(tree))),
 	}))
 	const locks = lockReader(
@@ -110,13 +112,14 @@ async function replayFile(run: Run, { name, sql: text }: HistoryFile, replay: Re
 		await begin(run)
 		await locks.began()
 	}
-	for (const [index, { node, sent, type }] of statements.entries()) {
+	for (const [index, { node, sent, tree, type }] of statements.entries()) {
 		const beyond = (await runsOnMade(run, type, node)) ? undefined : beyondDatabase(type, node)
 		if (beyond !== undefined) {
 			leaveOutTablespace(run.tablespaces, type, node)
 			replay.leftOut(name, sent, beyond)
 			continue
 		}
+		readStatement(tree, file.hidden)
 		await locks.next(index, type, node)
 		const send = () => runStatement(run, { name, node, sent, type }, replay)
 		if (inFile) await send()
@@ -206,7 +209,6 @@ async function opening(
 		owner,
 		seen: new Map(),
 		sql: open(),
-		strays: { databases: [], roles: [], slots: [] },
 		tablespaces: new Set(),
 		...(await devRoleOf(admin)),
 	}

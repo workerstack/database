@@ -2,8 +2,9 @@
  * The server's shared catalogs read as committed, in one query: what a bare
  * statement changed, which no transaction counts, and what a second connection committed, which this
  * backend's counts never see (pg-server-writes.ts). The read is the server's, another session's work
- * in it too, so each row carries the names of the objects it is about, and a change is a file's only
- * when one is a name the file spells (namesIn in sql-code.ts). A replay's own rows are left out, but
+ * in it too, so each row carries the names of the objects it is about: a change is a file's when it
+ * is to the replay's own database, or to a name the file spells (namesIn in sql-code.ts) beside a
+ * statement that can run code comb cannot read (pg-replay-hidden.ts). A replay's own rows are left out, but
  * for the fields of its own database's row that keep the cleanup from dropping it, which only that
  * replay changes. Beside the catalogs, the server's replication slots, which no catalog
  * holds.
@@ -142,27 +143,6 @@ function snapshotChanges(before: Snapshot, after: Snapshot, names?: ReadonlySet<
 	return changes
 }
 
-/** What the cleanup drops, by the noun its subject starts with */
-type Strays = { databases: string[]; roles: string[]; slots: string[] }
-
-// lookup-table: the nouns of what a file adds that the cleanup drops, by where it keeps them
-const DROPPED: ReadonlyArray<[keyof Strays, string]> = [
-	["databases", "database "],
-	["roles", "role "],
-	["slots", "replication slot "],
-]
-
-/** The roles, databases and replication slots named in `names` that `after` holds and `before` does not */
-function added(before: Snapshot, after: Snapshot, names: ReadonlySet<string>): Strays {
-	const out: Strays = { databases: [], roles: [], slots: [] }
-	for (const subject of after.keys()) {
-		if (before.has(subject) || !about(subject, { after, before }, names)) continue
-		const [where, noun] = DROPPED.find(([, prefix]) => subject.startsWith(prefix)) ?? []
-		if (where !== undefined) out[where].push(subject.slice(noun?.length))
-	}
-	return out
-}
-
 /** The subscriptions `after` holds in `database` and `before` does not, by subject: its drop takes them */
 const subscriptionsIn = (before: Snapshot, after: Snapshot, database: string): string[] =>
 	[...after]
@@ -171,4 +151,4 @@ const subscriptionsIn = (before: Snapshot, after: Snapshot, database: string): s
 		)
 		.map(([subject]) => subject)
 
-export { added, prepareSnapshot, type Snapshot, snapshot, snapshotChanges, type Strays, subscriptionsIn }
+export { prepareSnapshot, type Snapshot, snapshot, snapshotChanges, subscriptionsIn }

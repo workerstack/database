@@ -18,7 +18,7 @@
 import { sqlIdentifier } from "../../codegen/utils/case.ts"
 import { codeOf, literal, type Sql, TAG } from "./pg-replay-database.ts"
 import { addWrites, catalogsOf, counts, type Rows, subjectRows, type Writes, writesSince } from "./pg-server-writes.ts"
-import type { Snapshot, Strays } from "./pg-server-snapshot.ts"
+import type { Snapshot } from "./pg-server-snapshot.ts"
 import { flag } from "./pg-nodes.ts"
 
 /**
@@ -26,8 +26,7 @@ import { flag } from "./pg-nodes.ts"
  * that owns it, its role (`role`, which CURRENT_USER and its kin name in a file), whether that role
  * is a superuser, which reads pg_authid, whether it has CREATEROLE (`createrole`), and the roles it made; the
  * open transaction's own writes, comb's CREATE ROLEs', with the rows they left; the shared catalogs
- * as last read committed (`seen`), and the roles, databases and replication slots a refused window
- * added (`strays`), which the cleanup drops
+ * as last read committed (`seen`)
  */
 type Run = {
 	admin: Sql
@@ -39,7 +38,6 @@ type Run = {
 	role: string
 	seen: Snapshot
 	sql: Sql
-	strays: Strays
 	/** the tablespaces it left out the CREATE of, which a statement then runs in pg_default instead */
 	tablespaces: Set<string>
 	superuser: boolean

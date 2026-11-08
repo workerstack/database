@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest"
-import { added, type Snapshot, snapshotChanges } from "./pg-server-snapshot.ts"
+import { type Snapshot, snapshotChanges } from "./pg-server-snapshot.ts"
 
 /** A snapshot of `rows`: each subject, the names its row is about, and the row */
 const at = (rows: Array<[string, string[], Record<string, unknown>]>): Snapshot =>
 	new Map(rows.map(([subject, names, row]) => [subject, { names, row }]))
 
-/* P2 of r22: a change past the replay's database is the file's only when it names a name the file spells */
-describe("snapshotChanges and added", () => {
+/* P2 of r22: a change past the replay's database is the file's only when it is about a name the file spells */
+describe("snapshotChanges", () => {
 	const before = at([
 		["role kept", ["kept"], { rolconnlimit: -1 }],
 		["role gone", ["gone"], {}],
@@ -44,6 +44,5 @@ describe("snapshotChanges and added", () => {
 			"role gone removed",
 			"role svc added",
 		])
-		expect(added(before, after, names)).toEqual({ databases: ["Big"], roles: ["svc"], slots: ["feed"] })
 	})
 })

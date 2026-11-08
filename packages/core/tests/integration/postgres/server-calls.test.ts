@@ -111,6 +111,7 @@ describe("a backend another session holds stays its own (PR2; sibling: the repla
 })
 
 /* P2 of r22 reads the server's committed catalogs; a slot is a row of one, read by its name */
+/* PR1 of r23: a physical slot is the server's, with no creator, so the cleanup leaves one it cannot prove the replay made */
 describe("a slot a DO block makes is the file's (PR2; sibling: P2's DO-hidden dblink role)", () => {
 	const slot = unique("comb_t_slot")
 	afterEach(() => dropSlot(slot))
@@ -119,15 +120,17 @@ describe("a slot a DO block makes is the file's (PR2; sibling: P2's DO-hidden db
 		["a txmode none file", NONE],
 		["a file in a transaction", "-- comb:allow-unsafe: the test's change\n"],
 	])(
-		"refuses one in %s, naming it, and leaves no slot behind",
+		"refuses one in %s, and leaves it, naming it",
 		async (_, head) => {
 			const { refused } = await checked(
 				T,
 				`${head}DO $$ BEGIN PERFORM pg_create_physical_replication_slot('${slot}', true); END $$;\n`,
 			)
 			expect({ refused, slot: await slotOf(slot) }).toEqual({
-				refused: expect.stringContaining(`replication slot ${slot} added`),
-				slot: [],
+				refused: expect.stringContaining(
+					`comb leaves replication slot ${slot} added on devUrl's server, as another session may have made that change`,
+				),
+				slot: [{ slot_name: slot }],
 			})
 		},
 		60_000,
@@ -236,7 +239,7 @@ describe("a subscription the file makes in the replay's database dies with it (s
 				),
 				subscriptions: [],
 			})
-			expect(refused).not.toContain("which comb cannot undo")
+			expect(refused).not.toContain("comb leaves")
 		},
 		60_000,
 	)
