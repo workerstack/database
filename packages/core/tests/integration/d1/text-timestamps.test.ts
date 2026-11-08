@@ -115,25 +115,29 @@ describe("a SQLite timestamp holding ±Infinity pages every row once on every li
 	)
 })
 
-/* AB3-5 of area B: a list that binds the key as read refused a TEXT row only when it ended a page */
-describe("a TEXT row is refused on the page that serves it, wherever it lands (AB3-5 of area B; sibling: B2-3's refusal)", () => {
-	it.each(["anchorless", "anchored joined", "merged"] as const)(
-		"answers the %s list a 500 naming the key on the page a TEXT row leads and a number ends",
+/* AB3-5 of area B: a list that binds the key as read refused a TEXT row only when it ended a page; QL8: a
+   page by number checks only the row its cursor is minted from, a page by cursor every row it serves */
+describe("a TEXT row is refused on the page by cursor that serves it, wherever it lands (AB3-5 of area B; QL8)", () => {
+	it.each(["anchorless", "anchored joined"] as const)(
+		"answers the %s list a 500 naming the key on the last page, which mints no cursor, of a walk that reaches a TEXT row",
 		async (shape) => {
 			for (const key of ["s", "m"] as const)
 				expect(
-					(await firstPair(await dbsFor(shape, LEADING_SEED), { direction: "desc", key, shape })).error,
+					await servedText(await dbsFor(shape, LEADING_SEED), { deleting: false, direction: "asc", key, shape }),
 					key,
 				).toMatchObject({
-					cause: expect.stringContaining(`${key} stores a TEXT value`),
-					errorKey: "sort_not_wired",
-					status: 500,
+					error: {
+						cause: expect.stringContaining(`${key} stores a TEXT value`),
+						errorKey: "sort_not_wired",
+						status: 500,
+					},
+					ids: ["c", "a"],
 				})
 		},
 	)
 
-	it.each(["table", "anchored own", "listOptions"] as const)(
-		"serves the %s list's page as it reads the key back",
+	it.each(["table", "anchored own", "listOptions", "anchorless", "anchored joined"] as const)(
+		"serves the %s list's page by number a TEXT row leads and a number ends, its cursor minted from the number",
 		async (shape) => {
 			for (const key of ["s", "m"] as const)
 				expect(await firstPair(await dbsFor(shape, LEADING_SEED), { direction: "desc", key, shape }), key).toEqual({
@@ -141,6 +145,19 @@ describe("a TEXT row is refused on the page that serves it, wherever it lands (A
 				})
 		},
 	)
+
+	/* a merged list checks every row a shard read as it merges them, wherever the page lands (QL17's class) */
+	it("answers the merged list a 500 naming the key on the page by number a TEXT row leads", async () => {
+		for (const key of ["s", "m"] as const)
+			expect(
+				(await firstPair(await dbsFor("merged", LEADING_SEED), { direction: "desc", key, shape: "merged" })).error,
+				key,
+			).toMatchObject({
+				cause: expect.stringContaining(`${key} stores a TEXT value`),
+				errorKey: "sort_not_wired",
+				status: 500,
+			})
+	})
 })
 
 /* AB4-7 of area B: D1 prints some REALs in no text that reads back, and binds a JS number of others as another */
