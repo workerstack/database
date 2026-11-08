@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { type At, begin, commit, guarded, ownOf, window } from "./pg-replay-commit.ts"
+import { type Hidden, nothingHidden } from "./pg-replay-hidden.ts"
 import type { Run } from "./pg-replay-roles.ts"
 import { ReplayFailed } from "./replay-failed.ts"
 
@@ -10,9 +11,13 @@ type Row = [noun: string, key: string, names: string[], row: Record<string, unkn
 
 /**
  * A replay's two connections, faked: what the replay connection sent, its shared-catalog counts
- * answering each read in turn, track_counts, and the snapshot the admin connection reads
+ * answering each read in turn, track_counts, whether a function it is asked of is none of pg_catalog's
+ * alone (`outside`), and the snapshot the admin connection reads
  */
-function runOf(server: { counts?: number[]; on?: string; snapshot?: Row[] }): { run: Run; sent: string[] } {
+function runOf(server: { counts?: number[]; on?: string; outside?: boolean; snapshot?: Row[] }): {
+	run: Run
+	sent: string[]
+} {
 	const sent: string[] = []
 	const counts = [...(server.counts ?? [])]
 	const sql = {
@@ -21,6 +26,7 @@ function runOf(server: { counts?: number[]; on?: string; snapshot?: Row[] }): { 
 			sent.push(query)
 			if (query.startsWith(COUNTS))
 				return [{ on: server.on ?? "on", writes: { pg_authid: String(counts.shift() ?? 0) } }]
+			if (query.includes("pg_proc")) return [{ hidden: server.outside ?? false }]
 			return []
 		},
 	}
@@ -38,14 +44,17 @@ function runOf(server: { counts?: number[]; on?: string; snapshot?: Row[] }): { 
 		role: "dev",
 		seen: new Map([["role kept", { names: ["kept"], row: { rolconnlimit: -1 } }]]),
 		sql,
-		strays: { databases: [], roles: [], slots: [] },
 		tablespaces: new Set(),
 		superuser: false,
 	}
 	return { run, sent }
 }
 
-const at = (names: string[], sent?: string): At => ({
+/* statements that run a DO block, which comb cannot read */
+const DO: Hidden = { ...nothingHidden(), code: true }
+
+const at = (names: string[], sent?: string, hidden: Hidden = DO): At => ({
+	hidden,
 	name: "2_b.sql",
 	names: new Set(names),
 	sent,
@@ -100,7 +109,7 @@ describe("window", () => {
 		async (word) => {
 			const { run } = runOf({ snapshot: [["setting", "every database for dev", ["dev"], { work_mem: "9MB" }]] })
 			expect(await refusal(window(run, at([word])))).toContain(
-				"devUrl's server keeps setting every database for dev added, which comb cannot undo",
+				"comb leaves setting every database for dev added on devUrl's server",
 			)
 		},
 	)
@@ -110,7 +119,7 @@ describe("window", () => {
 		expect(await refusal(window(run, at(["svc"])))).toBeUndefined()
 	})
 
-	it("refuses a change the file names: what it added comb drops, and what it changed devUrl keeps", async () => {
+	it("refuses a change the file names beside code comb cannot read, and leaves it, as another session may have made it (PR1 of r23)", async () => {
 		const { run } = runOf({
 			snapshot: [
 				["role", "kept", ["kept"], { rolconnlimit: 5 }],
@@ -123,9 +132,8 @@ describe("window", () => {
 			/^2_b\.sql: devUrl's server changed past the database the replay runs in while "SELECT f\(\)" ran: database Big added, role kept changed \(rolconnlimit\), role svc added\. /,
 		)
 		expect(refused).toMatch(
-			/; comb drops role svc, database Big unless a session is in it, which the file added; devUrl's server keeps role kept changed \(rolconnlimit\), which comb cannot undo; check stops here$/,
+			/apply runs; comb leaves database Big added, role kept changed \(rolconnlimit\), role svc added on devUrl's server, as another session may have made those changes: undo there each that is the file's; check stops here$/,
 		)
-		expect(run.strays).toEqual({ databases: ["Big"], roles: ["svc"], slots: [] })
 	})
 
 	it("names the whole file when no one statement ran, and leaves out the parts that do not apply", async () => {
@@ -136,11 +144,81 @@ describe("window", () => {
 			],
 		})
 		expect(await refusal(window(added.run, at(["svc"])))).toMatch(
-			/while the file ran: role svc added\. .*; comb drops role svc, which the file added; check stops here$/,
+			/while the file ran: role svc added\. .*; comb leaves role svc added on devUrl's server, as another session may have made that change: undo there each that is the file's; check stops here$/,
 		)
 		const changed = runOf({ snapshot: [["role", "kept", ["kept"], { rolconnlimit: 5 }]] })
 		expect(await refusal(window(changed.run, at(["kept"])))).toMatch(
-			/apply runs; devUrl's server keeps role kept changed \(rolconnlimit\), which comb cannot undo; check stops here$/,
+			/apply runs; comb leaves role kept changed \(rolconnlimit\) on devUrl's server, as another session may have made that change: undo there each that is the file's; check stops here$/,
+		)
+	})
+})
+
+/* PR1 of r23: Postgres keeps no creator for a role or a database, so a change is the file's only beside code comb cannot read */
+/* devUrl's server after another session made a role and a database the file names */
+const NAMED: Row[] = [
+	["role", "kept", ["kept"], { rolconnlimit: -1 }],
+	["role", "svc", ["svc"], {}],
+	["database", "Big", ["Big"], {}],
+]
+
+/** Statements that call the functions `names` by a bare name, and run nothing else comb cannot read */
+const calls = (...names: string[]): Hidden => ({ ...nothingHidden(), calls: new Set(names) })
+
+describe("window beside statements that run only what their parse says", () => {
+	it("passes a change to an object the file names when its statements call nothing, asking nothing of the replay's database", async () => {
+		const { run, sent } = runOf({ snapshot: NAMED })
+		expect(await refusal(window(run, at(["svc", "Big"], undefined, nothingHidden())))).toBeUndefined()
+		expect({ seen: run.seen.has("role svc"), sent }).toEqual({ seen: true, sent: [] })
+	})
+
+	it("passes one beside a call by a bare name that is pg_catalog's alone on the replay's database", async () => {
+		const { run, sent } = runOf({ outside: false, snapshot: NAMED })
+		expect(await refusal(window(run, at(["svc"], undefined, calls("pg_sleep"))))).toBeUndefined()
+		expect(sent).toEqual([expect.stringContaining("pg_proc")])
+	})
+
+	it("refuses one beside a call by a bare name the replay's database holds outside pg_catalog", async () => {
+		const { run } = runOf({ outside: true, snapshot: NAMED })
+		expect(await refusal(window(run, at(["svc"], undefined, calls("make_side"))))).toContain(
+			"while the file ran: role svc added. ",
+		)
+	})
+
+	it("refuses one beside a call of a function the file makes, asking nothing, as the file may have dropped it since", async () => {
+		const { run, sent } = runOf({ outside: false, snapshot: NAMED })
+		const hidden = { ...calls("upper"), made: new Set(["upper"]) }
+		expect(await refusal(window(run, at(["svc"], undefined, hidden)))).toContain("role svc added")
+		expect(sent).toEqual([])
+	})
+})
+
+/* P3 of r22: only this replay runs in its own database, whatever the file runs */
+describe("window on the replay's own database", () => {
+	it("refuses a change to the replay's own database whatever the file runs, and drops it with the database", async () => {
+		const { run } = runOf({
+			snapshot: [
+				["role", "kept", ["kept"], { rolconnlimit: -1 }],
+				["database", "comb_replay_7_9_00000000", ["comb_replay_7_9_00000000"], { datistemplate: true }],
+				["subscription", "feed", ["feed", "comb_replay_7_9_00000000"], {}],
+			],
+		})
+		run.seen.set("database comb_replay_7_9_00000000", { names: [run.database], row: { datistemplate: false } })
+		const refused = await refusal(window(run, at(["svc"], undefined, nothingHidden())))
+		expect(refused).toMatch(
+			/ran: database comb_replay_7_9_00000000 changed \(datistemplate\), subscription feed added\. .*apply runs; comb drops the database it replays in, and subscription feed in it; check stops here$/,
+		)
+	})
+
+	it("refuses its own database's change alone when the file runs no code comb cannot read, and names no other", async () => {
+		const { run } = runOf({
+			snapshot: [
+				["role", "kept", ["kept"], { rolconnlimit: -1 }],
+				["role", "svc", ["svc"], {}],
+				["database", "comb_replay_7_9_00000000", ["comb_replay_7_9_00000000"], {}],
+			],
+		})
+		expect(await refusal(window(run, at(["svc"], undefined, nothingHidden())))).toMatch(
+			/ran: database comb_replay_7_9_00000000 added\. .*apply runs; comb drops the database it replays in; check stops here$/,
 		)
 	})
 })

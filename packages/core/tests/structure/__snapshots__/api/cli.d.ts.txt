@@ -600,14 +600,13 @@ export type { Calls, Locked };
 // migrate/core/pg-replay-roles.d.ts
 import { type Sql } from "./pg-replay-database.ts";
 import { type Rows, type Writes } from "./pg-server-writes.ts";
-import type { Snapshot, Strays } from "./pg-server-snapshot.ts";
+import type { Snapshot } from "./pg-server-snapshot.ts";
 /**
  * One replay's state: its connection, the server as committed (`admin`), its database, the backend
  * that owns it, its role (`role`, which CURRENT_USER and its kin name in a file), whether that role
  * is a superuser, which reads pg_authid, whether it has CREATEROLE (`createrole`), and the roles it made; the
  * open transaction's own writes, comb's CREATE ROLEs', with the rows they left; the shared catalogs
- * as last read committed (`seen`), and the roles, databases and replication slots a refused window
- * added (`strays`), which the cleanup drops
+ * as last read committed (`seen`)
  */
 type Run = {
     admin: Sql;
@@ -622,7 +621,6 @@ type Run = {
     role: string;
     seen: Snapshot;
     sql: Sql;
-    strays: Strays;
     /** the tablespaces it left out the CREATE of, which a statement then runs in pg_default instead */
     tablespaces: Set<string>;
     superuser: boolean;
@@ -768,8 +766,9 @@ export { addWrites, CATALOGS, type Catalog, catalogsOf, type Change, changedFiel
  * The server's shared catalogs read as committed, in one query: what a bare
  * statement changed, which no transaction counts, and what a second connection committed, which this
  * backend's counts never see (pg-server-writes.ts). The read is the server's, another session's work
- * in it too, so each row carries the names of the objects it is about, and a change is a file's only
- * when one is a name the file spells (namesIn in sql-code.ts). A replay's own rows are left out, but
+ * in it too, so each row carries the names of the objects it is about: a change is a file's when it
+ * is to the replay's own database, or to a name the file spells (namesIn in sql-code.ts) beside a
+ * statement that can run code comb cannot read (pg-replay-hidden.ts). A replay's own rows are left out, but
  * for the fields of its own database's row that keep the cleanup from dropping it, which only that
  * replay changes. Beside the catalogs, the server's replication slots, which no catalog
  * holds.
@@ -799,14 +798,6 @@ declare function snapshot(admin: Sql): Promise<Snapshot>;
  * name in `names`, the names a file spells, when given
  */
 declare function snapshotChanges(before: Snapshot, after: Snapshot, names?: ReadonlySet<string>): string[];
-/** What the cleanup drops, by the noun its subject starts with */
-type Strays = {
-    databases: string[];
-    roles: string[];
-    slots: string[];
-};
-/** The roles, databases and replication slots named in `names` that `after` holds and `before` does not */
-declare function added(before: Snapshot, after: Snapshot, names: ReadonlySet<string>): Strays;
 /** The subscriptions `after` holds in `database` and `before` does not, by subject: its drop takes them */
 declare const subscriptionsIn: (before: Snapshot, after: Snapshot, database: string) => string[];
-export { added, prepareSnapshot, type Snapshot, snapshot, snapshotChanges, type Strays, subscriptionsIn };
+export { prepareSnapshot, type Snapshot, snapshot, snapshotChanges, subscriptionsIn };
