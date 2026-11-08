@@ -46,7 +46,7 @@ describe("a SQLite boolean holding anything but 0 or 1 pages or is refused by na
 		},
 	)
 
-	it.each(["anchorless", "anchored joined", "merged"] as const)(
+	it.each(["merged"] as const)(
 		"answers the %s list a 500 naming the key, never repeating or skipping a row",
 		async (shape) => {
 			for (const walk of BOOLEAN_WALKS) {
@@ -58,6 +58,18 @@ describe("a SQLite boolean holding anything but 0 or 1 pages or is refused by na
 				})
 				expect(startsOrder(ids, BOOLEAN_SERVED[walk.direction]), `${JSON.stringify(walk)} ${ids}`).toBe(true)
 			}
+		},
+	)
+
+	/* QL8: both ways a value but 0 or 1 leads the walk's one page by number, which serves it and mints no cursor */
+	it.each(["anchorless", "anchored joined"] as const)(
+		"serves the %s list's first page by number, a value but 0 or 1, with no cursor while hasMore holds",
+		async (shape) => {
+			for (const walk of BOOLEAN_WALKS)
+				expect(await servedBooleans(await dbsFor(shape), { ...walk, shape }), JSON.stringify(walk)).toEqual({
+					ids: [BOOLEAN_SERVED[walk.direction][0]],
+					stranded: true,
+				})
 		},
 	)
 })

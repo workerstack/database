@@ -20,6 +20,7 @@ import {
 	viaBuilder,
 	viaDerived,
 	viaRelational,
+	walkEnding,
 } from "../support/bigint.ts"
 import { type D1Harness, d1Memory } from "../support/d1.ts"
 import {
@@ -43,6 +44,18 @@ async function d1(seed: string) {
 	await harness.CORE.prepare(CREATE).run()
 	await harness.CORE.prepare(seed).run()
 	return harness.CORE
+}
+
+/*
+ * QL8: ascending, the rounded keys come on pages by cursor, which refuse them by name; descending, the
+ * first is page 1's row, by number, which the page serves with no cursor while hasMore holds
+ */
+const ENDINGS: Record<string, { error?: unknown; ids: number[]; stranded?: true }> = {
+	"n.asc": {
+		error: expect.objectContaining({ cause: expect.stringMatching(ROUNDED), errorKey: "sort_not_wired" }),
+		ids: [1, 5],
+	},
+	"n.desc": { ids: [4], stranded: true },
 }
 
 describe("keyset pagination over an integer key past 2^53, on D1 (U22)", () => {
@@ -69,13 +82,10 @@ describe("keyset pagination over an integer key past 2^53, on D1 (U22)", () => {
 /* Q1 of r19: D1 reads every INTEGER as a JS number, so a derived list with no anchor table cannot page such a key */
 describe("a derived list over an integer key past 2^53, on D1", () => {
 	it.each(Object.keys(EXPECTED))(
-		"refuses the page whose cursor would carry a rounded key under %s, where it skipped rows or repeated one",
+		"ends %s where a page meets a rounded key, never skipping rows or repeating one (QL8)",
 		async (order) => {
 			const database = await d1(KEYS)
-			const refused = await pageAll(viaDerived(drizzle(database) as never), order).catch((error: unknown) => error)
-			expect(refused).toBeInstanceOf(CombError)
-			expect((refused as CombError).errorKey).toBe("sort_not_wired")
-			expect(String((refused as CombError).cause)).toMatch(ROUNDED)
+			expect(await walkEnding(viaDerived(drizzle(database) as never), order)).toEqual(ENDINGS[order])
 		},
 	)
 

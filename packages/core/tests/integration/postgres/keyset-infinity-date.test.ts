@@ -186,7 +186,13 @@ describe.each(MINTS)(
 			expect(await inOrder("tz.asc")).toHaveLength(8)
 			const query = schema.parse({ order: "tz.asc" })
 			const row = { _combId: 1, id: 1, tz: new Date(Number.NaN) }
-			expect(() => queryHelpers.paginate([row, row], built(query, { ...SEALED, keyset: "derived" }))).toThrow(
+			/* QL8: a page by number serves the row and mints no cursor from it; a page by cursor refuses it */
+			expect(queryHelpers.paginate([row, row], built(query, { ...SEALED, keyset: "derived" }))[1]).toMatchObject({
+				hasMore: true,
+				nextCursor: null,
+			})
+			const byCursor = { ...query, cursor: createCursor({ id: 0, tz: new Date(0) }, query.parsedSort, SEALED) }
+			expect(() => queryHelpers.paginate([row, row], built(byCursor, { ...SEALED, keyset: "derived" }))).toThrow(
 				expect.objectContaining({
 					cause: expect.stringMatching(/^the sort by tz reads a date no JS Date holds/),
 					errorKey: "sort_not_wired",

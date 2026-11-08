@@ -446,14 +446,21 @@ describe("queryHelpers.listOptions — a cursor and an empty sort (B2, B3)", () 
 describe("queryHelpers.paginate and the cursor length (Q6)", () => {
 	const schema = createListQuerySchema({ sort: ["title", "id"] })
 
-	it("carries a key too long for the cap by reference within it, and refuses it on page 1 of a derived list (R8)", () => {
+	it("carries a key too long for the cap by reference within it, and refuses it on a derived list's page by cursor (R8; QL8)", () => {
 		const query = schema.parse({ limit: "1", order: "title.asc" })
 		const long = { id: "a", title: "字".repeat(2100) }
 		const [, byReference] = queryHelpers.paginate(wired([long, { id: "b", title: "x" }]), built(query, SEALED))
 		expect(byReference.nextCursor?.length).toBeLessThanOrEqual(8192)
 		expect(openCursor(byReference.nextCursor as string, SEALED)?.values[0]).toBeInstanceOf(CursorRef)
+		/* QL8: a derived page by number serves it and mints no cursor; one by cursor refuses it */
+		const derived = queryHelpers.paginate(
+			wired([long, { id: "b", title: "x" }]),
+			built(query, { ...SEALED, keyset: "derived" }),
+		)
+		expect(derived[1]).toMatchObject({ hasMore: true, nextCursor: null })
+		const byCursor = { ...query, cursor: byReference.nextCursor as string }
 		expect(() =>
-			queryHelpers.paginate(wired([long, { id: "b", title: "x" }]), built(query, { ...SEALED, keyset: "derived" })),
+			queryHelpers.paginate(wired([long, { id: "b", title: "x" }]), built(byCursor, { ...SEALED, keyset: "derived" })),
 		).toThrow(
 			expect.objectContaining({
 				cause: expect.stringMatching(

@@ -20,6 +20,7 @@ import {
 	viaBuilder,
 	viaDerived,
 	viaRelational,
+	walkEnding,
 } from "../integration/support/bigint.ts"
 
 function seeded(seed: string) {
@@ -27,6 +28,18 @@ function seeded(seed: string) {
 	client.run(CREATE)
 	client.run(seed)
 	return client
+}
+
+/*
+ * QL8: ascending, the rounded keys come on pages by cursor, which refuse them by name; descending, the
+ * first is page 1's row, by number, which the page serves with no cursor while hasMore holds
+ */
+const ENDINGS: Record<string, { error?: unknown; ids: number[]; stranded?: true }> = {
+	"n.asc": {
+		error: expect.objectContaining({ cause: expect.stringMatching(ROUNDED), errorKey: "sort_not_wired" }),
+		ids: [1, 5],
+	},
+	"n.desc": { ids: [4], stranded: true },
 }
 
 describe("keyset pagination over an integer key past 2^53, on bun:sqlite (U22)", () => {
@@ -57,12 +70,9 @@ describe("keyset pagination over an integer key past 2^53, on bun:sqlite (U22)",
 /* Q1 of r19: a derived list with no anchor table binds the key as the driver read it */
 describe("a derived list over an integer key past 2^53, on bun:sqlite", () => {
 	for (const order of Object.keys(EXPECTED)) {
-		it(`refuses the page whose cursor would carry a rounded key under ${order}, where it skipped rows or repeated one`, async () => {
+		it(`ends ${order} where a page meets a rounded key, never skipping rows or repeating one (QL8)`, async () => {
 			const client = seeded(KEYS)
-			const refused = await pageAll(viaDerived(drizzle({ client }) as never), order).catch((error: unknown) => error)
-			expect(refused).toBeInstanceOf(CombError)
-			expect((refused as CombError).errorKey).toBe("sort_not_wired")
-			expect(String((refused as CombError).cause)).toMatch(ROUNDED)
+			expect(await walkEnding(viaDerived(drizzle({ client }) as never), order)).toEqual(ENDINGS[order])
 			client.close()
 		})
 

@@ -42,8 +42,8 @@ async function holding(rows: readonly (readonly [string, string])[]): Promise<Li
 	return drizzle({ client })
 }
 
-/** Every id `path` serves by `order`, one a page, by cursor, at most eight pages */
-async function served(path: Path, order: string): Promise<string[]> {
+/** Every id `path` serves by `order`, one a page, by cursor, at most eight pages, and whether it ended with no cursor while hasMore held */
+async function served(path: Path, order: string): Promise<{ ids: string[]; stranded: boolean }> {
 	/* the merged list's rows sit on two shards, two each */
 	const dbs =
 		path === "merged" ? [await holding(ROWS.slice(0, 2)), await holding(ROWS.slice(2))] : [await holding(ROWS)]
@@ -55,11 +55,12 @@ async function served(path: Path, order: string): Promise<string[]> {
 			db.select({ ...getTableColumns(item), ...extras }).from(item)
 		let page: Record<string, unknown>[]
 		let next: string | null
+		let hasMore: boolean
 		if (path === "merged") {
 			const list = buildListQuery({ ...SEALED, merged: {}, parsed, table: item })
 			const reads = await Promise.all(dbs.map((db) => applyListQuery(select(db), list)))
 			const [items, meta] = paginateMerged(reads, list)
-			;[page, next] = [items, meta.nextCursor]
+			;[page, next, hasMore] = [items, meta.nextCursor, meta.hasMore]
 		} else {
 			const list =
 				path === "table"
@@ -67,13 +68,13 @@ async function served(path: Path, order: string): Promise<string[]> {
 					: buildDerivedListQuery({ ...SEALED, idColumn: item.id, parsed, sortColumns: { b: item.b, doc: item.doc } })
 			const rows = await applyListQuery(select(dbs[0] as LibSQLDatabase), list)
 			const [items, meta] = queryHelpers.paginate(rows, list)
-			;[page, next] = [items, meta.nextCursor]
+			;[page, next, hasMore] = [items, meta.nextCursor, meta.hasMore]
 		}
 		ids.push(...page.map((row) => row["id"] as string))
-		if (next === null) return ids
+		if (next === null) return { ids, stranded: hasMore }
 		cursor = next
 	}
-	return ids
+	return { ids, stranded: false }
 }
 
 describe("a minted cursor is one comb reads (QL5 of r22b; sibling: a cursor openCursor refuses)", () => {
@@ -81,17 +82,15 @@ describe("a minted cursor is one comb reads (QL5 of r22b; sibling: a cursor open
 		"pages a blob key on the %s list every row once, asc and desc",
 		async (path) => {
 			for (const direction of ["asc", "desc"] as const)
-				expect(await served(path, `b.${direction}`), direction).toEqual(SERVED[direction])
+				expect(await served(path, `b.${direction}`), direction).toEqual({ ids: SERVED[direction], stranded: false })
 		},
 	)
 
+	/* QL8: a json-mode key is a value no cursor holds, so page 1, by number, serves its row and mints no cursor */
 	it.each(["table", "derived", "merged"] as const)(
-		"refuses a json-mode key on the %s list on page 1, as sort_not_wired naming it",
+		"serves a json-mode key's page 1 on the %s list with no cursor while hasMore holds",
 		async (path) => {
-			await expect(served(path, "doc.asc")).rejects.toMatchObject({
-				errorKey: "sort_not_wired",
-				cause: expect.stringContaining("doc"),
-			})
+			expect(await served(path, "doc.asc")).toEqual({ ids: ["a"], stranded: true })
 		},
 	)
 })

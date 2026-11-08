@@ -18,7 +18,7 @@ import {
 	COMB_ID,
 	type ListPagination,
 	type ListRow,
-	mintedFrom,
+	nextCursorOf,
 	type PaginationResponse,
 	totalOf,
 } from "./pagination.ts"
@@ -239,10 +239,8 @@ function paginateMerged<T extends object>(
 	const window = rows.slice(start, start + limit + 1)
 	const hasMore = full || window.length > limit
 	const page = hasMore ? window.slice(0, limit) : window
-	/* each row a cursor may be minted from is one a cursor resumes after; the last one's is sealed */
-	const last = mintedFrom(page, { byCursor: cursor !== undefined, hasMore })
-		.map((row) => pagination.fit(row))
-		.at(-1)
+	/* the rows a cursor may be minted from are fitted; the last one's is sealed */
+	const last = nextCursorOf(page, { byCursor: cursor !== undefined, hasMore }, (row) => pagination.fit(row))
 	const meta: PaginationResponse = {
 		count: countOf(rowsPerShard, cursor),
 		hasMore,

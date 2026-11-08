@@ -70,16 +70,16 @@ describe("a row no cursor holds is refused on the page by cursor that serves it,
 		})
 	})
 
-	/* QL8: a table list serves a JSON object on a page by number that mints no cursor, and refuses the JSON row a cursor is minted from */
-	it("serves a JSON object on a table list's one page by number, and answers the 500 on a page that mints from a JSON row", async () => {
+	/* QL8: a page by number serves a JSON row, and mints no cursor from one, its hasMore still true */
+	it("serves a JSON object on a table list's pages by number, minting no cursor from a JSON row", async () => {
 		expect(await refusedOnPage(open, JSON_OBJECT, { direction: "desc", kind: "table", limit: 3 })).toEqual({
 			ids: ["r1", "r2", "r0"],
 			page: 1,
 		})
 		expect(await refusedOnPage(open, JSON_OBJECT, { direction: "desc", kind: "table", limit: 2 })).toEqual({
-			error: "sort_not_wired",
-			ids: [],
+			ids: ["r1", "r2"],
 			page: 1,
+			stranded: true,
 		})
 	})
 
@@ -91,19 +91,21 @@ describe("a REAL a key's mode reads apart pages exactly where a text of it reads
 		expect(await storedProblems(open, kase)).toEqual([])
 	})
 
-	/* a list that binds the key as read refuses a text column's number on page 1, as AB4-2 has it */
+	/* ascending, the page by cursor that serves it refuses it; descending it is page 1's row, by number,
+	   which serves it and mints no cursor from it while hasMore holds (QL8) */
 	it.each(["table", "anchored", "listOptions"] as const)(
-		"answers the %s list a 500 naming the key on the page that serves a REAL no text reads back as",
+		"answers the %s list a 500 naming the key on the page by cursor that serves a REAL no text reads back as",
 		async (kind) => {
-			for (const [direction, ids] of [
-				["asc", ["r0", "r2"]],
-				["desc", []],
-			] as const)
-				expect(await refusedOnPage(open, HELD_UNPRINTED, { direction, kind, limit: 1 }), direction).toEqual({
-					error: "sort_not_wired",
-					ids,
-					page: ids.length + 1,
-				})
+			expect(await refusedOnPage(open, HELD_UNPRINTED, { direction: "asc", kind, limit: 1 })).toEqual({
+				error: "sort_not_wired",
+				ids: ["r0", "r2"],
+				page: 3,
+			})
+			expect(await refusedOnPage(open, HELD_UNPRINTED, { direction: "desc", kind, limit: 1 })).toEqual({
+				ids: ["r1"],
+				page: 1,
+				stranded: true,
+			})
 		},
 	)
 })

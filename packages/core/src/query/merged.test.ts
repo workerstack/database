@@ -3,7 +3,9 @@ import { bigint, numeric, pgTable, text as pgText } from "drizzle-orm/pg-core"
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
 import { describe, expect, it } from "vitest"
 import { SEALED } from "./__fixtures__/cursor-secret.ts"
+import { read, stored } from "./__fixtures__/merged-rows.ts"
 import { paginate } from "./pagination.ts"
+import { createCursor } from "./cursor-mint.ts"
 import { paginateMerged } from "./merged.ts"
 import { createListQuerySchema } from "./schema.ts"
 import { buildDerivedListQuery, buildListQuery } from "./sqlite/build-list-query.ts"
@@ -17,28 +19,8 @@ const numbered = sqliteTable("numbered", { id: text("id").primaryKey(), k: integ
 const merged = (params: Record<string, string>, maxRowsPerShard?: number, table: typeof t | typeof numbered = t) =>
 	buildListQuery({ ...SEALED, merged: { maxRowsPerShard }, parsed: parse(params), table })
 
-/** The storage class SQLite holds `value` in, as the builder's typeof() answers for a value a driver read so */
-function stored(value: unknown): string {
-	if (value === null || value === undefined) return "null"
-	if (typeof value === "string") return "text"
-	if (value instanceof Uint8Array) return "blob"
-	if (value === Number.POSITIVE_INFINITY) return "+inf"
-	if (value === Number.NEGATIVE_INFINITY) return "-inf"
-	return typeof value === "number" && !Number.isInteger(value) ? "real" : "integer"
-}
-
-/**
- * Hand-made rows as a shard reads them through the merged builder: the tiebreak, the storage class
- * of each of `sort`'s keys and of the id, and each row's shard count on an offset page
- */
-const read = <T extends { id: unknown }>(rows: readonly T[], total: number | null = rows.length, sort = ["k"]) =>
-	rows.map((row) => ({
-		...row,
-		_combId: row.id,
-		...(sort.length === 0 ? {} : { _combKeyTexts: sort.map(() => "").join(",") }),
-		_combKeyTypes: [...sort.map((field) => stored((row as Record<string, unknown>)[field])), stored(row.id)].join(","),
-		...(total === null ? {} : { _total: total }),
-	}))
+/** What a page by number answers when its next cursor would be minted from a row no cursor holds (QL8) */
+const NO_CURSOR = { hasMore: true, nextCursor: null }
 
 /** A merged derived list under `params`, over rows with an id and a k */
 const derived = (params: Record<string, string>) =>
@@ -144,11 +126,16 @@ describe("paginateMerged", () => {
 describe("paginateMerged and a key's column (AB4-1 of area B)", () => {
 	/* AB4-1 of area B: the cursor after such a row is one the next page's open would refuse as a 400 */
 	it("answers the 500 naming the key for a row whose TEXT column holds a number, never minting its cursor", () => {
-		const rows = read([
+		const numbers = [
 			{ id: "a", k: 1 },
 			{ id: "b", k: 2 },
-		])
-		expect(() => paginateMerged([rows], merged({ limit: "1", order: "k.asc" }))).toThrow(
+		]
+		/* QL8: a page by number serves the row and mints no cursor from it; a page by cursor refuses it */
+		expect(paginateMerged([read(numbers)], merged({ limit: "1", order: "k.asc" }))[1]).toMatchObject(NO_CURSOR)
+		/* descending from a TEXT, which sorts after every number, so the numbers come after the cursor */
+		const cursor = createCursor({ id: "0", k: "z" }, parse({ order: "k.desc" }).parsedSort, SEALED)
+		const resumed = read(numbers.toReversed(), null)
+		expect(() => paginateMerged([resumed], merged({ cursor, limit: "1", order: "k.desc" }))).toThrow(
 			expect.objectContaining({
 				cause: expect.stringMatching(/^the sort by k reads a value its column's mode does not hold/),
 				errorKey: "sort_not_wired",
@@ -232,12 +219,17 @@ describe("paginateMerged past a cursor a shard resumed before", () => {
 	it("refuses, on the page that meets it, a key too long for a cursor, where it paged forever by reference", () => {
 		const long = "x".repeat(9000)
 		const titled = (id: string, k: string) => ({ id, k: `${long}${k}` })
-		expect(() =>
+		const parts = [[titled("a1", "a"), titled("a2", "c")], [titled("b1", "b")]]
+		/* QL8: a page by number serves it and mints no cursor from it */
+		expect(
 			paginateMerged(
-				[read([titled("a1", "a"), titled("a2", "c")]), read([titled("b1", "b")])],
+				parts.map((rows) => read(rows)),
 				merged({ limit: "1", order: "k.asc" }),
-			),
-		).toThrow(
+			)[1],
+		).toMatchObject(NO_CURSOR)
+		const resumeAt = createCursor({ id: "a0", k: "a" }, parse({ order: "k.asc" }).parsedSort, SEALED)
+		const resumed = parts.map((rows) => read(rows, null))
+		expect(() => paginateMerged(resumed, merged({ cursor: resumeAt, limit: "1", order: "k.asc" }))).toThrow(
 			expect.objectContaining({
 				cause: expect.stringMatching(/^a row's k is too long to page this list by: .*a merged list/),
 				errorKey: "sort_not_wired",

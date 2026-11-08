@@ -75,9 +75,9 @@ describe("TEXT in a SQLite timestamp column pages or is refused by name (B2-3 of
 	)
 
 	it.each(["anchorless", "anchored joined", "merged"] as const)(
-		"answers the %s list a 500 naming the key where it would page a TEXT row, never repeating or skipping one",
+		"answers the %s list a 500 naming the key on the page by cursor that serves a TEXT row, never repeating or skipping one",
 		async (shape) => {
-			for (const walk of WALKS) {
+			for (const walk of WALKS.filter(({ direction }) => shape === "merged" || direction === "asc")) {
 				const { error, ids } = await servedText(await dbsFor(shape), { ...walk, shape })
 				expect(error, JSON.stringify(walk)).toMatchObject({
 					cause: expect.stringContaining(`${walk.key satisfies TextKey} stores a TEXT value`),
@@ -86,6 +86,18 @@ describe("TEXT in a SQLite timestamp column pages or is refused by name (B2-3 of
 				})
 				expect(startsOrder(ids, TEXT_SERVED[walk.direction]), `${JSON.stringify(walk)} ${ids}`).toBe(true)
 			}
+		},
+	)
+
+	/* QL8: descending, a TEXT row leads the walk's one page by number, which serves it and mints no cursor */
+	it.each(["anchorless", "anchored joined"] as const)(
+		"serves the %s list's first page by number, a TEXT row, with no cursor while hasMore holds",
+		async (shape) => {
+			for (const walk of WALKS.filter(({ direction }) => direction === "desc"))
+				expect(await servedText(await dbsFor(shape), { ...walk, shape }), JSON.stringify(walk)).toEqual({
+					ids: ["g"],
+					stranded: true,
+				})
 		},
 	)
 })

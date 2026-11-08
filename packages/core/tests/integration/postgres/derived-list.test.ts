@@ -144,12 +144,10 @@ describe("a Postgres derived list judges a key past 2^53 by its type (Q2 of r21)
 		expect(await scores(key, "desc")).toEqual(["d", "c", "b", "a"])
 	})
 
-	it("refuses a bigint read as a number past 2^53, which the driver rounded", async () => {
-		for (const direction of ["asc", "desc"] as const)
-			await expect(scores(score.b, direction)).rejects.toMatchObject({
-				cause: expect.stringMatching(/^k \d+ is past ±\(2\^53 − 1\), where the driver rounded it: a derived list/),
-				errorKey: "sort_not_wired",
-			})
+	/* QL8: every key is rounded, so page 1, by number, serves its row and mints no cursor from it */
+	it("serves page 1 of a bigint read as a number past 2^53, which the driver rounded, minting no cursor", async () => {
+		expect(await scores(score.b, "asc")).toEqual(["a"])
+		expect(await scores(score.b, "desc")).toEqual(["d"])
 	})
 })
 
@@ -206,12 +204,10 @@ describe("a key whose class isn't a double is exact or refused (Q1; sibling: r21
 		return ids
 	}
 
-	it("refuses a domain over a domain over bigint holding 2^60 + 1 to 2^60 + 7, asc and desc", async () => {
-		for (const direction of ["asc", "desc"] as const)
-			await expect(ledgerIds(ledger.cents, direction)).rejects.toMatchObject({
-				cause: expect.stringMatching(/^k \d+ is past ±\(2\^53 − 1\), where the driver rounded it: a derived list/),
-				errorKey: "sort_not_wired",
-			})
+	/* QL8: every key is rounded, so page 1, by number, serves its row and mints no cursor from it */
+	it("serves page 1 of a domain over a domain over bigint holding 2^60 + 1 to 2^60 + 7, minting no cursor", async () => {
+		expect(await ledgerIds(ledger.cents, "asc")).toEqual(["a"])
+		expect(await ledgerIds(ledger.cents, "desc")).toEqual(["d"])
 	})
 
 	/* QL3 of r22b: a numeric in number mode carries its text, so it pages where Q1 refused it */
@@ -322,13 +318,11 @@ describe("an anchored list's joined key is treated as anchorless (QL1; sibling: 
 		}
 	})
 
-	it("refuses a joined bigint read as a number past 2^53, as an anchorless list does", async () => {
+	/* QL8: every joined key is rounded, so page 1, by number, serves its row and mints no cursor from it */
+	it("serves page 1 of a joined bigint read as a number past 2^53, as an anchorless list does, minting no cursor", async () => {
 		for (const direction of ["asc", "desc"] as const) {
 			expect(await by("big", "anchored own", direction)).toEqual(SERVED[direction])
-			await expect(by("big", "anchored joined", direction)).rejects.toMatchObject({
-				cause: expect.stringMatching(/^k \d+ is past ±\(2\^53 − 1\), where the driver rounded it/),
-				errorKey: "sort_not_wired",
-			})
+			expect(await by("big", "anchored joined", direction)).toEqual([SERVED[direction][0]])
 		}
 	})
 })

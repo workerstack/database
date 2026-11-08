@@ -792,16 +792,17 @@ declare const totalOf: (row: object) => number;
  */
 declare function applySelect<T extends Record<string, unknown>>(row: T, parsedFields: ParsedFields | null): T;
 /**
- * The rows of a served page a cursor is checked from. On a page by cursor, every row: its client walks
- * the list one cursor at a time, so a row no cursor resumes after is refused on the page that serves
- * it, never on whichever page it happens to end. On a page by number, only the row its next cursor is
- * minted from, the last of a page with more, as 0.20.1 did: the page serves rows its client never
- * resumes after
+ * What seals a served page's next cursor, or undefined for none, `check` measuring a row's cursor. On
+ * a page by cursor it runs on every row: its client walks the list one cursor at a time, so a row no
+ * cursor resumes after is refused on the page that serves it, whatever the page size. On a page by
+ * number it runs only on the last row of a page with more, the one the cursor is minted from, as
+ * 0.20.1 did; a row whose own value no cursor holds (UnmintableRow) mints none, and the page serves it,
+ * its `hasMore` still saying a next page by number exists. A refusal of the list's wiring throws on both
  */
-declare function mintedFrom<T>(page: readonly T[], { byCursor, hasMore }: {
+declare function nextCursorOf<T>(page: readonly T[], { byCursor, hasMore }: {
     byCursor: boolean;
     hasMore: boolean;
-}): readonly T[];
+}, check: (row: T) => (() => string) | undefined): (() => string) | undefined;
 /**
  * The page of `items`, read with `built`, and its pagination: count, whether there is more, and
  * the next cursor, sealed under the builder's options; none for a list no cursor can resume
@@ -813,7 +814,7 @@ declare function paginate<T extends object>(items: readonly T[], built: {
         merged: false;
     };
 }): readonly [Array<ListRow<T>>, PaginationResponse];
-export { applySelect, COMB_ID, mintedFrom, type ListExtra, type ListPagination, type ListRow, paginate, type PaginationFacts, type PaginationResponse, paginationOf, totalOf, };
+export { applySelect, COMB_ID, nextCursorOf, type ListExtra, type ListPagination, type ListRow, paginate, type PaginationFacts, type PaginationResponse, paginationOf, totalOf, };
 
 // query/cursor.d.ts
 import { CursorRef, RealText, type CursorId, type CursorValue } from "./cursor-codec.ts";

@@ -35,14 +35,13 @@ describe("a list key is read back exactly or treated as anchorless (QL1, QL2; si
 		}
 	})
 
-	it("refuses a joined integer past 2^53 the driver rounded, as an anchorless list does", async () => {
+	/* QL8: the rounded keys end both ways, so each is page 1's row, by number, which serves it and mints no
+	   cursor from it; the page by cursor that serves one refuses it (list-query-bigint.test.ts) */
+	it("serves a joined integer past 2^53 the driver rounded on page 1, by number, minting no cursor from it", async () => {
 		const db = await seeded()
 		for (const direction of ["asc", "desc"] as const) {
 			expect(await servedBy(db, { direction, key: "big", shape: "anchored own" })).toEqual(SERVED[direction])
-			await expect(servedBy(db, { direction, key: "big", shape: "anchored joined" })).rejects.toMatchObject({
-				cause: expect.stringMatching(/^k \d+ is past ±\(2\^53 − 1\), where the driver rounded it/),
-				errorKey: "sort_not_wired",
-			})
+			expect(await servedBy(db, { direction, key: "big", shape: "anchored joined" })).toEqual([SERVED[direction][0]])
 		}
 	})
 

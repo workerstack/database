@@ -3,13 +3,12 @@
  * MAX_CURSOR_LENGTH, a value too long for it carried by reference (cursor-ref.ts) on a table's
  * list, and refused on a derived list, which no row holds to read a reference back from.
  */
-import { CombError } from "../error.ts"
-import { combErrorKeys } from "../types.ts"
 import { cursorBytes, CursorRef, MAX_CURSOR_LENGTH } from "./cursor.ts"
 import { readsApart } from "./cursor-reads.ts"
 import { type CursorOptions, seal, sealedLength } from "./cursor-seal.ts"
 import { roundedKey } from "./rounded-key.ts"
 import type { SortField } from "./types.ts"
+import { UnmintableRow } from "./cursor-refusals.ts"
 
 /**
  * The open's column check a builder hands the mint: the index of the first value, the tiebreak id last,
@@ -37,7 +36,7 @@ function longestFitting(record: Record<string, unknown>, field: string, fits: (r
 }
 
 /** The overflow, as paginate reports it on the page that met it: a 500 naming the field and the cap */
-function tooLong(fields: string, length: number, kind: KeysetKind | "unread"): CombError {
+function tooLong(fields: string, length: number, kind: KeysetKind | "unread"): UnmintableRow {
 	const reasons = {
 		derived: "a derived list reads no row to page by reference, so sort it by a key of bounded length",
 		merged:
@@ -47,11 +46,9 @@ function tooLong(fields: string, length: number, kind: KeysetKind | "unread"): C
 			"its long key is a column not of the anchor table, or an expression over one, so no reference reads its value back; sort by a key of bounded length, or by a column of the anchor table",
 	}
 	const reason = reasons[kind]
-	return new CombError({
-		cause: `a row's ${fields} is too long to page this list by: its cursor would be ${length} characters, past ${MAX_CURSOR_LENGTH}; ${reason}`,
-		errorKey: combErrorKeys.SORT_NOT_WIRED,
-		status: "internal_server_error",
-	})
+	return new UnmintableRow(
+		`a row's ${fields} is too long to page this list by: its cursor would be ${length} characters, past ${MAX_CURSOR_LENGTH}; ${reason}`,
+	)
 }
 
 /**
@@ -159,11 +156,9 @@ function refuseInvalidDate(
 		({ field }) => at.asRead(field) && row[field] instanceof Date && Number.isNaN((row[field] as Date).getTime()),
 	)
 	if (unheld === undefined) return
-	throw new CombError({
-		cause: `the sort by ${unheld.field} reads a date no JS Date holds (a Postgres 'infinity' read in date mode, or a SQLite timestamp holding ±Infinity), which this list has no row to read back by, ${at.derived ? "a derived list having none" : "its key being no column of the anchor table"}; select it in string mode or sort by another column`,
-		errorKey: combErrorKeys.SORT_NOT_WIRED,
-		status: "internal_server_error",
-	})
+	throw new UnmintableRow(
+		`the sort by ${unheld.field} reads a date no JS Date holds (a Postgres 'infinity' read in date mode, or a SQLite timestamp holding ±Infinity), which this list has no row to read back by, ${at.derived ? "a derived list having none" : "its key being no column of the anchor table"}; select it in string mode or sort by another column`,
+	)
 }
 
 /** A 500 naming the first value of `record` its column does not hold (ColumnCheck), the cursor the next page would refuse */
@@ -179,11 +174,9 @@ function refuseUnfit(
 	const index = options.holds(values, (i) => options.carried?.has(sort[i]?.field ?? "") ?? false)
 	if (index === -1) return
 	const named = sort[index] === undefined ? `the tiebreak id ${idField}` : `the sort by ${sort[index].field}`
-	throw new CombError({
-		cause: `${named} reads a value its column's mode does not hold (a JSON-mode key's, or a SQLite column's of another storage class than its mode reads), which no cursor of this list resumes after; sort by another column`,
-		errorKey: combErrorKeys.SORT_NOT_WIRED,
-		status: "internal_server_error",
-	})
+	throw new UnmintableRow(
+		`${named} reads a value its column's mode does not hold (a JSON-mode key's, or a SQLite column's of another storage class than its mode reads), which no cursor of this list resumes after; sort by another column`,
+	)
 }
 
 export { type ColumnCheck, createCursor, fitCursor, fittedCursor, type KeysetKind }

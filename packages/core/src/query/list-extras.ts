@@ -16,6 +16,7 @@ import {
 	unprintedNumber,
 } from "./held-keys.ts"
 import type { SortField } from "./types.ts"
+import { UnmintableRow } from "./cursor-refusals.ts"
 
 /** The column every built list selects its tiebreak as, which the next cursor's id is minted from */
 const COMB_ID = "_combId" as const
@@ -140,19 +141,15 @@ const FLOAT_MARK = "!f"
  * which the read places nowhere a cursor resumes after
  */
 const storesUnread = (field: string, stored: string): CombError =>
-	new CombError({
-		cause: `${field} stores a ${stored.toUpperCase()} value its column's drizzle mode reads as another, which no cursor of a list that binds the key as read resumes after: store what the mode reads back (a timestamp's epoch number, a boolean's 0 or 1, a finite number), or sort by a column of the list's own table`,
-		errorKey: combErrorKeys.SORT_NOT_WIRED,
-		status: "internal_server_error",
-	})
+	new UnmintableRow(
+		`${field} stores a ${stored.toUpperCase()} value its column's drizzle mode reads as another, which no cursor of a list that binds the key as read resumes after: store what the mode reads back (a timestamp's epoch number, a boolean's 0 or 1, a finite number), or sort by a column of the list's own table`,
+	)
 
 /** The 500 for a SQLite number key no text SQLite prints of reads back as it, which no cursor binds exactly */
 const printsUnread = (field: string): CombError =>
-	new CombError({
-		cause: `${field} holds a REAL no text SQLite prints of it reads back as (D1 misprints some past about 1e100 and below 1e-100), which no cursor resumes after: store a number of fewer significant digits, or sort by another column`,
-		errorKey: combErrorKeys.SORT_NOT_WIRED,
-		status: "internal_server_error",
-	})
+	new UnmintableRow(
+		`${field} holds a REAL no text SQLite prints of it reads back as (D1 misprints some past about 1e100 and below 1e-100), which no cursor resumes after: store a number of fewer significant digits, or sort by another column`,
+	)
 
 /** The 500 for a Postgres float key read under extra_float_digits 0 or below: its read is rounded */
 const printsRounded = (field: string): CombError =>

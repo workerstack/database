@@ -51,8 +51,8 @@ type Row = Record<string, unknown>
 /** How a suite opens one database on its driver, seeded with `statements`, its drizzle built with `relations` */
 export type OpenDb = (statements: readonly string[], relations: object) => Promise<Db>
 
-/** What a walk served: the ids in order, the pages it read, and the error that ended it */
-export type StoredWalk = { error?: unknown; ids: string[]; pages: number }
+/** What a walk served: the ids in order, the pages it read, and the error that ended it, or that it ended with no cursor while hasMore said a next page by number exists */
+export type StoredWalk = { error?: unknown; ids: string[]; pages: number; stranded?: true }
 
 /** The tables of `kase`, `post` holding the key and `metric` a joined copy of it */
 function tablesOf(kase: StoredCase) {
@@ -84,12 +84,12 @@ export async function sqliteOrder(open: OpenDb, kase: StoredCase, direction: "as
 /** The request a list of `kase` is built from */
 type Parsed = Parameters<typeof queryHelpers.listOptions>[0]
 
-/** One page of the list `kind` of `kase`, read from its databases: its rows, and the next cursor */
-type Lister = (parsed: Parsed) => Promise<readonly [readonly Row[], string | null]>
+/** One page of the list `kind` of `kase`, read from its databases: its rows, the next cursor, and hasMore */
+type Lister = (parsed: Parsed) => Promise<readonly [readonly Row[], string | null, boolean]>
 
-/** A paginated page as a Lister returns it: its rows, and the next cursor */
-const meta = ([page, { nextCursor }]: readonly [readonly Row[], { nextCursor: string | null }]) =>
-	[page, nextCursor] as const
+/** A paginated page as a Lister returns it: its rows, the next cursor, and hasMore */
+const meta = ([page, read]: readonly [readonly Row[], { hasMore: boolean; nextCursor: string | null }]) =>
+	[page, read.nextCursor, read.hasMore] as const
 
 /** What reads a page of the list `kind` of `kase`, on one database seeded with it, or two shards of it for "merged" */
 async function listerOf(open: OpenDb, kase: StoredCase, kind: StoredKind): Promise<Lister> {
@@ -157,9 +157,9 @@ export async function walkStored(
 	try {
 		while (pages < kase.values.length * 2 + 2) {
 			pages++
-			const [page, next] = await list({ ...schema.parse({ order: `k.${direction}` }), cursor })
+			const [page, next, hasMore] = await list({ ...schema.parse({ order: `k.${direction}` }), cursor })
 			ids.push(...page.map((row) => row["id"] as string))
-			if (next === null) return { ids, pages }
+			if (next === null) return hasMore ? { ids, pages, stranded: true } : { ids, pages }
 			cursor = next
 		}
 	} catch (error) {
@@ -181,11 +181,18 @@ const namesKey = (error: unknown): boolean =>
 	String((error as { cause?: unknown }).cause).includes("k")
 
 /**
- * What breaks the rule every walk of `kase` keeps, on every kind, both directions, each of `limits`: a
- * list that reads the key back serves every row once in SQLite's order; one that binds it as read
- * serves every row once or answers the documented 500, having served a start of that order (`refusing`
- * widens which may). Never a
- * 400, a repeat, a skip or a loop. One line a broken walk, so an empty list is a pass
+ * The rule every walk keeps, never a 400, a repeat, a skip or a loop: every row of `order` once; or, where it may
+ * refuse, a start of it, then the 500 naming the key or, on a page by number (QL8), no cursor while hasMore holds
+ */
+function keepsRule(walk: StoredWalk, order: readonly string[], refusing: boolean): boolean {
+	const ended = (walk.error !== undefined && namesKey(walk.error)) || walk.stranded === true
+	if (refusing && ended) return startsWith(walk.ids, order)
+	return walk.error === undefined && walk.stranded === undefined && walk.ids.join() === order.join()
+}
+
+/**
+ * The walks of `kase` that break keepsRule, on every kind, both directions, each of `limits`: a list that
+ * binds the key as read may refuse (`refusing` widens which). One line a broken walk, so an empty list is a pass
  */
 export async function storedProblems(
 	open: OpenDb,
@@ -207,13 +214,9 @@ export async function storedProblems(
 		for (const kind of kinds)
 			for (const limit of limits) {
 				const walk = await walkStored(open, kase, { direction, kind, limit })
-				const refused = walk.error !== undefined && refusing(kind) && namesKey(walk.error)
-				const fine = refused
-					? startsWith(walk.ids, order)
-					: walk.error === undefined && walk.ids.join() === order.join()
-				if (!fine)
+				if (!keepsRule(walk, order, refusing(kind)))
 					problems.push(
-						`${kind} ${direction} limit ${limit}: served ${walk.ids.join(",")} of ${order.join(",")} in ${walk.pages} pages${walk.error === undefined ? "" : `, then ${errorLine(walk.error)}`}`,
+						`${kind} ${direction} limit ${limit}: served ${walk.ids.join(",")} of ${order.join(",")} in ${walk.pages} pages${walk.stranded ? ", then no cursor while hasMore" : ""}${walk.error === undefined ? "" : `, then ${errorLine(walk.error)}`}`,
 					)
 			}
 	}
@@ -240,12 +243,13 @@ export async function refusedOnPage(
 	open: OpenDb,
 	kase: StoredCase,
 	walk: { direction: "asc" | "desc"; kind: StoredKind; limit: number },
-): Promise<{ error?: string; ids: string[]; page: number }> {
-	const { error, ids, pages } = await walkStored(open, kase, walk)
+): Promise<{ error?: string; ids: string[]; page: number; stranded?: true }> {
+	const { error, ids, pages, stranded } = await walkStored(open, kase, walk)
 	return {
 		...(error === undefined ? {} : { error: namesKey(error) ? "sort_not_wired" : errorLine(error) }),
 		ids,
 		page: pages,
+		...(stranded && { stranded }),
 	}
 }
 
