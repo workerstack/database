@@ -142,6 +142,14 @@ const carriesOpaque = (column: SQLWrapper | undefined): boolean =>
 	is(column, Column) && column.dataType === "custom" && !is(column, SQLiteColumn)
 
 /**
+ * `cast` as an operand of no affinity, as a bound parameter is: a CAST has its type's affinity, which
+ * SQLite applies to a column of none or BLOB's before it compares, so `k > cast(? as real)` read a
+ * stored TEXT '10' as 10 and paged it out of the column's own order. The unary `+` drops the affinity
+ * and keeps the index search
+ */
+const affinityFree = (cast: SQL): SQL => sql`+${cast}`
+
+/**
  * A cursor value as its key binds it. Stored text the list carried (`carried`, the cursor's flag)
  * binds as itself, past the column's mapper: cast to numeric on a key that reads rounded, and on a
  * Postgres custom column as a parameter Postgres types as the column it is compared with, its own type. A value as read binds through the mapper, so a custom
@@ -150,12 +158,12 @@ const carriesOpaque = (column: SQLWrapper | undefined): boolean =>
  */
 function boundCarried(column: SQLWrapper | undefined, value: unknown, carried: boolean): unknown {
 	/* one SQLite parse of the text the list checked reads back as the key, on every driver */
-	if (value instanceof RealText) return sql`cast(${value.text} as real)`
+	if (value instanceof RealText) return affinityFree(sql`cast(${value.text} as real)`)
 	if (carriedText(column, value, { asRead: false, carried })) return sql`${value}`
 	/* a mode's mapper binds the value as another (a boolean's as 0 or 1); D1 binds no bigint, so one past 2^53 goes as its digits */
 	if (carriedStored(column, value, { asRead: false, carried }))
 		return typeof value === "bigint" && !Number.isSafeInteger(Number(value))
-			? sql`cast(${String(value)} as integer)`
+			? affinityFree(sql`cast(${String(value)} as integer)`)
 			: sql`${bindable(value)}`
 	if (!carried || typeof value !== "string" || !NUMERIC_TEXT.test(value)) return value
 	if (readsRounded(column)) return sql`${value}::numeric`
