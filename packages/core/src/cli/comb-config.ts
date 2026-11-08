@@ -6,6 +6,7 @@ import * as z from "zod"
 import type { CodegenConfig, DatabaseCodegen } from "../codegen/config.ts"
 import type { FtsTableConfig } from "../codegen/generators/fts-sql.ts"
 import { codegenConfigSchema } from "../codegen/config-schema.ts"
+import { refuseNotFile } from "./file-path.ts"
 import { CliError, type CliIo } from "./output.ts"
 
 export type { CodegenConfig, DatabaseCodegen }
@@ -58,10 +59,14 @@ export function databaseIn(config: CodegenConfig, name: string, hint?: string): 
 	)
 }
 
-/** The tables file `tables` names, resolved against `cwd`; a CliError when it is missing */
-export function tablesFile(cwd: string, tables: string): string {
+/**
+ * The tables file `tables` names, resolved against `cwd`, as `what` gave it (--tables, or
+ * comb.config.ts `tables`); a CliError when it is missing or not a file
+ */
+export function tablesFile(cwd: string, tables: string, what: "--tables" | "tables"): string {
 	const resolved = path.resolve(cwd, tables)
 	if (!fs.existsSync(resolved)) throw new CliError(`Tables file not found: ${resolved}`)
+	refuseNotFile(resolved, what, "point it at the module that exports the tables")
 	return resolved
 }
 
@@ -85,7 +90,7 @@ export async function declaredFts(
 
 /** The FTS5 DDL `declared` asks for, for the migration diff to keep apart from what Atlas sees */
 export async function ftsSql(cwd: string, declared: DeclaredFts, io: CliIo): Promise<string> {
-	const resolvedTables = tablesFile(cwd, declared.tables)
+	const resolvedTables = tablesFile(cwd, declared.tables, "tables")
 	const { analyze } = await import("../codegen/analyzer.ts")
 	const { generateFtsSql } = await import("../codegen/generators/fts-sql.ts")
 	return generateFtsSql((await analyze(resolvedTables, { cwd })).tables, declared.fts, io.err)

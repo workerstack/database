@@ -1,7 +1,7 @@
 /** `comb migrate`: init, diff, check, apply, baseline and status. */
 import fs from "node:fs"
 import path from "node:path"
-import { parseArgs, refuseFurther } from "./args.ts"
+import { parseArgs, refuseFurther, usageOf } from "./args.ts"
 import { binOf } from "../migrate/core/optional-peer.ts"
 import { declaredFts, ftsSql } from "./comb-config.ts"
 import {
@@ -14,6 +14,7 @@ import {
 } from "./drizzle-dialect.ts"
 import { migrateApply, needPeers } from "./migrate-apply.ts"
 import { type MigrateTarget, refuseBlank, refuseNoDir, resolveMigrateTarget } from "./migrate-target.ts"
+import { refusePathName } from "./file-path.ts"
 import { CliError, type CliContext } from "./output.ts"
 import { scratchDir } from "../migrate/core/cleanup.ts"
 
@@ -104,6 +105,8 @@ async function migrateDiff(argv: readonly string[], io: CliContext): Promise<voi
 	const args = parseArgs(argv, "migrate diff")
 	/* parseArgs refuses a diff that names no database */
 	const [db, name] = args.positionals as [string, (string | undefined)?]
+	/* Atlas makes the file's name from it: a path would land outside the directory, or nowhere */
+	if (name !== undefined) refusePathName(name, "Migration name", usageOf("migrate diff"))
 	const env = args.options["env"] as string | undefined
 	const { d1, expected, exported, fts, migrationsDir, pg, provider, target } = await diffTarget(db, env, io)
 	/* a diff starts a missing directory, and refuses a file before anything runs */
