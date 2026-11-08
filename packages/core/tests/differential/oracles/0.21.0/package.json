@@ -1,0 +1,12 @@
+{
+	"private": true,
+	"type": "module",
+	"dependencies": {
+		"@libsql/client": "0.17.4",
+		"@lovrozagar/comb": "0.21.0",
+		"@noble/ciphers": "2.0.0",
+		"@noble/hashes": "2.0.0",
+		"drizzle-orm": "1.0.0-rc.4",
+		"zod": "4.6.0"
+	}
+}
