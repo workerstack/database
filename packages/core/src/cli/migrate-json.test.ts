@@ -1,7 +1,7 @@
 /**
- * KC3 of r23: a migrate apply a signal stops says what it applied as the one `--json` object, as it
- * says it as a line without --json, where it printed no object at all. The signal comes as a file
- * is announced (a stop parks the run at its next connection), on a real libsql file.
+ * KC3 of r23, migrate-json.ts: a migrate apply a signal stops says what it applied as the one
+ * `--json` object, as it says it as a line without --json, where it printed no object at all. The
+ * signal comes as a file is announced (a stop parks the run at its next connection), on a real libsql file.
  */
 import { mkdirSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
