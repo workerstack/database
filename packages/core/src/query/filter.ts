@@ -16,6 +16,43 @@ import {
 } from "./filter-validate.ts"
 import type { SortDirection, SortField } from "./types.ts"
 
+/** The direction suffix an `order` entry may end in, before any nulls suffix, and what it reads as */
+const SORT_DIRECTIONS = { asc: "asc", desc: "desc" } as const satisfies Record<string, SortDirection>
+/** The nulls suffix an `order` entry may end in, and what it reads as */
+const SORT_NULLS = { nullsfirst: "first", nullslast: "last" } as const
+
+/** The value `suffixes` reads the last of `tokens` as, popping it, or undefined when it is none of them */
+function suffixOf<T extends string>(tokens: string[], suffixes: Readonly<Record<string, T>>): T | undefined {
+	for (const [suffix, value] of Object.entries(suffixes))
+		if (tokens.at(-1) === suffix) {
+			tokens.pop()
+			return value
+		}
+	return undefined
+}
+
+function escapeRegExp(value: string): string {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+/** A regular expression taking any one of `names`, each literally */
+function anyOf(names: readonly string[]): string {
+	return `(?:${names.map(escapeRegExp).join("|")})`
+}
+
+/**
+ * A regular expression taking every `order` parseOrder reads over the fields in `sort`, up to
+ * `maxSortKeys` entries: the empty value, which reads as the default order, and each entry the field
+ * and the suffixes orderEntries reads off it. A field named twice is refused, so no order holds more
+ * entries than `sort` has fields; which field repeats needs a lookahead, which RE2 lacks, so the
+ * pattern leaves that to the description
+ */
+function orderPattern(sort: readonly string[], maxSortKeys: number): string {
+	const entry = `${anyOf(sort)}(?:\\.${anyOf(Object.keys(SORT_DIRECTIONS))})?(?:\\.${anyOf(Object.keys(SORT_NULLS))})?`
+	const keys = Math.min(maxSortKeys, sort.length)
+	return `^(?:${entry}(?:,${entry}){0,${Math.max(0, keys - 1)}})?$`
+}
+
 /**
  * Parse PostgREST-style `order` string into SortField array.
  *
@@ -67,24 +104,8 @@ function orderEntries(input: string | null | undefined): Array<SortField | strin
 
 		const tokens = trimmed.split(".")
 
-		let nulls: "first" | "last" | undefined
-		const last = tokens[tokens.length - 1]
-		if (last === "nullsfirst") {
-			nulls = "first"
-			tokens.pop()
-		} else if (last === "nullslast") {
-			nulls = "last"
-			tokens.pop()
-		}
-
-		let direction: SortDirection = "asc"
-		const newLast = tokens[tokens.length - 1]
-		if (newLast === "asc") {
-			tokens.pop()
-		} else if (newLast === "desc") {
-			direction = "desc"
-			tokens.pop()
-		}
+		const nulls = suffixOf(tokens, SORT_NULLS)
+		const direction: SortDirection = suffixOf(tokens, SORT_DIRECTIONS) ?? "asc"
 
 		const field = tokens.join(".")
 		if (!field || part !== trimmed) {
@@ -108,6 +129,7 @@ export {
 	parseFilterNumber,
 	namedTwice,
 	orderEntries,
+	orderPattern,
 	parseOrder,
 	validateFilter,
 	type FilterField,

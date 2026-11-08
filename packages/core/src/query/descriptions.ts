@@ -7,7 +7,7 @@
  * same config that validates the request, so the text cannot drift from what
  * the parser accepts — and stays when a publisher strips `x-*` extensions.
  */
-import type { FilterLimits } from "./filter.ts"
+import { type FilterLimits, orderPattern } from "./filter.ts"
 import { REQUEST_BYTES } from "./schema-limits.ts"
 import type { FieldsConfig } from "./schema-types.ts"
 import type { FieldType, FilterOperator } from "./types.ts"
@@ -133,10 +133,6 @@ function filterParamMeta(
 	return { description, examples: [...examples] }
 }
 
-function escapeRegExp(value: string): string {
-	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-}
-
 /** The `order` param's OpenAPI text over the sortable fields in `sort`, the first of which is the default, descending */
 function orderParamMeta(
 	sort: readonly string[],
@@ -146,18 +142,17 @@ function orderParamMeta(
 	pattern: string
 } {
 	const [first = "", second] = sort
-	const entry = `(?:${sort.map(escapeRegExp).join("|")})(?:\\.(?:asc|desc))?(?:\\.(?:nullsfirst|nullslast))?`
 	return {
 		description: [
-			`Sort keys, comma-separated, each \`field[.asc|.desc][.nullsfirst|.nullslast]\`; at most ${maxSortKeys}.`,
-			`Sortable: ${sort.join(", ")}. Default: ${first}.desc.`,
+			`Sort keys, comma-separated, each \`field[.asc|.desc][.nullsfirst|.nullslast]\` and each field at most once; at most ${maxSortKeys}.`,
+			`Sortable: ${sort.join(", ")}. Default, when absent or empty: ${first}.desc.`,
 			"Nulls sort last ascending and first descending unless stated.",
 		].join(" "),
 		/* a second key only where the endpoint takes two */
 		examples: second
 			? [`${first}.desc`, maxSortKeys > 1 ? `${second}.asc,${first}.desc` : `${second}.asc`]
 			: [`${first}.desc`, `${first}.asc`],
-		pattern: `^${entry}(?:,${entry}){0,${Math.max(0, maxSortKeys - 1)}}$`,
+		pattern: orderPattern(sort, maxSortKeys),
 	}
 }
 
