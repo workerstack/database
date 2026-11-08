@@ -1351,9 +1351,13 @@ declare function pragmaOf(code: string): Pragma | undefined;
 /** A whole name as SQLite resolves it, each part folded, with the schema it was written with (`main."Post"` is `main.post`) */
 declare const qualifiedKey: (name: string) => string;
 /**
- * Every name SQLite code can spell, as SQLite resolves one: each bare word and each quoted name unquoted, and each
- * word of a string, which SQLite reads as a name where one stands (`FROM 'post'`) and a module as its option's
- * (`content='post'`), folded by asciiFold; never a word of a comment
+ * Every name SQLite code can spell, as SQLite resolves one: each quoted name unquoted, each word of a string, which
+ * SQLite reads as a name where one stands (`FROM 'post'`) and a module as its option's (`content='post'`), and each
+ * bare word that can be one, all folded by asciiFold; never a word of a comment. A bare keyword is no name
+ * where SQLite's grammar takes none: `TABLE`, `CREATE`, `NULL` and the rest of NEVER_NAMES whenever it is bare, and
+ * `KEY` after `PRIMARY` or `FOREIGN`, which no name can follow. So a table named `table` is named by `"table"` and
+ * not by the `CREATE TABLE` of every file. Any other bare word may be a name and is read as one: a name read
+ * where there is none only widens what a proof copies, a name missed would narrow it
  */
 declare function sqliteNames(sql: string): Set<string>;
 /**
