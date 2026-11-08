@@ -12,7 +12,8 @@
  * - Rows go to S, each table a reader reached from S references (to a fixpoint), D (their FK descendants: a cascade
  *   reaches them) and A (the FK ancestors of all those: their keys must be met).
  * - The copy creates N, the seeded tables, and each reader that references an S table (SQLite checks views and
- *   triggers on DROP COLUMN and RENAME COLUMN, and a rename rewrites them). Then to a fixpoint each index and trigger
+ *   triggers on DROP COLUMN and RENAME COLUMN, and a rename rewrites them) or a view of N (a file that drops the
+ *   view leaves the reader unable to run, which the proof compiles it to see). Then to a fixpoint each index and trigger
  *   on a created table or view (a view's INSTEAD OF triggers carry out a write through it), each table and view a
  *   created reader references, and each created table's FK ancestors, which a write to it compiles checks against.
  * - Reflection reads the schema itself: a name with SQLite's reserved `sqlite_` prefix (its catalogs, sqlite_sequence,
@@ -224,9 +225,13 @@ function observable(
 	const statements = files.flatMap(({ sql }) => splitSqlStatements(sql))
 	const checks = objects.filter((object) => object.type === "view" || object.type === "trigger")
 	/* a rename rewrites the text of each view and trigger naming an S table, and D1 then compiles the writes to its
-	   table; a virtual table reading one reads the rows a file writes */
+	   table; a virtual table reading one reads the rows a file writes; a drop of a view of N breaks each reading it */
+	const reached = new Set([
+		...s,
+		...n.filter((object) => object.type === "view").map((object) => asciiFold(object.name)),
+	])
 	const rewritten = objects.filter(
-		(object) => isReader(object) && [...(graph.names.get(object) as Set<string>)].some((name) => s.has(name)),
+		(object) => isReader(object) && [...(graph.names.get(object) as Set<string>)].some((name) => reached.has(name)),
 	)
 	/* a write to a created table compiles its keys' checks, which need each parent table */
 	let made = forward(graph, [...n, ...objectsOf(graph, seeded), ...rewritten])
@@ -248,4 +253,4 @@ function observable(
 	return { objects: kept, seeded }
 }
 
-export { isVirtual, observable, type Scope, shadowsOf, virtualOf }
+export { isVirtual, observable, referencesOf, type Scope, shadowsOf, virtualOf }
