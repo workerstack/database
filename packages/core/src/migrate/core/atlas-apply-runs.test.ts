@@ -6,12 +6,14 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { fakeAtlas, file, ok, ranWhole, status } from "../../../tests/support/fake-atlas.ts"
 import { deliver, stubKill, until } from "../../../tests/support/signals.ts"
 import { applyRuns } from "./atlas-apply-runs.ts"
+import { hold } from "./cleanup.ts"
 import type { AtlasStatus } from "./atlas-history.ts"
 import type { RunResult } from "./process.ts"
+import { Stopped } from "./stopped.ts"
 
 /* three files, the second with a SET that outlives its COMMIT */
 const FILES: ReadonlyArray<[string, string]> = [
@@ -148,6 +150,25 @@ describe("applyRuns stopped by a signal (PA4 of r22)", () => {
 		["every file", DONE, "applied 1_a.sql, 2_b.sql, 3_c.sql; not applied none"],
 	])("says once which approved files the history records, %s here, then ends by the signal", async (_, after, said) => {
 		expect(await stoppedLines(after)).toEqual([[`Stopped by SIGTERM: ${said}`], [[process.pid, "SIGTERM"]]])
+	})
+
+	it("returns the files it found applied and pending as the report a command prints as JSON (KC3 of r23)", async () => {
+		const { run } = applied(signalledAfterFirstCall(fakeAtlas({ apply: report(...NAMES), status: PENDING })))
+		const last = vi.fn()
+		const release = hold(last)
+		await run().catch(() => undefined)
+		await until(() => kill.calls().length > 0, "the end the stop asks for")
+		release()
+		/* the child's own step, held after this one, returned nothing */
+		const [[, earlier]] = last.mock.calls as Array<[string, unknown[]]>
+		expect(earlier.filter((each) => each instanceof Stopped)).toEqual([
+			expect.objectContaining<Partial<Stopped>>({
+				applied: ["1_a.sql"],
+				pending: ["2_b.sql", "3_c.sql"],
+				signal: "SIGTERM",
+				unknown: [],
+			}),
+		])
 	})
 
 	it("says it could not read what was applied when the history read fails, and still ends by the signal", async () => {

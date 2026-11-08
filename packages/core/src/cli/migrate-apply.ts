@@ -33,8 +33,8 @@ import type { Connection } from "../migrate/types.ts"
 import { parseArgs, type ParsedArgs } from "./args.ts"
 import { fileName, openSqliteTarget, type SqliteTarget } from "./migrate-sqlite-target.ts"
 import { resolveMigrateTarget } from "./migrate-target.ts"
-import { Refused } from "../migrate/core/refused.ts"
-import { checkPassed, CliError, type CliContext, type MigrateOutcome, Reported } from "./output.ts"
+import { asJson } from "./migrate-json.ts"
+import { checkPassed, CliError, type CliContext, type MigrateOutcome } from "./output.ts"
 
 type Mode = "apply" | "baseline" | "check" | "status"
 
@@ -220,11 +220,6 @@ async function migrateSqlite({ args, io, mode }: Request, target: Target): Promi
 	return { applied: pendingNames, pending: [] }
 }
 
-/**
- * `migrate apply|baseline|check|status`. With --json the human lines go to stderr and stdout is
- * one JSON object: the database, the files applied (or found applied) and pending, what was
- * refused, and the files whose answer was lost, which may have committed; a refusal still exits 1.
- */
 /** `mode`'s argv read: its database and options; refused by usage without one database */
 function readArgv(mode: Mode, argv: readonly string[]): { args: ParsedArgs; db: string } {
 	const args = parseArgs(argv, `migrate ${mode}`)
@@ -232,22 +227,11 @@ function readArgv(mode: Mode, argv: readonly string[]): { args: ParsedArgs; db: 
 	return { args, db: args.positionals[0] as string }
 }
 
+/** `migrate apply|baseline|check|status`, with --json as one JSON object (migrate-json.ts) */
 export async function migrateApply(mode: Mode, argv: readonly string[], io: CliContext): Promise<void> {
 	const { args, db } = readArgv(mode, argv)
-	if (args.options["json"] !== true) {
-		await runMode({ args, db, io, mode })
-		return
-	}
-	const report = (outcome: MigrateOutcome, refused: string[], unknown: string[] = []) =>
-		io.out(JSON.stringify({ applied: outcome.applied, database: db, pending: outcome.pending, refused, unknown }))
-	try {
-		report(await runMode({ args, db, io: { ...io, out: io.err }, mode }), [])
-	} catch (error) {
-		/* a refusal or a failed command is an Error; a user's config can throw anything */
-		const { applied, pending, unknown } = error instanceof Refused ? error : { applied: [], pending: [], unknown: [] }
-		report({ applied, pending }, [error instanceof Error ? error.message : String(error)], unknown)
-		throw new Reported(error)
-	}
+	if (args.options["json"] === true) await asJson(db, io, (each) => runMode({ args, db, io: each, mode }))
+	else await runMode({ args, db, io, mode })
 }
 
 /**

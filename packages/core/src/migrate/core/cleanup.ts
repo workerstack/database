@@ -11,8 +11,11 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
-/** A step a signal runs, told which signal came */
-type Step = (signal: NodeJS.Signals) => unknown
+/**
+ * A step a signal runs, told which signal came and what the steps that ran before it returned, in
+ * that order: a step held first runs last, and reads what the steps held after it found out
+ */
+type Step = (signal: NodeJS.Signals, earlier: readonly unknown[]) => unknown
 
 // per-process-constant: what this process holds now
 const held = /* @__PURE__ */ new Set<Step>()
@@ -53,9 +56,10 @@ function newGate(): Gate {
 
 /** Every step, last held first, each once the one before ends: a child stops before the scratch it used goes */
 async function runSteps(steps: readonly Step[], signal: NodeJS.Signals): Promise<void> {
+	const returned: unknown[] = []
 	for (const step of steps.toReversed()) {
 		try {
-			await step(signal)
+			returned.push(await step(signal, [...returned]))
 		} catch {
 			// reason: one step that fails must not keep the rest from cleaning up; the process ends either way
 		}

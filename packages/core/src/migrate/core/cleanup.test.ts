@@ -183,7 +183,7 @@ describe("a signal (S2, KC5 and PA4 of r22)", () => {
 			const releases = steps.map((step) => hold(step))
 			await deliver(signal)
 			expect([steps.map((step) => step.mock.calls), kill.calls()]).toEqual([
-				[[[signal]], [[signal]]],
+				[[[signal, expect.any(Array)]], [[signal, expect.any(Array)]]],
 				[[process.pid, signal]],
 			])
 			for (const release of releases) release()
@@ -279,13 +279,30 @@ describe("a signal's steps, in order (PA4 of r22)", () => {
 		}
 	})
 
+	it("tells each step what the steps before it returned, a step that threw among them returning nothing (KC3 of r23)", async () => {
+		const last = vi.fn()
+		const releases = [
+			hold(last),
+			hold(() => Promise.reject(new Error("step"))),
+			hold(async () => "second"),
+			hold(() => "first"),
+		]
+		try {
+			await deliver("SIGTERM")
+			await until(() => kill.calls().length > 0, "the end")
+			expect(last.mock.calls).toEqual([["SIGTERM", ["first", "second"]]])
+		} finally {
+			for (const release of releases) release()
+		}
+	})
+
 	it("runs the next step past one that throws", async () => {
 		const after = vi.fn()
 		const releases = [hold(after), hold(() => Promise.reject(new Error("step")))]
 		try {
 			await deliver("SIGINT")
 			await until(() => kill.calls().length > 0, "the end")
-			expect([after.mock.calls, kill.calls()]).toEqual([[["SIGINT"]], [[process.pid, "SIGINT"]]])
+			expect([after.mock.calls, kill.calls()]).toEqual([[["SIGINT", []]], [[process.pid, "SIGINT"]]])
 		} finally {
 			for (const release of releases) release()
 		}
