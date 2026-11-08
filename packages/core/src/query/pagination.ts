@@ -188,6 +188,21 @@ function fitFrom(
 }
 
 /**
+ * The rows of a served page a cursor is checked from. On a page by cursor, every row: its client walks
+ * the list one cursor at a time, so a row no cursor resumes after is refused on the page that serves
+ * it, never on whichever page it happens to end. On a page by number, only the row its next cursor is
+ * minted from, the last of a page with more, as 0.20.1 did: the page serves rows its client never
+ * resumes after
+ */
+function mintedFrom<T>(
+	page: readonly T[],
+	{ byCursor, hasMore }: { byCursor: boolean; hasMore: boolean },
+): readonly T[] {
+	if (byCursor) return page
+	return hasMore ? page.slice(-1) : []
+}
+
+/**
  * The page of `items`, read with `built`, and its pagination: count, whether there is more, and
  * the next cursor, sealed under the builder's options; none for a list no cursor can resume
  */
@@ -207,11 +222,12 @@ function paginate<T extends object>(
 	refuseGoneAnchor(items)
 	const hasMore = items.length > pagination.limit
 	const sliced = hasMore ? items.slice(0, pagination.limit) : items
-	/* a key no cursor bound as read places is refused on the page that serves it, wherever its row lands */
-	for (const item of sliced) refuseUnheld(item as Record<string, unknown>, pagination.parsedSort)
-	/* every row served is one a cursor resumes after, checked from the fat row, under the sort the builder
-	   ordered by, so the next request's signature matches; the last one's is sealed */
-	const fitted = pagination.cursorable ? sliced.map((item) => pagination.fit(item)) : []
+	const minting = mintedFrom(sliced, { byCursor: pagination.cursor !== undefined, hasMore })
+	/* a key no cursor bound as read places is refused on each row a cursor may be minted from */
+	for (const item of minting) refuseUnheld(item as Record<string, unknown>, pagination.parsedSort)
+	/* checked from the fat row, under the sort the builder ordered by, so the next request's signature
+	   matches; the last one's is sealed */
+	const fitted = pagination.cursorable ? minting.map((item) => pagination.fit(item)) : []
 	const last = fitted.at(-1)
 	const meta: PaginationResponse = {
 		count: countOf(items, pagination),
@@ -229,6 +245,7 @@ function paginate<T extends object>(
 export {
 	applySelect,
 	COMB_ID,
+	mintedFrom,
 	type ListExtra,
 	type ListPagination,
 	type ListRow,
