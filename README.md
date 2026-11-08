@@ -233,7 +233,7 @@ OPTIONS:
   -e, --env <name>        Environment from comb.migrate.config.ts [migrate apply, migrate baseline, migrate check, migrate diff, migrate status]
   --dir <path>            Migrations directory (default: the config's, else ./atlas-migrations) [migrate apply, migrate baseline, migrate check, migrate status]
   --dialect <name>        The project's dialect: sqlite (default) or postgres [migrate init]
-  --dry-run               Write nothing: exit 1 printing the migration a diff would write, 0 in sync [migrate diff]
+  --dry-run               Write nothing: exit 1 printing the migration a diff would write, 0 in sync, 2 when the check could not run [migrate diff]
   --file <path>           Apply this one migration file [migrate apply]
   -y, --yes               Approve cautious changes without asking (not unsafe ones) [migrate apply, migrate check]
   --local                 Without a migrate config: the local D1 (wrangler --local) [migrate apply, migrate baseline, migrate check, migrate status]
@@ -286,7 +286,7 @@ Config mode reads `comb.config.ts` (or `.js`) from the working directory. Direct
 
 On SQLite, libsql and Turso, apply with `comb migrate apply`, not drizzle-kit migrate: comb's `__drizzle_migrations` is its own history, not drizzle-kit's, and drizzle-kit 1.0's migrate fails on it with "no column named applied_at".
 
-`init` scaffolds `drizzle.config.ts` and `atlas-migrations/`, and no `atlas.hcl`: comb runs Atlas with a config of its own, and comb's unsafe gate, not an Atlas `skip` block, is what stops a drop. Delete an `atlas.hcl` an earlier `init` wrote; `init --dialect postgres` adds a `comb.migrate.config.ts` whose URL comes from `DATABASE_URL`, and no file holds a credential. `check` runs the check every apply runs first and applies nothing; it reads the database's history, so it needs the database. `baseline` adopts a database that already has the schema: it records the migrations as applied without running any, but only once the database's schema is the one they leave (on D1, only the files comb 0.7's `__drizzle_migrations` records). `status` lists a database's applied and pending migrations. `diff --dry-run` writes nothing: it exits 0 when the schema is in sync, and 1 printing the migration a diff would write.
+`init` scaffolds `drizzle.config.ts` and `atlas-migrations/`, and no `atlas.hcl`: comb runs Atlas with a config of its own, and comb's unsafe gate, not an Atlas `skip` block, is what stops a drop. Delete an `atlas.hcl` an earlier `init` wrote; `init --dialect postgres` adds a `comb.migrate.config.ts` whose URL comes from `DATABASE_URL`, and no file holds a credential. `check` runs the check every apply runs first and applies nothing; it reads the database's history, so it needs the database. `baseline` adopts a database that already has the schema: it records the migrations as applied without running any, but only once the database's schema is the one they leave (on D1, only the files comb 0.7's `__drizzle_migrations` records). `status` lists a database's applied and pending migrations. `diff --dry-run` writes nothing: it exits 0 when the schema is in sync, 1 printing the migration a diff would write, and 2 when the check could not run (Atlas or drizzle-kit missing or failing, an unreachable `devUrl`, a config or an argument comb refuses), so a gate can act on drift alone.
 
 ## Columns
 
@@ -1291,6 +1291,8 @@ What changes for a project on 0.21. Before deploying it:
 3. **Install `@workerstack/database` in place of `@lovrozagar/comb`.** The package moved to the workerstack org and the old name gets no new releases; `@workerstack/database@0.21.0` is `@lovrozagar/comb@0.21.0` under the new name, so you can switch before taking 0.22. The `comb` CLI, `comb.config.ts`, `CombError` and the migration tables keep their names. Generated DTOs and entities import from the package by name, so files generated on the old name still import `@lovrozagar/comb`. **Fix:** run `bun remove @lovrozagar/comb && bun add @workerstack/database`, replace every `@lovrozagar/comb` import prefix with `@workerstack/database`, and rerun `comb codegen`.
 
 3. **Expect a path of the wrong kind refused by name.** `comb migrate diff <database> <name>` refuses a name holding `/` or `\`, or `.` or `..` alone, with its usage, where Atlas failed on a file it could not open in comb's scratch directory. `--tables`, or comb.config.ts `tables`, naming a directory is refused as `tables <path> is a directory, not a file`, where loading it failed with `EISDIR`. A d1 provider's `wranglerConfig` naming a directory is refused as `wranglerConfig <path> is a directory, not a file`, where comb said the config binds no such database. **Fix:** give a diff a name alone, point `tables` at the module that exports the tables, and point `wranglerConfig` at the wrangler.json, wrangler.jsonc or wrangler.toml itself.
+
+4. **Read `migrate diff --dry-run`'s exit 2 as a check that could not run.** A dry run exits 1 only for drift now; a failure that kept it from checking (Atlas or drizzle-kit missing or failing, an unreachable `devUrl`, a config or an argument comb refuses) exits 2, where 0.21 exited 1 for both. **Fix:** a gate that fails on any non-zero exit needs no change; one that acts on drift, by writing the migration or opening a pull request, acts on exit 1 alone.
 
 ## Upgrading to 0.21
 

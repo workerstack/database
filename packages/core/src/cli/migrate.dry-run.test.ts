@@ -36,11 +36,11 @@ describe("comb migrate diff --dry-run", () => {
 	})
 
 	/* KC2 of r22b: 0.20 diffed a new ./atlas-migrations against no history, whatever comb.migrate.config.ts said */
-	it("refuses no database named, with its usage, writing nothing", async () => {
+	it("refuses no database named, with its usage, writing nothing, as a check that could not run (exit 2)", async () => {
 		const dir = diffProject()
 		const run = fakeAtlas((replayed) => writeFileSync(join(replayed, "20260101000000_x.sql"), "SELECT 1;\n"))
 		const io = makeIo(dir, run)
-		expect(await runCliWithFakes(["migrate", "diff", "--dry-run"], io)).toBe(1)
+		expect(await runCliWithFakes(["migrate", "diff", "--dry-run"], io)).toBe(2)
 		expect(io.errors).toEqual(["Usage: comb migrate diff <database> [name] [-e <name>] [--dry-run]"])
 		expect({ calls: run.calls, files: readdirSync(dir) }).toEqual({ calls: [], files: ["drizzle.config.ts"] })
 	})
@@ -66,16 +66,53 @@ describe("comb migrate diff --dry-run", () => {
 	})
 })
 
+/* KC8 of r23: drift and a check that could not run both exited 1, so a gate could not tell them apart */
+/** An Atlas diff that writes a migration, so the schema has drifted */
+const drifting = (replayed: string) =>
+	writeFileSync(join(replayed, "20260101000000_x.sql"), "CREATE TABLE post (id TEXT PRIMARY KEY);\n")
+/** An Atlas diff that fails, so the check cannot run */
+const failing = () => ({ code: 1, stderr: "Error: dial tcp: connection refused", stdout: "" })
+
+describe("comb migrate diff --dry-run's exit", () => {
+	it("is 1 for drift, 2 when the check could not run, and 0 in sync", async () => {
+		const codes = []
+		for (const diff of [drifting, failing, () => undefined]) {
+			const io = makeIo(diffProject(), fakeAtlas(diff))
+			codes.push(await runCliWithFakes(["migrate", "diff", "core", "--dry-run"], io))
+		}
+		expect(codes).toEqual([1, 2, 0])
+	})
+
+	it("says why the check could not run, as without --dry-run, where the same failure exits 1", async () => {
+		const [dry, plain] = [makeIo(diffProject(), fakeAtlas(failing)), makeIo(diffProject(), fakeAtlas(failing))]
+		expect([
+			await runCliWithFakes(["migrate", "diff", "core", "--dry-run"], dry),
+			await runCliWithFakes(["migrate", "diff", "core"], plain),
+		]).toEqual([2, 1])
+		expect(dry.errors).toEqual(plain.errors)
+		expect(dry.errors.join("\n")).toContain("connection refused")
+	})
+
+	it("is 2 for an option it does not take, and 0 for its help", async () => {
+		const [unknown, help] = [makeIo(diffProject()), makeIo(diffProject())]
+		expect([
+			await runCliWithFakes(["migrate", "diff", "core", "--dry-run", "--nope"], unknown),
+			await runCliWithFakes(["migrate", "diff", "--dry-run", "--help"], help),
+		]).toEqual([2, 0])
+		expect(unknown.errors).toEqual(["Unknown option: --nope"])
+	})
+})
+
 describe("comb migrate diff: its migrations dir", () => {
 	/* D2-7 of the area D round-two review: a file there fell through to ENOTDIR after drizzle-kit and Atlas ran;
 	   Atlas's version read bypasses `run`, so it is counted on its own (D4-7 of round four) */
 	it("refuses a migrations dir that is a file before anything runs, Atlas's version read included, as the other commands do", async () => {
 		const dir = diffProject()
 		writeFileSync(join(dir, "atlas-migrations"), "SELECT 1;\n")
-		for (const argv of [
-			["migrate", "diff", "core"],
-			["migrate", "diff", "core", "--dry-run"],
-		]) {
+		for (const [argv, code] of [
+			[["migrate", "diff", "core"], 1],
+			[["migrate", "diff", "core", "--dry-run"], 2],
+		] as const) {
 			const run = fakeAtlas(() => undefined)
 			const base = makeIo(dir, run)
 			let versionReads = 0
@@ -87,7 +124,7 @@ describe("comb migrate diff: its migrations dir", () => {
 					return readAtlasVersion()
 				},
 			}
-			expect(await runCliWithFakes(argv, io)).toBe(1)
+			expect(await runCliWithFakes(argv, io)).toBe(code)
 			expect({ calls: run.calls, errors: io.errors, versionReads }).toEqual({
 				calls: [],
 				errors: [`Migrations dir ${join(dir, "atlas-migrations")} is not a directory`],
@@ -108,7 +145,7 @@ describe("comb migrate diff: its migrations dir", () => {
 				dir,
 				fakeAtlas(() => undefined),
 			)
-			expect(await runCliWithFakes(["migrate", "diff", "core", "--dry-run"], io)).toBe(1)
+			expect(await runCliWithFakes(["migrate", "diff", "core", "--dry-run"], io)).toBe(2)
 			expect(io.errors.join("\n")).toContain("EACCES")
 			expect(readdirSync(tmp)).toEqual([])
 		} finally {
