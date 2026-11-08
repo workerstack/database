@@ -11,6 +11,7 @@ import { RE2JS } from "re2js"
 import { afterAll, describe, expect, it } from "vitest"
 import * as z from "zod"
 import { takesFormat } from "../../src/__fixtures__/contract-reader.ts"
+import { createListQuerySchema } from "../../src/query/index.ts"
 import { cleanGeneratedDtos, generatedDtos } from "../integration/support/dtos.ts"
 
 afterAll(() => cleanGeneratedDtos())
@@ -359,5 +360,97 @@ describe("the patterns comb publishes (CS1, CS2, CS3; siblings: the id, the MAC,
 		const fields = Object.entries(published((create as Lane).schema)["properties"] as Record<string, Node>)
 		const patterned = fields.filter(([, field]) => patternsOf(field).length > 0).map(([key]) => key)
 		expect(patterned).toEqual(expect.arrayContaining(PATTERNED))
+	})
+})
+
+/* CS6 of r23: the list `order` param's published schema against what the list schema parses */
+type OrderCase = { order: string; twice?: true }
+const ORDERS: OrderCase[] = [
+	{ order: "" },
+	{ order: "id" },
+	{ order: "id.desc" },
+	{ order: "id.asc.nullslast" },
+	{ order: "id.nullsfirst" },
+	{ order: "title.asc,id.desc" },
+	{ order: "id,title,rank" },
+	{ order: "id,title,rank,slug" },
+	{ order: "id.asc,id.desc", twice: true },
+	{ order: "id,id", twice: true },
+	{ order: "title,id,title", twice: true },
+	{ order: "id," },
+	{ order: "," },
+	{ order: " id" },
+	{ order: "id.up" },
+	{ order: "id.nullslast.asc" },
+	{ order: "nope" },
+]
+
+const LISTS: Array<[label: string, sort: string[], maxSortKeys?: number]> = [
+	["one sortable field", ["id"]],
+	["one sortable field, one key", ["id"], 1],
+	["two sortable fields", ["id", "title"]],
+	["four sortable fields, two keys", ["id", "title", "rank", "slug"], 2],
+	["four sortable fields", ["id", "title", "rank", "slug"], 4],
+]
+
+/* each list's published `order` field, and whether its schema parses an order */
+const lists = LISTS.map(([label, sort, maxSortKeys]) => {
+	const schema = createListQuerySchema({ sort, ...(maxSortKeys ? { limits: { maxSortKeys } } : {}) })
+	const field = (published(schema)["properties"] as Record<string, Node>)["order"] as Node
+	return { field, label, parses: (order: string) => schema.safeParse({ order }).success, sort }
+})
+const repeats = ORDERS.filter((entry) => entry.twice).map(({ order }) => order)
+
+describe("the list order pattern agrees with the order parser (CS6 of r23)", () => {
+	it.each([
+		["an ECMA-262 reader", false],
+		["an RE2 reader", true],
+	])("takes the empty order the parser takes as the default, under %s", (_, re2) => {
+		for (const { field, label, parses } of lists) {
+			expect(parses(""), label).toBe(true)
+			expect(readerOf(field, {}, re2)(""), label).toBe(true)
+		}
+	})
+
+	it.each([
+		["an ECMA-262 reader", false],
+		["an RE2 reader", true],
+	])("holds the parser's verdict on every order but a field named twice among several, under %s", (_, re2) => {
+		const disagree: string[] = []
+		for (const { field, label, parses, sort } of lists) {
+			const reader = readerOf(field, {}, re2)
+			for (const { order, twice } of ORDERS) {
+				/* which field repeats needs a lookahead, which RE2 lacks: the description says it */
+				if (twice && sort.length > 1) continue
+				if (parses(order) !== reader(order)) disagree.push(`${label} ${JSON.stringify(order)}: parse ${parses(order)}`)
+			}
+		}
+		expect(disagree).toEqual([])
+	})
+
+	it("refuses a field named twice in its pattern where one field is sortable, as the parser does", () => {
+		const verdicts = lists
+			.filter(({ sort }) => sort.length === 1)
+			.flatMap(({ field, label, parses }) =>
+				repeats
+					.filter((order) => !order.includes("title"))
+					.map((order) => `${label} ${order}: parse ${parses(order)}, pattern ${readerOf(field, {})(order)}`),
+			)
+		expect(verdicts).toEqual([
+			"one sortable field id.asc,id.desc: parse false, pattern false",
+			"one sortable field id,id: parse false, pattern false",
+			"one sortable field, one key id.asc,id.desc: parse false, pattern false",
+			"one sortable field, one key id,id: parse false, pattern false",
+		])
+	})
+
+	it("states that each field appears at most once where several are sortable, which the parser holds", () => {
+		const several = lists.filter(({ sort }) => sort.length > 1)
+		expect(several.flatMap(({ label, parses }) => repeats.filter(parses).map((order) => `${label} ${order}`))).toEqual(
+			[],
+		)
+		expect(several.map(({ field }) => field["description"])).toEqual(
+			several.map(() => expect.stringMatching(/each field at most once/u)),
+		)
 	})
 })
