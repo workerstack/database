@@ -26,7 +26,11 @@ export async function deliver(signal: StopSignal): Promise<void> {
 	}
 }
 
-/** process.kill stubbed for each test of the calling describe; `calls` are the ends asked for */
+/**
+ * process.kill stubbed for each test of the calling describe; `calls` are the ends asked for. A
+ * probe (signal 0, as the scratch sweep asks whether another run's pid is alive) ends nothing, so
+ * it is no call, and a wait for an end never takes one for it.
+ */
 export function stubKill(): { calls: () => unknown[][] } {
 	let kill: MockInstance<typeof process.kill> | undefined
 	beforeEach(() => {
@@ -37,7 +41,7 @@ export function stubKill(): { calls: () => unknown[][] } {
 		await stopsEnded()
 		kill?.mockRestore()
 	})
-	return { calls: () => kill?.mock.calls ?? [] }
+	return { calls: () => (kill?.mock.calls ?? []).filter(([, signal]) => signal !== 0) }
 }
 
 /** Until `done` holds, at most 10 s, a turn of the event loop at a time */
