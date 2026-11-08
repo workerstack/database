@@ -88,7 +88,7 @@ describe("the release's gate on CI", () => {
 
 	it("reads a suite job by its run step, and not the coverage merge", () => {
 		expect(SUITE.test("      - run: bun run test:differential")).toBe(true)
-		expect(SUITE.test("      - run: bun run --filter @lovrozagar/comb test:e2e")).toBe(true)
+		expect(SUITE.test("      - run: bun run --filter @workerstack/database test:e2e")).toBe(true)
 		expect(SUITE.test("      - run: bun run test:coverage --merge-reports")).toBe(false)
 		expect(SUITE.test("      - run: bun run lint")).toBe(false)
 	})

@@ -15,7 +15,7 @@ import { unstable_splitSqlQuery } from "wrangler"
 import { localD1Path } from "../../../src/migrate/core/d1-binding.ts"
 import type { ProofCase } from "./proof-cases.ts"
 
-/** A version's CLI, as its own `@lovrozagar/comb/cli` exports it */
+/** A version's CLI, as its own `@workerstack/database/cli` exports it */
 export type Cli = {
 	runCli(
 		argv: readonly string[],
