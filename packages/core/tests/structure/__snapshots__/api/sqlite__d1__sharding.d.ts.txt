@@ -1755,6 +1755,14 @@ import { parseFilterNumber } from "./filter-typed.ts";
 import { FILTER_LIMITS, OPERATORS_BY_TYPE, type FilterField, type FilterFieldSpec, type FilterLimits, type FilterValidationResult, type LimitsGiven, validateFilter } from "./filter-validate.ts";
 import type { SortField } from "./types.ts";
 /**
+ * A regular expression taking every `order` parseOrder reads over the fields in `sort`, up to
+ * `maxSortKeys` entries: the empty value, which reads as the default order, and each entry the field
+ * and the suffixes orderEntries reads off it. A field named twice is refused, so no order holds more
+ * entries than `sort` has fields; which field repeats needs a lookahead, which RE2 lacks, so the
+ * pattern leaves that to the description
+ */
+declare function orderPattern(sort: readonly string[], maxSortKeys: number): string;
+/**
  * Parse PostgREST-style `order` string into SortField array.
  *
  * Grammar:
@@ -1784,7 +1792,7 @@ declare function namedTwice(fields: readonly SortField[]): string[];
  * has whitespace around it, which the published pattern refuses too
  */
 declare function orderEntries(input: string | null | undefined): Array<SortField | string>;
-export { FILTER_LIMITS, FILTER_OPERATORS, OPERATORS_BY_TYPE, parseFilter, parseFilterNumber, namedTwice, orderEntries, parseOrder, validateFilter, type FilterField, type FilterFieldSpec, type FilterLimits, type FilterValidationResult, type LimitsGiven, };
+export { FILTER_LIMITS, FILTER_OPERATORS, OPERATORS_BY_TYPE, parseFilter, parseFilterNumber, namedTwice, orderEntries, orderPattern, parseOrder, validateFilter, type FilterField, type FilterFieldSpec, type FilterLimits, type FilterValidationResult, type LimitsGiven, };
 
 // query/filter-validate.d.ts
 import type { FieldType, FilterAST, FilterOperator } from "./types.ts";
