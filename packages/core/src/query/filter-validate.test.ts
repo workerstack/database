@@ -266,3 +266,32 @@ describe("validateFilter — an empty member (QL14)", () => {
 		})
 	})
 })
+
+/* QL15: the parser recursed per group before the depth cap was checked, so deep nesting was a RangeError, a 500 */
+const nested = (depth: number) => `${"or(".repeat(depth)}a.eq.1${")".repeat(depth)}`
+
+describe("validateFilter — nesting past the cap (QL15)", () => {
+	it("refuses nesting far past the cap as invalid, naming where the first group past it opens", () => {
+		expect(validateFilter(nested(30_000), { a: "number" })).toEqual({
+			errors: ["Filter nesting too deep at position 9 (max 3)"],
+			valid: false,
+		})
+	})
+
+	it("takes nesting at the cap and refuses one level past it", () => {
+		expect(validateFilter(nested(3), { a: "number" })?.valid).toBe(true)
+		expect(validateFilter(`a.eq.1,${nested(4)}`, { a: "number" })).toEqual({
+			errors: ["Filter nesting too deep at position 16 (max 3)"],
+			valid: false,
+		})
+	})
+
+	it("reads no more than 256 levels, whatever cap the caller sets", () => {
+		const uncapped = { maxDepth: Number.MAX_SAFE_INTEGER }
+		expect(validateFilter(nested(256), { a: "number" }, uncapped)?.valid).toBe(true)
+		expect(validateFilter(nested(30_000), { a: "number" }, uncapped)).toEqual({
+			errors: ["Filter nesting too deep at position 768 (max 256)"],
+			valid: false,
+		})
+	})
+})
