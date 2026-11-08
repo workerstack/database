@@ -54,6 +54,21 @@ function ql8Shape(c: ListCase, truth: Truth, page: number): ShapeId {
 	return row !== undefined && row.slice(1, -1).some(unmintable) ? "QL8-mint" : "QL8"
 }
 
+/** How a walk that stopped with no cursor to follow served other than the engine's order up to where it stopped: rows twice, outside the filter or out of order, or a row ranked before its last row left out, ties in any order */
+function unlikePrefix(walk: Walk, truth: Truth): string | undefined {
+	const served = walk.served
+	const ranks = served.map((id) => truth.get(id)?.rank ?? Number.NaN)
+	const last = Math.max(...ranks)
+	const what = [
+		served.some((id, index) => served.indexOf(id) !== index) ? "served a row twice" : "",
+		ranks.some(Number.isNaN) ? "served a row outside the filter" : "",
+		ranks.some((rank, index) => index > 0 && rank < (ranks[index - 1] as number)) ? "out of order" : "",
+		[...truth].some(([id, { rank }]) => rank < last && !served.includes(id)) ? "left out a row before its last" : "",
+		walk.misprojected.length > 0 ? `projected ${walk.misprojected[0]}` : "",
+	].filter(Boolean)
+	return what.length === 0 ? undefined : `${what.join("; ")}: served ${JSON.stringify(served)}`
+}
+
 /** How the walk broke the rule: rows served twice or never, rows outside the filter or out of the engine's order, a walk that never ended, a projection other than `select` */
 function brokenRule(c: ListCase, walk: Walk, truth: Truth): string | undefined {
 	const served = walk.served
@@ -88,6 +103,16 @@ export function judgeList(c: ListCase, walk: Walk, truth: Truth): Verdict {
 			shape: undefined,
 			what: `threw ${error.key ?? "an error"} on page ${error.page}: ${error.message}`,
 		}
+	if (walk.stopped !== undefined) {
+		const wrong = unlikePrefix(walk, truth)
+		if (wrong === undefined)
+			return { kind: "refused", why: `no cursor past page ${walk.stopped}: nextCursor null while hasMore holds` }
+		return {
+			kind: "fail",
+			shape: ql2Shape(c) ? "QL2" : undefined,
+			what: `stopped after page ${walk.stopped}: ${wrong}`,
+		}
+	}
 	const broken = brokenRule(c, walk, truth)
 	if (broken === undefined) return { kind: "pass" }
 	return { kind: "fail", shape: ql2Shape(c) ? "QL2" : undefined, what: broken }
