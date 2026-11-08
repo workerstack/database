@@ -4,11 +4,11 @@
  * reading of a file proves what it leaves on its session: a trigger, a default, a DO block's EXECUTE
  * or code the target holds can each run a SET that outlives its COMMIT.
  */
-import { hold } from "./cleanup.ts"
 import { type Foreign, ownHistory } from "./atlas-foreign.ts"
 import { type AtlasFile, type AtlasStatus, checkHistory } from "./atlas-history.ts"
 import { APPLY_FORMAT, NON_LINEAR, reported } from "./atlas-report.ts"
 import { atlas, type AtlasCommand, atlasStatus } from "./atlas-status.ts"
+import { whileStoppable } from "./stopped.ts"
 
 /**
  * After an Atlas call that ran no file and said nothing, once this apply ran `applied`: done once
@@ -29,27 +29,17 @@ async function ranNothing(
 }
 
 /**
- * What SIGINT or SIGTERM runs once it stopped this apply's Atlas call and that call ended (cleanup.ts
- * runs a child's step before this one): the history read once more, and which approved
- * files it records and which it does not, printed; no further call starts, and the process then ends
- * by the signal
+ * The approved files the history records and those it does not, read once Atlas's call ended after a
+ * stop signal (cleanup.ts runs a child's step before this apply's): what stopped.ts reports
  */
-const stoppedBy =
+const found =
 	(options: AtlasCommand, copy: string, { approved, foreign }: { approved: ReadonlySet<string>; foreign: Foreign }) =>
-	async (signal: NodeJS.Signals): Promise<void> => {
-		try {
-			const { pending } = ownHistory(await atlasStatus(options, copy), foreign, copy)
-			const left = new Set(pending.map((file) => file.Name))
-			const [ran, not] = [
-				[...approved].filter((name) => !left.has(name)),
-				[...approved].filter((name) => left.has(name)),
-			]
-			options.print(
-				`Stopped by ${signal}: applied ${ran.join(", ") || "none"}; not applied ${not.join(", ") || "none"}`,
-			)
-		} catch (error) {
-			// reason: a history read that fails must not hide the stop: the line says what comb could not read, and the process still ends by the signal
-			options.print(`Stopped by ${signal}: comb could not read what was applied: ${(error as Error).message}`)
+	async (): Promise<{ applied: string[]; pending: string[] }> => {
+		const { pending } = ownHistory(await atlasStatus(options, copy), foreign, copy)
+		const left = new Set(pending.map((file) => file.Name))
+		return {
+			applied: [...approved].filter((name) => !left.has(name)),
+			pending: [...approved].filter((name) => left.has(name)),
 		}
 	}
 
@@ -67,12 +57,11 @@ async function applyRuns(
 	{ foreign, report, status }: { foreign: Foreign; report: Parameters<typeof checkHistory>[2]; status: AtlasStatus },
 ): Promise<string[]> {
 	const approved = new Set(status.pending.map((file) => file.Name))
-	const release = hold(stoppedBy(options, copy, { approved, foreign }))
-	try {
-		return await callEach(options, copy, { approved, foreign, report })
-	} finally {
-		release()
-	}
+	/* no further call starts, and the process then ends by the signal, after the report: a stop parks this loop */
+	return whileStoppable(
+		{ names: [...approved], print: options.print, read: found(options, copy, { approved, foreign }) },
+		() => callEach(options, copy, { approved, foreign, report }),
+	)
 }
 
 /** applyRuns' calls, each of the first file still pending, until every approved file ran */

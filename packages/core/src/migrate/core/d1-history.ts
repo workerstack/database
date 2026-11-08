@@ -15,7 +15,7 @@ import { executeAll } from "../drivers/d1.ts"
 import { lockedOut } from "../drivers/d1-lock.ts"
 import { assertLocalExists, type D1Target, localMissing, type ReadConfig, resolveBinding } from "./d1-binding.ts"
 import { d1Files, refuseSwallowing } from "./d1-files.ts"
-import { applyFailure, wranglerError } from "./d1-wrangler-error.ts"
+import { refuseUnlike } from "./d1-wrangler-error.ts"
 import { D1_HASH_INTENT_TABLE, D1_HASH_TABLE, DRIZZLE_HISTORY_TABLE } from "./d1-history-tables.ts"
 import {
 	type Hashed,
@@ -37,8 +37,9 @@ import { orphanMessage } from "./history-match.ts"
 import { generateMigrationHash, migrationHashes } from "./parse.ts"
 import { proveOnD1 } from "./d1-engine.ts"
 import { planApply } from "./plan-apply.ts"
-import { runPeer } from "./process.ts"
+import { type RunResult, runPeer } from "./process.ts"
 import { Refused } from "./refused.ts"
+import { whileStoppable } from "./stopped.ts"
 
 /** The files `__drizzle_migrations` records that the migrations table does not */
 function recordedByDrizzle(
@@ -129,33 +130,31 @@ async function appliedAfter(
 	}
 }
 
-/** Refuse a failed run, or one whose table gained (`added`) other than the `names` checked, naming a file never checked */
-function refuseUnlike(
-	ran: { code: number; stderr: string; stdout: string },
-	{ added, locked, names, table }: { added: string[]; locked: boolean; names: string[]; table: string },
-): void {
-	const unchecked = added.filter((name) => !names.includes(name))
-	const rest = names.filter((name) => !added.includes(name))
-	const also =
-		unchecked.length === 0
-			? ""
-			: `; wrangler also applied ${unchecked.join(", ")}, which comb never checked and holds no hash for: check each against git, then run comb migrate baseline <db> --hashes`
-	const now = { applied: added, pending: rest }
-	if (ran.code !== 0) throw new Refused(`wrangler d1 migrations apply failed: ${applyFailure(ran, locked)}${also}`, now)
-	if (unchecked.length > 0 || rest.length > 0) {
-		throw new Refused(
-			`wrangler recorded ${added.join(", ") || "nothing"} in ${table}, where comb checked ${names.join(", ")}; wrangler said: ${wranglerError(ran)}${also}`,
-			now,
-		)
-	}
-}
-
 type D1Apply = {
 	approve(migration: ParsedMigration): Promise<Approval>
 	/** only check: apply nothing */
 	checkOnly?: boolean | undefined
 	print(line: string): void
 	read: ReadConfig
+}
+
+/**
+ * wrangler's apply of `names`, each announced first. A stop signal ends its run, and the table then
+ * says which of them it recorded (stopped.ts)
+ */
+async function wranglerApply(
+	target: D1Target,
+	{ print, read }: D1Apply,
+	{ names, table }: { names: string[]; table: string },
+): Promise<RunResult> {
+	for (const name of names) print(`Apply: ${name}`)
+	const found = async () => {
+		const recorded = await appliedAfter(target, read, { names, ok: false, table })
+		return { applied: names.filter((name) => recorded.has(name)), pending: names.filter((name) => !recorded.has(name)) }
+	}
+	return whileStoppable({ names, print, read: found }, () =>
+		runPeer(target.exec, target.wrangler)(["d1", "migrations", "apply", target.name, ...target.flags], { input: "" }),
+	)
 }
 
 /** Check the pending migrations and, unless only checking, apply them through wrangler; returns them */
@@ -193,9 +192,7 @@ async function applyD1(target: D1Target, options: D1Apply): Promise<string[]> {
 	/* the intents go first: a lost record then fails before wrangler applies anything */
 	const hashed = pending.map(({ migration, name }) => ({ hash: migration.hash, marked: true, name }))
 	await target.conn.batch([...settleStatements(settle, hasIntents, marks), ...intentStatements(hashed)])
-	for (const name of names) options.print(`Apply: ${name}`)
-	const apply = ["d1", "migrations", "apply", target.name, ...target.flags]
-	const ran = await runPeer(target.exec, target.wrangler)(apply, { input: "" })
+	const ran = await wranglerApply(target, options, { names, table })
 	/* asked before anything else runs, while the lock that failed the apply is most likely still held */
 	const locked = ran.code !== 0 && target.flags.includes("--local") && (await lockedOut(ran, target.held))
 	const after = await appliedAfter(target, options.read, { names, ok: ran.code === 0, table })

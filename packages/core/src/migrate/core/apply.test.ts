@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { beforeAll, describe, expect, it, vi } from "vitest"
+import { deliver, stubKill, until } from "../../../tests/support/signals.ts"
 import { BREAKS_CHECK, IGNORE_CHECKS } from "../__fixtures__/pragma-scope.ts"
 import { createBunSqliteProvider } from "../drivers/bun-sqlite.ts"
 import { createLibsqlProvider } from "../drivers/sqlite.ts"
@@ -11,7 +12,9 @@ import type { Connection } from "../types.ts"
 import { libsqlConnection } from "../__fixtures__/libsql-connection.ts"
 import { lostRequest } from "../__fixtures__/libsql-stubs.ts"
 import { generateMigrationHash, legacyMigrationHash, migrationHashes } from "./parse.ts"
+import { hold } from "./cleanup.ts"
 import { Refused } from "./refused.ts"
+import { Stopped } from "./stopped.ts"
 
 vi.mock("bun:sqlite", () => import("../__fixtures__/bun-sqlite-node.ts"))
 
@@ -222,6 +225,80 @@ describe("applyEach", () => {
 			[1, 1],
 			[1, 1],
 		])
+	})
+})
+
+/**
+ * SIGTERM while the second of three files' batch is held; `settle` ends that batch; what the stop
+ * said and returned to a step held before it, the connections opened and the ends `kill` was asked for
+ */
+async function stoppedDuringSecond(
+	kill: ReturnType<typeof stubKill>,
+	settle: (gate: { fail(): void; pass(): void }) => void,
+) {
+	let [pass, fail] = [() => {}, () => {}]
+	const gate = new Promise<void>((resolve, reject) => {
+		pass = resolve
+		fail = () => reject(new Error("SQLITE_FULL"))
+	})
+	let running = false
+	const opened: Connection[] = []
+	const open = async () => {
+		const conn = mockConnection(
+			opened.length === 1
+				? {
+						batch: () => {
+							running = true
+							return gate
+						},
+					}
+				: {},
+		)
+		opened.push(conn)
+		return conn
+	}
+	const [lines, last] = [[] as string[], vi.fn()]
+	const release = hold(last)
+	const files = [file("1_a.sql", "SELECT 1"), file("2_b.sql", "SELECT 2"), file("3_c.sql", "SELECT 3")]
+	const applying = applyEach(open, files, { history: mockConnection(), print: (line) => lines.push(line) }).catch(
+		(error: unknown) => error,
+	)
+	await until(() => running, "the second file's batch")
+	await deliver("SIGTERM")
+	settle({ fail, pass })
+	await until(() => kill.calls().length > 0, "the end the stop asks for")
+	release()
+	const [[, earlier]] = last.mock.calls as Array<[string, unknown[]]>
+	return { applying, earlier: earlier.filter((each) => each instanceof Stopped), kill: kill.calls(), lines, opened }
+}
+
+/* a signal while the file under way ends its batch: the report waits for it, and no further file starts (KC3 of r23) */
+describe("applyEach stopped by a signal", () => {
+	const kill = stubKill()
+
+	it("waits for the batch in flight, says it applied, starts no further file, and returns the report", async () => {
+		const seen = await stoppedDuringSecond(kill, (gate) => gate.pass())
+		expect([seen.lines, seen.opened.length, seen.kill]).toEqual([
+			["Apply: 1_a.sql", "Apply: 2_b.sql", "Stopped by SIGTERM: applied 1_a.sql, 2_b.sql; not applied 3_c.sql"],
+			2,
+			[[process.pid, "SIGTERM"]],
+		])
+		expect(seen.earlier).toEqual([
+			expect.objectContaining({
+				applied: ["1_a.sql", "2_b.sql"],
+				pending: ["3_c.sql"],
+				signal: "SIGTERM",
+				unknown: [],
+			}),
+		])
+	})
+
+	it("says it did not apply the file whose batch failed", async () => {
+		const seen = await stoppedDuringSecond(kill, (gate) => gate.fail())
+		expect(seen.earlier).toEqual([
+			expect.objectContaining({ applied: ["1_a.sql"], pending: ["2_b.sql", "3_c.sql"], signal: "SIGTERM" }),
+		])
+		expect(seen.lines.at(-1)).toBe("Stopped by SIGTERM: applied 1_a.sql; not applied 2_b.sql, 3_c.sql")
 	})
 })
 

@@ -187,3 +187,91 @@ describe("a Postgres apply stopped by a signal while Atlas applies (PA4 of r22, 
 		90_000,
 	)
 })
+
+/**
+ * `comb migrate apply db --json --yes` in `project` as comb's own process, signalled alone with
+ * `signal` once the held Atlas call (`<state>.pid`) waits; how it ended, its "Stopped by" lines and its
+ * stdout as JSON lines. Past STOP_WITHIN_MS comb and its Atlas child are killed and the case fails.
+ */
+async function combJsonStopped(
+	{ env, project, state }: { env: NodeJS.ProcessEnv; project: string; state: string },
+	signal: NodeJS.Signals,
+) {
+	const comb = spawn(
+		process.execPath,
+		[join(import.meta.dirname, "../../../src/bin.ts"), "migrate", "apply", "db", "--json", "--yes"],
+		{ cwd: project, env, stdio: ["ignore", "pipe", "pipe"] },
+	)
+	let [out, err] = ["", ""]
+	comb.stdout.on("data", (chunk: Buffer) => (out += chunk.toString()))
+	comb.stderr.on("data", (chunk: Buffer) => (err += chunk.toString()))
+	const ended = new Promise<NodeJS.Signals | null>((done) => comb.on("close", (_, by) => done(by)))
+	await until(() => existsSync(`${state}.pid`), "the held apply call")
+	comb.kill(signal)
+	const by = await Promise.race([ended, new Promise<"late">((done) => setTimeout(() => done("late"), STOP_WITHIN_MS))])
+	if (by === "late") {
+		comb.kill("SIGKILL")
+		send(running(Number(readFileSync(`${state}.pid`, "utf8")), comb.pid as number), "SIGKILL")
+		throw new Error(`comb had not ended ${STOP_WITHIN_MS} ms after ${signal}: ${JSON.stringify({ err, out })}`)
+	}
+	return {
+		by,
+		err: err.split("\n").filter((line) => line.startsWith("Stopped by")),
+		out: out
+			.trim()
+			.split("\n")
+			.map((line) => JSON.parse(line) as unknown),
+	}
+}
+
+/*
+ * The same stop through the CLI, `comb migrate apply --json`, which printed no object when a signal
+ * ended it (KC3 of r23). It prints the one object, naming the file that committed and the signal, and
+ * still ends by the signal.
+ */
+describe("comb migrate apply --json stopped by a signal while Atlas applies (KC3 of r23)", () => {
+	it.each(STOP_SIGNALS)(
+		"on %s prints the one JSON object naming the committed file, then ends by it",
+		async (signal) => {
+			const [dir, bin, tmp, project] = [join(root, "m"), join(root, "bin"), join(root, "tmp"), join(root, "project")]
+			for (const each of [dir, bin, tmp, project]) mkdirSync(each)
+			FILES.forEach((sql, i) => writeFileSync(join(dir, NAMES[i] as string), sql))
+			await hashDir(run, dir)
+			writeFileSync(join(bin, "atlas"), STAND_IN)
+			chmodSync(join(bin, "atlas"), 0o755)
+			const state = join(root, "state")
+			const env = {
+				...process.env,
+				COMB_REAL_ATLAS: REAL_ATLAS,
+				COMB_STAND_IN_STATE: state,
+				PATH: `${bin}:${process.env["PATH"] ?? ""}`,
+				TMPDIR: tmp,
+			}
+			await withScratchDb((devUrl) =>
+				withScratchDb(async (url) => {
+					const provider = JSON.stringify({ devUrl, type: "postgres", url })
+					writeFileSync(
+						join(project, "comb.migrate.config.ts"),
+						`export default { databases: { db: { migrationsDir: ${JSON.stringify(dir)}, name: "db", provider: ${provider} } } }\n`,
+					)
+					const message = `Stopped by ${signal}: applied ${NAMES[0]}; not applied ${NAMES[1]}`
+					expect(await combJsonStopped({ env, project, state }, signal)).toEqual({
+						by: signal,
+						err: [message],
+						out: [
+							{
+								applied: [NAMES[0]],
+								database: "db",
+								pending: [NAMES[1]],
+								refused: [message],
+								stoppedBy: signal,
+								unknown: [],
+							},
+						],
+					})
+				}),
+			)
+		},
+		90_000,
+	)
+})

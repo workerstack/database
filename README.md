@@ -238,7 +238,7 @@ OPTIONS:
   -y, --yes               Approve cautious changes without asking (not unsafe ones) [migrate apply, migrate check]
   --local                 Without a migrate config: the local D1 (wrangler --local) [migrate apply, migrate baseline, migrate check, migrate status]
   --hashes                On D1: record the current hash of each applied file that has none (check the files against git first) [migrate baseline]
-  --json                  Print one JSON object (database, applied, pending, refused, unknown) as the only stdout [migrate apply, migrate check, migrate status]
+  --json                  Print one JSON object (database, applied, pending, refused, unknown; stoppedBy when a signal stopped the run) as the only stdout [migrate apply, migrate check, migrate status]
   -h, --help              Show this help
   --version               Print comb's version
 ```
