@@ -27,9 +27,9 @@ const nothingHidden = (): Hidden => ({ calls: new Set(), code: false, made: new 
 // lookup-table: the statements that run code the parse does not hold: a DO block's body, a procedure, a prepared statement
 const RUNS_CODE: ReadonlySet<string> = /* @__PURE__ */ new Set(["CallStmt", "DoStmt", "ExecuteStmt"])
 
-/** The name parts of a FuncCall's or a CREATE FUNCTION's `funcname` */
+/** The name parts of a FuncCall's or a CREATE FUNCTION's `funcname`, each a String node, the name last */
 const partsOf = (funcname: unknown): string[] =>
-	(funcname as Array<{ String?: { sval: string } | undefined }>).map((part) => part.String?.sval ?? "")
+	(funcname as Array<{ String: { sval: string } }>).map((part) => part.String.sval)
 
 /** `tree`, a parse tree or a part of one, read `into` */
 function readTree(tree: unknown, into: Hidden): void {
@@ -38,7 +38,8 @@ function readTree(tree: unknown, into: Hidden): void {
 		if (RUNS_CODE.has(key)) into.code = true
 		else if (key === "FuncCall" || key === "CreateFunctionStmt") {
 			const parts = partsOf((value as { funcname: unknown }).funcname)
-			const name = parts.at(-1) ?? ""
+			/* a funcname holds its name at least */
+			const name = parts.at(-1) as string
 			if (key === "CreateFunctionStmt") into.made.add(name)
 			else if (parts.length === 1) into.calls.add(name)
 			else if (parts.length > 2 || parts[0] !== "pg_catalog") into.code = true
@@ -67,8 +68,8 @@ const NOT_CATALOG = `SELECT EXISTS (
 async function runsHidden(sql: Sql, { calls, code, made }: Hidden): Promise<boolean> {
 	if (code || [...calls].some((name) => made.has(name))) return true
 	if (calls.size === 0) return false
-	const [row] = await sql.unsafe(NOT_CATALOG, [JSON.stringify([...calls])])
-	return row?.["hidden"] === true
+	const rows = await sql.unsafe(NOT_CATALOG, [JSON.stringify([...calls])])
+	return rows.some((row) => row["hidden"] === true)
 }
 
 export { type Hidden, nothingHidden, readStatement, runsHidden }
