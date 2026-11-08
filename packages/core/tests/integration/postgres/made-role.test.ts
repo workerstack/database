@@ -115,13 +115,16 @@ describe("a change past what the replay drops stays refused (P5's limits; siblin
 		expect(refused).toContain(`setting every database for ${pre} added`)
 	}, 60_000)
 
-	it("refuses a role a second connection makes, which no count sees (P2)", async () => {
+	/* PR1 of r23: Postgres keeps no creator for a role, so the cleanup leaves one it cannot prove the replay made */
+	it("refuses a role a second connection makes, which no count sees, and leaves it, naming it (P2)", async () => {
 		const { refused } = await checked(
 			`${T}${approved("CREATE EXTENSION IF NOT EXISTS dblink;\n")}`,
 			approved(`DO $$ BEGIN PERFORM dblink_exec(${LOOPBACK}, 'CREATE ROLE ${made}'); END $$;\n`),
 		)
-		expect(refused).toContain(`role ${made} added`)
-		expect(await roleOf(made)).toEqual([])
+		expect(refused).toContain(
+			`comb leaves role ${made} added on devUrl's server, as another session may have made that change`,
+		)
+		expect(await roleOf(made)).toEqual([{ rolconnlimit: -1, rolname: made }])
 	}, 60_000)
 
 	it("refuses a made role's password under a devUrl role that is not a superuser, which cannot read it", async () => {
