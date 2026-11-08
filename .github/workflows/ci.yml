@@ -214,6 +214,57 @@ jobs:
           echo "$RUNNER_TEMP/atlas" >> "$GITHUB_PATH"
       - run: bun run test:bun
 
+  # lists and the D1 proof built by the tip and by the published 0.21.0 and 0.20.1, held to the engine's own answer over
+  # generated cases (packages/core/tests/differential): the fixed seeds, and one fresh seed it prints. It installs the
+  # releases from the npm registry. test:differential ran 99 s locally on a machine at load 30 of 16 cores, the D1
+  # proof (46 s) and D1 local's list walks (35 s) the longest; the plan holds the job under 3 minutes, and 6 still
+  # catches a hang after the Postgres service's 60 s health check
+  differential:
+    name: differential
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: comb
+          POSTGRES_PASSWORD: comb
+          POSTGRES_USER: comb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U comb -d comb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      # every suite job gets the Postgres service and its URL (tests/structure/workflows.test.ts), as one may come to need it
+      COMB_TEST_PG_URL: postgres://comb:comb@localhost:5432/comb?sslmode=disable
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+      # vitest runs on Node; Miniflare's workerd runs D1 local, and each version's check runs its proof child on node
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - run: bun install --frozen-lockfile
+      # each DROP DATABASE forces a checkpoint, slow under fsync; tests/integration/support/pg-fsync.ts says why
+      - name: test Postgres without fsync
+        run: |
+          PGPASSWORD=comb psql -h localhost -U comb -d comb -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET fsync = off" -c "SELECT pg_reload_conf()"
+      # the proof suite hashes each case's migrations directory with the real Atlas, as a D1 project's atlas.sum is made
+      - name: install atlas v1.3.0
+        run: |
+          mkdir -p "$RUNNER_TEMP/atlas"
+          curl -sSfL -o "$RUNNER_TEMP/atlas/atlas" https://release.ariga.io/atlas/atlas-linux-amd64-v1.3.0
+          echo "cfc773e5b4e845bc01d680390c174648938a7f88bf30e5a2c83ae85217c21587  $RUNNER_TEMP/atlas/atlas" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/atlas/atlas"
+          echo "$RUNNER_TEMP/atlas" >> "$GITHUB_PATH"
+      - run: bun run test:differential
+
   e2e:
     name: e2e
     runs-on: ubuntu-latest

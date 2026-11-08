@@ -19,6 +19,7 @@ CI on the pushed tip is the full gate. After a push, `bun scripts/ci-wait.ts` wa
 - `test:bun`
 - `test:e2e`
 - `test:consumers`
+- `test:differential`
 
 Hooks enforce the fast checks. pre-commit fixes, formats and lints the staged files and type-checks. pre-push checks fmt and lint over the whole tree and checks the repo is in sync with `~/Development/standards`. Never use `--no-verify`. A failure is never skipped, retried away, or called flaky. Detail: `.rulesync/reference/gates.md`.
 
