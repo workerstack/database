@@ -81,8 +81,8 @@ describe("databaseIn and tablesFile", () => {
 	it("resolves a tables file against the project, and refuses one that is missing", () => {
 		const dir = project()
 		const file = writeTables(dir)
-		expect(tablesFile(dir, "db.core.tables.ts")).toBe(file)
-		expect(() => tablesFile(dir, "gone.ts")).toThrow(`Tables file not found: ${join(dir, "gone.ts")}`)
+		expect(tablesFile(dir, "db.core.tables.ts", "tables")).toBe(file)
+		expect(() => tablesFile(dir, "gone.ts", "tables")).toThrow(`Tables file not found: ${join(dir, "gone.ts")}`)
 	})
 })
 
