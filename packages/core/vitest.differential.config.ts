@@ -26,7 +26,7 @@ export default defineConfig({
 					hookTimeout: 120_000,
 					include: ["tests/differential/**/*.test.ts"],
 					name: "differential",
-					server: { deps: { inline: [/[\\/]@lovrozagar[\\/]comb[\\/]/] } },
+					server: { deps: { inline: [/[\\/]@workerstack[\\/]database[\\/]/] } },
 					testTimeout: 600_000,
 				},
 			},
