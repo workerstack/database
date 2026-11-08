@@ -18,7 +18,7 @@ import { usePg } from "../support/pg.ts"
 const item = pgTable("json_item", { id: text("id").primaryKey(), k: jsonb("k") })
 type Path = "anchorless" | "listOptions" | "table"
 
-/** What a walk of `path` ended on: its error's key and status, and the ids served before it */
+/** What a walk of `path` ended on: its error's key and status, or that it ended with no cursor while hasMore held, and the ids served before it */
 type Ended = { error: string | null; ids: string[] }
 
 /** Every id `path` serves of a jsonb key holding "a", "b" and "c", `limit` a page ascending, by cursor, at most five pages */
@@ -34,7 +34,7 @@ async function walked(client: pg.Client, path: Path, limit: number): Promise<End
 			const query = { ...schema.parse({ order: "k.asc" }), cursor }
 			const [rows, meta] = await pageOf(client, path, query)
 			ids.push(...rows.map((row) => row["id"] as string))
-			if (meta.nextCursor === null) return { error: null, ids }
+			if (meta.nextCursor === null) return { error: meta.hasMore ? "no cursor while hasMore" : null, ids }
 			cursor = meta.nextCursor
 		}
 	} catch (error) {
@@ -68,13 +68,17 @@ async function pageOf(client: pg.Client, path: Path, query: Parameters<typeof qu
 describe("a JSON key's cursor is never refused as invalid_cursor (AB4-1 of area B)", () => {
 	const sessions = usePg()
 
+	/* QL8: no cursor holds a JSON key, so page 1, by number, serves its rows and mints no cursor */
 	it.each(["table", "anchorless", "listOptions"] as const)(
-		"answers a jsonb key on the %s path the 500 naming it on page 1, at limits 1 and 2",
+		"serves a jsonb key's page 1 on the %s path with no cursor while hasMore holds, at limits 1 and 2",
 		async (path) => {
-			for (const limit of [1, 2])
+			for (const [limit, ids] of [
+				[1, ["r0"]],
+				[2, ["r0", "r1"]],
+			] as const)
 				expect(await walked(sessions.pg(), path, limit), `limit ${limit}`).toEqual({
-					error: "sort_not_wired 500 naming k",
-					ids: [],
+					error: "no cursor while hasMore",
+					ids,
 				})
 		},
 	)

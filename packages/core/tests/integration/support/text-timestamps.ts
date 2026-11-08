@@ -174,12 +174,12 @@ function listOf(shape: Exclude<TextShape, "listOptions" | "merged">, parsed: Par
 	return buildDerivedListQuery({ ...SEALED, anchor: { idColumn: post.id, table: post }, parsed, sortColumns })
 }
 
-/** One page of the list `shape` builds by `key` for `parsed`, over every shard of `dbs` when merged, and its next cursor */
+/** One page of the list `shape` builds by `key` for `parsed`, over every shard of `dbs` when merged, its next cursor and hasMore */
 async function pageOf(
 	dbs: readonly Db[],
 	{ key, shape }: { key: TextKey; shape: TextShape },
 	parsed: Parsed,
-): Promise<[Record<string, unknown>[], string | null]> {
+): Promise<[Record<string, unknown>[], string | null, boolean]> {
 	const select = (db: Db) => (extras: object) =>
 		db
 			.select({ id: post.id, [key]: shape === "anchored joined" ? metric[key] : post[key], ...extras })
@@ -191,16 +191,16 @@ async function pageOf(
 			query: { post: { findMany: (options: never) => Promise<Record<string, unknown>[]> } }
 		}
 		const [items, meta] = queryHelpers.paginate(await relational.query.post.findMany(options as never), options)
-		return [items, meta.nextCursor]
+		return [items, meta.nextCursor, meta.hasMore]
 	}
 	if (shape === "merged") {
 		const list = buildListQuery({ ...SEALED, merged: {}, parsed, table: post })
 		const [items, meta] = paginateMerged(await Promise.all(dbs.map((db) => applyListQuery(select(db), list))), list)
-		return [items, meta.nextCursor]
+		return [items, meta.nextCursor, meta.hasMore]
 	}
 	const list = listOf(shape, parsed)
 	const [items, meta] = queryHelpers.paginate(await applyListQuery(select(dbs[0]!), list), list)
-	return [items, meta.nextCursor]
+	return [items, meta.nextCursor, meta.hasMore]
 }
 
 /** The rows of the first page the list of `shape` by `key` serves `direction`, as paginate hands them on */
@@ -251,12 +251,12 @@ async function dropRows(dbs: readonly Db[], ids: readonly string[]): Promise<voi
 export async function servedText(
 	dbs: readonly Db[],
 	{ deleting, direction, key, shape }: { deleting: boolean; direction: "asc" | "desc"; key: TextKey; shape: TextShape },
-): Promise<{ error?: unknown; ids: string[] }> {
+): Promise<{ error?: unknown; ids: string[]; stranded?: true }> {
 	const ids: string[] = []
 	let cursor: string | undefined
 	try {
 		for (let n = 1; n <= 8; n++) {
-			const [items, next] = await pageOf(
+			const [items, next, hasMore] = await pageOf(
 				dbs,
 				{ key, shape },
 				{ ...schema.parse({ order: `${key}.${direction}` }), cursor },
@@ -264,7 +264,7 @@ export async function servedText(
 			const page = items.map((row) => (row as { id: string }).id)
 			ids.push(...page)
 			if (deleting) await dropRows(dbs, page)
-			if (next === null) return { ids }
+			if (next === null) return hasMore ? { ids, stranded: true } : { ids }
 			cursor = next
 		}
 	} catch (error) {

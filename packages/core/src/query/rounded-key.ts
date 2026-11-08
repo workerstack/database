@@ -7,10 +7,9 @@
  * selected does the value alone. A class is trusted only when it names a double, so one comb cannot
  * place, such as a type no family covers, is refused as an integer is.
  */
-import { CombError } from "../error.ts"
-import { combErrorKeys } from "../types.ts"
 import { storedClasses } from "./list-extras.ts"
 import type { SortField } from "./types.ts"
+import { UnmintableRow } from "./cursor-refusals.ts"
 
 // lookup-table: why a list cannot page an integer sort key the driver rounded, by the list
 const ROUNDED: Readonly<Record<"derived" | "merged" | "unread", string>> = {
@@ -45,7 +44,7 @@ function roundedKey(
 	row: Record<string, unknown>,
 	sort: readonly SortField[],
 	list: "derived" | "merged" | { unread: (field: string) => boolean },
-): CombError | undefined {
+): UnmintableRow | undefined {
 	const [kind, judged] = typeof list === "string" ? [list, () => true] : (["unread", list.unread] as const)
 	const stored = storedClasses(row)
 	const rounded = sort.find(({ field }, i) => {
@@ -60,13 +59,11 @@ function roundedKey(
 	})
 	if (rounded === undefined) return undefined
 	const value = row[rounded.field] as number
-	return new CombError({
-		cause: Number.isInteger(value)
+	return new UnmintableRow(
+		Number.isInteger(value)
 			? `${rounded.field} ${BigInt(value)} is past ±(2^53 − 1), where the driver rounded it: ${ROUNDED[kind]}`
 			: `${rounded.field} ${value} is a fraction under a type no driver reads exactly as a JS number, so the driver may have rounded it: ${FRACTION[kind]}: sort by a Postgres numeric, whose text comb carries, read the key as a string, or sort by a double precision or real`,
-		errorKey: combErrorKeys.SORT_NOT_WIRED,
-		status: "internal_server_error",
-	})
+	)
 }
 
 export { roundedKey }

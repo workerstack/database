@@ -26,8 +26,11 @@ export const EXPECTED: Record<string, number[]> = { "n.asc": [1, 5, 2, 3, 4], "n
 /* what a refusal to mint names: how to read the id exactly */
 export const EXACTLY = /safeIntegers.*intMode: "bigint".*mode: "bigint".*text id/
 
-/** One page under `order` after `cursor`: its ids and the next cursor */
-export type Page = (order: string, cursor: string | undefined) => Promise<{ ids: number[]; next: string | null }>
+/** One page under `order` after `cursor`: its ids, the next cursor, and hasMore */
+export type Page = (
+	order: string,
+	cursor: string | undefined,
+) => Promise<{ hasMore: boolean; ids: number[]; next: string | null }>
 
 type Builder = { select(fields: object): { from(table: typeof big): { $dynamic(): never } } }
 type Relational = { query: { big: { findMany(options: never): Promise<Array<{ id: number }>> } } }
@@ -40,7 +43,7 @@ export const viaBuilder =
 		const list = buildListQuery({ ...SEALED, parsed, table: big })
 		const rows = await applyListQuery((extras) => db.select({ ...getTableColumns(big), ...extras }).from(big), list)
 		const [items, meta] = queryHelpers.paginate(rows as Array<{ id: number }>, list)
-		return { ids: items.map((row) => row.id), next: meta.nextCursor }
+		return { hasMore: meta.hasMore, ids: items.map((row) => row.id), next: meta.nextCursor }
 	}
 
 /**
@@ -56,7 +59,7 @@ export const viaDerived =
 		const list = buildDerivedListQuery({ ...SEALED, ...keyedBy, parsed, sortColumns: { n: big.n } })
 		const rows = await applyListQuery((extras) => db.select({ ...getTableColumns(big), ...extras }).from(big), list)
 		const [items, meta] = queryHelpers.paginate(rows as Array<{ id: number }>, list)
-		return { ids: items.map((row) => row.id), next: meta.nextCursor }
+		return { hasMore: meta.hasMore, ids: items.map((row) => row.id), next: meta.nextCursor }
 	}
 
 /* what a derived list's refusal names: the key past ±(2^53 − 1), and how to page it */
@@ -71,7 +74,7 @@ export const viaRelational =
 		const listed = queryHelpers.listOptions(query, SEALED)
 		const rows = await db.query.big.findMany(listed as never)
 		const [items, meta] = queryHelpers.paginate(rows, listed)
-		return { ids: items.map((row) => row.id), next: meta.nextCursor }
+		return { hasMore: meta.hasMore, ids: items.map((row) => row.id), next: meta.nextCursor }
 	}
 
 /** Every page under `order`, at most twelve, so a loop shows as a repeat rather than a hang */
@@ -85,4 +88,28 @@ export async function pageAll(page: Page, order: string): Promise<number[]> {
 		cursor = next
 	}
 	return seen
+}
+
+/**
+ * How a walk under `order` ends: the ids it served, and the error that ended it, or that it ended with
+ * no cursor while hasMore said a next page by number exists (QL8: a page by number mints none from a
+ * row no cursor holds)
+ */
+export async function walkEnding(
+	page: Page,
+	order: string,
+): Promise<{ error?: unknown; ids: number[]; stranded?: true }> {
+	const ids: number[] = []
+	let cursor: string | undefined
+	try {
+		for (let i = 0; i < 12; i++) {
+			const { hasMore, ids: served, next } = await page(order, cursor)
+			ids.push(...served)
+			if (next === null) return hasMore ? { ids, stranded: true } : { ids }
+			cursor = next
+		}
+	} catch (error) {
+		return { error, ids }
+	}
+	return { ids }
 }
