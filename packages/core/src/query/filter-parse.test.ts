@@ -300,11 +300,18 @@ describe("parseFilter — an empty member (QL14)", () => {
 
 	it.each(CASES)("refuses %j as an empty member at position %i", (input, position) => {
 		expect(parseFilter(input)).toBeNull()
-		expect(readFilter(input)).toEqual({ error: `Invalid filter syntax: empty member at position ${position}` })
+		expect(readFilter(input, 3)).toEqual({ error: `Invalid filter syntax: empty member at position ${position}` })
 	})
 
 	it("keeps in.() the only empty list, and a quoted empty member a member", () => {
-		expect(readFilter("a.in.()")).toEqual({ ast: parseFilter("a.in.()") })
+		expect(readFilter("a.in.()", 3)).toEqual({ ast: parseFilter("a.in.()") })
 		expect(value('a.in.("",x)')).toEqual(["", "x"])
+	})
+})
+
+/* QL15: the parser recursed per group with no bound, so deep nesting was a RangeError */
+describe("parseFilter — deep nesting (QL15)", () => {
+	it("refuses nesting no list could run rather than throwing", () => {
+		expect(parseFilter(`${"or(".repeat(30_000)}a.eq.1${")".repeat(30_000)}`)).toBeNull()
 	})
 })

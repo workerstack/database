@@ -34,6 +34,12 @@ const OPERATOR_PATTERN = /^(contains|ilike|like|neq|gte|lte|nin|eq|ne|gt|lt|in|i
 /** What a refused filter is told: this alone when no more is known, else this and the reason */
 const SYNTAX = "Invalid filter syntax"
 
+/**
+ * The deepest nesting the parser reads, whatever cap a caller sets: it descends one call per group,
+ * so a bound keeps a deep filter a refusal instead of a stack overflow on every runtime comb runs on
+ */
+const FILTER_MAX_DEPTH = 256
+
 class FilterParser {
 	private pos = 0
 	/** Why the input is untrustworthy, the first reason met; null while every term parsed */
@@ -41,10 +47,13 @@ class FilterParser {
 	private readonly input: string
 	/** Whitespace the caller's string held before the input: positions are told in the caller's string */
 	private readonly offset: number
+	/** The deepest group the input may open, the top level being 0 */
+	private readonly maxDepth: number
 
-	constructor(input: string, offset: number) {
+	constructor(input: string, offset: number, maxDepth: number) {
 		this.input = input
 		this.offset = offset
+		this.maxDepth = Math.min(maxDepth, FILTER_MAX_DEPTH)
 	}
 
 	/** Why any term could not be parsed, or null: the input is not trustworthy while this is set. */
@@ -63,19 +72,25 @@ class FilterParser {
 	}
 
 	parse(): FilterAST {
-		const root = this.parseGroup("and")
+		const root = this.parseGroup("and", 0)
 		/* a stray ")" stops the top-level group early; anything left is unparsed */
 		if (this.pos < this.input.length) this.fail()
 		return { root }
 	}
 
-	private parseGroup(logic: "and" | "or"): FilterGroup {
+	private parseGroup(logic: "and" | "or", depth: number): FilterGroup {
 		const group: FilterGroup = { conditions: [], logic, subgroups: [] }
 		while (this.skipWhitespace() < this.input.length && this.peek() !== ")") {
 			const nested = this.matchKeyword("or(") ? "or" : this.matchKeyword("and(") ? "and" : null
+			if (nested && depth === this.maxDepth) {
+				/* the first group past the cap: the input is refused here, before the descent could overflow */
+				this.fail(`Filter nesting too deep at position ${this.pos + this.offset} (max ${this.maxDepth})`)
+				this.pos = this.input.length
+				break
+			}
 			if (nested) {
 				this.pos += nested.length + 1
-				group.subgroups.push(this.parseGroup(nested))
+				group.subgroups.push(this.parseGroup(nested, depth + 1))
 				this.expect(")")
 			} else {
 				this.parseTerm(group)
@@ -212,22 +227,23 @@ class FilterParser {
 /**
  * The AST of a non-blank filter string, or why it cannot be read, in words for a caller to show: a
  * filter the parser does not fully understand is refused, never reduced to "no filter", which
- * would widen the result to the whole table on a typo.
+ * would widen the result to the whole table on a typo. A group nested past `maxDepth`, or past
+ * FILTER_MAX_DEPTH whatever `maxDepth` is, is refused where it opens.
  */
-function readFilter(input: string): { ast: FilterAST } | { error: string } {
-	const parser = new FilterParser(input.trim(), input.length - input.trimStart().length)
+function readFilter(input: string, maxDepth: number): { ast: FilterAST } | { error: string } {
+	const parser = new FilterParser(input.trim(), input.length - input.trimStart().length, maxDepth)
 	const ast = parser.parse()
 	return parser.error === null ? { ast } : { error: parser.error }
 }
 
 /**
- * The AST of a filter string, or null when there is none or any part of it cannot be read: a
- * filter the parser does not fully understand is refused, never reduced to "no filter", which
- * would widen the result to the whole table on a typo.
+ * The AST of a filter string, or null when there is none or any part of it cannot be read, or it
+ * nests past FILTER_MAX_DEPTH: a filter the parser does not fully understand is refused, never
+ * reduced to "no filter", which would widen the result to the whole table on a typo.
  */
 function parseFilter(input: string | null | undefined): FilterAST | null {
 	if (!input || input.trim() === "") return null
-	const read = readFilter(input)
+	const read = readFilter(input, FILTER_MAX_DEPTH)
 	return "ast" in read ? read.ast : null
 }
 
