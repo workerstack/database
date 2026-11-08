@@ -3,9 +3,10 @@
  * can observe, created, and the tables whose rows they can observe, seeded, so the copy refuses what the whole
  * schema would and costs what the files reach.
  *
- * - An object's references are every name its text spells (sql-code's lexer, compared folded, never as a substring)
- *   and, for a virtual table, each string and quoted name among its module's arguments, whole. A table's FK parents
- *   are the other tables it references; a reader is a view, a trigger or a virtual table, and reads what it references.
+ * - An object's references are every name its text spells where SQLite's grammar takes a name (sql-code's lexer,
+ *   compared folded, never as a substring: the `TABLE` of `CREATE TABLE` is no name) and, for a virtual table, each
+ *   word, string and quoted name among its module's arguments, whole. A table's FK parents are the other tables it
+ *   references; a reader is a view, a trigger or a virtual table, and reads what it references.
  * - N: each live object whose name a file spells, and the history table; S is N's tables, which a file creates,
  *   alters, drops, renames or writes.
  * - Rows go to S, each table a reader reached from S references (to a fixpoint), D (their FK descendants: a cascade
@@ -66,24 +67,31 @@ const nameOf = ({ kind, text }: Token): string =>
 	asciiFold(kind === "literal" ? text.slice(1, -1).replaceAll("''", "'") : unquote(text))
 
 /**
- * Virtual table `object`'s module, the name after USING however it is written, and each string and quoted name among
- * the module's arguments, which the module may read as a table's name (fts5vocab, content=)
+ * Virtual table `object`'s module, the name after USING however it is written, each string and quoted name among
+ * the module's arguments, which the module may read as a table's name (fts5vocab, content=), and each bare word there
  */
-function virtualOf(object: LiveObject): { args: string[]; module: string } | undefined {
+function virtualOf(object: LiveObject): { args: string[]; module: string; words: string[] } | undefined {
 	if (!isVirtual(object)) return undefined
 	const tokens = tokensOf(object.sql)
 	const at = tokens.findIndex(({ kind, text }) => kind === "code" && /^using$/i.test(text)) + 1
-	const args = tokens[at + 1]?.text === "(" ? tokens.slice(at + 2).filter(({ kind }) => kind !== "code") : []
-	return { args: args.map(nameOf), module: nameOf(tokens[at] as Token) }
+	const inside = tokens[at + 1]?.text === "(" ? tokens.slice(at + 2) : []
+	return {
+		args: inside.filter(({ kind }) => kind !== "code").map(nameOf),
+		module: nameOf(tokens[at] as Token),
+		words: inside.filter(({ kind, text }) => kind === "code" && /^[A-Za-z_\u0080-\uffff]/.test(text)).map(nameOf),
+	}
 }
 
 /** The folded names of the shadow tables virtual table `object`'s module makes */
 const shadowsOf = (object: LiveObject): string[] =>
 	(SHADOWS[virtualOf(object)?.module as string] ?? []).map((suffix) => asciiFold(`${object.name}_${suffix}`))
 
-/** Every name `object` references, folded (see the module's comment) */
+/**
+ * Every name `object` references, folded (see the module's comment). A virtual table's module reads its own arguments,
+ * not SQL, so each bare word among them may name a table, `group` in `content=group` among them
+ */
 const referencesOf = (object: LiveObject): Set<string> =>
-	new Set([...sqliteNames(object.sql), ...(virtualOf(object)?.args ?? [])])
+	new Set([...sqliteNames(object.sql), ...(virtualOf(object)?.args ?? []), ...(virtualOf(object)?.words ?? [])])
 
 /* a name SQLite reserves for its own tables, or a pragma's table-valued function: either reads the schema itself */
 const REFLECTION = /^(?:sqlite_|pragma_)/

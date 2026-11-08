@@ -4,7 +4,8 @@
  * an action list splits only at its top-level commas.
  */
 import type { Dialect } from "../types.ts"
-import { bodyText, joined, segments } from "../../sql-lexer.ts"
+import { bodyText, segments } from "../../sql-lexer.ts"
+import { NEVER_NAMES } from "./sqlite-keywords.ts"
 
 /** One name part: double-quoted, backtick or bracket quoted, or bare */
 const IDENT: string = `(?:"(?:[^"]|"")*"|\`[^\`]*\`|\\[[^\\]]*\\]|[A-Za-z_\\u0080-\\uffff][\\w$\\u0080-\\uffff]*)`
@@ -100,13 +101,43 @@ function pragmaOf(code: string): Pragma | undefined {
 const qualifiedKey = (name: string): string =>
 	[...name.matchAll(PARTS)].map((match) => partKey(match[0], "sqlite")).join(".")
 
+/* the words and punctuation of SQLite code: a bare word, or one character that breaks a run of words */
+const CODE_TOKEN = /[A-Za-z_\u0080-\uffff][\w$\u0080-\uffff]*|\S/g
+
 /**
- * Every name SQLite code can spell, as SQLite resolves one: each bare word and each quoted name unquoted, and each
- * word of a string, which SQLite reads as a name where one stands (`FROM 'post'`) and a module as its option's
- * (`content='post'`), folded by asciiFold; never a word of a comment
+ * Every name SQLite code can spell, as SQLite resolves one: each quoted name unquoted, each word of a string, which
+ * SQLite reads as a name where one stands (`FROM 'post'`) and a module as its option's (`content='post'`), and each
+ * bare word that can be one, all folded by asciiFold; never a word of a comment. A bare keyword is no name
+ * where SQLite's grammar takes none: `TABLE`, `CREATE`, `NULL` and the rest of NEVER_NAMES whenever it is bare, and
+ * `KEY` after `PRIMARY` or `FOREIGN`, which no name can follow. So a table named `table` is named by `"table"` and
+ * not by the `CREATE TABLE` of every file. Any other bare word may be a name and is read as one: a name read
+ * where there is none only widens what a proof copies, a name missed would narrow it
  */
 function sqliteNames(sql: string): Set<string> {
-	return new Set([...joined(sql, "sqlite", true).matchAll(PARTS)].map((match) => partKey(match[0], "sqlite")))
+	const names = new Set<string>()
+	const quoted = (text: string) => {
+		for (const match of text.matchAll(PARTS)) names.add(partKey(match[0], "sqlite"))
+	}
+	let before: string | undefined
+	for (const { kind, text } of segments(sql, "sqlite")) {
+		if (kind === "comment") continue
+		if (kind !== "code") {
+			quoted(text)
+			before = undefined
+			continue
+		}
+		for (const [token] of text.matchAll(CODE_TOKEN)) {
+			if (!/^[A-Za-z_\u0080-\uffff]/.test(token)) {
+				before = undefined
+				continue
+			}
+			const word = asciiFold(token)
+			const keyword = NEVER_NAMES.has(word) || (word === "key" && (before === "primary" || before === "foreign"))
+			if (!keyword) names.add(word)
+			before = word
+		}
+	}
+	return names
 }
 
 /* a bare word in Postgres code, which may be a name */

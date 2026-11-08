@@ -120,6 +120,69 @@ describe("observable: what the scoped copy creates and seeds", () => {
 	})
 })
 
+/** `meta`, then 400 tables in chains of ten, each referencing the one before */
+const schemaWith = (meta: string): string =>
+	[
+		`CREATE TABLE \`${meta}\` (\`id\` text PRIMARY KEY NOT NULL, \`name\` text);`,
+		...Array.from({ length: 400 }, (_, at) =>
+			at % 10 === 0
+				? `CREATE TABLE u${at} (id text PRIMARY KEY NOT NULL, v text); CREATE INDEX u${at}_v ON u${at} (v);`
+				: `CREATE TABLE u${at} (id text PRIMARY KEY NOT NULL, p text REFERENCES u${at - 1} (id), v text); CREATE INDEX u${at}_p ON u${at} (p);`,
+		),
+	].join("\n")
+
+/** The objects the scoped copy creates and the tables it seeds, for `file` over the schema with `meta` */
+async function scopeSize(meta: string, file: string): Promise<{ objects: number; seeded: string[] }> {
+	const scope = observable(await liveOf(schemaWith(meta)), [{ sql: file }], "d1_migrations")
+	return { objects: scope.objects.length, seeded: [...scope.seeded] }
+}
+
+/* SD3 of r23: anyrow's shard has a table named `table`, the keyword every CREATE TABLE spells, and 3,741 tables beside it */
+describe("observable: a table named for a keyword is no name a file spells by the keyword (SD3 of r23)", () => {
+	it.each([
+		{
+			file: "CREATE TABLE `r23_probe` (`id` text PRIMARY KEY NOT NULL);\n",
+			label: "a CREATE TABLE naming nothing live",
+			objects: 0,
+			seeded: [],
+		},
+		{
+			file: "UPDATE u5 SET v = v WHERE 0;\n",
+			label: "a write to one table of a chain",
+			objects: 20,
+			seeded: ["u0", "u1", "u2", "u3", "u4", "u5", "u6", "u7", "u8", "u9"],
+		},
+	])(
+		"$label copies what it does with the table named table as with it named tbl",
+		async ({ file, objects, seeded }) => {
+			const [keyword, plain] = [await scopeSize("table", file), await scopeSize("tbl", file)]
+			expect(keyword).toEqual(plain)
+			expect(keyword.objects).toBe(objects)
+			expect(keyword.seeded.toSorted()).toEqual(seeded.toSorted())
+		},
+	)
+
+	it("copies the table named table, with the keys that reach it, for a file that names it quoted", async () => {
+		const scope = observable(
+			await liveOf(schemaWith("table")),
+			[{ sql: "INSERT INTO `table` (id) VALUES ('x');" }],
+			"d1_migrations",
+		)
+		expect(scope.objects.map(({ name }) => name)).toEqual(["table"])
+		expect([...scope.seeded]).toEqual(["table"])
+	})
+
+	/* a module reads its arguments, not SQL: the bare `group` of `content=group` names the table, keyword or not */
+	it("copies an FTS table whose content table is named for a keyword, spelled bare among the module's arguments", async () => {
+		const live = await liveOf(
+			'CREATE TABLE "group" (id INTEGER PRIMARY KEY, body TEXT);\nCREATE VIRTUAL TABLE g USING fts5 (body, content=group, content_rowid=id);',
+		)
+		const scope = observable(live, [{ sql: "UPDATE \"group\" SET body = 'x';" }], "d1_migrations")
+		expect(scope.objects.map(({ name }) => name).toSorted()).toEqual(["g", "group"])
+		expect([...scope.seeded].toSorted()).toEqual(["g", "group"])
+	})
+})
+
 /* AC2-4 of area C round 2: SQLite's ALTER check resolves each view and trigger against what it names, and needs no
    key ancestor or index of a table only those name */
 describe("observable: with an ALTER TABLE pending", () => {
