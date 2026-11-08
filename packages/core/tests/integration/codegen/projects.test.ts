@@ -12,7 +12,7 @@ import { codegen, exportsOf, project, read, typecheck, useProjects } from "../su
 useProjects()
 
 const tables = (name: string) => `import { sqliteTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const ${name}Item = sqliteTable("${name}_item", { id: c.id("it${name}"), name: c.text("name").notNull() })
 `
 
@@ -94,7 +94,7 @@ describe("comb codegen: SQL names that are not plain identifiers", () => {
 		const dir = project({
 			"comb.config.ts": `export default { databases: { core: { tables: "./src/db/db.core.tables.ts", fts: { ${JSON.stringify(HOSTILE)}: { columns: ["label"] } } } } }\n`,
 			"src/db/db.core.tables.ts": `import { sqliteTable, uniqueIndex } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const account = sqliteTable("account", { id: c.id("acc") })
 export const quoted = sqliteTable(${JSON.stringify(HOSTILE)}, {
 	id: c.id("qt"),

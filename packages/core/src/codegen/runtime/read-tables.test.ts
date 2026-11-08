@@ -29,7 +29,7 @@ beforeEach(() => {
 
 afterEach(() => fs.rmSync(dir, { force: true, recursive: true }))
 
-const HEAD = `import { sqliteTable } from "drizzle-orm/sqlite-core"\nimport { c } from "@lovrozagar/comb/sqlite/columns"\n`
+const HEAD = `import { sqliteTable } from "drizzle-orm/sqlite-core"\nimport { c } from "@workerstack/database/sqlite/columns"\n`
 
 /** `files` written into the fixture directory, the tables file `db.core.tables.ts` among them */
 function write(files: Record<string, string>): string {

@@ -24,7 +24,7 @@ describe("validateTables: primary keys the helpers declare", () => {
 		fs.writeFileSync(
 			file,
 			`import { sqliteTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const task = sqliteTable("task", {
 ${columns}
 })
@@ -58,7 +58,7 @@ describe("validateTables: keys, tenants and tables it cannot read", () => {
 		const file = path.join(dir, "db.test.tables.ts")
 		fs.writeFileSync(
 			file,
-			`import { sqliteTable } from "drizzle-orm/sqlite-core"\nimport { c } from "@lovrozagar/comb/sqlite/columns"\n${source}`,
+			`import { sqliteTable } from "drizzle-orm/sqlite-core"\nimport { c } from "@workerstack/database/sqlite/columns"\n${source}`,
 		)
 		return validateTables(file)
 	}
@@ -111,7 +111,7 @@ describe("validateTables: composite keys (D2)", () => {
 			const file = path.join(dir, "db.test.tables.ts")
 			fs.writeFileSync(
 				file,
-				`import { sqliteTable } from "drizzle-orm/sqlite-core"\nimport { c } from "@lovrozagar/comb/sqlite/columns"\nexport const m = sqliteTable("m", { a: c.text("a"), b: c.text("b") }, (t) => [primaryKey({ columns: [t.a, t.b] })])\nimport { primaryKey } from "drizzle-orm/sqlite-core"`,
+				`import { sqliteTable } from "drizzle-orm/sqlite-core"\nimport { c } from "@workerstack/database/sqlite/columns"\nexport const m = sqliteTable("m", { a: c.text("a"), b: c.text("b") }, (t) => [primaryKey({ columns: [t.a, t.b] })])\nimport { primaryKey } from "drizzle-orm/sqlite-core"`,
 			)
 			expect((await validateTables(file)).warnings).toEqual([
 				"m: composite primary key, so no entity stamp is published (docs/meta-contract.md §6.4)",

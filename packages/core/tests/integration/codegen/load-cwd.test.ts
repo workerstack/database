@@ -14,7 +14,7 @@ describe("comb codegen's working directory as it loads the tables module (F58)",
 			"limits.json": JSON.stringify({ name: 40 }),
 			"src/db/db.core.tables.ts": `import fs from "node:fs"
 import { sqliteTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 const limits = JSON.parse(fs.readFileSync("limits.json", "utf8")) as { name: number }
 export const user = sqliteTable("user", { id: c.id("usr"), name: c.text("name", { max: limits.name }) })
 `,

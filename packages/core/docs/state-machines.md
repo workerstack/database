@@ -1,7 +1,7 @@
 # Column state machines
 
-Status: **implemented** in `@lovrozagar/comb` (`packages/core`). The declaration
-is the third argument to `c.enum`; the runtime guard lives at `@lovrozagar/comb/states`;
+Status: **implemented** in `@workerstack/database` (`packages/core`). The declaration
+is the third argument to `c.enum`; the runtime guard lives at `@workerstack/database/states`;
 the published subset is `CombEntityMeta.states`.
 
 ## 1. What this is for
@@ -91,7 +91,7 @@ StateMachine` checks those names against `string` only: a typo compiles, and the
 silently disappears until codegen runs `validateTables`.
 
 ```ts
-import { assertTransition, canTransition, defineStateMachine } from "@lovrozagar/comb/states"
+import { assertTransition, canTransition, defineStateMachine } from "@workerstack/database/states"
 
 const deliveryStates = defineStateMachine({
 	values: ["queued", "sending", "sent", "partial", "failed", "cancelled"],

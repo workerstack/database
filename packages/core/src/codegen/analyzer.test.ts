@@ -35,7 +35,7 @@ export const post = sqliteTable("post", { id: text("id").primaryKey() })
 		const fp = writeTablesFile(`
 import { sqliteTable as createTable, text } from "drizzle-orm/sqlite-core"
 
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 
 export const zebra = createTable("zebra", { id: c.id() })
 export const alpha = createTable("alpha", { id: c.id() })
@@ -58,7 +58,7 @@ describe("analyzer: the constants a constraint names", () => {
 		const fp = writeTablesFile(`
 import { sqliteTable, text } from "drizzle-orm/sqlite-core"
 import { PATTERNS } from "./patterns"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const post = sqliteTable("post", { id: text("id").primaryKey(), slug: c.text("slug", { pattern: PATTERNS.SLUG }) })
 `)
 		expect((await analyze(fp)).tables[0]?.fields.find((field) => field.name === "slug")?.constraints.pattern).toBe(
@@ -90,7 +90,7 @@ describe("analyzer: columns", () => {
 import { sql } from "drizzle-orm"
 import { sqliteTable as createTable, text, integer } from "drizzle-orm/sqlite-core"
 
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 
 export const user = createTable("user", {
 	id: c.id(),
@@ -124,7 +124,7 @@ describe("analyzer: references and field constraints", () => {
 		const fp = writeTablesFile(`
 import { sqliteTable as createTable, text } from "drizzle-orm/sqlite-core"
 
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 
 export const user = createTable("user", {
 	id: c.id(),
@@ -152,7 +152,7 @@ export const post = createTable("post", {
 		const fp = writeTablesFile(`
 import { sqliteTable as createTable, text } from "drizzle-orm/sqlite-core"
 
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 
 export const user = createTable("user", {
 	id: c.id(),
@@ -173,7 +173,7 @@ describe("analyzer: timestamps and unique indexes", () => {
 		const fp = writeTablesFile(`
 import { sqliteTable as createTable, text, integer } from "drizzle-orm/sqlite-core"
 
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 
 export const item = createTable("item", {
 	id: c.id(),
@@ -194,7 +194,7 @@ export const item = createTable("item", {
 		const fp = writeTablesFile(`
 import { sqliteTable as createTable, text, uniqueIndex } from "drizzle-orm/sqlite-core"
 
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 
 export const user = createTable("user", {
 	id: c.id(),
@@ -221,7 +221,7 @@ describe("analyzer: checks and enums", () => {
 import { sql } from "drizzle-orm"
 import { sqliteTable as createTable, text, integer, check } from "drizzle-orm/sqlite-core"
 
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 
 export const product = createTable("product", {
 	id: c.id(),
@@ -243,7 +243,7 @@ import { sqliteTable as createTable, text } from "drizzle-orm/sqlite-core"
 
 const ROLES = ["admin", "user"] as const
 
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 
 export const user = createTable("user", {
 	id: c.id(),
@@ -260,7 +260,7 @@ describe("analyzer: state machines", () => {
 	it("extracts a state machine declared as c.enum's third argument", async () => {
 		const fp = writeTablesFile(`
 import { sqliteTable as createTable, text } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const delivery = createTable("delivery", {
 	id: c.id(),
 	status: c.enum("status", ["queued", "sent"], { initial: "queued", terminal: ["sent"] }),
@@ -283,7 +283,7 @@ async function fkFor(options: string) {
 		fp,
 		`
 import { sqliteTable as createTable, text } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const author = createTable("author", { id: c.id() })
 export const post = createTable("post", {
 id: c.id(),

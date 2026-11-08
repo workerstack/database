@@ -20,12 +20,12 @@ import {
 useProjects()
 
 const SQLITE = `import { sqliteTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const item = sqliteTable("item", { id: c.id("itm"), name: c.text("name").notNull() })
 `
 
 const PG = `import { pgTable } from "drizzle-orm/pg-core"
-import { c } from "@lovrozagar/comb/pg/columns"
+import { c } from "@workerstack/database/pg/columns"
 export const users = pgTable("users", { id: c.id("usr"), age: c.integer("age").notNull(), kind: c.enum("kind", ["a", "b"]).notNull() })
 `
 
@@ -84,7 +84,7 @@ describe("direct mode on tables a file re-exports (F9)", () => {
 
 	it("falls back to the comb columns a tables file imports when its builder is a wrapper", async () => {
 		const wrapped = `import { pgTable } from "drizzle-orm/pg-core"
-import { c } from "@lovrozagar/comb/pg/columns"
+import { c } from "@workerstack/database/pg/columns"
 const createTable = pgTable
 export const users = createTable("users", { id: c.id("usr"), kind: c.enum("kind", ["a", "b"]).notNull() })
 `
@@ -139,7 +139,7 @@ describe("a run with one database that fails (F17)", () => {
 	bad: { tables: "./src/bad/db.bad.tables.ts" },
 } }\n`,
 			"src/bad/db.bad.tables.ts": `import { sqliteTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const thing = sqliteTable("thing", { id: c.id("thg") })
 throw new Error("not import-safe")
 `,
@@ -172,7 +172,7 @@ const DEFAULTED_SCHEMAS = `import * as z from "zod"
 export const extractionSchema = z.object({ columns: z.array(z.object({ name: z.string(), type: z.enum(["string", "number"]).default("string") })) }).meta({ id: "Extraction", description: "What to extract" })
 `
 const DEFAULTED_TABLES = `import { sqliteTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 import { extractionSchema } from "./schemas.ts"
 export const batch = sqliteTable("batch", { id: c.id("bat"), schemaJson: c.json("schema_json", extractionSchema).notNull(), extra: c.json("extra", extractionSchema), preset: c.json("preset", extractionSchema).notNull().default({ columns: [] }) })
 `

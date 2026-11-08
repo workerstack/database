@@ -20,7 +20,7 @@ describe("writeSnapshot", () => {
 		const result = path.join(dir, "result.json")
 		fs.writeFileSync(
 			tables,
-			`import { sqliteTable } from "drizzle-orm/sqlite-core"\nimport { c } from "@lovrozagar/comb/sqlite/columns"\nexport const note = sqliteTable("note", { id: c.id("not") })\n`,
+			`import { sqliteTable } from "drizzle-orm/sqlite-core"\nimport { c } from "@workerstack/database/sqlite/columns"\nexport const note = sqliteTable("note", { id: c.id("not") })\n`,
 		)
 		await writeSnapshot([tables, result])
 		expect((read(result)["snapshot"] as { tables: unknown[] }).tables).toHaveLength(1)

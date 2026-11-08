@@ -13,10 +13,10 @@ useProjects()
 
 const HEAD = {
 	postgres: `import { pgTable } from "drizzle-orm/pg-core"
-import { c } from "@lovrozagar/comb/pg/columns"
+import { c } from "@workerstack/database/pg/columns"
 `,
 	sqlite: `import { sqliteTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 `,
 }
 const config = (dialect: "postgres" | "sqlite") =>
@@ -52,7 +52,7 @@ describe("a column no comb rule names (F6)", () => {
 	it("types a column of c imported under another name", async () => {
 		const dir = await generated(
 			`import { sqliteTable } from "drizzle-orm/sqlite-core"
-import { c as col } from "@lovrozagar/comb/sqlite/columns"
+import { c as col } from "@workerstack/database/sqlite/columns"
 export const item = sqliteTable("item", { id: col.id("itm"), name: col.text("name", { max: 3 }) })`,
 			{ head: false },
 		)

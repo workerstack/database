@@ -17,7 +17,7 @@ const CONFIG = `export default { databases: {
 `
 
 const tables = (name: string) => `import { jsonb, pgTable } from "drizzle-orm/pg-core"
-import { c } from "@lovrozagar/comb/pg/columns"
+import { c } from "@workerstack/database/pg/columns"
 export const ${name} = pgTable("${name}", { id: c.id("${name.slice(0, 3)}"), raw: jsonb("raw") })
 `
 

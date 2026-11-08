@@ -21,7 +21,7 @@ beforeEach(() => {
 afterEach(() => fs.rmSync(dir, { force: true, recursive: true }))
 
 const HEAD = `import { sqliteTable, text, type AnySQLiteColumn } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const currency = sqliteTable("currency", { code: text("code").primaryKey() })
 `
 

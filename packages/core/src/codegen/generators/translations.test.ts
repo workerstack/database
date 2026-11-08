@@ -9,7 +9,7 @@ import { type TestContext, testContext } from "./__fixtures__/context.ts"
 
 const TABLES = `
 import { sqliteTable as createTable, text, uniqueIndex } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const user = createTable("user", {
 	id: c.id(),
 	email: c.text("email").notNull(),
@@ -117,7 +117,7 @@ describe("generateTranslations: a CHECK and an enum key (F34)", () => {
 	it("says what the value broke, never to try again", async () => {
 		await fromTables(`import { sql } from "drizzle-orm"
 import { check, sqliteTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const seat = sqliteTable("seat", { id: c.id("set"), kind: c.enum("kind", ["a", "b"]), n: c.integer("n"), note: c.text("note") }, (t) => [
 	check("seat_n_positive", sql\`\${t.n} > 0\`),
 	check("seat_note_size", sql\`length(\${t.note}) <= 2048\`),
@@ -137,7 +137,7 @@ describe("generateTranslations: a private column's keys (F66)", () => {
 	it("says each kind's generic cause, never another's", async () => {
 		await fromTables(`import { sql } from "drizzle-orm"
 import { check, sqliteTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const user = sqliteTable("user", { id: c.id("usr") })
 export const doc = sqliteTable("doc", {
 	id: c.id("doc"),

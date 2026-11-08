@@ -12,7 +12,7 @@ import { beforeAll, describe, expect, it } from "vitest"
 import { buildFtsWhere } from "../../src/query/sqlite/search.ts"
 import { app, BLOG, ok, type App } from "./support/project.ts"
 
-const CONFIG = `import { defineCodegenConfig } from "@lovrozagar/comb/codegen"
+const CONFIG = `import { defineCodegenConfig } from "@workerstack/database/codegen"
 
 export default defineCodegenConfig({
 	databases: {
@@ -27,7 +27,7 @@ export default defineCodegenConfig({
 })
 `
 
-const MIGRATE_CONFIG = `import { defineConfig } from "@lovrozagar/comb/migrate"
+const MIGRATE_CONFIG = `import { defineConfig } from "@workerstack/database/migrate"
 
 export default defineConfig({
 	databases: {

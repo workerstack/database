@@ -12,7 +12,7 @@ import type { GeneratorContext } from "./context-types.ts"
 
 /** Where the entities generator writes and what it imports */
 export type EntitiesConfig = {
-	/** the package the generated file imports `generateId` and `generateUlid` from; `@lovrozagar/comb` when omitted */
+	/** the package the generated file imports `generateId` and `generateUlid` from; `@workerstack/database` when omitted */
 	importFrom?: string | undefined
 	/** the file written, relative to the codegen working directory */
 	output: string
@@ -41,7 +41,7 @@ function generateEntities(ctx: GeneratorContext, config: EntitiesConfig): void {
 
 	const lines: string[] = []
 
-	const importFrom = config.importFrom ?? "@lovrozagar/comb"
+	const importFrom = config.importFrom ?? "@workerstack/database"
 	lines.push(`import { generateId, generateUlid } from "${importFrom}"`)
 	lines.push("")
 

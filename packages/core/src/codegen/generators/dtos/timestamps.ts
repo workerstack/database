@@ -156,7 +156,7 @@ function header(): string[] {
 export function generateSharedFile(
 	used: UsedTimestampCombos,
 	sharedSchemas: Map<string, SharedSchema>,
-	{ combFrom = "@lovrozagar/comb", imported }: { combFrom?: string | undefined; imported: ReadonlySet<string> },
+	{ combFrom = "@workerstack/database", imported }: { combFrom?: string | undefined; imported: ReadonlySet<string> },
 ): string {
 	const lines = header()
 	/* Auto-deduped shared schema constants — must be before timestamp spreads that reference them */

@@ -25,7 +25,7 @@ const NODE_ARGS = [
 
 /* names whose order differs by locale: aa after z in Danish, y between i and j in Lithuanian */
 const TABLES = `import { sqliteTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const zebra = sqliteTable("zebra", { id: c.id("zeb"), name: c.text("name") })
 export const aardvark = sqliteTable("aardvark", { id: c.id("aar"), zebraId: c.ref("zebra_id", () => zebra.id) })
 export const yak = sqliteTable("yak", { id: c.id("yak"), aardvarkId: c.ref("aardvark_id", () => aardvark.id), zebraId: c.ref("zebra_id", () => zebra.id) })

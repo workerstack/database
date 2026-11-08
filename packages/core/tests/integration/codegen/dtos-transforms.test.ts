@@ -10,7 +10,7 @@ import { codegen, project, useProjects } from "../support/codegen-project.ts"
 useProjects()
 
 const TABLES = `import { sqliteTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const member = sqliteTable("member", {
 	id: c.id("mbr"),
 	title: c.text("title", { trim: true }).notNull(),

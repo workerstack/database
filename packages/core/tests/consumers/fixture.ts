@@ -1,12 +1,12 @@
 /** The consumer app the cells build: a Worker on comb's runtime subpaths, and a module that types every subpath. */
 import { SUBPATHS } from "./stage.ts"
 
-export const WORKER = `import { createListQuerySchema } from "@lovrozagar/comb/query"
-import { buildListQuery } from "@lovrozagar/comb/query/sqlite"
-import { c } from "@lovrozagar/comb/sqlite/columns"
-import { d1ErrorHandler } from "@lovrozagar/comb/sqlite/d1/error-handler"
-import { openD1Session } from "@lovrozagar/comb/sqlite/d1/session"
-import { ShardRouter } from "@lovrozagar/comb/sqlite/d1/sharding"
+export const WORKER = `import { createListQuerySchema } from "@workerstack/database/query"
+import { buildListQuery } from "@workerstack/database/query/sqlite"
+import { c } from "@workerstack/database/sqlite/columns"
+import { d1ErrorHandler } from "@workerstack/database/sqlite/d1/error-handler"
+import { openD1Session } from "@workerstack/database/sqlite/d1/session"
+import { ShardRouter } from "@workerstack/database/sqlite/d1/sharding"
 import { sqliteTable } from "drizzle-orm/sqlite-core"
 
 const post = sqliteTable("post", { id: c.id("pst"), title: c.text("title") })
@@ -42,7 +42,7 @@ globalThis.Function = new Proxy(Real, {
 
 /** A Worker that builds and parses comb's query schemas and says how many Functions that made */
 export const NO_EVAL_WORKER = `import { counter } from "./count-eval.ts"
-import { createListQuerySchema, createRetrieveQuerySchema, paginationResponseSchema } from "@lovrozagar/comb/query"
+import { createListQuerySchema, createRetrieveQuerySchema, paginationResponseSchema } from "@workerstack/database/query"
 
 export default {
 	async fetch(): Promise<Response> {
@@ -65,7 +65,7 @@ export type All = [${SUBPATHS.map((_, i) => `typeof m${i}`).join(", ")}]
 
 /* the subpaths a Worker imports at runtime: all but the tooling, which runs under Node */
 const RUNTIME = SUBPATHS.filter(
-	(spec) => !/^@lovrozagar\/comb\/(?:cli|codegen|migrate|package\.json)(?:\/|$)/.test(spec),
+	(spec) => !/^@workerstack\/database\/(?:cli|codegen|migrate|package\.json)(?:\/|$)/.test(spec),
 )
 
 /** A module that imports the types of every runtime subpath, for a Worker's own lib (K1 of r17) */
@@ -83,7 +83,7 @@ const specs = ${JSON.stringify(SUBPATHS)}
 const lines = []
 for (const [i, spec] of specs.entries()) {
 	const names = Object.keys(await import(spec)).sort()
-	const slug = spec === "@lovrozagar/comb" ? "root" : spec.slice("@lovrozagar/comb/".length).replaceAll(/[^a-z0-9]/gi, "_")
+	const slug = spec === "@workerstack/database" ? "root" : spec.slice("@workerstack/database/".length).replaceAll(/[^a-z0-9]/gi, "_")
 	if (names.length > 0) lines.push("import * as m" + i + " from " + JSON.stringify(spec))
 	for (const name of names) lines.push("export const " + slug + "$" + name + " = m" + i + "." + name)
 }
@@ -95,8 +95,8 @@ console.log(lines.filter((line) => line.startsWith("export ")).length)
  * A module of the two checks a TypeScript below 5.7 dropped with no error under skipLibCheck (KT2
  * of r22b): each must stay an error at comb's floor, and below it the named imports fail instead
  */
-export const FLOOR = `import { createUlidFactory } from "@lovrozagar/comb"
-import { defineStateMachine } from "@lovrozagar/comb/states"
+export const FLOOR = `import { createUlidFactory } from "@workerstack/database"
+import { defineStateMachine } from "@workerstack/database/states"
 export const post = defineStateMachine({
 	initial: "draft",
 	transitions: {
@@ -116,14 +116,14 @@ export const ids = createUlidFactory({ random: (bytes: string) => void bytes.toU
  * left out, so each optional property it reads takes undefined, and 0.20.1 refused these with
  * TS2379; what comb hands back keeps each optional key absent, never undefined
  */
-export const UNSET = `import { createUlidFactory, LruCache } from "@lovrozagar/comb"
-import { createListQuerySchema, createRetrieveQuerySchema, type DrizzleListOptions, validateFilter } from "@lovrozagar/comb/query"
-import type { ListExtras } from "@lovrozagar/comb/query/sqlite"
-import { c } from "@lovrozagar/comb/sqlite/columns"
-import { ShardRouter } from "@lovrozagar/comb/sqlite/d1/sharding"
-import { defineStateMachine } from "@lovrozagar/comb/states"
-import { processIo } from "@lovrozagar/comb/cli"
-import { defineCodegenConfig } from "@lovrozagar/comb/codegen"
+export const UNSET = `import { createUlidFactory, LruCache } from "@workerstack/database"
+import { createListQuerySchema, createRetrieveQuerySchema, type DrizzleListOptions, validateFilter } from "@workerstack/database/query"
+import type { ListExtras } from "@workerstack/database/query/sqlite"
+import { c } from "@workerstack/database/sqlite/columns"
+import { ShardRouter } from "@workerstack/database/sqlite/d1/sharding"
+import { defineStateMachine } from "@workerstack/database/states"
+import { processIo } from "@workerstack/database/cli"
+import { defineCodegenConfig } from "@workerstack/database/codegen"
 declare const env: { MAX?: number; NOW?: () => number; LANG?: true; TTL?: number; LOG?: (event: string) => void; DIR?: string; IN?: NodeJS.ReadableStream; LIVE?: readonly ("draft" | "live")[] }
 export const ids = () => createUlidFactory({ now: env.NOW })
 export const cache = () => new LruCache<string, string>({ hardTtlMs: env.TTL, maxSize: 10, ttlMs: env.TTL })
@@ -148,13 +148,13 @@ export const options: Defined<Pick<DrizzleListOptions, "where">> & { extras: Def
 `
 
 /** A module that exports list and retrieve schemas, their types inferred, as an app's route module does (K11 of r17) */
-export const SCHEMAS = `import { createListQuerySchema, createRetrieveQuerySchema } from "@lovrozagar/comb/query"
+export const SCHEMAS = `import { createListQuerySchema, createRetrieveQuerySchema } from "@workerstack/database/query"
 export const listSchema = createListQuerySchema({ sort: ["created_at"] })
 export const retrieveSchema = createRetrieveQuerySchema({ fields: { scalars: ["id"] } })
 `
 
 /** A D1-only project's migrate config, which needs neither @libsql/client nor libpg-query (K2 of r17) */
-export const MIGRATE_CONFIG = `import { defineConfig } from "@lovrozagar/comb/migrate"
+export const MIGRATE_CONFIG = `import { defineConfig } from "@workerstack/database/migrate"
 export default defineConfig({
 	databases: { core: { migrationsDir: "migrations", name: "core", provider: { databaseName: "CORE_DB", type: "d1" } } },
 })
@@ -237,10 +237,10 @@ const STRICT_UNION = {
  * binding's own: a wrong argument and an unknown method are each refused, which an untyped module,
  * as 0.19's was there, would let through; and a shard's handle is the env's own binding (K2 of r22)
  */
-const C3_D1 = `import { BookmarkTracker } from "@lovrozagar/comb/sqlite/d1/bookmark"
+const C3_D1 = `import { BookmarkTracker } from "@workerstack/database/sqlite/d1/bookmark"
 import { drizzle } from "drizzle-orm/d1"
-import { openD1Session } from "@lovrozagar/comb/sqlite/d1/session"
-import { ShardRouter } from "@lovrozagar/comb/sqlite/d1/sharding"
+import { openD1Session } from "@workerstack/database/sqlite/d1/session"
+import { ShardRouter } from "@workerstack/database/sqlite/d1/sharding"
 
 export async function routed(env: Env, ctx: ExecutionContext, bookmark: string | undefined): Promise<string[]> {
 	const { client, session } = openD1Session(env.DB, { bookmark })

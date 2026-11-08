@@ -9,7 +9,7 @@ import { project, read, runCodegen, useProjects } from "../support/codegen-proje
 useProjects()
 
 const HEAD = `import { sqliteTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 `
 
 describe("the modules codegen walks, as the runtime loads them (F52)", () => {

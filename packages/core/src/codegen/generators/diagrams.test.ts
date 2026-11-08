@@ -8,7 +8,7 @@ import { testContext } from "./__fixtures__/context.ts"
 
 const PRELUDE = `
 import { sqliteTable as createTable, text, integer, real, blob } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 `
 
 type Generated = {
@@ -148,7 +148,7 @@ describe("generateDiagrams on a Postgres database (F36)", () => {
 		fs.writeFileSync(
 			fp,
 			`import { pgTable, text } from "drizzle-orm/pg-core"
-import { c } from "@lovrozagar/comb/pg/columns"
+import { c } from "@workerstack/database/pg/columns"
 import * as z from "zod"
 export const meta = z.object({ a: z.string() })
 export const alpha = pgTable("alpha", { id: c.id("al"), tags: text("tags").array(), teamId: c.ref("team_id").references(() => zteam.id), at: c.timestamp("at"), ok: c.boolean("ok"), blob: c.json("blob", meta), ratio: c.real("ratio") })

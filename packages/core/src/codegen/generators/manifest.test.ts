@@ -10,7 +10,7 @@ import { testContext } from "./__fixtures__/context.ts"
 const PRELUDE = `
 import { sqliteTable as createTable, text, integer, uniqueIndex, check, primaryKey } from "drizzle-orm/sqlite-core"
 import { sql } from "drizzle-orm"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 `
 
 const SCHEMA = `

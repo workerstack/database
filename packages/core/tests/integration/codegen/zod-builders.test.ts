@@ -13,7 +13,7 @@ import { codegen, generatedFiles, project, read, typecheck, useProjects } from "
 useProjects()
 
 const PG_TABLES = `import { bigint, bit, boolean, cidr, date, doublePrecision, inet, integer, interval, json, jsonb, macaddr, macaddr8, numeric, pgEnum, pgTable, real, text, time, timestamp, uuid, varchar } from "drizzle-orm/pg-core"
-import { c } from "@lovrozagar/comb/pg/columns"
+import { c } from "@workerstack/database/pg/columns"
 import { settings } from "./schemas.ts"
 export const mood = pgEnum("mood", ["ok", "sad"])
 export const kinds = pgTable("kinds", {
@@ -67,7 +67,7 @@ export const child = pgTable("child", { id: c.id("chd"), kindsId: c.ref("kinds_i
 `
 
 const SQLITE_TABLES = `import { sqliteTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 import { settings } from "./schemas.ts"
 export const note = sqliteTable("note", {
 	id: c.id("not"),

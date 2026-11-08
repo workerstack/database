@@ -17,7 +17,7 @@ import type { ConstraintMap } from "../../src/types.ts"
 import { app, BLOG, ok, type App } from "./support/project.ts"
 import { SEALED } from "../../src/query/__fixtures__/cursor-secret.ts"
 
-const MIGRATE_CONFIG = `import { defineConfig } from "@lovrozagar/comb/migrate"
+const MIGRATE_CONFIG = `import { defineConfig } from "@workerstack/database/migrate"
 
 export default defineConfig({
 	databases: {

@@ -28,7 +28,7 @@ function writeTables(content: string): string {
 const STRUCTURE_PRELUDE = `
 import { sqliteTable as createTable, text, uniqueIndex, check } from "drizzle-orm/sqlite-core"
 import { sql } from "drizzle-orm"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 `
 
 /** Validates `body` under the structural-check prelude. */
@@ -38,7 +38,7 @@ function validateStructure(body: string) {
 
 const MACHINE_PRELUDE = `
 import { sqliteTable as createTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 `
 
 /** Validates `body` under the state-machine prelude. */
@@ -50,7 +50,7 @@ describe("validateTables", () => {
 	it("returns no errors for valid schema", async () => {
 		const fp = writeTables(`
 import { sqliteTable as createTable, text } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const user = createTable("user", { id: c.id() })
 `)
 		const result = await validateTables(fp)
@@ -60,7 +60,7 @@ export const user = createTable("user", { id: c.id() })
 	it("warns about missing primary key", async () => {
 		const fp = writeTables(`
 import { sqliteTable as createTable, text } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const log = createTable("log", { msg: c.text("msg") })
 `)
 		const result = await validateTables(fp)
@@ -70,7 +70,7 @@ export const log = createTable("log", { msg: c.text("msg") })
 	it("errors on duplicate table names", async () => {
 		const fp = writeTables(`
 import { sqliteTable as createTable, text } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const user = createTable("user", { id: c.id() })
 export const user2 = createTable("user", { id: c.id() })
 `)
@@ -83,7 +83,7 @@ describe("validateTables: foreign keys", () => {
 	it("refuses a foreign key into a table the module never defines, naming the table it is on", async () => {
 		const fp = writeTables(`
 import { sqliteTable as createTable, text } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const post = createTable("post", {
 	id: c.id(),
 	author_id: c.ref("author_id").references(() => missing_table.id),
@@ -97,7 +97,7 @@ export const post = createTable("post", {
 	it("returns clean result for multi-table schema with valid FKs", async () => {
 		const fp = writeTables(`
 import { sqliteTable as createTable, text } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const user = createTable("user", { id: c.id() })
 export const post = createTable("post", {
 	id: c.id(),
@@ -294,7 +294,7 @@ export const delivery = createTable("delivery", {
 
 describe("validateTables: names two tables may not share (F13, F14)", () => {
 	const prelude = `import { sqliteTable as createTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 `
 	it("refuses two tables whose names make one generated type name, naming both (F13)", async () => {
 		const result = await validateTables(

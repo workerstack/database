@@ -12,7 +12,7 @@ import { ok, pack, run, type Stage, stage } from "./stage.ts"
 
 const TABLES = `import { sql } from "drizzle-orm"
 import { check, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 import { STATES } from "@app/enums"
 import { prefsSchema } from "./schemas.ts"
 
@@ -34,7 +34,7 @@ export const membership = sqliteTable("membership", {
 `
 
 const PG_TABLES = `import { integer, pgEnum, pgTable, text, varchar } from "drizzle-orm/pg-core"
-import { c } from "@lovrozagar/comb/pg/columns"
+import { c } from "@workerstack/database/pg/columns"
 export const mood = pgEnum("mood", ["ok", "sad"])
 export const ticket = pgTable("ticket", { id: c.integer("id").primaryKey().generatedAlwaysAsIdentity(), code: varchar("code", { length: 3 }).notNull(), feeling: mood("feeling"), tags: text("tags").array(), grid: integer("grid").array("[][]") })
 `
@@ -77,7 +77,7 @@ function written(): Record<string, string> {
 
 /** `comb codegen` under node `bin`: comb's own hooks load its TypeScript, as they load the child's */
 function underNode(bin: string): string {
-	const core = join(app.dir, "node_modules/@lovrozagar/comb/src")
+	const core = join(app.dir, "node_modules/@workerstack/database/src")
 	const hooks = pathToFileURL(join(core, "codegen/runtime/node-hooks.mjs")).href
 	const cli = pathToFileURL(join(core, "cli/index.ts")).href
 	const script = `const { processIo, runCli } = await import(${JSON.stringify(cli)}); process.exitCode = await runCli(["codegen"], processIo())`

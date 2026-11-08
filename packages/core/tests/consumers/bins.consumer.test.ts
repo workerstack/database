@@ -58,7 +58,7 @@ exports.getPlatformProxy = async () => {
 		"m/atlas.sum":
 			"h1:49rgkc+5rAlkUINyqIrGhzKe7Sec5arvFN+yPbLgUKo=\n20260101000000_init.sql h1:RQHt4SOaDsBNzXQ/whJf0fie4LxTmkJ3zg0glyracF0=\n",
 		"post.tables.ts": `import { sqliteTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const post = sqliteTable("post", { id: c.id("id", { prefix: "post" }) })
 `,
 		"wrangler.jsonc": JSON.stringify({
@@ -74,7 +74,7 @@ export const post = sqliteTable("post", { id: c.id("id", { prefix: "post" }) })
 			name: "w",
 		}),
 	}
-	const COMB = join("..", ["node_", "modules"].join(""), "@lovrozagar/comb/src/bin.ts")
+	const COMB = join("..", ["node_", "modules"].join(""), "@workerstack/database/src/bin.ts")
 	/* each command under bun (comb's own shebang) and under node (through tsx), as a package script runs it */
 	const SCRIPTS = {
 		"apply:bun": "comb migrate apply local --yes",
@@ -110,7 +110,7 @@ export const post = sqliteTable("post", { id: c.id("id", { prefix: "post" }) })
 			)
 		write(dir, {
 			"package.json": JSON.stringify({
-				dependencies: { "@lovrozagar/comb": `file:${tarball}`, ...REQUIRED_PEERS, ...deps(root, dir) },
+				dependencies: { "@workerstack/database": `file:${tarball}`, ...REQUIRED_PEERS, ...deps(root, dir) },
 				devDependencies: { tsx: TOOLS.tsx },
 				name: "ws-root",
 				private: true,

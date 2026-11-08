@@ -1,6 +1,6 @@
 /** The tables every SQLite e2e app is generated from; copied into the app as src/db/core.tables.ts */
 import { sqliteTable, uniqueIndex } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 
 export const post = sqliteTable(
 	"post",

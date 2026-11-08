@@ -16,7 +16,7 @@ let dir = ""
 let account: Record<string, z.ZodType> = {}
 
 const TABLES = `import { sqliteTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 import { profile as homeProfile } from "./home/schemas.ts"
 import { profile as workProfile } from "./work/schemas.ts"
 import { _str as tag, combMeta as note, z as zone } from "./named/schemas.ts"
@@ -83,7 +83,7 @@ describe("generated DTOs: a text or number column's schema and a format", () => 
 	it("imports the schema from its module under a name apart from comb's, beside comb's namespace", () => {
 		const file = fs.readFileSync(path.join(dir, "dtos", "account", "index.gen.ts"), "utf8").split("\n")
 		expect(file).toContain('import { comb as combFromScalarSchemas, evenMinutes } from "../../scalar/schemas"')
-		expect(file).toContain('import * as comb from "@lovrozagar/comb"')
+		expect(file).toContain('import * as comb from "@workerstack/database"')
 	})
 
 	it("pipes each value into its schema after comb's rules, and holds the format", () => {

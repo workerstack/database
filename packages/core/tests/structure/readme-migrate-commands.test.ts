@@ -30,7 +30,7 @@ const BLOCKS: Block[] = [...MIGRATIONS.matchAll(/^```(\w+)\n([\s\S]*?)^```$/gm)]
 const CONFIGS = BLOCKS.filter((block) => block.body.startsWith("/* comb.migrate.config.ts */\n"))
 const COMMANDS = BLOCKS.filter((block) => block.lang === "bash" && block.body.includes("comb migrate"))
 
-/* inside the package, so a config's import of @lovrozagar/comb/migrate resolves to this comb */
+/* inside the package, so a config's import of @workerstack/database/migrate resolves to this comb */
 const temp = projects(path.resolve(import.meta.dirname, "../.."))
 afterEach(temp.clean)
 

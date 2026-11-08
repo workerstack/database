@@ -9,6 +9,6 @@ describe("comb's namespace in generated code (C2 of r17)", () => {
 	})
 
 	it("is imported whole from where comb is imported", () => {
-		expect(combImport("@lovrozagar/comb")).toBe('import * as comb from "@lovrozagar/comb"')
+		expect(combImport("@workerstack/database")).toBe('import * as comb from "@workerstack/database"')
 	})
 })

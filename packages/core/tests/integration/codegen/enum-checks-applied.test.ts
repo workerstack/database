@@ -12,7 +12,7 @@ useProjects()
 
 const CONFIG = `export default { databases: { core: { tables: "./src/db/db.core.tables.ts" } } }\n`
 const tables = (head: string, third: string) => `import { sqliteTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 ${head}
 export const item = sqliteTable("item", { id: c.id("itm"), status: c.enum("status", ["open", "it's done"]) }${third})
 `

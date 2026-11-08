@@ -11,7 +11,7 @@ import { codegen, project, read, useProjects } from "../support/codegen-project.
 useProjects()
 
 const tables = (motto: boolean) => `import { sqliteTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const author = sqliteTable("author", { id: c.id("aut"), name: c.text("name", { max: 60 })${motto ? ', motto: c.text("motto", { max: 30 })' : ""} })
 export const shelf = sqliteTable("shelf", { id: c.id("shf"), label: c.text("label", { max: 30 }) })
 `

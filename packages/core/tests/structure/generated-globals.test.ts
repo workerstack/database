@@ -21,7 +21,7 @@ const CONFIG = `export default { databases: { core: { tables: "./src/db/db.core.
 const TABLES = {
 	postgres: `import * as z from "zod"
 import { cidr, integer, json, jsonb, pgTable } from "drizzle-orm/pg-core"
-import { c } from "@lovrozagar/comb/pg/columns"
+import { c } from "@workerstack/database/pg/columns"
 export const docSchema = z.object({ a: z.string() })
 export const jsonValueSchemaStrict = z.object({ b: z.string() })
 export const cidrSchemaDoc = z.object({ c: z.string() })
@@ -49,7 +49,7 @@ export const grid = pgTable("grid", {
 `,
 	sqlite: `import * as z from "zod"
 import { sqliteTable, text } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const docSchema = z.object({ a: z.string() })
 export const cidrSchemaDoc = z.object({ c: z.string() })
 export const timestampSchemaDoc = z.object({ d: z.string() })

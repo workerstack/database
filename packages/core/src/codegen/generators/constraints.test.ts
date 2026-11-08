@@ -8,7 +8,7 @@ import { testContext } from "./__fixtures__/context.ts"
 
 const HEAD = `import { sql } from "drizzle-orm"
 import { sqliteTable as createTable, text, integer, check, primaryKey, uniqueIndex } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 `
 
 let tmpDir: string

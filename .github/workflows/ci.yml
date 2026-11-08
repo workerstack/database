@@ -258,7 +258,7 @@ jobs:
           echo "cfc773e5b4e845bc01d680390c174648938a7f88bf30e5a2c83ae85217c21587  $RUNNER_TEMP/atlas/atlas" | sha256sum -c -
           chmod +x "$RUNNER_TEMP/atlas/atlas"
           echo "$RUNNER_TEMP/atlas" >> "$GITHUB_PATH"
-      - run: bun run --filter @lovrozagar/comb test:e2e
+      - run: bun run --filter @workerstack/database test:e2e
 
   consumers:
     name: consumers (node ${{ matrix.node }})
@@ -308,7 +308,7 @@ jobs:
           echo "cfc773e5b4e845bc01d680390c174648938a7f88bf30e5a2c83ae85217c21587  $RUNNER_TEMP/atlas/atlas" | sha256sum -c -
           chmod +x "$RUNNER_TEMP/atlas/atlas"
           echo "$RUNNER_TEMP/atlas" >> "$GITHUB_PATH"
-      - run: bun run --filter @lovrozagar/comb test:consumers
+      - run: bun run --filter @workerstack/database test:consumers
 
   # the suites where real processes and paths meet, on macOS too (tests/support/posix.ts)
   posix:
@@ -334,4 +334,4 @@ jobs:
           echo "47aaf7c295c7569c7eecfcbc53f02de862846ce1fbef16f1bd8ae98b03c3c68f  $RUNNER_TEMP/atlas/atlas" | shasum -a 256 -c -
           chmod +x "$RUNNER_TEMP/atlas/atlas"
           echo "$RUNNER_TEMP/atlas" >> "$GITHUB_PATH"
-      - run: bun run --filter @lovrozagar/comb test:posix
+      - run: bun run --filter @workerstack/database test:posix

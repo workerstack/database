@@ -16,7 +16,7 @@ let dir = ""
 let person: Record<string, z.ZodType> = {}
 
 const TABLES = `import { sqliteTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 import * as z from "zod"
 export const blobSchema = z.object({ s: z.string() })
 export const team = sqliteTable("team", { id: c.id("tm") })

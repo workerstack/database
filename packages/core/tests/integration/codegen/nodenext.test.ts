@@ -12,7 +12,7 @@ import { codegen, project, typecheck, useProjects } from "../support/codegen-pro
 useProjects()
 
 const TABLES = `import { sqliteTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 import { address } from "./schemas.js"
 export const user = sqliteTable("user", { id: c.id("usr"), name: c.text("name"), address: c.json("address", address) })
 export const post = sqliteTable("post", { id: c.id("pst"), authorId: c.ref("author_id").references(() => user.id) })

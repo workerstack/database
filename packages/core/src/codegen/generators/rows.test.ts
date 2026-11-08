@@ -30,7 +30,7 @@ describe("generateRows — row types", () => {
 	it("generates row types for each table", async () => {
 		const result = await writeTablesAndAnalyze(`
 import { sqliteTable as createTable, text, integer } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const user = createTable("user", { id: c.id(), name: c.text("name") })
 export const post = createTable("post", { id: c.id(), title: c.text("title") })
 `)
@@ -66,7 +66,7 @@ describe("generateRows — the tables import", () => {
 	it("generates correct import path", async () => {
 		const result = await writeTablesAndAnalyze(`
 import { sqliteTable as createTable, text } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const item = createTable("item", { id: c.id() })
 `)
 		const tablesPath = path.join(tmpDir(), "db.test.tables.ts")

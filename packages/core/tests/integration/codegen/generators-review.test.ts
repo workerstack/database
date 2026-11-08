@@ -12,7 +12,7 @@ import { libsqlMemory } from "../support/libsql.ts"
 useProjects()
 
 const HEAD = `import { sqliteTable, unique } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 `
 const config = (extra = "") =>
 	`export default { databases: { core: { tables: "./src/db/db.core.tables.ts"${extra} } } }\n`

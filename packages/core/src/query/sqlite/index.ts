@@ -1,5 +1,5 @@
 /**
- * @lovrozagar/comb/query/sqlite — SQLite-specific SQL generation.
+ * @workerstack/database/query/sqlite — SQLite-specific SQL generation.
  */
 
 /* List query builder */

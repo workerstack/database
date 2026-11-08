@@ -10,7 +10,7 @@ import { codegen, generatedFiles, project, typecheck, useProjects } from "../sup
 useProjects()
 
 const TABLES = `import { sqliteTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const user = sqliteTable("user", { id: c.id("usr"), name: c.text("name"), role: c.enum("role", ["admin", "member"]).notNull() })
 export const post = sqliteTable("post", { id: c.id("pst"), state: c.enum("state", ["draft", "live"]), "title-x": c.text("title_x") })
 `
