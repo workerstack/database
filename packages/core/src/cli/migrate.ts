@@ -249,7 +249,8 @@ async function migrateDiff(argv: readonly string[], io: CliContext): Promise<voi
 		await runDiff(argv, io)
 	} catch (error) {
 		if (error instanceof Drifted || error instanceof ShowHelp) throw error
-		throw new CliError(error instanceof Error ? error.message : String(error), 2, { cause: error })
+		/* an Error: comb throws only Errors, and a config's load wraps whatever the config throws (migrate/config.ts) */
+		throw new CliError((error as Error).message, 2, { cause: error })
 	}
 }
 

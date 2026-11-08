@@ -93,6 +93,14 @@ describe("comb migrate diff --dry-run's exit", () => {
 		expect(dry.errors.join("\n")).toContain("connection refused")
 	})
 
+	it("is 2 when a migrate config throws what is not an Error, saying it", async () => {
+		const dir = diffProject()
+		writeFileSync(join(dir, "comb.migrate.config.ts"), 'throw "no DATABASE_URL"\n')
+		const io = makeIo(dir, fakeAtlas(drifting))
+		expect(await runCliWithFakes(["migrate", "diff", "core", "--dry-run"], io)).toBe(2)
+		expect(io.errors.join("\n")).toContain("no DATABASE_URL")
+	})
+
 	it("is 2 for an option it does not take, and 0 for its help", async () => {
 		const [unknown, help] = [makeIo(diffProject()), makeIo(diffProject())]
 		expect([
