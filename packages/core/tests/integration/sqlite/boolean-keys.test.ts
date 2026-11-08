@@ -63,25 +63,38 @@ describe("a SQLite boolean holding anything but 0 or 1 pages or is refused by na
 	)
 })
 
-/* AB3-5 of area B: a list that binds the key as read refused such a row only when it ended a page */
-describe("a boolean row holding a value but 0 or 1 is refused on the page that serves it (AB3-5 of area B; sibling: AB3-2)", () => {
-	it.each(["anchorless", "anchored joined", "merged"] as const)(
-		"answers the %s list a 500 naming the key on the page such a row leads and a 0 ends",
+/* AB3-5 of area B: a list that binds the key as read refused such a row only when it ended a page; QL8: a
+   page by number checks only the row its cursor is minted from, a page by cursor every row it serves */
+describe("a boolean row holding a value but 0 or 1 is refused on the page by cursor that serves it (AB3-5 of area B; QL8)", () => {
+	it.each(["anchorless", "anchored joined"] as const)(
+		"answers the %s list a 500 naming the key on the last page, which mints no cursor, of a walk that reaches such a row",
 		async (shape) => {
-			expect((await firstPair(await dbsFor(shape, LEADING_SEED), { direction: "asc", shape })).error).toMatchObject({
-				cause: expect.stringContaining("b stores"),
-				errorKey: "sort_not_wired",
-				status: 500,
+			expect(
+				await servedBooleans(await dbsFor(shape, LEADING_SEED), { deleting: false, direction: "desc", shape }),
+			).toMatchObject({
+				error: { cause: expect.stringContaining("b stores"), errorKey: "sort_not_wired", status: 500 },
+				ids: ["a"],
 			})
 		},
 	)
 
-	it.each(["table", "anchored own", "listOptions"] as const)(
-		"serves the %s list's page as it reads the key back",
+	it.each(["table", "anchored own", "listOptions", "anchorless", "anchored joined"] as const)(
+		"serves the %s list's page by number such a row leads and a 0 ends, which mints no cursor",
 		async (shape) => {
 			expect(await firstPair(await dbsFor(shape, LEADING_SEED), { direction: "asc", shape })).toEqual({
 				ids: ["e", "a"],
 			})
 		},
 	)
+
+	/* a merged list checks every row a shard read as it merges them, wherever the page lands (QL17's class) */
+	it("answers the merged list a 500 naming the key on the page by number such a row leads", async () => {
+		expect(
+			(await firstPair(await dbsFor("merged", LEADING_SEED), { direction: "asc", shape: "merged" })).error,
+		).toMatchObject({
+			cause: expect.stringContaining("b stores"),
+			errorKey: "sort_not_wired",
+			status: 500,
+		})
+	})
 })

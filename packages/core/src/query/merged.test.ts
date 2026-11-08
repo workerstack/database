@@ -123,10 +123,12 @@ describe("paginateMerged", () => {
 		expect(ids(shards, { limit: "10", order: "k.desc.nullslast" })).toEqual([2, 1, 4, 3])
 		expect(ids(shards, { limit: "10", order: "k.asc.nullsfirst" })).toEqual([3, 4, 1, 2])
 		expect(ids(shards.slice(0, 2), { limit: "10", order: "k.asc" })).toEqual([1, 2])
-		/* a key a row lacks sorts as a null, and is refused once served: no cursor resumes after it (AB4-3 of area B) */
+		/* a key a row lacks sorts as a null, and no cursor resumes after it: a page by number serves it,
+		   and refuses it once its cursor is minted from it (AB4-3 of area B; QL8) */
 		const unread = [...shards.slice(0, 3), [{ id: 4, k: undefined }]]
 		expect(ids(unread, { limit: "3", order: "k.asc" })).toEqual([1, 2, 3])
-		expect(() => ids(unread, { limit: "10", order: "k.asc" })).toThrow(
+		expect(ids(unread, { limit: "10", order: "k.asc" })).toEqual([1, 2, 3, 4])
+		expect(() => ids(unread, { limit: "1", order: "k.desc" })).toThrow(
 			expect.objectContaining({ errorKey: "sort_not_wired", status: 500 }),
 		)
 	})
@@ -142,7 +144,11 @@ describe("paginateMerged", () => {
 describe("paginateMerged and a key's column (AB4-1 of area B)", () => {
 	/* AB4-1 of area B: the cursor after such a row is one the next page's open would refuse as a 400 */
 	it("answers the 500 naming the key for a row whose TEXT column holds a number, never minting its cursor", () => {
-		expect(() => paginateMerged([read([{ id: "a", k: 1 }])], merged({}))).toThrow(
+		const rows = read([
+			{ id: "a", k: 1 },
+			{ id: "b", k: 2 },
+		])
+		expect(() => paginateMerged([rows], merged({ limit: "1", order: "k.asc" }))).toThrow(
 			expect.objectContaining({
 				cause: expect.stringMatching(/^the sort by k reads a value its column's mode does not hold/),
 				errorKey: "sort_not_wired",

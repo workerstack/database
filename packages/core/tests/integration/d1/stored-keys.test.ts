@@ -61,17 +61,22 @@ describe("a stored class a key's mode reads apart pages or is refused by name (A
 	})
 })
 
-describe("a row no cursor holds is refused on the page that serves it, at any page size (AB4-3 of area B)", () => {
-	it("answers the 500 on page 1 for a key past the cap the page serves before its last row", async () => {
-		expect(await refusedOnPage(open, LONG_BETWEEN, { direction: "desc", kind: "anchorless", limit: 2 })).toEqual({
+describe("a row no cursor holds is refused on the page by cursor that serves it, at any page size (AB4-3 of area B; QL8)", () => {
+	it("answers the 500 on the last page, by cursor, that serves a key past the cap, though no cursor is minted from it (QL8)", async () => {
+		expect(await refusedOnPage(open, LONG_BETWEEN, { direction: "asc", kind: "anchorless", limit: 2 })).toEqual({
 			error: "sort_not_wired",
-			ids: [],
-			page: 1,
+			ids: ["r0", "r2"],
+			page: 2,
 		})
 	})
 
-	it("answers the 500 on page 1 for a JSON object on a table list that ends on that page", async () => {
+	/* QL8: a table list serves a JSON object on a page by number that mints no cursor, and refuses the JSON row a cursor is minted from */
+	it("serves a JSON object on a table list's one page by number, and answers the 500 on a page that mints from a JSON row", async () => {
 		expect(await refusedOnPage(open, JSON_OBJECT, { direction: "desc", kind: "table", limit: 3 })).toEqual({
+			ids: ["r1", "r2", "r0"],
+			page: 1,
+		})
+		expect(await refusedOnPage(open, JSON_OBJECT, { direction: "desc", kind: "table", limit: 2 })).toEqual({
 			error: "sort_not_wired",
 			ids: [],
 			page: 1,
