@@ -22,6 +22,7 @@ import {
 	TEXT_BLOB,
 	UNTYPED_TEXT,
 } from "../support/stored-keys.ts"
+import { HELD_BESIDE_DIGITS, HELD_WIDE_BESIDE_DIGITS } from "../support/held-beside-digits.ts"
 
 const shards: D1Harness[] = []
 afterEach(async () => {
@@ -100,4 +101,16 @@ describe("a REAL a key's mode reads apart pages exactly where a text of it reads
 				})
 		},
 	)
+})
+
+/* QL2: a value held apart binds with no affinity, so a numeric-looking TEXT beside it compares as stored */
+describe("a held value beside a numeric-looking TEXT pages every row once, on D1 (QL2)", () => {
+	it.each(
+		Object.entries({
+			...HELD_BESIDE_DIGITS,
+			"text() holding an integer past 2^53 beside '10'": HELD_WIDE_BESIDE_DIGITS,
+		}),
+	)("%s", async (_, kase) => {
+		expect(await storedProblems(open, kase)).toEqual([])
+	})
 })

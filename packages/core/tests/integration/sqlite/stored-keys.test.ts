@@ -23,6 +23,7 @@ import {
 	TIMESTAMP_BLOB,
 	UNTYPED_TEXT,
 } from "../support/stored-keys.ts"
+import { HELD_BESIDE_DIGITS } from "../support/held-beside-digits.ts"
 
 const clients: Client[] = []
 afterEach(() => {
@@ -91,6 +92,13 @@ describe("a REAL a key's mode reads apart pages exactly where a text of it reads
 	it.each(
 		Object.entries({ ...HELD_REALS, "text() holding a REAL D1 prints no text of that reads back": HELD_UNPRINTED }),
 	)("%s", async (_, kase) => {
+		expect(await storedProblems(open, kase)).toEqual([])
+	})
+})
+
+/* QL2: a value held apart binds with no affinity, so a numeric-looking TEXT beside it compares as stored */
+describe("a held value beside a numeric-looking TEXT pages every row once, on libsql (QL2)", () => {
+	it.each(Object.entries(HELD_BESIDE_DIGITS))("%s", async (_, kase) => {
 		expect(await storedProblems(open, kase)).toEqual([])
 	})
 })
