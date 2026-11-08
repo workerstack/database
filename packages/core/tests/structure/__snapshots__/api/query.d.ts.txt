@@ -225,6 +225,17 @@ declare const totalOf: (row: object) => number;
  */
 declare function applySelect<T extends Record<string, unknown>>(row: T, parsedFields: ParsedFields | null): T;
 /**
+ * The rows of a served page a cursor is checked from. On a page by cursor, every row: its client walks
+ * the list one cursor at a time, so a row no cursor resumes after is refused on the page that serves
+ * it, never on whichever page it happens to end. On a page by number, only the row its next cursor is
+ * minted from, the last of a page with more, as 0.20.1 did: the page serves rows its client never
+ * resumes after
+ */
+declare function mintedFrom<T>(page: readonly T[], { byCursor, hasMore }: {
+    byCursor: boolean;
+    hasMore: boolean;
+}): readonly T[];
+/**
  * The page of `items`, read with `built`, and its pagination: count, whether there is more, and
  * the next cursor, sealed under the builder's options; none for a list no cursor can resume
  */
@@ -235,7 +246,7 @@ declare function paginate<T extends object>(items: readonly T[], built: {
         merged: false;
     };
 }): readonly [Array<ListRow<T>>, PaginationResponse];
-export { applySelect, COMB_ID, type ListExtra, type ListPagination, type ListRow, paginate, type PaginationFacts, type PaginationResponse, paginationOf, totalOf, };
+export { applySelect, COMB_ID, mintedFrom, type ListExtra, type ListPagination, type ListRow, paginate, type PaginationFacts, type PaginationResponse, paginationOf, totalOf, };
 
 // query/cursor-mint.d.ts
 import { type CursorOptions } from "./cursor-seal.ts";
@@ -1081,17 +1092,18 @@ declare const FILTER_OPERATORS: readonly [FilterOperator, ...FilterOperator[]];
 /**
  * The AST of a non-blank filter string, or why it cannot be read, in words for a caller to show: a
  * filter the parser does not fully understand is refused, never reduced to "no filter", which
- * would widen the result to the whole table on a typo.
+ * would widen the result to the whole table on a typo. A group nested past `maxDepth`, or past
+ * FILTER_MAX_DEPTH whatever `maxDepth` is, is refused where it opens.
  */
-declare function readFilter(input: string): {
+declare function readFilter(input: string, maxDepth: number): {
     ast: FilterAST;
 } | {
     error: string;
 };
 /**
- * The AST of a filter string, or null when there is none or any part of it cannot be read: a
- * filter the parser does not fully understand is refused, never reduced to "no filter", which
- * would widen the result to the whole table on a typo.
+ * The AST of a filter string, or null when there is none or any part of it cannot be read, or it
+ * nests past FILTER_MAX_DEPTH: a filter the parser does not fully understand is refused, never
+ * reduced to "no filter", which would widen the result to the whole table on a typo.
  */
 declare function parseFilter(input: string | null | undefined): FilterAST | null;
 export { FILTER_OPERATORS, parseFilter, readFilter };
@@ -1161,7 +1173,7 @@ type FilterValidationResult = {
 type FilterLimits = {
     /** Conditions in the whole filter, every group counted */
     maxConditions: number;
-    /** Nested or()/and() groups below the top level */
+    /** Nested or()/and() groups below the top level; the parser reads no more than 256, whatever this is */
     maxDepth: number;
     /** Members of one in/nin list */
     maxInValues: number;
