@@ -66,7 +66,7 @@ type FilterValidationResult =
 type FilterLimits = {
 	/** Conditions in the whole filter, every group counted */
 	maxConditions: number
-	/** Nested or()/and() groups below the top level */
+	/** Nested or()/and() groups below the top level; the parser reads no more than 256, whatever this is */
 	maxDepth: number
 	/** Members of one in/nin list */
 	maxInValues: number
@@ -168,17 +168,16 @@ function checkCondition(condition: FilterCondition, check: Check): FilterConditi
 	return { ...condition, value: typed.value }
 }
 
-/** The group with every condition checked and typed, and how many conditions and levels it holds */
-type Shape = { conditions: number; depth: number; group: FilterGroup; values: number }
+/** The group with every condition checked and typed, and how many conditions and values it holds */
+type Shape = { conditions: number; group: FilterGroup; values: number }
 
-function checkGroup(group: FilterGroup, check: Check, depth: number): Shape {
-	const subgroups = group.subgroups.map((subgroup) => checkGroup(subgroup, check, depth + 1))
+function checkGroup(group: FilterGroup, check: Check): Shape {
+	const subgroups = group.subgroups.map((subgroup) => checkGroup(subgroup, check))
 	/* counted on the typed conditions: is.true binds its boolean, is.null nothing */
 	const conditions = group.conditions.map((condition) => checkCondition(condition, check))
 	const values = conditions.reduce((total, condition) => total + boundBy(condition), 0)
 	return {
 		conditions: subgroups.reduce((total, sub) => total + sub.conditions, group.conditions.length),
-		depth: Math.max(depth, ...subgroups.map((sub) => sub.depth)),
 		values: subgroups.reduce((total, sub) => total + sub.values, values),
 		group: {
 			conditions,
@@ -201,20 +200,17 @@ function validateFilter(
 	const fields = checkedFields(allowedFields)
 	const caps = limitsOver("validateFilter", FILTER_LIMITS, limits)
 	if (!filterString || filterString.trim() === "") return null
-	const read = readFilter(filterString)
+	const read = readFilter(filterString, caps.maxDepth)
 	if ("error" in read) return { errors: [read.error], valid: false }
 	const ast = read.ast
 
 	const check: Check = { errors: [], fields, limits: caps }
-	const shape = checkGroup(ast.root, check, 0)
+	const shape = checkGroup(ast.root, check)
 	if (shape.conditions > check.limits.maxConditions) {
 		check.errors.push(`Too many filter conditions: ${shape.conditions} (max ${check.limits.maxConditions})`)
 	}
 	if (shape.values > check.limits.maxValues) {
 		check.errors.push(`Filter binds too many values: ${shape.values} (max ${check.limits.maxValues})`)
-	}
-	if (shape.depth > check.limits.maxDepth) {
-		check.errors.push(`Filter nesting too deep: ${shape.depth} (max ${check.limits.maxDepth})`)
 	}
 	return check.errors.length > 0 ? { errors: check.errors, valid: false } : { ast: { root: shape.group }, valid: true }
 }
