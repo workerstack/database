@@ -79,8 +79,7 @@ describe("applyD1 stopped by a signal", () => {
 		expect([
 			lines.filter((line) => line.startsWith("Stopped by")),
 			earlier.filter((each) => each instanceof Stopped),
-			/* the scratch sweep probes other runs' pids with signal 0, which ends nothing */
-			kill.calls().filter(([, signal]) => signal !== 0),
+			kill.calls(),
 		]).toEqual([
 			["Stopped by SIGTERM: applied 1_a.sql, 2_b.sql; not applied 3_c.sql"],
 			[
