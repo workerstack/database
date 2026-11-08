@@ -77,8 +77,12 @@ async function deleteRows(dbs: readonly Db[], page: readonly string[]) {
 		}
 }
 
-/** One page of the list `shape` builds for `parsed`, over every shard of `dbs` when merged, and its next cursor */
-async function pageOf(dbs: readonly Db[], shape: BooleanShape, parsed: Parsed): Promise<[string[], string | null]> {
+/** One page of the list `shape` builds for `parsed`, over every shard of `dbs` when merged, its next cursor and hasMore */
+async function pageOf(
+	dbs: readonly Db[],
+	shape: BooleanShape,
+	parsed: Parsed,
+): Promise<[string[], string | null, boolean]> {
 	const select = (db: Db) => (extras: object) =>
 		db
 			.select({ b: shape === "anchored joined" ? metric.b : post.b, id: post.id, ...extras })
@@ -90,12 +94,12 @@ async function pageOf(dbs: readonly Db[], shape: BooleanShape, parsed: Parsed): 
 			query: { post: { findMany: (options: never) => Promise<Record<string, unknown>[]> } }
 		}
 		const [items, meta] = queryHelpers.paginate(await relational.query.post.findMany(options as never), options)
-		return [idsOf(items), meta.nextCursor]
+		return [idsOf(items), meta.nextCursor, meta.hasMore]
 	}
 	if (shape === "merged") {
 		const list = buildListQuery({ ...SEALED, merged: {}, parsed, table: post })
 		const [items, meta] = paginateMerged(await Promise.all(dbs.map((db) => applyListQuery(select(db), list))), list)
-		return [idsOf(items), meta.nextCursor]
+		return [idsOf(items), meta.nextCursor, meta.hasMore]
 	}
 	const anchor = { idColumn: post.id, table: post }
 	const list =
@@ -110,7 +114,7 @@ async function pageOf(dbs: readonly Db[], shape: BooleanShape, parsed: Parsed): 
 						sortColumns: { b: shape === "anchored joined" ? metric.b : post.b },
 					})
 	const [items, meta] = queryHelpers.paginate(await applyListQuery(select(dbs[0]!), list), list)
-	return [idsOf(items), meta.nextCursor]
+	return [idsOf(items), meta.nextCursor, meta.hasMore]
 }
 
 /** The ids of the first page, two a page, the list of `shape` serves `direction`; or the error it answered */
@@ -133,15 +137,15 @@ export async function firstPair(
 export async function servedBooleans(
 	dbs: readonly Db[],
 	{ deleting, direction, shape }: { deleting: boolean; direction: "asc" | "desc"; shape: BooleanShape },
-): Promise<{ error?: unknown; ids: string[] }> {
+): Promise<{ error?: unknown; ids: string[]; stranded?: true }> {
 	const ids: string[] = []
 	let cursor: string | undefined
 	try {
 		for (let n = 1; n <= 14; n++) {
-			const [page, next] = await pageOf(dbs, shape, { ...schema.parse({ order: `b.${direction}` }), cursor })
+			const [page, next, hasMore] = await pageOf(dbs, shape, { ...schema.parse({ order: `b.${direction}` }), cursor })
 			ids.push(...page)
 			if (deleting) await deleteRows(dbs, page)
-			if (next === null) return { ids }
+			if (next === null) return hasMore ? { ids, stranded: true } : { ids }
 			cursor = next
 		}
 	} catch (error) {

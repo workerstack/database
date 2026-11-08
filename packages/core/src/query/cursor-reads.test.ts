@@ -20,14 +20,14 @@ const schema = createListQuerySchema({ sort: ["at", "n", "title"] })
 const query = schema.parse({ limit: "1", order: "at.asc,n.asc,title.asc" })
 const derived = built(query, { ...SEALED, keyset: "derived" })
 
-/** The next cursor of a derived page whose last row is `row`, its keys' stored values in `texts` */
-const next = (row: Record<string, unknown>, texts: string): string =>
+/** The next cursor of a derived page whose last row is `row`, its keys' stored values in `texts`; null when no cursor holds it */
+const next = (row: Record<string, unknown>, texts: string, list = derived): string =>
 	queryHelpers.paginate(
 		[
 			{ _combId: "a", _combKeyTexts: texts, id: "a", ...row },
 			{ _combId: "b", _combKeyTexts: ",,", at: new Date(9), id: "b", n: 9, title: "x" },
 		],
-		derived,
+		list,
 	)[1].nextCursor as string
 
 /** The next cursor of a row whose title is `n` code points long, its two time keys carried as stored */
@@ -63,14 +63,8 @@ describe("readCursor returns each key as the cursor's row read it (B2-6 of area 
 	})
 
 	it("counts the Dates against the cap, and names the keys of a derived row past it", () => {
-		const fits = (n: number) => {
-			try {
-				return long(n).length > 0
-			} catch {
-				// reason: a row past the cap is the refusal this test pins below; here it only marks the bound
-				return false
-			}
-		}
+		/* QL8: a page by number mints no cursor from a row past the cap */
+		const fits = (n: number) => long(n) !== null
 		let [low, high] = [1, 4096]
 		while (low < high) {
 			const mid = Math.ceil((low + high) / 2)
@@ -80,7 +74,11 @@ describe("readCursor returns each key as the cursor's row read it (B2-6 of area 
 		expect(long(low).length).toBeLessThanOrEqual(8192)
 		expect(readCursor(long(low), query.parsedSort, SEALED).values.slice(0, 2)).toEqual([new Date(1), new Date(2)])
 		expect(openCursor(long(low), SEALED)?.values.slice(0, 2)).toEqual([new RealText("1.5"), new RealText("2.5")])
-		expect(() => long(low + 1)).toThrow(
+		expect(long(low + 1)).toBeNull()
+		/* a page by cursor refuses it, naming its keys */
+		const byCursor = built({ ...query, cursor: long(1) }, { ...SEALED, keyset: "derived" })
+		const past = { at: new Date(1), n: new Date(2), title: "字".repeat(low + 1) }
+		expect(() => next(past, "1.5,2.5,", byCursor)).toThrow(
 			expect.objectContaining({
 				cause: expect.stringMatching(
 					/^a row's at, n, title is too long to page this list by: its cursor would be \d+ characters, past 8192; a derived list reads no row/,

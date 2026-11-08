@@ -43,24 +43,27 @@ async function seeded(rows: Array<[string, string]>): Promise<LibsqlHarness> {
 type Query = { cursor?: string | undefined; limit?: string; order: string; page?: string }
 type Served = { hasMore: boolean; ids: string[]; nextCursor: string | null }
 
-const select = (harness: LibsqlHarness) => (extras: object) =>
-	harness.db.select({ ...getTableColumns(doc), ...extras }).from(doc)
+/** The rows with the extras a list asks for; `untitled` leaves the sort key out, a wiring mistake */
+const select =
+	(harness: LibsqlHarness, untitled = false) =>
+	(extras: object) =>
+		harness.db.select({ ...(untitled ? { id: doc.id, rank: doc.rank } : getTableColumns(doc)), ...extras }).from(doc)
 
 /** One page of the derived list with no anchor, which reads no row to page a long title by reference */
-async function derivedPage(query: Query): Promise<Served> {
+async function derivedPage(query: Query, untitled = false): Promise<Served> {
 	const harness = await seeded(TITLES)
 	const parsed = schema.parse(query)
 	const list = buildDerivedListQuery({ ...SEALED, idColumn: doc.id, parsed, sortColumns: { title: doc.title } })
-	const [items, meta] = queryHelpers.paginate(await applyListQuery(select(harness), list), list)
+	const [items, meta] = queryHelpers.paginate(await applyListQuery(select(harness, untitled), list), list)
 	return { hasMore: meta.hasMore, ids: items.map((row) => row.id), nextCursor: meta.nextCursor }
 }
 
 /** One page of the merged list over two shards of the rows, which carries no key by reference */
-async function mergedPage(query: Query): Promise<Served> {
+async function mergedPage(query: Query, untitled = false): Promise<Served> {
 	const shards = await Promise.all([0, 1].map(async (half) => await seeded(TITLES.filter((_, i) => i % 2 === half))))
 	const parsed = schema.parse(query)
 	const list = buildListQuery({ ...SEALED, merged: {}, parsed, table: doc })
-	const reads = await Promise.all(shards.map(async (shard) => await applyListQuery(select(shard), list)))
+	const reads = await Promise.all(shards.map(async (shard) => await applyListQuery(select(shard, untitled), list)))
 	const [items, meta] = paginateMerged(reads, list)
 	return { hasMore: meta.hasMore, ids: items.map((row) => row.id), nextCursor: meta.nextCursor }
 }
@@ -87,8 +90,21 @@ describe.each([
 		})
 	})
 
-	it("answers the 500 on a page by number whose cursor would be minted from the long title", async () => {
-		await expect(page({ limit: "1", order: "title.asc", page: "1" })).rejects.toEqual(refusesTitle)
+	/* the row's own value is what no cursor holds: the page serves it and says a next page by number exists */
+	it("serves a page by number whose cursor would be minted from the long title, with no cursor and hasMore", async () => {
+		expect(await page({ limit: "1", order: "title.asc", page: "1" })).toEqual({
+			hasMore: true,
+			ids: ["a"],
+			nextCursor: null,
+		})
+		expect((await page({ limit: "1", order: "title.asc", page: "2" })).ids).toEqual(["b"])
+	})
+
+	/* a refusal of the list's wiring, not of a row's value, is loud on a page by number too */
+	it("answers the 500 on a page by number whose rows lack the sort key the cursor is minted from", async () => {
+		await expect(page({ order: "title.asc", page: "1" }, true)).rejects.toEqual(
+			expect.objectContaining({ cause: expect.stringContaining("title"), errorKey: "sort_not_wired", status: 500 }),
+		)
 	})
 
 	it("answers the 500 on the page by cursor that serves the long title, though no cursor is minted from it", async () => {

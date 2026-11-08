@@ -16,6 +16,7 @@ import { paginationIn, refuseGoneAnchor, refuseOverRead, refuseUnwired } from ".
 import type { paginationResponseSchema } from "./schema.ts"
 import type { ListQueryInput, ParsedFields, SortField } from "./types.ts"
 import type * as z from "zod"
+import { UnmintableRow } from "./cursor-refusals.ts"
 
 /**
  * The name of one column a builder selects for `paginate` to read, which no row it returns keeps: the
@@ -188,18 +189,25 @@ function fitFrom(
 }
 
 /**
- * The rows of a served page a cursor is checked from. On a page by cursor, every row: its client walks
- * the list one cursor at a time, so a row no cursor resumes after is refused on the page that serves
- * it, never on whichever page it happens to end. On a page by number, only the row its next cursor is
- * minted from, the last of a page with more, as 0.20.1 did: the page serves rows its client never
- * resumes after
+ * What seals a served page's next cursor, or undefined for none, `check` measuring a row's cursor. On
+ * a page by cursor it runs on every row: its client walks the list one cursor at a time, so a row no
+ * cursor resumes after is refused on the page that serves it, whatever the page size. On a page by
+ * number it runs only on the last row of a page with more, the one the cursor is minted from, as
+ * 0.20.1 did; a row whose own value no cursor holds (UnmintableRow) mints none, and the page serves it,
+ * its `hasMore` still saying a next page by number exists. A refusal of the list's wiring throws on both
  */
-function mintedFrom<T>(
+function nextCursorOf<T>(
 	page: readonly T[],
 	{ byCursor, hasMore }: { byCursor: boolean; hasMore: boolean },
-): readonly T[] {
-	if (byCursor) return page
-	return hasMore ? page.slice(-1) : []
+	check: (row: T) => (() => string) | undefined,
+): (() => string) | undefined {
+	if (byCursor) return page.map(check).at(-1)
+	try {
+		return (hasMore ? page.slice(-1) : []).map(check).at(-1)
+	} catch (error) {
+		if (error instanceof UnmintableRow) return undefined
+		throw error
+	}
 }
 
 /**
@@ -222,13 +230,12 @@ function paginate<T extends object>(
 	refuseGoneAnchor(items)
 	const hasMore = items.length > pagination.limit
 	const sliced = hasMore ? items.slice(0, pagination.limit) : items
-	const minting = mintedFrom(sliced, { byCursor: pagination.cursor !== undefined, hasMore })
-	/* a key no cursor bound as read places is refused on each row a cursor may be minted from */
-	for (const item of minting) refuseUnheld(item as Record<string, unknown>, pagination.parsedSort)
-	/* checked from the fat row, under the sort the builder ordered by, so the next request's signature
-	   matches; the last one's is sealed */
-	const fitted = pagination.cursorable ? minting.map((item) => pagination.fit(item)) : []
-	const last = fitted.at(-1)
+	/* a key no cursor bound as read places is refused as a mint is, checked from the fat row, under the
+	   sort the builder ordered by, so the next request's signature matches; the last one's is sealed */
+	const last = nextCursorOf(sliced, { byCursor: pagination.cursor !== undefined, hasMore }, (item) => {
+		refuseUnheld(item as Record<string, unknown>, pagination.parsedSort)
+		return pagination.cursorable ? pagination.fit(item) : undefined
+	})
 	const meta: PaginationResponse = {
 		count: countOf(items, pagination),
 		hasMore,
@@ -245,7 +252,7 @@ function paginate<T extends object>(
 export {
 	applySelect,
 	COMB_ID,
-	mintedFrom,
+	nextCursorOf,
 	type ListExtra,
 	type ListPagination,
 	type ListRow,

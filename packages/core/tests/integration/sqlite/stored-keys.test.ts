@@ -71,16 +71,16 @@ describe("a row no cursor holds is refused on the page by cursor that serves it,
 		})
 	})
 
-	/* QL8: a table list serves a JSON object on a page by number that mints no cursor, and refuses the JSON row a cursor is minted from */
-	it("serves a JSON object on a table list's one page by number, and answers the 500 on a page that mints from a JSON row", async () => {
+	/* QL8: a page by number serves a JSON row, and mints no cursor from one, its hasMore still true */
+	it("serves a JSON object on a table list's pages by number, minting no cursor from a JSON row", async () => {
 		expect(await refusedOnPage(open, JSON_OBJECT, { direction: "desc", kind: "table", limit: 3 })).toEqual({
 			ids: ["r1", "r2", "r0"],
 			page: 1,
 		})
 		expect(await refusedOnPage(open, JSON_OBJECT, { direction: "desc", kind: "table", limit: 2 })).toEqual({
-			error: "sort_not_wired",
-			ids: [],
+			ids: ["r1", "r2"],
 			page: 1,
+			stranded: true,
 		})
 	})
 
