@@ -55,7 +55,8 @@ export const OPTIONS: readonly OptionSpec[] = [
 	},
 	{
 		commands: ["migrate diff"],
-		description: "Write nothing: exit 1 printing the migration a diff would write, 0 in sync",
+		description:
+			"Write nothing: exit 1 printing the migration a diff would write, 0 in sync, 2 when the check could not run",
 		long: "--dry-run",
 	},
 	{ commands: ["migrate apply"], description: "Apply this one migration file", long: "--file", value: "path" },
