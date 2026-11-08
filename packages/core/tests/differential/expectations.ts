@@ -42,13 +42,13 @@ export const EXPECTED = {
 		passesOn: ["tip"],
 		suite: "lists",
 	},
-	/* plan 25's 3.2 moves "tip" to passesOn: its fix serves such a page with nextCursor null and hasMore true */
+	/* fixed on the tip by plan 25 (3.2): such a page serves with nextCursor null and hasMore true */
 	"QL8-mint": {
 		claim:
 			"a page by number is refused with 500 for the row its next cursor would be minted from, a row no cursor can hold",
-		failsOn: ["tip", "0.21.0", "0.20.1"],
+		failsOn: ["0.21.0", "0.20.1"],
 		finding: "QL8",
-		passesOn: [],
+		passesOn: ["tip"],
 		suite: "lists",
 	},
 	/* fixed on the tip by plan 25 (3.9) */

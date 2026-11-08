@@ -36,6 +36,8 @@ export type Walk = {
 	misprojected: string[]
 	pages: number
 	served: string[]
+	/** the page after which a cursor walk had no cursor to follow while `hasMore` said there was more (QL8's page by number) */
+	stopped: number | undefined
 }
 
 /** The drizzle column of `column` named `name`, from the version's own builders */
@@ -212,7 +214,7 @@ function misprojected(c: ListCase, items: Row[]): string[] {
 /** Walk the case's list: by cursor until no next cursor, or by page number until no next page; a loop ends at a cap */
 export async function walk(driver: Driver, lib: Lib, c: ListCase): Promise<Walk> {
 	const built = await build(driver, lib, c)
-	const result: Walk = { error: undefined, misprojected: [], pages: 0, served: [] }
+	const result: Walk = { error: undefined, misprojected: [], pages: 0, served: [], stopped: undefined }
 	const schema = schemaOf(lib, c)
 	let cursor: string | undefined
 	try {
@@ -233,6 +235,12 @@ export async function walk(driver: Driver, lib: Lib, c: ListCase): Promise<Walk>
 				const listed = ids.map((id) => `'${id}'`).join(", ")
 				for (const db of built.shards)
 					await db.run(`DELETE FROM t WHERE id IN (${listed})`, `DELETE FROM m WHERE id IN (${listed})`)
+			}
+			/* a page by number whose last row no cursor holds serves with nextCursor null while hasMore holds: a client
+			   walking by cursor stops there, and the judge holds what it served to the engine's order */
+			if (c.mode === "cursor" && meta.nextCursor === null && meta.hasMore) {
+				result.stopped = result.pages + 1
+				return result
 			}
 			if (c.mode === "page" ? !meta.hasMore : meta.nextCursor === null) return result
 			cursor = c.mode === "cursor" ? (meta.nextCursor as string) : undefined
