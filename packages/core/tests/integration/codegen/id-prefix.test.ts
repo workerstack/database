@@ -13,7 +13,7 @@ describe("comb codegen: a c.id prefix generateId refuses (F55)", () => {
 		async (prefix) => {
 			const dir = project({
 				"src/db/db.core.tables.ts": `import { sqliteTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const org = sqliteTable("org", { id: c.id(${JSON.stringify(prefix)}) })
 `,
 			})

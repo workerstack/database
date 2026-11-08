@@ -32,7 +32,7 @@ function wait(tarballAt: number | null, npmKnows: boolean) {
 	)
 	stub("npm", npmKnows ? "echo 0.5.0" : "exit 1")
 	stub("sleep", "exit 0")
-	return spawnSync("bash", [SCRIPT, "@lovrozagar/comb", "0.5.0"], {
+	return spawnSync("bash", [SCRIPT, "@workerstack/database", "0.5.0"], {
 		encoding: "utf8",
 		env: { ...process.env, PATH: `${bin}:${process.env["PATH"]}`, WAIT_ATTEMPTS: "5", WAIT_SECONDS: "0" },
 	})

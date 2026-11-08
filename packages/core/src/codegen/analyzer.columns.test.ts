@@ -21,7 +21,7 @@ describe("analyzer: column facts the helpers hide", () => {
 		fs.writeFileSync(
 			file,
 			`import { sqliteTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const task = sqliteTable("task", {
 ${columns}
 })

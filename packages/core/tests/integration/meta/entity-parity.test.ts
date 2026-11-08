@@ -20,7 +20,7 @@ import { disagreements, entityChannels } from "../support/entity-channels.ts"
 
 const PRELUDE = `
 import { sqliteTable as createTable, text, integer, primaryKey, uniqueIndex } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 `
 
 let tmpDir: string
@@ -158,7 +158,7 @@ describe("entity meta matches the generated DTOs", () => {
 
 	it("stamps the read schema and only the read schema", async () => {
 		const generated = generatedFile(await analyzeSource(fullTable), "post")
-		expect(generated).toContain(`import { combMeta } from "@lovrozagar/comb/meta"`)
+		expect(generated).toContain(`import { combMeta } from "@workerstack/database/meta"`)
 		expect(generated.match(/combMeta\(\{/g)).toHaveLength(1)
 		expect(generated).toMatch(/postDtoReadSchema = z\.object\(\{[\s\S]*?\}\)\.meta\(combMeta\(\{/)
 	})

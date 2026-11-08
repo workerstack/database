@@ -1,9 +1,9 @@
 // query/index.d.ts
 /**
- * @lovrozagar/comb/query — DB-agnostic query helpers.
+ * @workerstack/database/query — DB-agnostic query helpers.
  *
  * Parsers, validators, Zod schemas, and pagination utilities.
- * For SQLite-specific SQL generation, use @lovrozagar/comb/query/sqlite.
+ * For SQLite-specific SQL generation, use @workerstack/database/query/sqlite.
  */
 export { CursorRef, CURSOR_TIEBREAK_COLUMN, cursorProblem, effectiveNulls, MAX_CURSOR_LENGTH, readCursor, sortSignature, } from "./cursor.ts";
 export type { CursorOptions, CursorValue, DecodedCursor } from "./cursor.ts";

@@ -14,7 +14,7 @@ import { type TestContext, testContext } from "../__fixtures__/context.ts"
 
 const PRELUDE = `
 import { sqliteTable as createTable, text, integer } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 `
 
 let tmpDir: string

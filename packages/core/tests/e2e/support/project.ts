@@ -76,7 +76,7 @@ export function ok(run: Run, what: string): Run {
 
 /** The tables, config and migrate config every SQLite e2e app starts from */
 export const BLOG = {
-	"comb.config.ts": `import { defineCodegenConfig } from "@lovrozagar/comb/codegen"
+	"comb.config.ts": `import { defineCodegenConfig } from "@workerstack/database/codegen"
 
 export default defineCodegenConfig({
 	databases: {

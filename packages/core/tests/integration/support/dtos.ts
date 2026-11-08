@@ -1,7 +1,7 @@
 /**
  * Generate DTOs from a tables source and import them, so tests assert on what the generated
  * schemas accept and reject, not on the text the generator printed. Output lands inside the
- * package (gitignored `.tmp-*`) so the emitted `zod` and `@lovrozagar/comb/*` imports resolve.
+ * package (gitignored `.tmp-*`) so the emitted `zod` and `@workerstack/database/*` imports resolve.
  */
 import fs from "node:fs"
 import path from "node:path"
@@ -14,10 +14,10 @@ const ROOT = path.resolve(import.meta.dirname, "../codegen/.tmp-dtos")
 
 const HEAD = {
 	postgres: `import { pgTable } from "drizzle-orm/pg-core"
-import { c } from "@lovrozagar/comb/pg/columns"
+import { c } from "@workerstack/database/pg/columns"
 `,
 	sqlite: `import { sqliteTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 `,
 }
 

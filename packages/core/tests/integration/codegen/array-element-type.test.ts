@@ -16,7 +16,7 @@ const CONFIG = `export default { databases: { core: { dialect: "postgres", table
 `
 
 const TABLES = `import { integer, pgTable, text } from "drizzle-orm/pg-core"
-import { c } from "@lovrozagar/comb/pg/columns"
+import { c } from "@workerstack/database/pg/columns"
 type Open = string | null
 export const row = pgTable("row", {
 	id: c.id("row"),
@@ -90,7 +90,7 @@ describe("a Postgres array column's element, as drizzle's type declares it (A2-9
 			const dir = project({
 				"comb.config.ts": CONFIG.replace("./db.core.tables.ts", `./${file}`),
 				[file]: `import { pgTable, text } from "drizzle-orm/pg-core"
-import { c } from "@lovrozagar/comb/pg/columns"
+import { c } from "@workerstack/database/pg/columns"
 export const row = pgTable("row", { id: c.id("row"), tags: text("tags").array().notNull() })
 `,
 				"tsconfig.json": JSON.stringify({ compilerOptions: { allowJs: false } }),

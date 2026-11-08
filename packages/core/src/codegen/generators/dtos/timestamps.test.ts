@@ -77,7 +77,7 @@ describe("generateSharedFile", () => {
 		expect(cidr).toContain('import * as comb from "~/comb"')
 		expect(cidr).toContain(`export const cidrSchema = ${inetRule()}.refine(comb.isCidr, `)
 		expect(generateSharedFile(none, new Map(), { imported: new Set(["cidrSchema"]) })).toContain(
-			'import * as comb from "@lovrozagar/comb"',
+			'import * as comb from "@workerstack/database"',
 		)
 		expect(generateSharedFile(none, new Map(), { imported: new Set(["timestampSchema"]) })).not.toContain("comb")
 	})

@@ -310,7 +310,7 @@ export type { DtosConfig } from "./dto-types.ts";
 import type { GeneratorContext } from "./context-types.ts";
 /** Where the entities generator writes and what it imports */
 export type EntitiesConfig = {
-    /** the package the generated file imports `generateId` and `generateUlid` from; `@lovrozagar/comb` when omitted */
+    /** the package the generated file imports `generateId` and `generateUlid` from; `@workerstack/database` when omitted */
     importFrom?: string | undefined;
     /** the file written, relative to the codegen working directory */
     output: string;

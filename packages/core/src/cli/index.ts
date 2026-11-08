@@ -1,4 +1,4 @@
-/** @lovrozagar/comb/cli: run the comb CLI in process. */
+/** @workerstack/database/cli: run the comb CLI in process. */
 export { CliError, type CliIo, processIo } from "./output.ts"
 export { help, runCli } from "./run.ts"
 export type { Terminal } from "./output.ts"

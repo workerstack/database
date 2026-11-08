@@ -1,5 +1,5 @@
 /**
- * A checkout tests its own source: the `@lovrozagar/comb` a generated project beneath the checkout
+ * A checkout tests its own source: the `@workerstack/database` a generated project beneath the checkout
  * resolves is this checkout's packages/core. Resolution walks up the project's node_modules
  * directories, and worktrees live under the main checkout's .worktrees/, so a worktree without its
  * own install resolves comb through the main checkout's node_modules, and a run there tests whichever
@@ -14,16 +14,18 @@ import { describe, expect, it } from "vitest"
 const CORE = realpathSync(join(import.meta.dirname, "../.."))
 const CHECKOUT = dirname(dirname(CORE))
 
-/** The comb package a project in `dir` resolves: the nearest node_modules/@lovrozagar/comb up from it */
+/** The comb package a project in `dir` resolves: the nearest node_modules/@workerstack/database up from it */
 function combFrom(dir: string): string | undefined {
-	const link = join(dir, "node_modules", "@lovrozagar", "comb")
+	const link = join(dir, "node_modules", "@workerstack", "database")
 	if (existsSync(link)) return realpathSync(link)
 	return dirname(dir) === dir ? undefined : combFrom(dirname(dir))
 }
 
 describe("the install this checkout tests", () => {
-	it("resolves @lovrozagar/comb, from the checkout's root, to this checkout's packages/core", () => {
+	it("resolves @workerstack/database, from the checkout's root, to this checkout's packages/core", () => {
 		const resolved = combFrom(CHECKOUT)
-		expect(resolved, `@lovrozagar/comb resolves to ${resolved}, not ${CORE}: run bun install in ${CHECKOUT}`).toBe(CORE)
+		expect(resolved, `@workerstack/database resolves to ${resolved}, not ${CORE}: run bun install in ${CHECKOUT}`).toBe(
+			CORE,
+		)
 	})
 })

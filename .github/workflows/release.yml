@@ -20,7 +20,7 @@ permissions:
   contents: read
 
 env:
-  PACKAGE_NAME: "@lovrozagar/comb"
+  PACKAGE_NAME: "@workerstack/database"
   PACKAGE_DIR: packages/core
 
 jobs:
@@ -138,7 +138,7 @@ jobs:
             echo "npm rejected the GitHub OIDC token."
             echo "On https://www.npmjs.com/package/${name} → Settings → Trusted Publisher"
             echo "the saved connection must be exactly:"
-            echo "  GitHub Actions / lovrozagar / comb / release.yml / environment empty / allow npm publish"
+            echo "  GitHub Actions / workerstack / database / release.yml / environment empty / allow npm publish"
             exit 1
           fi
           NODE_AUTH_TOKEN="$(node -e 'process.stdout.write(require("/tmp/npm-ex.json").token || "")')"
@@ -184,7 +184,7 @@ jobs:
         with:
           node-version: "24"
           registry-url: https://npm.pkg.github.com
-          scope: "@lovrozagar"
+          scope: "@workerstack"
           package-manager-cache: false
       # the npm the npmjs job publishes with, so both registries get one manifest
       - run: npm install -g npm@latest

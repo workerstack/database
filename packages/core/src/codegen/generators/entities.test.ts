@@ -92,14 +92,14 @@ describe("generateEntities — the prefix map", () => {
 describe("generateEntities — imports and header", () => {
 	const tmpDir = useTmpDir("comb-gen-entities-")
 
-	it("uses default @lovrozagar/comb import", () => {
+	it("uses default @workerstack/database import", () => {
 		const tables = [makeTable("user", "usr")]
 		const output = path.join(tmpDir(), "entities.gen.ts")
 
 		generateEntities(testContext(tables, { cwd: tmpDir(), dbName: "test" }), { output })
 
 		const content = fs.readFileSync(output, "utf-8")
-		expect(content).toContain('import { generateId, generateUlid } from "@lovrozagar/comb"')
+		expect(content).toContain('import { generateId, generateUlid } from "@workerstack/database"')
 	})
 
 	it("uses custom importFrom when provided", () => {

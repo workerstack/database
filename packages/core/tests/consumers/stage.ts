@@ -53,7 +53,7 @@ export const OPTIONAL_PEERS: string[] = Object.entries(manifest.peerDependencies
 /** Every subpath a consumer imports, as a specifier */
 export const SUBPATHS: string[] = Object.keys(manifest.exports)
 	.filter((key) => key !== "./package.json")
-	.map((key) => (key === "." ? "@lovrozagar/comb" : `@lovrozagar/comb/${key.slice(2)}`))
+	.map((key) => (key === "." ? "@workerstack/database" : `@workerstack/database/${key.slice(2)}`))
 
 export type Run = { output: string; status: number }
 
@@ -228,7 +228,7 @@ export function stage(
 		(name) => peers === "all" || !OPTIONAL_PEERS.includes(name),
 	)
 	const dependencies = Object.fromEntries([
-		["@lovrozagar/comb", `file:${tarball}`],
+		["@workerstack/database", `file:${tarball}`],
 		...wanted.map((name) => [name, versionOf(name, versions)]),
 	])
 	const devDependencies = toolsFor(dependencies, typeof versions === "string" ? {} : versions.pin)
@@ -262,7 +262,7 @@ export function stage(
 export function stageLine(tarball: string, line: string): Stage {
 	const dir = mkdtempSync(join(tmpdir(), "comb-consumer-readme-"))
 	writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "comb-consumer", private: true, type: "module" }))
-	const [cmd, ...args] = line.split(" ").map((word) => (word === "@lovrozagar/comb" ? tarball : word))
+	const [cmd, ...args] = line.split(" ").map((word) => (word === "@workerstack/database" ? tarball : word))
 	ok(run(dir, cmd as string, args), line)
 	return { dir, dispose: () => rmSync(dir, { force: true, recursive: true }) }
 }

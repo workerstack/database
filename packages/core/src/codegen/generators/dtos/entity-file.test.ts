@@ -138,7 +138,7 @@ describe("generateEntityFile", () => {
 				combMeta: { ...META, softDelete: "deleted_at", states: null, uniqueIndexes: [] },
 			}),
 		)
-		expect(output).toContain('import { combMeta } from "@lovrozagar/comb/meta"')
+		expect(output).toContain('import { combMeta } from "@workerstack/database/meta"')
 		expect(output).toContain(
 			'\tsoftDelete: "deleted_at",\n\tstates: null,\n\ttenantColumn: null,\n\tuniqueIndexes: [],',
 		)
@@ -191,7 +191,7 @@ describe("generateEntityFile: comb's namespace", () => {
 
 	it("imports it only when the file names it, from the configured specifier or comb's own", () => {
 		expect(file(guarded, { combFrom: "~/comb" })).toContain('import * as comb from "~/comb"')
-		expect(file(guarded)).toContain('import * as comb from "@lovrozagar/comb"')
+		expect(file(guarded)).toContain('import * as comb from "@workerstack/database"')
 		expect(file(table([field("title", "read", "z.string()")]))).not.toContain("import * as comb")
 	})
 })

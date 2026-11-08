@@ -2,7 +2,9 @@
 
 Database framework for Cloudflare D1, PostgreSQL, and SQLite. Dialect-agnostic column builders on top of Drizzle, constraint-aware error mapping, D1 Sessions and sharding, a PostgREST-style list-query layer, schema codegen, and an Atlas-backed migration toolkit.
 
-This repo is the source of the [`@lovrozagar/comb`](https://www.npmjs.com/package/@lovrozagar/comb) npm package. The CLI binary is `comb`.
+This repo is the source of the [`@workerstack/database`](https://www.npmjs.com/package/@workerstack/database) npm package. The CLI binary is `comb`.
+
+Moved from `@lovrozagar/comb`: `@workerstack/database@0.21.0` is the same release as `@lovrozagar/comb@0.21.0` under the new name, and the old package is deprecated. To switch, follow step 3 of [Upgrading to 0.22](#upgrading-to-022).
 
 This README is the full usage manual. An agent that reads only this file should be able to define tables, generate artifacts, run migrations, and serve list queries without opening source.
 
@@ -91,15 +93,15 @@ Every layer is usable on its own. Nothing here requires an HTTP framework.
 ## Install
 
 ```bash
-bun add @lovrozagar/comb drizzle-orm@1.0.0-rc.4 zod @noble/ciphers @noble/hashes
+bun add @workerstack/database drizzle-orm@1.0.0-rc.4 zod @noble/ciphers @noble/hashes
 ```
 
 ```bash
-npm install @lovrozagar/comb drizzle-orm@1.0.0-rc.4 zod @noble/ciphers @noble/hashes
+npm install @workerstack/database drizzle-orm@1.0.0-rc.4 zod @noble/ciphers @noble/hashes
 ```
 
 ```bash
-pnpm add @lovrozagar/comb drizzle-orm@1.0.0-rc.4 zod @noble/ciphers @noble/hashes
+pnpm add @workerstack/database drizzle-orm@1.0.0-rc.4 zod @noble/ciphers @noble/hashes
 ```
 
 Comb ships TypeScript source, not a build, and the declarations a type checker reads. Your bundler or runtime compiles the source; your `tsc` and editor read the declarations under `types/`, so your project needs no tsconfig flag for comb, and your strict flags check your code, not comb's. Go-to-definition still opens comb's source, through the declarations' maps.
@@ -151,7 +153,7 @@ Define a table with Comb's column factories instead of Drizzle's raw ones.
 ```ts
 /* src/db/core.tables.ts */
 import { sqliteTable, index } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 import * as z from "zod"
 
 /* a c.json schema is exported, so the generated DTOs can import it, and is the stored document:
@@ -190,7 +192,7 @@ Point a config at the file:
 
 ```ts
 /* comb.config.ts */
-import { defineCodegenConfig } from "@lovrozagar/comb/codegen"
+import { defineCodegenConfig } from "@workerstack/database/codegen"
 
 export default defineCodegenConfig({
 	databases: {
@@ -290,7 +292,7 @@ On SQLite, libsql and Turso, apply with `comb migrate apply`, not drizzle-kit mi
 
 ### SQLite factories
 
-`@lovrozagar/comb/sqlite/columns` exports `c`:
+`@workerstack/database/sqlite/columns` exports `c`:
 
 | Factory                              | Emits                                               | Notes                                                                                                                                                                    |
 | ------------------------------------ | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -312,11 +314,11 @@ Timestamps are integer milliseconds, not SQLite's `TEXT` dates — comparisons, 
 
 ### PostgreSQL factories
 
-`@lovrozagar/comb/pg/columns` exports the same `c` shape backed by `drizzle-orm/pg-core` (`text`, `integer`, `serial`, `boolean`, `jsonb`, `doublePrecision`). Timestamps (`createdAt`, `updatedAt`, `deletedAt`, `timestamp`) are `bigint` epoch milliseconds read as JS numbers: a 4-byte `integer` overflows on today's time. A table file written against Comb's `c` compiles under either dialect by swapping the import.
+`@workerstack/database/pg/columns` exports the same `c` shape backed by `drizzle-orm/pg-core` (`text`, `integer`, `serial`, `boolean`, `jsonb`, `doublePrecision`). Timestamps (`createdAt`, `updatedAt`, `deletedAt`, `timestamp`) are `bigint` epoch milliseconds read as JS numbers: a 4-byte `integer` overflows on today's time. A table file written against Comb's `c` compiles under either dialect by swapping the import.
 
 ### Constraints
 
-The constraint object is shared by both dialects. `@lovrozagar/comb/sqlite/constraints` types them:
+The constraint object is shared by both dialects. `@workerstack/database/sqlite/constraints` types them:
 
 | Key                              | Applies to          | Effect                                                                                                                                                                                                                       |
 | -------------------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -344,7 +346,7 @@ A text takes one kind of `email`, `url`, `password`, `imageUri` and `name`, and 
 A `password` column holds the hash, so its DTO takes any storable hash: bcrypt's 60 characters, an argon2id PHC string or a PBKDF2 one, at least 1 character when the column is required, under the `max` and `pattern` it declares (`pattern: "/^\\$argon2id\\$/"` holds the hash to its scheme) and no limit of comb's. The plaintext is the request body's, before it is hashed: `passwordText()` from the package root holds it to NIST SP 800-63B rev 4 §3.1.1.2.
 
 ```ts
-import { passwordText } from "@lovrozagar/comb"
+import { passwordText } from "@workerstack/database"
 import * as z from "zod"
 
 const signUp = z.object({ email: z.email(), password: passwordText() })
@@ -359,7 +361,7 @@ const signIn = z.object({ email: z.email(), password: passwordText.typed() })
 
 ```ts
 import { sqliteTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 
 export const users = sqliteTable("users", {
 	id: c.id("usr"),
@@ -412,7 +414,7 @@ A text format's rule is its pattern, which Go's RE2, Rust's regex and JavaScript
 Where the table names a predicate, a value must also be a member of the pinned registry it reads, which no pattern states: `HRK` matches `^[A-Z]{3}$` and is no `iso4217` value, withdrawn in 2023, and `Europe/Atlantis` matches the zone pattern and names no zone. Each registry is a snapshot of the release the table names, committed in comb's source: nothing fetches at build, test or run time, and a comb release moves to a newer one. The five predicates are root exports, each taking any string, exactly as written, and never throwing; a bundle that calls none of them carries none of their lists.
 
 ```ts
-import { isIanaTimeZone, isIso3166Alpha2, isIso3166Alpha3, isIso4217, isIso639Alpha2 } from "@lovrozagar/comb"
+import { isIanaTimeZone, isIso3166Alpha2, isIso3166Alpha3, isIso4217, isIso639Alpha2 } from "@workerstack/database"
 
 isIso4217("EUR") // true
 isIso4217("HRK") // false: withdrawn in 2023
@@ -465,7 +467,7 @@ declare const evenMinutes: import("zod").ZodType<number, number>
 
 ```ts
 import { sqliteTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 
 export const users = sqliteTable("users", {
 	id: c.id("usr"),
@@ -511,7 +513,7 @@ declare const original: unknown
 -->
 
 ```ts
-import { CombError, combErrorKeys } from "@lovrozagar/comb"
+import { CombError, combErrorKeys } from "@workerstack/database"
 
 throw new CombError({
 	errorKey: combErrorKeys.UNIQUE_CONSTRAINT_VIOLATION,
@@ -534,7 +536,7 @@ Built-in keys (`combErrorKeys`): `CHECK_CONSTRAINT_VIOLATION`, `CONSTRAINT_VIOLA
 A constraint map turns a constraint violation into your domain's error, keyed by what every dialect's message lets the handler read: a unique by its columns' SQL names, comma-joined (`email`, `org_id,slug`); a unique index on an expression by its index name; a foreign key by its first column's SQL name; a CHECK, and on Postgres an exclusion, by its constraint name. SQLite and D1 report a plain unique's columns and no foreign key's name, so a map keyed by those names works on Postgres alone; key it as codegen does. Their message names no foreign key at all, so their handler blames a `foreignKey` entry only where it is the one key the maps list for the table and the statement sets that column; any other foreign-key failure there is the generic 409. List every foreign key of the table, as codegen does: a key the map leaves out that fails beside the listed one is blamed on it:
 
 ```ts
-import type { ConstraintMap } from "@lovrozagar/comb"
+import type { ConstraintMap } from "@workerstack/database"
 
 export const authorConstraints: ConstraintMap = {
 	author: {
@@ -565,14 +567,14 @@ Three handlers, one signature — `(error: unknown, constraintMaps: readonly Con
 declare const db: { insert(table: unknown): { values(row: unknown): Promise<unknown> } }
 declare const author: unknown
 declare const input: unknown
-declare const authorConstraints: import("@lovrozagar/comb/types").ConstraintMap
+declare const authorConstraints: import("@workerstack/database/types").ConstraintMap
 -->
 
 ```ts
-import { defineConstraintMaps } from "@lovrozagar/comb"
-import { d1ErrorHandler } from "@lovrozagar/comb/sqlite/d1/error-handler"
-import { pgErrorHandler } from "@lovrozagar/comb/pg/error-handler"
-import { sqliteErrorHandler } from "@lovrozagar/comb/sqlite/constraint-handler"
+import { defineConstraintMaps } from "@workerstack/database"
+import { d1ErrorHandler } from "@workerstack/database/sqlite/d1/error-handler"
+import { pgErrorHandler } from "@workerstack/database/pg/error-handler"
+import { sqliteErrorHandler } from "@workerstack/database/sqlite/constraint-handler"
 
 /* once, at module load: a malformed key fails here, not at the first violation */
 const MAPS = defineConstraintMaps(authorConstraints)
@@ -585,7 +587,7 @@ try {
 }
 ```
 
-Build the maps you pass once, at module load, with `defineConstraintMaps(...maps)` (from `@lovrozagar/comb`): it refuses, as a TypeError naming the key, a prefix pattern with its `*` anywhere but the end (`"ut_*_rows"`), so a typo fails at startup and in tests, never at the first violation. A handler given maps not built with it still answers each violation with its well-formed keys, and warns once per process (`comb.constraint-maps.error`, on `console.warn`) of each malformed key, which matches no table, however many arrays or maps carry it, a map spread per call included.
+Build the maps you pass once, at module load, with `defineConstraintMaps(...maps)` (from `@workerstack/database`): it refuses, as a TypeError naming the key, a prefix pattern with its `*` anywhere but the end (`"ut_*_rows"`), so a typo fails at startup and in tests, never at the first violation. A handler given maps not built with it still answers each violation with its well-formed keys, and warns once per process (`comb.constraint-maps.error`, on `console.warn`) of each malformed key, which matches no table, however many arrays or maps carry it, a map spread per call included.
 
 - `sqliteErrorHandler` — libsql, Turso and `bun:sqlite`. Classifies by SQLite's extended result code: the primary key by `SQLITE_CONSTRAINT_PRIMARYKEY`, a CHECK by its constraint name (in the statement's table first), a composite unique by its columns together, naming no one column, NOT NULL with its column. A duplicate rowid, an FTS5 table's included, is a primary key violation (409). It also maps `SQLITE_FULL` (422) and `SQLITE_BUSY` / `SQLITE_LOCKED` / `SQLITE_READONLY` (503).
 - `d1ErrorHandler` — Cloudflare D1. Constraint violations go through the same SQLite mapping. Other errors with an SQLite code are query errors (500); a D1 platform failure without one is transient (503) or a storage limit (422).
@@ -605,7 +607,7 @@ A `CombError`'s `cause` is safe to show a client. The original error, which can 
 
 ```ts
 /* comb.config.ts */
-import { defineCodegenConfig } from "@lovrozagar/comb/codegen"
+import { defineCodegenConfig } from "@workerstack/database/codegen"
 
 export default defineCodegenConfig({
 	databases: {
@@ -634,7 +636,7 @@ A run writes nothing until every database's generators succeed, then writes them
 
 ### Generators
 
-`@lovrozagar/comb/codegen/generators` exports each one directly; the CLI runs them by name via `-g`.
+`@workerstack/database/codegen/generators` exports each one directly; the CLI runs them by name via `-g`.
 
 | Generator      | Output                                                                    |
 | -------------- | ------------------------------------------------------------------------- |
@@ -667,7 +669,7 @@ A plain drizzle column, built with no `c` helper, is typed by its data type. On 
 ### Analyzer
 
 ```ts
-import { analyze, validateTables } from "@lovrozagar/comb/codegen"
+import { analyze, validateTables } from "@workerstack/database/codegen"
 
 const result = await analyze("./src/db/core.tables.ts")
 const { errors, warnings } = validateTables(result)
@@ -683,7 +685,7 @@ const { errors, warnings } = validateTables(result)
 
 ```ts
 /* comb.migrate.config.ts */
-import { defineConfig } from "@lovrozagar/comb/migrate"
+import { defineConfig } from "@workerstack/database/migrate"
 
 export default defineConfig({
 	databases: {
@@ -703,7 +705,7 @@ A database migrated in more than one place declares `environments` instead, and 
 
 ```ts
 /* comb.migrate.config.ts */
-import { defineConfig } from "@lovrozagar/comb/migrate"
+import { defineConfig } from "@workerstack/database/migrate"
 
 export default defineConfig({
 	databases: {
@@ -747,7 +749,7 @@ The function form, for a config that reads its secrets when comb loads it: the f
 ```ts
 /* comb.migrate.config.ts */
 import { readFile } from "node:fs/promises"
-import { defineConfig } from "@lovrozagar/comb/migrate"
+import { defineConfig } from "@workerstack/database/migrate"
 
 export default async () =>
 	defineConfig({
@@ -769,7 +771,7 @@ A Postgres database is a URL, with the dev database Atlas replays migrations on 
 
 ```ts
 /* comb.migrate.config.ts */
-import { defineConfig } from "@lovrozagar/comb/migrate"
+import { defineConfig } from "@workerstack/database/migrate"
 
 export default defineConfig({
 	databases: {
@@ -835,7 +837,7 @@ A migration's hash is its SQL with comments and layout normalized away, never th
 
 4. On SQLite, libsql and Turso, comb applies each file's statements, as written, and the insert of its hash as one batch, which every provider runs all-or-nothing. On a SQLite file (bun:sqlite, a libsql `file:` URL), each file applies on a connection opened for it and closed after it, as wrangler runs each file on D1, so a pragma a file sets on its connection (`ignore_check_constraints`, `recursive_triggers`, `legacy_alter_table`, `case_sensitive_like` and the like) ends with the file, and the next file runs as it would alone. A libsql server, which a libsql URL of any other scheme (`http`, `https`, `ws`, `wss`, `libsql`) reaches and which Turso runs, refuses those pragmas: it parses each statement first and runs only what it lists. So check holds a file for such a target to what the libsql server (sqld) runs, measured on the sqld comb's tests pin, and refuses the rest with no override, naming the server: a pragma outside its list or with a quoted name (it runs `foreign_keys`, `defer_foreign_keys`, `user_version`, the `table_info` family and the checks, and reads most others), `ANALYZE`, `ATTACH`, a `TEMP` object and `load_extension()`. Turso cloud is held to the same set. With no connection setting left to end, a server's files apply through the one client the run writes with, and a Turso apply mints one token for it. An in-memory database (`:memory:`) lives in its one connection, so every file applies through that one. A pragma whose setting is the process's (`hard_heap_limit`, `soft_heap_limit`, `temp_store_directory`) reaches every connection and outlives the file, so check refuses it, with no override. Every SQLite provider applies with foreign keys on, as the proof runs: bun:sqlite, which SQLite opens with them off, turns them on for each connection comb opens. A file is applied and recorded, or neither. A transient failure retries the whole batch through `withRetry()`, which reads it from the error's structured fields alone (on the error or a cause): an HTTP status of 429 or 5xx, or a network code such as `ECONNRESET` or `UND_ERR_SOCKET`. An error with a `SQLITE_` code is never retried, whatever its message says. On a SQLite file, a write lock that the app serving the file or a second runner holds is waited for rather than failed on: every connection comb opens to the file sets `PRAGMA busy_timeout = 5000`, SQLite's own wait, which retries no failed statement, and each file's batch begins `IMMEDIATE`, taking the lock before any statement. Its record is written first, so a file another run applied while this one waited fails on its name before it runs anything, and is skipped as `Skip (applied by another run)`. `--file` applies one file on its own, which no sum or order covers.
 
-On D1, wrangler applies. comb reads the binding from the wrangler config with wrangler's own reader, refuses when its `migrations_dir` is not comb's `migrationsDir` or its `migrations_pattern` takes anything but that directory's `.sql` files, orders the files as wrangler does (by leading number, then name, so 8- and 14-digit prefixes mix), checks exactly the files wrangler will apply, and runs `wrangler d1 migrations apply` with stdin closed. wrangler runs each file and its `d1_migrations` row as one batch locally and one query remotely, and takes no backup, so bookmark a production database (Time Travel) before an apply. comb then reads the table back and fails unless it holds exactly the files it checked, printing wrangler's own words; a declined prompt or a failed file leaves its row out. A file that landed in the directory while wrangler ran, which wrangler applied and comb never checked, is named, and listed under `applied` in `--json`: check it against git, then run `comb migrate baseline <db> --hashes`. `--file` does not apply to D1. D1's own engine refuses much a SQLite build runs: pragmas outside [Cloudflare's list](https://developers.cloudflare.com/d1/sql-api/sql-statements/), functions outside workerd's allowlist, virtual-table modules but fts5, fts5vocab, rtree and rtree_i32, TEMP objects, savepoints, `_cf_` names, and its limits. So check runs each pending file on D1's own engine: after the proof, on a scratch local D1 that the checked wrangler's Miniflare opens with the proof's copy and its rows, each file as wrangler sends it (its `splitSqlQuery`, with the `d1_migrations` row it appends), then compiles each view, and each table's writes, that the file made or changed, since D1 resolves a function in a trigger, a view or a generated column only when a statement uses it. A file D1 refuses there is refused, naming D1's error, and no approval overrides it. When the local D1 itself crashes compiling a statement, comb compiles it again on a fresh scratch D1; a second crash proves nothing about the live database, so the file is cautious, "unproven on D1's engine", and runs with `--yes` or a yes on a terminal. wrangler `--local` deletes the first `BEGIN TRANSACTION;` and `COMMIT;` of a file holding `BEGIN TRANSACTION`, inside literals and comments too, where a remote apply sends the text as written, so check refuses such a file; split the words, as in `'BEGIN ' || 'TRANSACTION'`. A database comb 0.7 migrated records its files in `__drizzle_migrations`; apply refuses it until `comb migrate baseline <db>` copies that record into `d1_migrations` once. wrangler's table records names only, so comb records each applied file's hash beside it and refuses a file applied, then edited. A name is in wrangler's table only once comb holds its hash or its intent. Apply records each pending file's hash as an intent before wrangler runs, and moves it into comb's hashes once wrangler's table names the file, so a recorded hash is always the text wrangler ran: an apply that fails or is lost leaves only intents, which the next apply clears, and a file wrangler applied while comb lost the move counts as hashed while its text still matches its intent, until the next apply or `--hashes` records it. Baseline writes the hashes before wrangler's rows, so a call lost between them leaves nothing a rerun cannot finish. A rerun of baseline copies every file `__drizzle_migrations` records that lacks either row, so it also finishes a baseline a lost call left half done. A file applied before comb recorded hashes has none, and `status` names it; once you have checked those files against git, `comb migrate baseline <db> --hashes` records the current hash of each applied file that has none, after the same checks apply runs (it refuses while a name in the history matches no file, or a recorded hash is not its file's). Run it once; `--hashes` is for D1 alone, as every other history records each hash as it applies. A D1 database's history is in four tables, which a tool that empties a database must keep, rows and all: `d1HistoryTables(migrationsTable?)` from `@lovrozagar/comb/migrate` names them, the binding's `migrations_table` first (`D1_MIGRATIONS_TABLE`, `d1_migrations`, by default), then `D1_HASH_TABLE` (`_comb_migration_hashes`), whose loss lets an edited applied file pass `check`, `_comb_migration_hash_intents`, the intents of an apply in flight, and `DRIZZLE_HISTORY_TABLE` (`__drizzle_migrations`, comb's history before 0.8).
+On D1, wrangler applies. comb reads the binding from the wrangler config with wrangler's own reader, refuses when its `migrations_dir` is not comb's `migrationsDir` or its `migrations_pattern` takes anything but that directory's `.sql` files, orders the files as wrangler does (by leading number, then name, so 8- and 14-digit prefixes mix), checks exactly the files wrangler will apply, and runs `wrangler d1 migrations apply` with stdin closed. wrangler runs each file and its `d1_migrations` row as one batch locally and one query remotely, and takes no backup, so bookmark a production database (Time Travel) before an apply. comb then reads the table back and fails unless it holds exactly the files it checked, printing wrangler's own words; a declined prompt or a failed file leaves its row out. A file that landed in the directory while wrangler ran, which wrangler applied and comb never checked, is named, and listed under `applied` in `--json`: check it against git, then run `comb migrate baseline <db> --hashes`. `--file` does not apply to D1. D1's own engine refuses much a SQLite build runs: pragmas outside [Cloudflare's list](https://developers.cloudflare.com/d1/sql-api/sql-statements/), functions outside workerd's allowlist, virtual-table modules but fts5, fts5vocab, rtree and rtree_i32, TEMP objects, savepoints, `_cf_` names, and its limits. So check runs each pending file on D1's own engine: after the proof, on a scratch local D1 that the checked wrangler's Miniflare opens with the proof's copy and its rows, each file as wrangler sends it (its `splitSqlQuery`, with the `d1_migrations` row it appends), then compiles each view, and each table's writes, that the file made or changed, since D1 resolves a function in a trigger, a view or a generated column only when a statement uses it. A file D1 refuses there is refused, naming D1's error, and no approval overrides it. When the local D1 itself crashes compiling a statement, comb compiles it again on a fresh scratch D1; a second crash proves nothing about the live database, so the file is cautious, "unproven on D1's engine", and runs with `--yes` or a yes on a terminal. wrangler `--local` deletes the first `BEGIN TRANSACTION;` and `COMMIT;` of a file holding `BEGIN TRANSACTION`, inside literals and comments too, where a remote apply sends the text as written, so check refuses such a file; split the words, as in `'BEGIN ' || 'TRANSACTION'`. A database comb 0.7 migrated records its files in `__drizzle_migrations`; apply refuses it until `comb migrate baseline <db>` copies that record into `d1_migrations` once. wrangler's table records names only, so comb records each applied file's hash beside it and refuses a file applied, then edited. A name is in wrangler's table only once comb holds its hash or its intent. Apply records each pending file's hash as an intent before wrangler runs, and moves it into comb's hashes once wrangler's table names the file, so a recorded hash is always the text wrangler ran: an apply that fails or is lost leaves only intents, which the next apply clears, and a file wrangler applied while comb lost the move counts as hashed while its text still matches its intent, until the next apply or `--hashes` records it. Baseline writes the hashes before wrangler's rows, so a call lost between them leaves nothing a rerun cannot finish. A rerun of baseline copies every file `__drizzle_migrations` records that lacks either row, so it also finishes a baseline a lost call left half done. A file applied before comb recorded hashes has none, and `status` names it; once you have checked those files against git, `comb migrate baseline <db> --hashes` records the current hash of each applied file that has none, after the same checks apply runs (it refuses while a name in the history matches no file, or a recorded hash is not its file's). Run it once; `--hashes` is for D1 alone, as every other history records each hash as it applies. A D1 database's history is in four tables, which a tool that empties a database must keep, rows and all: `d1HistoryTables(migrationsTable?)` from `@workerstack/database/migrate` names them, the binding's `migrations_table` first (`D1_MIGRATIONS_TABLE`, `d1_migrations`, by default), then `D1_HASH_TABLE` (`_comb_migration_hashes`), whose loss lets an edited applied file pass `check`, `_comb_migration_hash_intents`, the intents of an apply in flight, and `DRIZZLE_HISTORY_TABLE` (`__drizzle_migrations`, comb's history before 0.8).
 
 `baseline <db>` records the files as applied without running them, for a database whose schema was set up out of band, after Atlas compares the database's schema with the one the history leaves; any difference is printed and nothing is recorded. On SQLite comb reads the schema from the database itself and compares FTS5 tables by name, since Atlas's dev SQLite has no fts5 module. On D1 it copies only what `__drizzle_migrations` records.
 
@@ -868,14 +870,14 @@ declare const atlasSql: string
 -->
 
 ```ts
-import { applySqliteMigrationTransforms } from "@lovrozagar/comb/migrate"
+import { applySqliteMigrationTransforms } from "@workerstack/database/migrate"
 
 const safe = applySqliteMigrationTransforms(atlasSql)
 ```
 
 ## Query layer
 
-`@lovrozagar/comb/query` is dialect-agnostic: it parses and validates, and produces an AST. `@lovrozagar/comb/query/sqlite` lowers that AST to SQL.
+`@workerstack/database/query` is dialect-agnostic: it parses and validates, and produces an AST. `@workerstack/database/query/sqlite` lowers that AST to SQL.
 
 ### Filter grammar
 
@@ -899,8 +901,8 @@ A value that holds `,`, `(`, `)` or `.` is written in double quotes, PostgREST s
 `validateFilter()` parses and checks in one step, against declared field types, and rejects operators a type does not support — `string` allows `like`, `boolean` allows only `eq`, `ne`, and `is`, and so on — and values that are not of the field's type: a `number` takes a decimal number, a `date` epoch milliseconds, a `boolean` `true` or `false`. A valid result carries each value typed as its field declares. Unknown fields are rejected rather than silently dropped, so a typo returns a 400 instead of the whole table. Unbalanced parentheses, an unclosed `in.(` list and trailing input are syntax errors. Each expression is bounded by `FILTER_LIMITS` — 20 conditions, 3 nested groups, 50 `in`/`nin` values per list, 60 bound values in all, and 50 bytes in a `like` or `ilike` pattern (`maxPatternBytes`: a value with a `*` inside it, measured as SQLite reads it, escaped, so a `[` in a `like` counts as the three bytes of `[[]`) — overridable per call with a third `limits` argument, where a key left out or set to `undefined` keeps its default and any value but a whole number from 0 throws a `TypeError` naming it, as `createListQuerySchema`'s `limits` do. D1 refuses a longer pattern only once it reads a row, so the 400 would depend on the data; the cap refuses it before the query runs. The defaults keep every request the list schema accepts within D1's 100 bound parameters per statement: 60 filter values, 8 search words (`maxSearchTerms`, one `LIKE` each), 10 for a three-key cursor and 2 for limit and offset make 80, which leaves 20 for your `baseWhere`. Raise a limit only on a database without that cap, or with a `baseWhere` that binds less. `createListQuerySchema` also caps the `filter` string at 2048 characters before parsing it (`limits.maxFilterLength`), as it caps `q` at 200, `select` at 500 and `order` at 200. A URL limit counts bytes once percent-encoded (Cloudflare's is 16 KB), and one CJK character is nine of them, so `filter` is also capped at 4608 bytes, `q` at 600, `order` at 200 and `select` at 500 (`REQUEST_BYTES`), each measured as the widest common encoding writes it: a space (`%20` in a URL) and a mark such as `~` or `!` (`%7E`, `%21` in a form) count as 3. With the cursor's 8192, the largest accepted query string is at most 14 KB however a client encodes it, `maxQueryBytes`: 16 KB less 2 KB for the path and the handler's own params. A value holding a lone surrogate, which no URL can carry, is refused. The schema takes any cursor string and `readCursor` answers every one it cannot use, a longer one included, with `invalid_cursor`, so a client restarts on one key; `paginate` carries a sort value too long for the cap by reference (see [Pagination and cursors](#pagination-and-cursors)). `in` and `nin` take a list: `id.in.5` is a 400, not a driver error.
 
 ```ts
-import { CombError } from "@lovrozagar/comb"
-import { validateFilter } from "@lovrozagar/comb/query"
+import { CombError } from "@workerstack/database"
+import { validateFilter } from "@workerstack/database/query"
 
 const result = validateFilter("status.eq.published,or(minute_read.lt.5,title.like.intro)", {
 	minute_read: "number",
@@ -918,7 +920,7 @@ const ast = result?.ast
 A runtime field map, such as one built from a user table's columns, can give a field a spec in place of its type: `{ type, operators?, format? }`. `operators` replaces the type's defaults (`OPERATORS_BY_TYPE`) and may add `contains` on any type, its value typed as one scalar of the type, for an array or multi-select column: `filterToSQL` lowers it on SQLite as a member of the JSON array the column holds (`json_each`). It may also add `gt`, `gte`, `lt` and `lte` on a `string`, which compare text, so stored values must share one form: an ISO instant written in two offsets, `2024-01-01T01:00+01:00` and `2024-01-01T00:00Z`, is one instant that sorts as two. `format: "iso"` on a `date` takes ISO 8601 text, a date (`2024-02-29`) or a date-time with `Z` or an offset (`2024-01-01T00:00+14:00`), naming a real day and time by the proleptic Gregorian calendar (so `0000-02-29` is a day), in place of epoch milliseconds, and types it as the instant it names in `toISOString()`'s form: a bare date is midnight UTC, and a fraction past milliseconds is cut. A text column that stores `toISOString()` text so compares every spelling of one instant as one, `2024-01-01T01:00+01:00` as `2024-01-01T00:00Z`; on a date or number column `filterToSQL` binds it as the column stores it, epoch milliseconds or a drizzle date in either unit. A spec that lists an operator its type cannot type (`like` on a `number`, `in` on a `boolean`) or puts `format` on no date throws a `TypeError` naming the field, the operator and the type. `parseFilterNumber(raw)` is the number rule on its own: `{ value }`, or `{ error }` for a spelling `Number()` takes and comb does not (`0x4d2`, `0b1`, `0o7`, `1e999`) an integer past ±(2^53 − 1), which a double would bind as its neighbour, or nonzero digits that read as 0 or a subnormal (`1e-400`, `5e-324`), which would match the rows holding 0.
 
 ```ts
-import { validateFilter } from "@lovrozagar/comb/query"
+import { validateFilter } from "@workerstack/database/query"
 
 const rows = validateFilter("tags.contains.red,due.gte.2024-02-29", {
 	due: { format: "iso", type: "date" },
@@ -969,7 +971,7 @@ For drizzle's relational API, `queryHelpers.listOptions(query, { cursorScope, cu
 `pagination.count` is the number of rows the filter matches across all pages, or `null` when the response cannot know it. Every builder hands back the columns `paginate` reads as `extras`: the tiebreak (`_combId`), an offset page's count (`_total`), and, on a cursor that carries a reference, whether its anchor is gone (`_combAnchorGone`); a merged SQLite list, a SQLite derived list with no `anchor`, and an anchored one sorted by an expression with no column, such as `count(*)`, also select the storage class of each sort key and of the tiebreak (`_combKeyTypes`), so a key libsql's `intMode: "string"` reads as a decimal string resumes as the integer SQLite stored, never as text, and a REAL ±Infinity, which D1 reads as null, resumes as itself; a Postgres derived list with no `anchor` selects each one's type family there (`float`, `fixed` or `other`), so a `double precision` past 2^53 pages and a `bigint` read as a number is refused. An anchored derived list sorted by a joined table's column does the same for that key, as its anchor row holds no such column: a joined integer past 2^53 is refused rather than resumed from a rounded number. A list sorted by a Postgres `timestamp`, `timestamptz` or `date` also selects the key's stored value as text (`_combKeyTexts`), on every list, `listOptions` included: written the same in any session's `DateStyle`, microseconds and `'infinity'` included, so a cursor resumes from the stored value rather than the Date or string the driver read. A Postgres `double precision` or `real` key carries no text, as every text Postgres prints a float in follows the session's `extra_float_digits`: at its default of 1 the driver reads the float exactly, and at 0 or below, which a configuration from before Postgres 12 or a pooler may set, it reads `1.0000000000000002` as `1`, so a page that serves a non-null float key under it is a 500 `sort_not_wired` naming the setting, never a page that skips rows. A Postgres `numeric` read in number mode carries its text the same way, and an expression of `numeric` type or of a type of the database's own that is no float does on a derived list. On SQLite, a seconds-mode timestamp carries its REAL seconds where it is an anchored derived list's joined key or a key of a list with no `anchor`, and on a merged list, which merges by them. A SQLite REAL such a key carries, and a REAL held apart below, goes in the cursor as the text of it SQLite reads back as that REAL, `cast(k as text)` where that reads back and `printf('%!.17g', k)` where it does not, and the next page binds `cast(? as real)`: one SQLite parse of one text, the one the list checked, where D1 parses a bound number's shortest text as another REAL for some values, which skipped rows. A REAL neither text reads back as, as D1 prints some, is a 500 `sort_not_wired` on the page that serves it, naming the key. A non-STRICT SQLite table lets any column hold any storage class, and each drizzle mode reads back as stored only its own: a number mode and a timestamp integers and REALs, a `numeric()` integers and finite REALs, a text TEXT, a buffer or bigint blob BLOBs, a boolean 0 and 1. A list that reads a SQLite key back from its anchor row, `listOptions` included, selects the value of any other class such a key holds, its class beside it (`_combTextKeys`), so a cursor resumes from the stored value, a `timestamp`'s TEXT, which SQLite orders after every number, among them; a list that binds the key as read answers a 500 `sort_not_wired` on such a row, naming the key and the class. A JSON-mode or custom key has no such set. Select them beside your columns, `db.select({ ...columns, ...built.extras })` or `findMany({ extras: options.extras })` (`applyListQuery` does it for you), and pass the rows with the built query to `queryHelpers.paginate(rows, built)`, which strips them. To put them into raw SQL, render each as `` sql`${extra.sql} AS ${sql.identifier(extra.fieldAlias)}` ``: interpolating the aliased extra itself renders only its quoted name, which SQLite reads as the string `'_combId'`. Rows that lack one the builder selected are a 500 (`page_not_wired`) naming it, on every page, so a forgotten count or flag is never read as none. An offset page reports the total (`0` for an empty first page). On one database a page past the end reports `null`, since no row carried the count and knowing it would take a second query; a merged page past the end reports the total, as every shard counted from its first row. A cursor page reports `null` too, and selects no count: a `count(*) over()` window would make the database read every remaining row on each page, which is the cost keyset pagination exists to avoid (and on D1, rows read are billed). The tiebreak id keeps its JSON type in the cursor, so a numeric id compares as a number even when it is an expression with no column affinity. Every value a cursor carries must be a string, number, bigint, boolean, `null`, date or bytes, and one its column holds; anything else is `invalid_cursor`. No list mints a cursor its next page refuses: a page that serves a row whose key its column does not hold, such as a JSON-mode key, answers a 500 `sort_not_wired` naming the key, and a SQLite column holding a class its mode reads as another, a `TEXT` column holding a BLOB or a number column holding TEXT, pages where the list reads the key back, as above. A number holds ±Infinity and NaN too, as a Postgres `double precision` or a SQLite `REAL` may. A Postgres `timestamp`, `timestamptz` or `date` in date mode pages exactly where it holds `'infinity'` or `'-infinity'`, which node-postgres reads as 2000-01-01 local time on a `timestamp` and as a Date no JS Date holds on the other two: the cursor binds the text the list carried, so it resumes where its row stood, deleted or not. A SQLite timestamp holding ±Infinity, or a finite value past the range a JS Date holds, reads as such a Date on bun:sqlite and libsql (D1 reads ±Infinity as null, above). A list that reads the key back from its anchor row carries that Date as itself, never as the null group, and reads its bound from the row: exact while the row is there, and once it is deleted, the list resumes from the direction's own end, repeating rows and skipping none. Any other list carries the stored value, as above.
 
 ```ts
-import { createCursor, MIN_CURSOR_SECRET_BYTES, readCursor, sortSignature } from "@lovrozagar/comb/query"
+import { createCursor, MIN_CURSOR_SECRET_BYTES, readCursor, sortSignature } from "@workerstack/database/query"
 ```
 
 ### Zod schemas
@@ -981,7 +983,7 @@ declare const request: { query: Record<string, string> }
 -->
 
 ```ts
-import { createListQuerySchema } from "@lovrozagar/comb/query"
+import { createListQuerySchema } from "@workerstack/database/query"
 
 const postQuery = createListQuerySchema({
 	filter: { created_at: "date", minute_read: "number", status: "enum", title: "string" },
@@ -1011,14 +1013,14 @@ The `filter`, `order`, `q`, `limit` and `select` descriptions, examples and the 
 <!-- ts-context
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
 declare const db: import("drizzle-orm/libsql").LibSQLDatabase
-declare const parsed: import("@lovrozagar/comb/query").ListQueryOutput
+declare const parsed: import("@workerstack/database/query").ListQueryOutput
 declare const env: { CURSOR_SECRET: string }
 const post = sqliteTable("post", { _search: text("_search"), created_at: integer("created_at"), deleted_at: integer("deleted_at"), id: text("id").primaryKey(), title: text("title") })
 -->
 
 ```ts
-import { applyListQuery, buildListQuery, likeSearch } from "@lovrozagar/comb/query/sqlite"
-import { queryHelpers } from "@lovrozagar/comb/query"
+import { applyListQuery, buildListQuery, likeSearch } from "@workerstack/database/query/sqlite"
+import { queryHelpers } from "@workerstack/database/query"
 import { getTableColumns, isNull, sql } from "drizzle-orm"
 
 const result = buildListQuery({
@@ -1047,7 +1049,7 @@ A filter on a relation field (`tags.slug`, through a `relations` entry) asks abo
 
 `queryHelpers.paginate(rows, built)` takes the rows and the query that read them, any of the three builders' results (a merged list's goes to `paginateMerged`), and returns `[items, pagination]`; the built query's `pagination` says what it read, so nothing is passed twice. A list ordered by a computed sort, or a table with no tiebreak column, has no cursor to resume it: its `nextCursor` is `null` while `hasMore` still says there is a next page by number. More rows than the built query reads, one past the page, are a 500 (`page_not_wired`): rows a query read without its limit and offset are no page of this list. Underneath, `filterToSQL()` and `conditionToSQL()` are exported for advanced use, along with `orderSQL()` / `orderByKeys()` / `keysetSQL()` — the one ordering and keyset implementation every builder shares — and `patternToSQL()` for `like` / `ilike`.
 
-Search comes in two flavours. `likeSearch(column)` is the portable fallback: it targets a `_search` column (or any SQL expression, such as `sql.raw('"_search"')` on a table drizzle does not declare), folds each whitespace-separated term with `searchText()`, finds it with `instr` in the expression's `lower()`, so no LIKE pattern meets D1's 50-byte cap, and ANDs the terms. A raw expression, such as a `title` column, is matched by ASCII case only: its accents and the other folds below match only in a column `searchText` wrote, so `café` and `cafe` both miss a raw `Café`. Write the column with the same function, `searchText(title, body, …)`, so the stored text and the query cannot drift apart: a column filled by SQL `lower()` misses every accented query. Its format, which a backfill must reproduce: the parts present joined by one space, NFKD-normalized (so ＦＩＬＥ and ﬁ fold), lowercased, Greek final sigma ς written σ (so an uppercase query ending in Σ finds the word), combining marks (U+0300–U+036F) removed except those that make a Cyrillic letter of its own, which NFC puts back into one letter (й, ї, ё, ў stay apart from и, і, е, у; a stress mark, as in доро́га, goes), Hebrew points and cantillation (U+0591–U+05C7), Arabic harakat and Quranic marks (U+0610–U+061A, U+064B–U+065F, U+0670, U+06D6–U+06ED) and the tatweel (U+0640) removed, so שָׁלוֹם is שלום and مـحـمّد is محمد, the Latin letters with no decomposition spelled in ASCII (ß ss, æ ae, œ oe, ø o, ł l, đ d, ð d, þ th, ı i, ĸ k, ŋ n, ŧ t, ħ h), then NFC-composed again, so й and Hangul syllables stay whole. Greek accents fold (ά is α). A change to this format means rewriting every `_search` column; 0.11 changed it, and "Upgrading to 0.11" says how to refold. `refoldStatements(table, column, sources)` from `@lovrozagar/comb/query/sqlite` is that rewrite: its `select` reads each row's rowid, its sources and the text it stores, and `updates(rows)` gives one `UPDATE` per row whose fold differs, so a second run writes nothing. Run the select, then the updates in batches your driver takes (`db.batch` on D1). It needs the table's rowid. `buildFtsMatch()`, `buildFtsWhere({ table, ftsTable }, q)`, and `buildFtsHighlight()` target the FTS5 tables the `fts` generator created, and `buildFtsWhereWithSpellfix(db, { table, ftsTable, spellfixTable }, q)` adds spellfix1 fuzzy matching where the extension is available. It asks each database client once, before any spellfix query, with `editdist3`, the function spellfix1 registers, which reads no table: without the extension (stock bun:sqlite and libsql) the terms are searched as typed, and with it a missing or misspelled spellfix table, or a transient driver error, is thrown. The answer is kept per client a drizzle wrapper holds (`db.$client`), so a server that builds a wrapper per request asks once per client. D1 loads no extension, so a D1 client, the binding or a session `openD1Session` opens per request, is never asked and its terms are searched as typed. `spellfix: false` asks nothing and searches the terms as typed, for any other database that never has the extension. Every term becomes a bound prefix phrase, `"term"*`, so `post` finds `postgres`; FTS5 syntax in user text (`*`, `:`, parentheses, `AND`/`OR`/`NOT`) is quoted, never interpreted: inside its quotes every word and character of a term is searched as text, so `not found` needs both words and `error:timeout` finds that text. `sanitizeFtsTerm()` is the per-term cleaning: it removes control characters and skips a term with no letter or digit, which no token matches and which would otherwise empty the search. The FTS table name is a single identifier, quoted with `quoteIdent`. The generated FTS tables are keyed by their content table's `rowid`, so `buildFtsWhere` emits `<table>.rowid IN (SELECT rowid FROM <fts> WHERE <fts> MATCH ?)`: the rowid is qualified by the drizzle table you pass, so a join cannot make it ambiguous and a text `id` column never stands in for it. FTS5's `unicode61` tokenizer folds less: not ß to ss, æ to ae, a ligature such as ﬁ, halfwidth kana or a Greek accent. So an FTS table over the raw text misses a query typed in one of those folds, and one over a `searchText` column misses a query typed as written, unless the source says so: `buildFtsWhere({ folded: true, ftsTable, table }, q)` (and `buildFtsWhereWithSpellfix`, and `buildFtsMatch(name, q, { folded: true })`) folds each term with `searchText` first, so FTS over `_search` applies the folds `likeSearch` applies, per token prefix. It still finds less in two ways. FTS matches a term at the start of a token, where `likeSearch` matches a substring anywhere: `asse` finds no `reassess`, and a term inside an unspaced CJK, Thai or Hangul run (`都庁` in `東京都庁`, `국어` in `한국어`) finds no row, as the run is one token. And FTS drops symbols, which `unicode61` does not index, so `c++` searches `c*` and finds every row with a word that starts with c.
+Search comes in two flavours. `likeSearch(column)` is the portable fallback: it targets a `_search` column (or any SQL expression, such as `sql.raw('"_search"')` on a table drizzle does not declare), folds each whitespace-separated term with `searchText()`, finds it with `instr` in the expression's `lower()`, so no LIKE pattern meets D1's 50-byte cap, and ANDs the terms. A raw expression, such as a `title` column, is matched by ASCII case only: its accents and the other folds below match only in a column `searchText` wrote, so `café` and `cafe` both miss a raw `Café`. Write the column with the same function, `searchText(title, body, …)`, so the stored text and the query cannot drift apart: a column filled by SQL `lower()` misses every accented query. Its format, which a backfill must reproduce: the parts present joined by one space, NFKD-normalized (so ＦＩＬＥ and ﬁ fold), lowercased, Greek final sigma ς written σ (so an uppercase query ending in Σ finds the word), combining marks (U+0300–U+036F) removed except those that make a Cyrillic letter of its own, which NFC puts back into one letter (й, ї, ё, ў stay apart from и, і, е, у; a stress mark, as in доро́га, goes), Hebrew points and cantillation (U+0591–U+05C7), Arabic harakat and Quranic marks (U+0610–U+061A, U+064B–U+065F, U+0670, U+06D6–U+06ED) and the tatweel (U+0640) removed, so שָׁלוֹם is שלום and مـحـمّد is محمد, the Latin letters with no decomposition spelled in ASCII (ß ss, æ ae, œ oe, ø o, ł l, đ d, ð d, þ th, ı i, ĸ k, ŋ n, ŧ t, ħ h), then NFC-composed again, so й and Hangul syllables stay whole. Greek accents fold (ά is α). A change to this format means rewriting every `_search` column; 0.11 changed it, and "Upgrading to 0.11" says how to refold. `refoldStatements(table, column, sources)` from `@workerstack/database/query/sqlite` is that rewrite: its `select` reads each row's rowid, its sources and the text it stores, and `updates(rows)` gives one `UPDATE` per row whose fold differs, so a second run writes nothing. Run the select, then the updates in batches your driver takes (`db.batch` on D1). It needs the table's rowid. `buildFtsMatch()`, `buildFtsWhere({ table, ftsTable }, q)`, and `buildFtsHighlight()` target the FTS5 tables the `fts` generator created, and `buildFtsWhereWithSpellfix(db, { table, ftsTable, spellfixTable }, q)` adds spellfix1 fuzzy matching where the extension is available. It asks each database client once, before any spellfix query, with `editdist3`, the function spellfix1 registers, which reads no table: without the extension (stock bun:sqlite and libsql) the terms are searched as typed, and with it a missing or misspelled spellfix table, or a transient driver error, is thrown. The answer is kept per client a drizzle wrapper holds (`db.$client`), so a server that builds a wrapper per request asks once per client. D1 loads no extension, so a D1 client, the binding or a session `openD1Session` opens per request, is never asked and its terms are searched as typed. `spellfix: false` asks nothing and searches the terms as typed, for any other database that never has the extension. Every term becomes a bound prefix phrase, `"term"*`, so `post` finds `postgres`; FTS5 syntax in user text (`*`, `:`, parentheses, `AND`/`OR`/`NOT`) is quoted, never interpreted: inside its quotes every word and character of a term is searched as text, so `not found` needs both words and `error:timeout` finds that text. `sanitizeFtsTerm()` is the per-term cleaning: it removes control characters and skips a term with no letter or digit, which no token matches and which would otherwise empty the search. The FTS table name is a single identifier, quoted with `quoteIdent`. The generated FTS tables are keyed by their content table's `rowid`, so `buildFtsWhere` emits `<table>.rowid IN (SELECT rowid FROM <fts> WHERE <fts> MATCH ?)`: the rowid is qualified by the drizzle table you pass, so a join cannot make it ambiguous and a text `id` column never stands in for it. FTS5's `unicode61` tokenizer folds less: not ß to ss, æ to ae, a ligature such as ﬁ, halfwidth kana or a Greek accent. So an FTS table over the raw text misses a query typed in one of those folds, and one over a `searchText` column misses a query typed as written, unless the source says so: `buildFtsWhere({ folded: true, ftsTable, table }, q)` (and `buildFtsWhereWithSpellfix`, and `buildFtsMatch(name, q, { folded: true })`) folds each term with `searchText` first, so FTS over `_search` applies the folds `likeSearch` applies, per token prefix. It still finds less in two ways. FTS matches a term at the start of a token, where `likeSearch` matches a substring anywhere: `asse` finds no `reassess`, and a term inside an unspaced CJK, Thai or Hangul run (`都庁` in `東京都庁`, `국어` in `한국어`) finds no row, as the run is one token. And FTS drops symbols, which `unicode61` does not index, so `c++` searches `c*` and finds every row with a word that starts with c.
 
 ### Translations
 
@@ -1058,7 +1060,7 @@ declare const post: { post_translation: Array<{ body: string; languageCode: stri
 -->
 
 ```ts
-import { resolveTranslation } from "@lovrozagar/comb/query"
+import { resolveTranslation } from "@workerstack/database/query"
 
 const localized = resolveTranslation({
 	translations: post.post_translation,
@@ -1072,7 +1074,7 @@ const localized = resolveTranslation({
 
 ### Loading a `wrangler d1 export`
 
-An export, from `wrangler d1 export <db> --remote --output dump.sql`, lists its tables by name and each table's rows after its own `CREATE TABLE`. So a child's rows can come before its parent's table, and the file does not load as written into a database with foreign keys on. To load it, into a local copy or a restore, reorder it: `PRAGMA defer_foreign_keys = on` first, then every `CREATE TABLE`, then the rest (rows, indexes, triggers). `splitSqlStatements` from `@lovrozagar/comb/migrate` splits the file quote-aware. An export blocks the database's requests while it runs, so take a production export off-peak, and take a Time Travel bookmark with it.
+An export, from `wrangler d1 export <db> --remote --output dump.sql`, lists its tables by name and each table's rows after its own `CREATE TABLE`. So a child's rows can come before its parent's table, and the file does not load as written into a database with foreign keys on. To load it, into a local copy or a restore, reorder it: `PRAGMA defer_foreign_keys = on` first, then every `CREATE TABLE`, then the rest (rows, indexes, triggers). `splitSqlStatements` from `@workerstack/database/migrate` splits the file quote-aware. An export blocks the database's requests while it runs, so take a production export off-peak, and take a Time Travel bookmark with it.
 
 ### Sessions
 
@@ -1084,7 +1086,7 @@ const relations = defineRelations({})
 -->
 
 ```ts
-import { openD1Session } from "@lovrozagar/comb/sqlite/d1/session"
+import { openD1Session } from "@workerstack/database/sqlite/d1/session"
 import { drizzle } from "drizzle-orm/d1"
 
 const { client, session } = openD1Session(env.DB, { bookmark: bookmarkFromCookie })
@@ -1101,7 +1103,7 @@ declare function setCookie(name: string, value: string): void
 -->
 
 ```ts
-import { BookmarkTracker } from "@lovrozagar/comb/sqlite/d1/bookmark"
+import { BookmarkTracker } from "@workerstack/database/sqlite/d1/bookmark"
 
 const tracker = new BookmarkTracker()
 tracker.track(session, "core")
@@ -1119,7 +1121,7 @@ declare const orgId: string
 -->
 
 ```ts
-import { ShardRouter, shardMap } from "@lovrozagar/comb/sqlite/d1/sharding"
+import { ShardRouter, shardMap } from "@workerstack/database/sqlite/d1/sharding"
 
 /* module scope — the LRU must outlive the request */
 const router = new ShardRouter({ totalShards: 16, maxOrgsPerShard: 500 })
@@ -1154,7 +1156,7 @@ declare const postDtoReadSchema: import("zod").ZodType
 -->
 
 ```ts
-import { readCombEntityMeta } from "@lovrozagar/comb/meta"
+import { readCombEntityMeta } from "@workerstack/database/meta"
 import * as z from "zod"
 
 readCombEntityMeta(z.toJSONSchema(postDtoReadSchema))
@@ -1178,7 +1180,7 @@ in [`packages/core/docs/meta-contract.md`](packages/core/docs/meta-contract.md).
 ## Utilities
 
 ```ts
-import { createUlidFactory, generateId, generateUlid, LruCache } from "@lovrozagar/comb"
+import { createUlidFactory, generateId, generateUlid, LruCache } from "@workerstack/database"
 
 generateUlid() // "01jqx8r4m2n7p3q5s6t8v9w0xy" — lexicographically sortable
 generateId("pst") // "pst_01jqx8r4m2n7p3q5s6t8v9w0xy"
@@ -1196,33 +1198,33 @@ ULIDs use Crockford base32 with a 10-character timestamp and 16 characters of ra
 
 ## Package exports
 
-| Specifier                                    | Contents                                                                                                                         |
-| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `@lovrozagar/comb`                           | `CombError`, `createUlidFactory`, `generateId`, `generateUlid`, `LruCache`, the format registry predicates, error keys and types |
-| `@lovrozagar/comb/types`                     | `StatusKey`, `ConstraintMap`, `DatabaseErrorHandler`, …                                                                          |
-| `@lovrozagar/comb/cli`                       | `runCli(argv, io)`: run the CLI in process and get its exit code                                                                 |
-| `@lovrozagar/comb/codegen`                   | `analyze`, `validateTables`, `fieldConstraintsOf`, analysis types                                                                |
-| `@lovrozagar/comb/codegen/generators`        | every `generate*` function                                                                                                       |
-| `@lovrozagar/comb/meta`                      | `combMeta`, `readCombMeta`, `readCombEntityMeta`, `readCombQueryMeta`, `carryCombMeta`, meta types                               |
-| `@lovrozagar/comb/migrate`                   | config, providers, apply, parse, Atlas helpers                                                                                   |
-| `@lovrozagar/comb/query`                     | filter, order, select, cursors, Zod builders                                                                                     |
-| `@lovrozagar/comb/query/sqlite`              | SQL generation, FTS5, JSON helpers                                                                                               |
-| `@lovrozagar/comb/sqlite/columns`            | `c` for SQLite                                                                                                                   |
-| `@lovrozagar/comb/sqlite/constraints`        | constraint types                                                                                                                 |
-| `@lovrozagar/comb/sqlite/constraint-handler` | `sqliteErrorHandler`, `classifySqliteError`, `handleConstraintViolation`                                                         |
-| `@lovrozagar/comb/sqlite/d1/session`         | `openD1Session`                                                                                                                  |
-| `@lovrozagar/comb/sqlite/d1/bookmark`        | `BookmarkTracker`                                                                                                                |
-| `@lovrozagar/comb/sqlite/d1/error-handler`   | `d1ErrorHandler`, `classifyD1Error`                                                                                              |
-| `@lovrozagar/comb/sqlite/d1/sharding`        | `ShardRouter`, `shardMap`                                                                                                        |
-| `@lovrozagar/comb/states`                    | `defineStateMachine`, `canTransition`, `assertTransition`, `nextStates`, `isState`, `isTerminal`                                 |
-| `@lovrozagar/comb/pg/columns`                | `c` for PostgreSQL                                                                                                               |
-| `@lovrozagar/comb/pg/error-handler`          | `pgErrorHandler`, `classifyPgError`                                                                                              |
+| Specifier                                         | Contents                                                                                                                         |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `@workerstack/database`                           | `CombError`, `createUlidFactory`, `generateId`, `generateUlid`, `LruCache`, the format registry predicates, error keys and types |
+| `@workerstack/database/types`                     | `StatusKey`, `ConstraintMap`, `DatabaseErrorHandler`, …                                                                          |
+| `@workerstack/database/cli`                       | `runCli(argv, io)`: run the CLI in process and get its exit code                                                                 |
+| `@workerstack/database/codegen`                   | `analyze`, `validateTables`, `fieldConstraintsOf`, analysis types                                                                |
+| `@workerstack/database/codegen/generators`        | every `generate*` function                                                                                                       |
+| `@workerstack/database/meta`                      | `combMeta`, `readCombMeta`, `readCombEntityMeta`, `readCombQueryMeta`, `carryCombMeta`, meta types                               |
+| `@workerstack/database/migrate`                   | config, providers, apply, parse, Atlas helpers                                                                                   |
+| `@workerstack/database/query`                     | filter, order, select, cursors, Zod builders                                                                                     |
+| `@workerstack/database/query/sqlite`              | SQL generation, FTS5, JSON helpers                                                                                               |
+| `@workerstack/database/sqlite/columns`            | `c` for SQLite                                                                                                                   |
+| `@workerstack/database/sqlite/constraints`        | constraint types                                                                                                                 |
+| `@workerstack/database/sqlite/constraint-handler` | `sqliteErrorHandler`, `classifySqliteError`, `handleConstraintViolation`                                                         |
+| `@workerstack/database/sqlite/d1/session`         | `openD1Session`                                                                                                                  |
+| `@workerstack/database/sqlite/d1/bookmark`        | `BookmarkTracker`                                                                                                                |
+| `@workerstack/database/sqlite/d1/error-handler`   | `d1ErrorHandler`, `classifyD1Error`                                                                                              |
+| `@workerstack/database/sqlite/d1/sharding`        | `ShardRouter`, `shardMap`                                                                                                        |
+| `@workerstack/database/states`                    | `defineStateMachine`, `canTransition`, `assertTransition`, `nextStates`, `isState`, `isTerminal`                                 |
+| `@workerstack/database/pg/columns`                | `c` for PostgreSQL                                                                                                               |
+| `@workerstack/database/pg/error-handler`          | `pgErrorHandler`, `classifyPgError`                                                                                              |
 
 ## Repository layout
 
 ```text
 comb/
-├── packages/core/          the @lovrozagar/comb package
+├── packages/core/          the @workerstack/database package
 │   ├── src/
 │   │   ├── codegen/        analyzer + generators
 │   │   ├── migrate/        config, drivers, Atlas integration
@@ -1272,19 +1274,21 @@ What changes for a project on 0.21. Before deploying it:
 
    New exports: `IntegerFormat`, `RealConstraints`, `RefConstraints`, `TextFormat`, `isIanaTimeZone`, `isIso3166Alpha2`, `isIso3166Alpha3`, `isIso4217`, `isIso639Alpha2`.
 
-   Removed: `patterns`, with its entry point, @lovrozagar/comb/sqlite/patterns. **Fix:** declare the format that holds the standard a pattern of it stood for, as item 2 maps each one.
+   Removed: `patterns`, with its entry point, @workerstack/database/sqlite/patterns. **Fix:** declare the format that holds the standard a pattern of it stood for, as item 2 maps each one.
 
    Changed: `AnalysisResult`, `CodegenConfig`, `DatabaseCodegen`, `EnumOptions`, `FieldConstraints`, `FieldConstraintsMeta`, `FieldMeta`, `GeneratorContext`, `IntegerConstraints`, `Manifest`, `ManifestColumn`, `ManifestEntity`, `OrmConfig`, `PgColumns`, `ShardMapColumns`, `ShardMapTable`, `SqliteColumns`, `TableMeta`, `TextConstraints`, `analyze`, `buildManifest`, `c`, `defineCodegenConfig`, `deriveEntityMeta`, `fieldConstraintsOf`, `generateColumns`, `generateConstraints`, `generateDiagrams`, `generateDtos`, `generateEntities`, `generateEnumChecks`, `generateFieldNames`, `generateFts`, `generateFtsSql`, `generateManifest`, `generateOrm`, `generateRelations`, `generateRows`, `generateTranslations`, `isExcludedFromUpdate`, `shardMap`, `validateTables`.
 
-   `TextConstraints` gains `format` and `schema`, `IntegerConstraints` gains `format` and `schema`, and `EnumOptions` gains `format`, each optional ([Formats](#formats), [Column schemas](#column-schemas)), a `format` standing where a regex of the removed `patterns` did (step 2). `c.real` takes `RealConstraints`, a real's bounds and `schema` with no `format`, where 0.21 typed it with `IntegerConstraints`, and `c.ref` takes `RefConstraints`, a text's keys but `format` and `schema`. The `c` of @lovrozagar/comb/sqlite/columns, @lovrozagar/comb/pg/columns and @lovrozagar/comb/sqlite/d1/sharding changes with them, as do `SqliteColumns`, `PgColumns`, `ShardMapColumns`, `ShardMapTable` and `shardMap`. **Fix:** none: a call that compiled on 0.21, one passing a value typed `IntegerConstraints` to `c.real` or `TextConstraints` to `c.ref` among them, compiles on 0.22.
+   `TextConstraints` gains `format` and `schema`, `IntegerConstraints` gains `format` and `schema`, and `EnumOptions` gains `format`, each optional ([Formats](#formats), [Column schemas](#column-schemas)), a `format` standing where a regex of the removed `patterns` did (step 2). `c.real` takes `RealConstraints`, a real's bounds and `schema` with no `format`, where 0.21 typed it with `IntegerConstraints`, and `c.ref` takes `RefConstraints`, a text's keys but `format` and `schema`. The `c` of @workerstack/database/sqlite/columns, @workerstack/database/pg/columns and @workerstack/database/sqlite/d1/sharding changes with them, as do `SqliteColumns`, `PgColumns`, `ShardMapColumns`, `ShardMapTable` and `shardMap`. **Fix:** none: a call that compiled on 0.21, one passing a value typed `IntegerConstraints` to `c.real` or `TextConstraints` to `c.ref` among them, compiles on 0.22.
 
-   `ManifestColumn` gains `format`, the id of the standard a write checks the value against, and `schema`, the export name of the zod schema a text or number column declares, each null when the column declares none and `schema` null on a `c.json` column, whose schema the manifest already describes. `FieldConstraintsMeta`, which the package root, @lovrozagar/comb/codegen, @lovrozagar/comb/meta and @lovrozagar/comb/query reach, gains `format`, and `FieldMeta` gains `schemaJson`, the schema's input JSON Schema, which the DTOs publish. Each is required, as every field of these types is (`ManifestColumn.format`, `ManifestColumn.schema`, `FieldConstraintsMeta.format`, `FieldMeta.schemaJson`), so a `ManifestColumn` or `FieldConstraintsMeta` you build fails to compile (TS2741). The manifest stays `v` 3, and a manifest reader meets the two fields as nulls on every column that declares neither. **Fix:** a `ManifestColumn` you build sets `format: null` and `schema: null`, a `FieldConstraintsMeta` sets `format: null`, and a `FieldMeta` sets `schemaJson: null`.
+   `ManifestColumn` gains `format`, the id of the standard a write checks the value against, and `schema`, the export name of the zod schema a text or number column declares, each null when the column declares none and `schema` null on a `c.json` column, whose schema the manifest already describes. `FieldConstraintsMeta`, which the package root, @workerstack/database/codegen, @workerstack/database/meta and @workerstack/database/query reach, gains `format`, and `FieldMeta` gains `schemaJson`, the schema's input JSON Schema, which the DTOs publish. Each is required, as every field of these types is (`ManifestColumn.format`, `ManifestColumn.schema`, `FieldConstraintsMeta.format`, `FieldMeta.schemaJson`), so a `ManifestColumn` or `FieldConstraintsMeta` you build fails to compile (TS2741). The manifest stays `v` 3, and a manifest reader meets the two fields as nulls on every column that declares neither. **Fix:** a `ManifestColumn` you build sets `format: null` and `schema: null`, a `FieldConstraintsMeta` sets `format: null`, and a `FieldMeta` sets `schemaJson: null`.
 
    `fieldConstraintsOf` takes `values`, the column's enum values, each of which a `c.enum`'s format must take, or `null` for a column with none. **Fix:** a direct caller of `fieldConstraintsOf` passes `values`.
 
    The rest of the list changes only through those types: `FieldConstraints` is `FieldConstraintsMeta`; `AnalysisResult`, `TableMeta`, `Manifest` and `ManifestEntity` hold a `FieldMeta` or a `ManifestColumn`; and `analyze`, `buildManifest`, `validateTables`, `deriveEntityMeta`, `isExcludedFromUpdate`, `CodegenConfig`, `DatabaseCodegen`, `GeneratorContext`, `OrmConfig`, `defineCodegenConfig` and each `generate*` function take or return one. **Fix:** none.
 
 2. **Declare a `format` where a `patterns` regex stood.** Each of the four stood for a standard it held loosely: `COUNTRY_ALPHA2` took any two capitals, `UK` and `XX` among them; `E164_PHONE` refused a number of fewer than 8 digits; `IANA_TIMEZONE` took `a/b/c` and refused `Etc/GMT+5` and `America/Port-au-Prince`; `LOCALE` refused `zh-Hant-TW` and `es-419`. A format holds the standard itself, and a registry's format its pinned list: `iso3166-1-alpha-2` refuses `UK` and `XX`, `e164` takes 2 to 15 digits after the `+`, `iana-time-zone` takes the names of tzdata 2026f alone, and `bcp47` takes every well-formed tag. A format also trims the value and writes it in its standard's case before its check, so `" hr"` is stored as `HR` where the pattern refused it. A value it refuses gets zod's `invalid_format` with the id as its `format` and the locale's message, where a pattern's issue was `format: "regex"` with the pattern and an English message. **Fix:** replace `pattern: patterns.COUNTRY_ALPHA2` with `format: "iso3166-1-alpha-2"`, `pattern: patterns.E164_PHONE` with `format: "e164"`, `pattern: patterns.IANA_TIMEZONE` with `format: "iana-time-zone"` and `pattern: patterns.LOCALE` with `format: "bcp47"`; drop a `trim`, `lowercase` or `uppercase` beside it, and a `min` or `max` outside its range, which codegen refuses; a client that read a pattern's `format: "regex"` reads the id.
+
+3. **Install `@workerstack/database` in place of `@lovrozagar/comb`.** The package moved to the workerstack org and the old name gets no new releases; `@workerstack/database@0.21.0` is `@lovrozagar/comb@0.21.0` under the new name, so you can switch before taking 0.22. The `comb` CLI, `comb.config.ts`, `CombError` and the migration tables keep their names. Generated DTOs and entities import from the package by name, so files generated on the old name still import `@lovrozagar/comb`. **Fix:** run `bun remove @lovrozagar/comb && bun add @workerstack/database`, replace every `@lovrozagar/comb` import prefix with `@workerstack/database`, and rerun `comb codegen`.
 
 ## Upgrading to 0.21
 
@@ -1294,13 +1298,13 @@ What changes for a project on 0.20. Before deploying it:
 
    New exports: `BinPeer`, `ClassifyOptions`, `ColumnsConfig`, `CombColumnKind`, `ConstantValue`, `ConstraintsConfig`, `CursorId`, `D1AnswerLike`, `D1DatabaseLike`, `D1SessionLike`, `D1StatementLike`, `DatabaseShared`, `DiagramsConfig`, `DtosConfig`, `EntitiesConfig`, `EnumChecksConfig`, `EnvironmentsDatabaseConfig`, `ExpressionIndexMeta`, `Fallback`, `FieldNamesConfig`, `FilterToSQLConfig`, `ForeignKey`, `FtsGeneratorConfig`, `FtsObject`, `FtsSource`, `FtsState`, `GeneratorContext`, `ImportRef`, `ImportStyle`, `KeysetKind`, `LimitsGiven`, `ListPagination`, `ListQuery`, `ListQueryAppliable`, `ListQueryRequest`, `ListQueryShape`, `LogFn`, `ManifestConfig`, `MappedColumn`, `MetaCarrier`, `OrmConfig`, `OrmDialect`, `OutputStableShape`, `PaginationConfig`, `PaginationResponse`, `PaginationResponseSchema`, `ParamMeta`, `PartialUniqueIndexMeta`, `PgColumns`, `PgTarget`, `PostgresDriver`, `ProviderDeps`, `ReadOptions`, `RelationalTable`, `RelationsConfig`, `ReservedListKey`, `ReservedRetrieveKey`, `RetrieveRequest`, `RetrieveShape`, `RowsConfig`, `Run`, `RunOptions`, `RunResult`, `SessionOf`, `ShardBindingOf`, `ShardEnv`, `ShardMapColumns`, `ShardMapTable`, `SingleDatabaseConfig`, `SpellfixRow`, `SqliteDriver`, `StateMachineMeta`, `TableInfo`, `TargetKind`, `Terminal`, `TranslationsConfig`, `TriggerEvent`, `TursoCredentialsRequest`, `TursoDeps`, `ValidationResult`, `WaitUntilCtx`, `drizzleListOptions`, `drizzleProject`, `extractFilterValue`, `extractFilterValues`, `jsonValue`, `limitParamMeta`, `paginate`, `selectParamMeta`.
 
-   Removed: `CURSOR_EXAMPLES`, `LIMIT_DESCRIPTION`, `LIMIT_EXAMPLES`, `SELECT_EXAMPLES` (step 36); `MigrationResult`, `MigrationStatus` and `ResolvedMigrationConfig` from @lovrozagar/comb/migrate, and `CursorPayload`, `ListQueryCapabilities` and `PaginationMeta` from @lovrozagar/comb/query, which no comb export takes or returns. **Fix:** declare your own where you named one.
+   Removed: `CURSOR_EXAMPLES`, `LIMIT_DESCRIPTION`, `LIMIT_EXAMPLES`, `SELECT_EXAMPLES` (step 36); `MigrationResult`, `MigrationStatus` and `ResolvedMigrationConfig` from @workerstack/database/migrate, and `CursorPayload`, `ListQueryCapabilities` and `PaginationMeta` from @workerstack/database/query, which no comb export takes or returns. **Fix:** declare your own where you named one.
 
-   `@lovrozagar/comb/query` drops three types no call takes or returns. `paginateMerged` returns `PaginationResponse`, as `paginate` does; `PaginationMeta`, which 0.20 typed its meta as, is gone, and `PaginationResponse` has the same five fields. `CursorPayload` is what a cursor seals, which only `readCursor` opens, as a `DecodedCursor`. `ListQueryCapabilities` was read by no builder. **Fix:** type `paginateMerged`'s meta as `PaginationResponse` and an opened cursor as `DecodedCursor`, or declare your own; drop a `ListQueryCapabilities` you declared.
+   `@workerstack/database/query` drops three types no call takes or returns. `paginateMerged` returns `PaginationResponse`, as `paginate` does; `PaginationMeta`, which 0.20 typed its meta as, is gone, and `PaginationResponse` has the same five fields. `CursorPayload` is what a cursor seals, which only `readCursor` opens, as a `DecodedCursor`. `ListQueryCapabilities` was read by no builder. **Fix:** type `paginateMerged`'s meta as `PaginationResponse` and an opened cursor as `DecodedCursor`, or declare your own; drop a `ListQueryCapabilities` you declared.
 
    Changed: `AnalysisResult`, `BuildDerivedListQueryOpts`, `BuildListQueryOpts`, `CircuitBreakerState`, `CliError`, `CliIo`, `CodegenConfig`, `CombError`, `CombMeta`, `CombMetaInput`, `CombMetaStamp`, `CombQueryMeta`, `CombQueryMetaInput`, `Connection`, `ConnectionProvider`, `ConstraintMap`, `ConstraintMapEntry`, `CursorValue`, `DatabaseCodegen`, `DatabaseErrorHandler`, `DecodedCursor`, `DrizzleExportOptions`, `DrizzleListOptions`, `EnumOptions`, `EnumStates`, `FieldMeta`, `FieldsConfig`, `IntegerConstraints`, `JsonConstraints`, `ListExtra`, `ListExtras`, `ListQueryConfig`, `ListQueryInput`, `ListQueryOutput`, `ListQueryResult`, `ListQuerySchema`, `ListRow`, `LruCache`, `MANIFEST_VERSION`, `Manifest`, `ManifestColumn`, `ManifestEntity`, `ManifestRelation`, `MergedListQueryResult`, `PAGE_DESCRIPTION`, `RetrieveQueryConfig`, `RetrieveQuerySchema`, `RetryOptions`, `SchemaDiffOptions`, `SessionHandle`, `ShardDbHandle`, `ShardKv`, `ShardResolverDeps`, `ShardRouter`, `ShardRouterConfig`, `ShardVerifyDeps`, `SpellfixSearch`, `SqliteColumns`, `StateMachine`, `TableMeta`, `TextConstraints`, `TimestampConstraints`, `TranslationResolverInput`, `UlidFactoryOptions`, `analyze`, `applyListQuery`, `assertTransition`, `buildDerivedListQuery`, `buildFtsWhereWithSpellfix`, `buildListQuery`, `buildManifest`, `c`, `canTransition`, `checkAtlasInstalled`, `checkCircuitBreaker`, `classifyD1Error`, `classifyMigration`, `classifyPgError`, `classifySqliteError`, `combMeta`, `constraintError`, `createBunSqliteProvider`, `createCircuitBreaker`, `createCursor`, `createD1Provider`, `createLibsqlProvider`, `createListQuerySchema`, `createProvider`, `createRetrieveQuerySchema`, `createTursoProvider`, `createUlidFactory`, `d1ErrorHandler`, `defineCodegenConfig`, `defineConstraintMaps`, `defineStateMachine`, `deriveEntityMeta`, `exportDrizzleSchema`, `extractDropStatements`, `fieldConstraintsOf`, `generateColumns`, `generateConstraints`, `generateDiagrams`, `generateDtos`, `generateEntities`, `generateEnumChecks`, `generateFieldNames`, `generateFts`, `generateFtsSql`, `generateManifest`, `generateOrm`, `generateRelations`, `generateRows`, `generateSchemaDiff`, `generateTranslations`, `getAtlasVersion`, `getSqliteColumns`, `getSqliteIndexes`, `getSqliteTables`, `getTursoCredentials`, `handleConstraintViolation`, `introspectSqliteSchema`, `isExcludedFromUpdate`, `isState`, `isTerminal`, `nextStates`, `openD1Session`, `paginateMerged`, `parseMigration`, `parseOrder`, `patterns`, `pgErrorHandler`, `processIo`, `queryHelpers`, `readCombEntityMeta`, `readCombMeta`, `readCombQueryMeta`, `readCursor`, `resolveTranslation`, `resourceOutcome`, `runCli`, `shardMap`, `sqliteErrorHandler`, `updateCircuitBreaker`, `validateFilter`, `validateTables`, `withRetry`.
 
-   `CliIo` holds `cwd`, `out`, `err`, `run` and `confirm` alone. 0.20's `CliIo.readPgObjects`, `CliIo.replayPgHistory`, `CliIo.readyPgDev` and `CliIo.locatePeer`, seams comb's own tests fake and typed by its internals, are gone from it, and `runCli` reads none of them from an io that carries one. `Run`, `RunOptions`, `RunResult` and `BinPeer`, which type `run`, are exported from `@lovrozagar/comb/cli` as from `/migrate`. **Fix:** drop such a field from the io you pass; comb finds its peers, reads Postgres and readies the dev database itself. Every type a public declaration names is now one you can import, from the subpath whose function or type names it, or from the one subpath that owns a type several share (the column options from `/sqlite/constraints`, `CombError` and the constraint map from the root, the list query types from `/query`), so a helper typed around comb's API names what it takes and returns; a test holds each subpath to its list, and the few kept internal to theirs, each with its reason. `ListQuerySchema`, `RetrieveQuerySchema`, `paginateMerged` and `createRetrieveQuerySchema` changed only in the names their declarations give types they reach: `ListQueryRequest`, `RetrieveRequest` and `PaginationResponse`, exported under those names. `createListQuerySchema` and `queryHelpers` change in those names and more: `queryHelpers.filterValue` and `filterValues` take an `operator` (step 34), and `createListQuerySchema`'s `limits` takes `undefined` for any key (step 21) and its config reserves `tiebreak`, as below. `@lovrozagar/comb/query` exports the functions `queryHelpers` groups, `paginate`, `drizzleListOptions`, `drizzleProject`, `extractFilterValue` and `extractFilterValues`, so a project that emits declarations can export `queryHelpers`, or a helper returning what one of them returns, where 0.20 failed it with TS2742, its type naming a file only comb's `types/` folder holds. `processIo` and `runCli` change with `CliIo`. The options of `run`, which `DrizzleExportOptions`, `SchemaDiffOptions`, `checkAtlasInstalled`, `createD1Provider`, `createProvider`, `exportDrizzleSchema`, `generateSchemaDiff` and `getAtlasVersion` take, gain an optional `peer`, the `BinPeer` a command runs (step 2).
+   `CliIo` holds `cwd`, `out`, `err`, `run` and `confirm` alone. 0.20's `CliIo.readPgObjects`, `CliIo.replayPgHistory`, `CliIo.readyPgDev` and `CliIo.locatePeer`, seams comb's own tests fake and typed by its internals, are gone from it, and `runCli` reads none of them from an io that carries one. `Run`, `RunOptions`, `RunResult` and `BinPeer`, which type `run`, are exported from `@workerstack/database/cli` as from `/migrate`. **Fix:** drop such a field from the io you pass; comb finds its peers, reads Postgres and readies the dev database itself. Every type a public declaration names is now one you can import, from the subpath whose function or type names it, or from the one subpath that owns a type several share (the column options from `/sqlite/constraints`, `CombError` and the constraint map from the root, the list query types from `/query`), so a helper typed around comb's API names what it takes and returns; a test holds each subpath to its list, and the few kept internal to theirs, each with its reason. `ListQuerySchema`, `RetrieveQuerySchema`, `paginateMerged` and `createRetrieveQuerySchema` changed only in the names their declarations give types they reach: `ListQueryRequest`, `RetrieveRequest` and `PaginationResponse`, exported under those names. `createListQuerySchema` and `queryHelpers` change in those names and more: `queryHelpers.filterValue` and `filterValues` take an `operator` (step 34), and `createListQuerySchema`'s `limits` takes `undefined` for any key (step 21) and its config reserves `tiebreak`, as below. `@workerstack/database/query` exports the functions `queryHelpers` groups, `paginate`, `drizzleListOptions`, `drizzleProject`, `extractFilterValue` and `extractFilterValues`, so a project that emits declarations can export `queryHelpers`, or a helper returning what one of them returns, where 0.20 failed it with TS2742, its type naming a file only comb's `types/` folder holds. `processIo` and `runCli` change with `CliIo`. The options of `run`, which `DrizzleExportOptions`, `SchemaDiffOptions`, `checkAtlasInstalled`, `createD1Provider`, `createProvider`, `exportDrizzleSchema`, `generateSchemaDiff` and `getAtlasVersion` take, gain an optional `peer`, the `BinPeer` a command runs (step 2).
 
    `generateManifest`'s config no longer takes `ManifestConfig.filePrefix`, which it never read: the manifest is written to `output` alone, as in 0.20. 0.20 exported the function but not its config type, so `ManifestConfig` is listed as a new export by name only; its `output` is unchanged. A call whose object literal still passes `filePrefix` fails to compile (TS2353). **Fix:** drop `filePrefix` from the call.
 
@@ -1376,7 +1380,7 @@ What changes for a project on 0.20. Before deploying it:
 
 23. **Create a state column's row at its `initial`.** A `c.enum` column whose machine declares `initial` takes that value alone in the generated create DTO, published as `const` and as its example; the update DTO keeps every value. 0.20 took any state on create, so a body created a job already `done` and skipped the lifecycle `assertTransition` guards. Codegen refuses such a column's default when it is another value, or a default function, an update function or SQL, which comb cannot hold to `initial`. **Fix:** write `.default(initial)`, or drop `initial` where rows start in several states.
 
-24. **Read an identity column as generated, and a private column's flags as the bodies'.** One rule now decides which write bodies take a column, and the DTOs, the stamp and the manifest all read it. A non-key identity column (`generatedAlwaysAsIdentity()`, `generatedByDefaultAsIdentity()`), which 0.20 already left out of both bodies, is now in the stamp's `generated`, and the manifest flags it `generated` and `immutable`, where 0.20 flagged it neither while the stamp called it immutable. A private column's manifest flags state what the bodies do: a private reference that does not declare `mutable` is `immutable`, a private `autogenerate` column `generated` and `immutable`, where 0.20 flagged every private column `false`. `isExcludedFromUpdate` from `@lovrozagar/comb/codegen` counts an identity column, and `deriveEntityMeta` takes the table alone: its second argument, the update body's emitted fields, is gone, as the rule it read is the one the generator applies. The stamp's `generated` lists its fields in the table's order, the key no longer moved first. **Fix:** regenerate; call `deriveEntityMeta(table)` without a second argument, and a reader that took the stamp's first `generated` entry as the key reads the key from `identity`.
+24. **Read an identity column as generated, and a private column's flags as the bodies'.** One rule now decides which write bodies take a column, and the DTOs, the stamp and the manifest all read it. A non-key identity column (`generatedAlwaysAsIdentity()`, `generatedByDefaultAsIdentity()`), which 0.20 already left out of both bodies, is now in the stamp's `generated`, and the manifest flags it `generated` and `immutable`, where 0.20 flagged it neither while the stamp called it immutable. A private column's manifest flags state what the bodies do: a private reference that does not declare `mutable` is `immutable`, a private `autogenerate` column `generated` and `immutable`, where 0.20 flagged every private column `false`. `isExcludedFromUpdate` from `@workerstack/database/codegen` counts an identity column, and `deriveEntityMeta` takes the table alone: its second argument, the update body's emitted fields, is gone, as the rule it read is the one the generator applies. The stamp's `generated` lists its fields in the table's order, the key no longer moved first. **Fix:** regenerate; call `deriveEntityMeta(table)` without a second argument, and a reader that took the stamp's first `generated` entry as the key reads the key from `identity`.
 
 25. **Run zod 4.6.0 or later.** comb's zod peer range is `>=4.6.0 <5`, raised from `>=4.5.4 <5`: zod 4.5.x publishes an email pattern with lookahead, which Go's RE2 and Rust's `regex` crate refuse, so a Go validator refused the whole document of any API with an email field. **Fix:** upgrade zod to 4.6.0 or later.
 
@@ -1596,7 +1600,7 @@ What changes for a project on 0.18. Before deploying it:
 
 10. **Leave D1's new `_comb_migration_hash_intents` table to comb.** Apply on D1 writes each checked file's hash there before `wrangler d1 migrations apply` runs, and moves it to `_comb_migration_hashes` once wrangler's table names the file. 0.18 wrote the hash itself first, so when wrangler then ran nothing, the row outlived the apply, and every later command refused a file fixed and applied by wrangler alone, as applied and then as edited. The first apply that writes an intent makes the table; `d1HistoryTables()` lists it, and comb's own schema reads leave it out, as they do its other history tables. **Fix:** a hand-written list of comb's tables that a schema tool skips adds it; one built from `d1HistoryTables()` needs nothing.
 
-11. **Drop a tsconfig mapping into comb's source.** A consumer's `tsc` now reads comb's declarations, so it needs no flag and no longer checks comb's internals. A `paths` entry or a `customConditions` mapping that sends `@lovrozagar/comb` to its `src` bypasses them and keeps the 0.18 behavior, `allowImportingTsExtensions` and all. **Fix:** remove the mapping; `allowImportingTsExtensions` can go too, unless your own imports end in `.ts`.
+11. **Drop a tsconfig mapping into comb's source.** A consumer's `tsc` now reads comb's declarations, so it needs no flag and no longer checks comb's internals. A `paths` entry or a `customConditions` mapping that sends `@workerstack/database` to its `src` bypasses them and keeps the 0.18 behavior, `allowImportingTsExtensions` and all. **Fix:** remove the mapping; `allowImportingTsExtensions` can go too, unless your own imports end in `.ts`.
 
 ## Upgrading to 0.18
 
@@ -1726,7 +1730,7 @@ What changes for a project on 0.15. Before deploying it:
 1. **Regenerate, then rename what codegen renames.**
    - Generated subpaths now split at acronyms and digits, as well as at a lowercase-to-uppercase step: `HTTPLog` is `http-log`, `oauth2Token` is `oauth2-token` and `apiKeyV2Token` is `api-key-v2-token`, so a camelCase and a snake_case spelling of one name now always meet. Rewrite the imports of any table whose name holds an acronym or a digit.
    - The run record is `.comb.codegen.gen.json`, named under the `.gen.` convention every formatter config ignores, so a format pass no longer rewrites it. comb does not read the old `.comb.codegen.json`: rename the committed file (`git mv .comb.codegen.json .comb.codegen.gen.json`), or delete it at the cost of one run that removes no stale file.
-   - Generated DTO files reach comb's own predicates as `import * as comb from "@lovrozagar/comb"` (`comb.isStorableText`, `comb.isCidr`), and name every global they call through `globalThis`, so a `c.json` schema exported under one of those names can no longer replace it. A schema exported as `comb` or `globalThis` is imported under an alias. Every DTO file's text changes; its behavior does not.
+   - Generated DTO files reach comb's own predicates as `import * as comb from "@workerstack/database"` (`comb.isStorableText`, `comb.isCidr`), and name every global they call through `globalThis`, so a `c.json` schema exported under one of those names can no longer replace it. A schema exported as `comb` or `globalThis` is imported under an alias. Every DTO file's text changes; its behavior does not.
    - A declared bound that holds no value fails codegen, naming the column: a `min` past its `max` on any column, a text `min` or `max` that is not a whole number from 0, a `maxBytes` that is not a whole number from 1. Each used to generate a module that threw on import, or a schema no value passed.
    - A nullable read float publishes `null` once (`anyOf [number, null]`, as a NOT NULL one does); parsing is unchanged. The manifest gains each entity's `partialUniqueIndexes`. Generated enum checks return `CheckBuilder[]` and each sql-cols record is typed `Pick<typeof <table>, …>`, so both compile under `isolatedDeclarations`.
 
@@ -1885,7 +1889,7 @@ What changes for a project on 0.14.1. Before deploying it:
 
 ### New
 
-- `refoldStatements(table, column, sources)`, from `@lovrozagar/comb/query/sqlite`: the backfill of a `_search` column, writing only rows whose fold changed.
+- `refoldStatements(table, column, sources)`, from `@workerstack/database/query/sqlite`: the backfill of a `_search` column, writing only rows whose fold changed.
 - `combDatabaseErrorKeys` and `CombDatabaseErrorKey`, from the package root: the keys the database classifiers answer with.
 - `contains` runs on SQLite, as a member of the JSON array a column holds, a plain `text()` column's included; a scalar JSON value is no array, and matches nothing.
 - The entity stamp's `partialUniqueIndexes` (meta-contract.md §6.8) and the query stamp's `maxPatternBytes`, optional facts within v1.
@@ -1906,7 +1910,7 @@ What changes for a project on 0.13.1. Before deploying it:
    - **A read DTO states a declared bound and no longer enforces it.** `maxLength`, `minLength`, `minimum` and `maximum` from `c.text`, an email, `c.id`, `c.integer`, `c.real` and `c.timestamp` (and a SQLite text length) move to `x-comb-maxLength`, `x-comb-minLength`, `x-comb-minimum` and `x-comb-maximum`, so a row stored past one parses. A client that validates responses against the published schema reads them under the new names.
 2. **Expect codegen to refuse what it used to let through.** A `c.id` prefix `generateId` refuses (2–10 lowercase letters and digits, a letter first) fails the tables module as it loads, naming the file; its ids could never be generated. A constraint that is no finite number (`max: Number(process.env.NAME_MAX)`, NaN in codegen's env-free child) fails codegen naming the column. A plain Postgres column of a data type comb has no rule for (`sparsevec`) fails, naming the types comb does type. A tables module that read a file relative to its own folder now reads it relative to the config's directory, where the app and drizzle-kit load it; resolve a module-relative path from `import.meta.url`.
 3. **Run `comb migrate check <db>` on every Postgres database.** Postgres DDL and writes are rated from the parse tree, so a pending file that relied on a spelling the text rules missed is re-rated, and the history's Atlas split, renamed or deleted applied files, and 0.12's shared history are checked as the Migrate list says. Approve a file that is meant to do what it is refused for with `-- comb:allow-unsafe: <reason>`.
-4. **Record the hashes of D1 files applied before comb kept them.** `comb migrate status <db>` names them (`No hash recorded for …`), and comb cannot tell whether one was edited since. From the commit that applied them, once `git log` shows no edit to them since, run `comb migrate baseline <db> --hashes` once on each D1 database: it records each one's current text as the text that ran, which is the one thing it cannot verify. A tool that empties a D1 database keeps `d1HistoryTables(...)` from `@lovrozagar/comb/migrate`, rows and all, or an applied file edited after a wipe passes `check`.
+4. **Record the hashes of D1 files applied before comb kept them.** `comb migrate status <db>` names them (`No hash recorded for …`), and comb cannot tell whether one was edited since. From the commit that applied them, once `git log` shows no edit to them since, run `comb migrate baseline <db> --hashes` once on each D1 database: it records each one's current text as the text that ran, which is the one thing it cannot verify. A tool that empties a D1 database keeps `d1HistoryTables(...)` from `@workerstack/database/migrate`, rows and all, or an applied file edited after a wipe passes `check`.
 5. **Install `postgres` (`>=3.4.9 <4`) where you baseline a Postgres database.** `comb migrate baseline` on Postgres now compares the database's functions, procedures and triggers with the history's by name, which Atlas OSS leaves out without a word: without the package it refuses, naming it, and a database holding one the history does not make, or lacking one it does, is refused ("the database's functions and triggers are not the ones the migrations leave, so baseline records nothing: …").
 6. **Check every configured Postgres `schema`.** It must be a lowercase plain name (`^[a-z_][a-z0-9_$]*$`), at most 63 bytes and no reserved word: `Tenant`, which Postgres folds to `tenant`, `user` or `order` is refused with why. A `devUrl` that reaches the target database is refused however the two URLs spell it.
 7. **Check what your clients send to list endpoints.** `filter` is capped at 4608 bytes (was 5120), `order` at 200 and `select` at 500 (new), and every character a form or a URL escapes, a space and `~ ! ' ( )` among them, counts 3 bytes; a request past a cap is a 400 field error ("At most N bytes as a URL or a form encodes it, …"). `page` and `limit` take decimal digits only: `0x10` or `1e3` is a 400, and a page that is no whole number from 1 throws `invalid_page` (400) from `parse` as from `paginate`. A handler that builds its parsed object with `validated: true` no longer skips the page bound: mark `pageBounded: true` where its own schema bounds the page.
@@ -1948,7 +1952,7 @@ What changes for a project on 0.13.1. Before deploying it:
 - `paginateMerged(rowsPerShard, parsed, options)` and `mergedListOptions(parsed, options)`, from the sharding entry, page a list merged from several shards by number or by cursor as one database would, its count summed.
 - `move({ orgId, shardId, with })` batches your own core-database statements with the mapping's write; `ShardMove` is its type.
 - `isStorableText(s)`, `storableText()` and `STORABLE_TEXT_RULE`, from the package root, hold an app's own text to the rule generated DTOs hold it to; `isCidr` is there too.
-- `d1HistoryTables(migrationsTable?)`, `D1_MIGRATIONS_TABLE`, `D1_HASH_TABLE` and `DRIZZLE_HISTORY_TABLE`, from `@lovrozagar/comb/migrate`.
+- `d1HistoryTables(migrationsTable?)`, `D1_MIGRATIONS_TABLE`, `D1_HASH_TABLE` and `DRIZZLE_HISTORY_TABLE`, from `@workerstack/database/migrate`.
 - `comb migrate baseline <db> --hashes` on D1.
 - `c.ref(name, { relation })` names a key's relation, where a key whose role is a column's own name failed codegen.
 - A constraint map's table may list `referenced` and `private`; a manifest relation carries a composite key's `key`; `generateSchemaDiff` and `generateIncrementalMigration` return Atlas's `notices`.
@@ -2004,7 +2008,7 @@ What changes for a project on 0.12. Before deploying it:
 - **`classifyMigration()` on SQLite, without the proof run, holds writes for the engine.** It clears only what text can show: any write to a table the file created, a backfill of only the columns the file added (cautious, once), and an insert no history trigger watches that replaces nothing. Every other write is unsafe, "pending the proof run's read of what it writes", and listed in the new `MigrationClassification.pendingStatements`. `comb migrate check` and `apply` run the proof, whose findings replace those entries, so their ratings are the engine's.
 - **A file the proof copy cannot run is unsafe**, with the statement and SQLite's error, and so is every pending file after it. In 0.12 such a file kept the classifier's rating. A file that fails only on the copy (a constraint a seeded row breaks) needs `-- comb:allow-unsafe: <reason>`.
 - **An FTS5 `'delete'` or `'delete-all'` command is unsafe**, as is a command comb cannot read. `'rebuild'`, `'optimize'`, `'merge'` and the option settings stay safe.
-- **Postgres migrations are read with Postgres's own parser.** Install the optional peer `libpg-query` (`>=17.7.4 <18`) to migrate Postgres. comb's CLI loads it itself; a program that calls `classifyMigration()`, `parseMigration()` or `extractDropStatements()` on Postgres awaits `loadPostgresParser()` from `@lovrozagar/comb/migrate` first.
+- **Postgres migrations are read with Postgres's own parser.** Install the optional peer `libpg-query` (`>=17.7.4 <18`) to migrate Postgres. comb's CLI loads it itself; a program that calls `classifyMigration()`, `parseMigration()` or `extractDropStatements()` on Postgres awaits `loadPostgresParser()` from `@workerstack/database/migrate` first.
 - **Each row of comb's SQLite history records one file.** A row recorded with a name matches the file of that name; a row from before 0.11, unnamed, matches one file by its hash, among the files no named row holds, and is named on the next apply. A row that matches no file (one edited or renamed after it was applied) refuses `check` and `apply` and is named in `status`. A new file whose text matches an applied one (an index dropped, then made again) is pending and runs. The first `apply` or `baseline` rebuilds `__drizzle_migrations` once, in one batch, so the file's name, not its hash, is unique; every row and id is kept.
 - **A history 0.12 left is read as 0.13 names it.** 0.12 recorded a `--file` by its base name wherever the file was, so the first 0.13 `apply` (and `check` and `status`, read-only, before it) resolves each named row once: a row whose name a top-level file has keeps it; one whose hash exactly one unrecorded file has takes that file's name, so a file renamed under 0.12 is not applied again; any other is recorded as `../<name>`, a file from outside the directory, as 0.13 names one. A file deleted under 0.12 reads so too: 0.12 could not tell a deleted file from one applied with `--file` either. A hash two unrecorded files hold is refused, naming them. Every row 0.13 records stays strict. The rebuild also keeps the history's AUTOINCREMENT counter, so no id is handed out twice, and takes any view or trigger over the history with it, recreated in the same batch; one that cannot come back is named, and nothing changes. `--file` refuses a file in a subdirectory of the migrations directory, which a whole-directory run does not read.
 - **An applied file edited since is refused on Postgres and D1 too**, in `status`, `check` and `apply`, as on SQLite; on Postgres it was a status warning. D1's `migrations_table` records names only, so comb records the hash each file was applied under in its own table, `_comb_migration_hashes`. For a file applied before 0.13, `status` says comb has no hash to compare.
@@ -2029,7 +2033,7 @@ What changes for a project on 0.12. Before deploying it:
 - **A date-mode Postgres `timestamp` holding `'infinity'` pages exactly.** It looped: node-postgres reads both infinities as 2000-01-01, and the cursor carried that Date. The cursor's bound is now read from its row; a `timestamptz` or `date` holding one is still the documented 500, its message naming both dialects' causes.
 - **FTS can fold its terms as `_search` was folded.** An FTS source takes `folded: true` when its table indexes a `searchText` column, and each term is folded with `searchText` before the match, so FTS over `_search` finds what `likeSearch` does; the README's Search section lists the folds `unicode61` does not make.
 - **`@noble/ciphers` and `@noble/hashes` take 2.0.0 and up.** comb's calls (`xchacha20poly1305`, `hkdf`, `sha256`) are the same from 2.0.0, so an app that pins noble 2.0 to 2.3 through the scure packages shares one copy; the repo's suites run at that floor.
-- **`CursorRef` and `CursorValue` are exported** from `@lovrozagar/comb/query`, so code that reads a cursor with `readCursor` can tell a value carried by reference, which a keyset must read from the cursor's row, never bind. `readCursor` checks its options first, so a handler that cannot seal answers a long cursor with `cursor_not_wired` too.
+- **`CursorRef` and `CursorValue` are exported** from `@workerstack/database/query`, so code that reads a cursor with `readCursor` can tell a value carried by reference, which a keyset must read from the cursor's row, never bind. `readCursor` checks its options first, so a handler that cannot seal answers a long cursor with `cursor_not_wired` too.
 - **SQLite names with a dot or a dash** split right in errors: a STRICT mismatch on `line-item` names its table and column, and a dotted pair splits at the statement's own table.
 - **A sealed cursor's length says nothing of its values.** Its plaintext is padded to a multiple of 256 bytes before sealing, so cursors whose values differ in length within one bucket are one length; a cursor is up to about 340 characters longer. 0.12 cursors still open.
 - **A seconds-mode SQLite timestamp holding a fraction pages exactly.** A cursor's bound on such a key is read from its own row, any fraction kept, as no Date holds one below a millisecond; drizzle would floor a bound Date to the second. Once that row is deleted the cursor's milliseconds bound it, so a row of that millisecond may come again and none is skipped. A `buildDerivedListQuery` list has no row to read, so on a seconds-mode key it pages exactly only for values whose fraction is whole milliseconds.
@@ -2125,7 +2129,7 @@ What changes for a project on 0.12. Before deploying it:
 
 **Query layer**
 
-- **Cursors are signed.** `createCursor`, `readCursor`, `queryHelpers.listOptions`, `queryHelpers.paginate`, `buildListQuery` and `buildDerivedListQuery` take a required `cursorSecret` of at least 32 UTF-8 bytes: give every worker the same `CURSOR_SECRET` and pass it at the call. A cursor 0.9 minted is `invalid_cursor` after the upgrade, so a client on page 2 starts over. `decodeCursor` is removed; use `readCursor`. `encodeCursor` is no longer exported from `@lovrozagar/comb/query`.
+- **Cursors are signed.** `createCursor`, `readCursor`, `queryHelpers.listOptions`, `queryHelpers.paginate`, `buildListQuery` and `buildDerivedListQuery` take a required `cursorSecret` of at least 32 UTF-8 bytes: give every worker the same `CURSOR_SECRET` and pass it at the call. A cursor 0.9 minted is `invalid_cursor` after the upgrade, so a client on page 2 starts over. `decodeCursor` is removed; use `readCursor`. `encodeCursor` is no longer exported from `@workerstack/database/query`.
 - The cursor cap is 8192 characters (`MAX_CURSOR_LENGTH`), and `paginate` throws `sort_not_wired` rather than mint a longer one.
 - A number past ±2^53−1 in a filter is a 400.
 - `page` runs to `pagination.maxPage` (10 000 by default, published as `maxPage`); page further by cursor.
@@ -2172,7 +2176,7 @@ What changes for a project on 0.12. Before deploying it:
 - **D1 `status` and `check` write nothing**: a database without `d1_migrations` reads as nothing applied. Only `apply` and `baseline` create the table.
 - **The D1 provider takes no `databaseId`.** Remove it from `comb.migrate.config.ts`: wrangler finds the database by `databaseName` and the wrangler config's `database_id`. A config that still passes one fails to load, saying so.
 - `migrate apply`, `check` and `status` take `--json`: one object, `{ database, applied, pending, refused }`, as the only stdout, the human lines on stderr.
-- `confirmDrops` and its `ConfirmDrops` type are removed from `@lovrozagar/comb/migrate`; `dropsQuestion` stays.
+- `confirmDrops` and its `ConfirmDrops` type are removed from `@workerstack/database/migrate`; `dropsQuestion` stays.
 
 **Queries**
 
@@ -2184,7 +2188,7 @@ What changes for a project on 0.12. Before deploying it:
 - A relation without `relationFields` selects no field; declare the fields a client may embed.
 - `parseSelect` throws a 400 (`invalid_select`) on a select it cannot parse, instead of returning null, which `queryHelpers.project` read as every column.
 - `queryHelpers.paginate` throws `sort_not_wired` (500) when a row lacks a sort key or the id, instead of minting a cursor that repeats or ends the list.
-- `escapeLike` is exported from `@lovrozagar/comb/query`. `hasRelation`, `hasScalarsRequested`, `getRelationSelection`, `buildRelationColumns`, `getEntityColumns`, `buildColumns`, `getPrimarySortDirection` and the `PaginationOptions` and `PaginationQueryInput` types are removed: nothing used them.
+- `escapeLike` is exported from `@workerstack/database/query`. `hasRelation`, `hasScalarsRequested`, `getRelationSelection`, `buildRelationColumns`, `getEntityColumns`, `buildColumns`, `getPrimarySortDirection` and the `PaginationOptions` and `PaginationQueryInput` types are removed: nothing used them.
 
 **Errors**
 
@@ -2281,7 +2285,7 @@ Fixes that change what a caller sees:
 - **Codegen.** Config mode names a database as the config does (`core`, not `db` for `src/db/core.tables.ts`), which renames its generated maps and diagrams. Generated subpaths are never written into a `package.json` above the project root. Temporary files of atomic writes are named with `randomUUID`.
 - **Meta.** The manifest no longer lists unique indexes over private columns, matching the stamp.
 
-New: `createUlidFactory()` for ULIDs that strictly increase, even through a clock that steps back. `KeysetPosition` is exported from `@lovrozagar/comb/query/sqlite`. The package's declared types are checked under `isolatedDeclarations` and every strict flag a consumer may set. That covers comb's own shipped types: the generated files (DTOs, relations, enum checks) and your drizzle tables module are your app's code, which `isolatedDeclarations` would flag for their inferred types, so keep them out of a project that sets it.
+New: `createUlidFactory()` for ULIDs that strictly increase, even through a clock that steps back. `KeysetPosition` is exported from `@workerstack/database/query/sqlite`. The package's declared types are checked under `isolatedDeclarations` and every strict flag a consumer may set. That covers comb's own shipped types: the generated files (DTOs, relations, enum checks) and your drizzle tables module are your app's code, which `isolatedDeclarations` would flag for their inferred types, so keep them out of a project that sets it.
 
 ## Upgrading to 0.5.0
 
@@ -2290,7 +2294,7 @@ New: `createUlidFactory()` for ULIDs that strictly increase, even through a cloc
 **Package**
 
 - `zod` is a required peer; `@cloudflare/workers-types` is an optional peer; every peer range stops before its next major.
-- `@lovrozagar/comb/cli` exports `runCli` and runs nothing on import; the executable is a bin shim, and the export moves to `src/cli/index.ts` (`HELP` is now `help()`).
+- `@workerstack/database/cli` exports `runCli` and runs nothing on import; the executable is a bin shim, and the export moves to `src/cli/index.ts` (`HELP` is now `help()`).
 - `./package.json` is exported.
 
 **Errors**

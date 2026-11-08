@@ -226,7 +226,7 @@ describe("comb codegen: arguments", () => {
 })
 
 const HEAD = `import { sqliteTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 `
 const POST = `export const post = sqliteTable("post", { id: c.id("pst"), title: c.text("title").notNull() })\n`
 const INVOICE = `export const invoice = sqliteTable("invoice", { id: c.id("inv"), total: c.integer("total") })\n`
@@ -306,7 +306,7 @@ describe("comb codegen: the dialect of a tables file", () => {
 		config(dir, { generators: ["enum-checks"] })
 		writeFileSync(
 			join(dir, "db.core.tables.ts"),
-			`import { pgTable } from "drizzle-orm/pg-core"\nimport { c } from "@lovrozagar/comb/pg/columns"\nexport const post = pgTable("post", { id: c.id("pst"), s: c.enum("s", ["a", "b"]) })\n`,
+			`import { pgTable } from "drizzle-orm/pg-core"\nimport { c } from "@workerstack/database/pg/columns"\nexport const post = pgTable("post", { id: c.id("pst"), s: c.enum("s", ["a", "b"]) })\n`,
 		)
 		expect(await runCliWithFakes(["codegen"], makeIo(dir))).toBe(0)
 		expect(readFileSync(join(dir, "db.core.enum-checks.gen.ts"), "utf8")).toContain('from "drizzle-orm/pg-core"')
@@ -319,7 +319,7 @@ describe("comb codegen: a config dialect the tables contradict (F18)", () => {
 		config(dir, { dialect: "sqlite", generators: ["enum-checks"] })
 		writeFileSync(
 			join(dir, "db.core.tables.ts"),
-			`import { pgTable } from "drizzle-orm/pg-core"\nimport { c } from "@lovrozagar/comb/pg/columns"\nexport const post = pgTable("post", { id: c.id("pst"), s: c.enum("s", ["a", "b"]) })\n`,
+			`import { pgTable } from "drizzle-orm/pg-core"\nimport { c } from "@workerstack/database/pg/columns"\nexport const post = pgTable("post", { id: c.id("pst"), s: c.enum("s", ["a", "b"]) })\n`,
 		)
 		const io = makeIo(dir)
 		expect(await runCliWithFakes(["codegen"], io)).toBe(1)

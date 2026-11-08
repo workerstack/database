@@ -21,7 +21,7 @@ function validate(source: string) {
 	const file = path.join(dir, "db.test.tables.ts")
 	fs.writeFileSync(
 		file,
-		`import { sqliteTable } from "drizzle-orm/sqlite-core"\nimport { c } from "@lovrozagar/comb/sqlite/columns"\n${source}`,
+		`import { sqliteTable } from "drizzle-orm/sqlite-core"\nimport { c } from "@workerstack/database/sqlite/columns"\n${source}`,
 	)
 	return validateTables(file)
 }

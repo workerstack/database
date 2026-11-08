@@ -219,10 +219,10 @@ describe("ci.yml runs the gates standards lists for comb", () => {
 	it("reads a step's script through comb's package filter, and a block step by its name", () => {
 		expect(
 			ciSteps(
-				"      - run: bun run --filter @lovrozagar/comb test:e2e\n      - name: x\n        run: |\n          y\n",
+				"      - run: bun run --filter @workerstack/database test:e2e\n      - name: x\n        run: |\n          y\n",
 			),
-		).toEqual([{ command: "bun run --filter @lovrozagar/comb test:e2e" }, { name: "x" }])
-		expect(scriptOf("bun run --filter @lovrozagar/comb test:e2e")).toBe("test:e2e")
+		).toEqual([{ command: "bun run --filter @workerstack/database test:e2e" }, { name: "x" }])
+		expect(scriptOf("bun run --filter @workerstack/database test:e2e")).toBe("test:e2e")
 		expect(scriptOf("bun run test:coverage --shard=${{ matrix.shard }}/3 --reporter=blob")).toBe("test:coverage")
 		expect(scriptOf("bun install --frozen-lockfile")).toBeUndefined()
 	})

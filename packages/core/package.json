@@ -1,5 +1,5 @@
 {
-	"name": "@lovrozagar/comb",
+	"name": "@workerstack/database",
 	"version": "0.21.0",
 	"description": "Database framework for Cloudflare D1, PostgreSQL, and SQLite. Schema builders, error handling, D1 sessions, sharding, codegen, migrations.",
 	"keywords": [
@@ -13,15 +13,15 @@
 		"sharding",
 		"sqlite"
 	],
-	"homepage": "https://github.com/lovrozagar/comb#readme",
+	"homepage": "https://github.com/workerstack/database#readme",
 	"bugs": {
-		"url": "https://github.com/lovrozagar/comb/issues"
+		"url": "https://github.com/workerstack/database/issues"
 	},
 	"license": "MIT",
 	"author": "lovrozagar",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/lovrozagar/comb.git",
+		"url": "git+https://github.com/workerstack/database.git",
 		"directory": "packages/core"
 	},
 	"bin": {

@@ -1,6 +1,6 @@
 // query/sqlite/index.d.ts
 /**
- * @lovrozagar/comb/query/sqlite — SQLite-specific SQL generation.
+ * @workerstack/database/query/sqlite — SQLite-specific SQL generation.
  */
 export { applyListQuery, buildDerivedListQuery, buildListQuery, type BuildDerivedListQueryOpts, type BuildListQueryOpts, type ListExtras, type ListQueryResult, type MergedListQueryResult, } from "./build-list-query.ts";
 export { filterToSQL } from "./executor.ts";

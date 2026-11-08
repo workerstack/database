@@ -3,7 +3,7 @@
  * honey reads off it.
  *
  * The generated file is imported and executed, not string-matched, so this
- * covers the whole trip including the `@lovrozagar/comb/meta` import the
+ * covers the whole trip including the `@workerstack/database/meta` import the
  * generator emits. Assertions are on the exact JSON Schema, because "the object
  * is non-empty" would pass even if the stamp landed somewhere honey never looks.
  */
@@ -19,13 +19,13 @@ import { createListQuerySchema } from "../../../src/query/schema.ts"
 import { depthOfKey, readRootKey, searchSchemaKey } from "./honey-search.ts"
 import { testContext } from "../../../src/codegen/generators/__fixtures__/context.ts"
 
-/* Generated inside the package so the emitted `@lovrozagar/comb/meta` import
+/* Generated inside the package so the emitted `@workerstack/database/meta` import
    resolves through the workspace. `.tmp-*` is gitignored. */
 const WORK_DIR = path.resolve(import.meta.dirname, ".tmp-stamp-e2e")
 
 const TABLES = `
 import { sqliteTable as createTable, text, integer, uniqueIndex } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const author = createTable("author", { id: c.id("aut"), name: c.text("name") })
 export const article = createTable("article", {
 	id: c.id("art"),

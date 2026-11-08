@@ -72,7 +72,7 @@ const privately = async (source: string) =>
 		),
 	}))
 const DOC = `${SQLITE}import { uniqueIndex } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 ${USER}export const doc = sqliteTable("doc", {
 id: text("id").primaryKey(),
 email: text("email").unique(),
@@ -187,7 +187,7 @@ describe("buildConstraintMap: a CHECK's verdict (F27) and comb's own enum CHECKs
 		const name = `organization_notification_${column}_enum`
 		const enums = async (dialect: "postgres" | "sqlite", applied: boolean) =>
 			await tablesOf(
-				`${dialect === "postgres" ? PG : SQLITE}import { c } from "@lovrozagar/comb/${dialect === "postgres" ? "pg" : "sqlite"}/columns"\nexport const organization_notification = ${dialect === "postgres" ? "pgTable" : "sqliteTable"}("organization_notification", { id: text("id").primaryKey(), ${column}: c.enum("${column}", ["sent", "failed"]) }${applied ? `, (t) => [check("${name}", sql\`\${t.${column}} IN ('sent', 'failed')\`)]` : ""})\n`,
+				`${dialect === "postgres" ? PG : SQLITE}import { c } from "@workerstack/database/${dialect === "postgres" ? "pg" : "sqlite"}/columns"\nexport const organization_notification = ${dialect === "postgres" ? "pgTable" : "sqliteTable"}("organization_notification", { id: text("id").primaryKey(), ${column}: c.enum("${column}", ["sent", "failed"]) }${applied ? `, (t) => [check("${name}", sql\`\${t.${column}} IN ('sent', 'failed')\`)]` : ""})\n`,
 			)
 		expect(buildConstraintMap(await enums("sqlite", true))["organization_notification"]?.check?.[name]).toEqual({
 			cause: "Invalid enum value",
@@ -222,7 +222,7 @@ describe("buildConstraintMap: a CHECK named after its table (F35)", () => {
  * maps once; two CHECKs of one name blame Postgres's cut only when the cut is what joins them.
  */
 describe("buildConstraintMap: comb's enum CHECK declared, and CHECKs of one name (F47)", () => {
-	const ENUM = `import { c } from "@lovrozagar/comb/sqlite/columns"
+	const ENUM = `import { c } from "@workerstack/database/sqlite/columns"
 export const t = sqliteTable("t", { id: text("id").primaryKey(), status: c.enum("status", ["a", "it's"]) }, (t) => [`
 
 	it("maps comb's own enum CHECK once, as the enum's, when the table declares it", async () => {
@@ -233,7 +233,7 @@ export const t = sqliteTable("t", { id: text("id").primaryKey(), status: c.enum(
 	})
 
 	it("maps it once on Postgres too, as pg-core renders it", async () => {
-		const tables = await tablesOf(`${PG}import { c } from "@lovrozagar/comb/pg/columns"
+		const tables = await tablesOf(`${PG}import { c } from "@workerstack/database/pg/columns"
 export const t = pgTable("t", { id: text("id").primaryKey(), status: c.enum("status", ["a", "it's"]) }, (t) => [check("t_status_enum", sql\`\${t.status} IN ('a', 'it''s')\`)])\n`)
 		expect(Object.keys(buildConstraintMap(tables, "postgres")["t"]?.check ?? {})).toEqual(["t_status_enum"])
 	})

@@ -13,7 +13,7 @@ import { libsqlMemory } from "../support/libsql.ts"
 useProjects()
 
 const TABLES = `import { foreignKey, primaryKey, sqliteTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const member = sqliteTable("member", { orgId: c.text("org_id").notNull(), userId: c.text("user_id").notNull(), role: c.text("role") }, (t) => [primaryKey({ columns: [t.orgId, t.userId] })])
 export const grant = sqliteTable("grant", { id: c.id("grt"), orgId: c.text("org_id").notNull(), userId: c.text("user_id").notNull(), note: c.text("note") }, (t) => [foreignKey({ columns: [t.orgId, t.userId], foreignColumns: [member.orgId, member.userId] })])
 `

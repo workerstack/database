@@ -1,6 +1,6 @@
 # The comb meta contract
 
-Status: v1, implemented in `@lovrozagar/comb` (`packages/core`).
+Status: v1, implemented in `@workerstack/database` (`packages/core`).
 
 Consumer of record: honey's `.metaSpec()` policy layer — see
 `@lovrozagar/honey` `docs/meta-spec.md` §2.3.
@@ -159,7 +159,7 @@ no `anyOf` walk. A nullable trimmed text with a `max` of 9, as codegen publishes
   bcrypt reads.
 - `x-comb-cidr`: `true` on a Postgres cidr: the address, an IPv4 or IPv6 one with its prefix length
   or without (a host), has no bit set past that length: `10.0.0.0/8` is a network, `10.0.0.1/8` is
-  not. `isCidr` from `@lovrozagar/comb` is the check.
+  not. `isCidr` from `@workerstack/database` is the check.
 - `x-comb-url`: `"whatwg"` on a written url: the value, after its transforms, parses with the WHATWG URL
   parser (`new URL(value)`, `URL.canParse(value)`), which the published pattern's `https://` prefix
   alone does not state: `https://ex.co:99999`, `https://a b` and `https://:80` do not parse.
@@ -170,7 +170,7 @@ no `anyOf` walk. A nullable trimmed text with a `max` of 9, as codegen publishes
   integer. On a text, the value after its `x-comb-transform` matches the published `pattern` and
   length bounds; where the id below names a registry, it is also a member of that pinned registry,
   which no pattern states, so a reader must check it, with the predicate named, which
-  `@lovrozagar/comb` exports, or with the release named (`HRK` matches `^[A-Z]{3}$` and is no
+  `@workerstack/database` exports, or with the release named (`HRK` matches `^[A-Z]{3}$` and is no
   `iso4217` value: withdrawn in 2023). A text failing it gets zod's `invalid_format` issue with the
   id as its `format` and no message of comb's, so a zod locale or error map words it. On an enum the
   listed values are the rule, each one the format takes, and the id is what they mean; every DTO of
@@ -221,7 +221,7 @@ no `anyOf` walk. A nullable trimmed text with a `max` of 9, as codegen publishes
 ## 3. Producer API
 
 ```ts
-import { combMeta } from "@lovrozagar/comb/meta"
+import { combMeta } from "@workerstack/database/meta"
 
 const postReadSchema = z.compile(z.object({/* … */})).meta(
 	combMeta({
@@ -269,7 +269,7 @@ successfully in development and emit nothing for a consumer reading the output v
 ## 4. Reader API, and the versioning story
 
 ```ts
-import { readCombMeta, readCombEntityMeta, readCombQueryMeta, COMB_META_VERSION } from "@lovrozagar/comb/meta"
+import { readCombMeta, readCombEntityMeta, readCombQueryMeta, COMB_META_VERSION } from "@workerstack/database/meta"
 
 const meta = readCombEntityMeta(jsonSchema) // CombEntityMeta | null
 const any = readCombMeta(jsonSchema, { maxVersion: 1 })
@@ -767,7 +767,7 @@ requires rejection. `entity-parity` reads the generated update schema back off d
 `immutable` against it **in both directions**, so neither list can quietly grow past the other.
 
 The e2e file executes the generated DTO rather than string-matching it, so it covers the
-`@lovrozagar/comb/meta` import the generator emits, and asserts placement for the three shapes that
+`@workerstack/database/meta` import the generator emits, and asserts placement for the three shapes that
 actually occur: a bare item (root, depth 0), a bare array (under `items`, depth 1, still reachable
 by honey's `search: "root"`), and a pagination envelope `{ articles: [Article], count, hasMore,
 nextCursor }` (depth 2 — invisible to `"root"`, found by `"deep"`, well inside its limit of 6).

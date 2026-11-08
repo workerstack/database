@@ -23,7 +23,7 @@ const server = pgUrl()
 /** The tables file: comb's pg column builders, with whatever else a step adds */
 const tables = (more = "", columns = "") => `import { sql } from "drizzle-orm"
 import { pgPolicy, pgTable, pgView, text } from "drizzle-orm/pg-core"
-import { c } from "@lovrozagar/comb/pg/columns"
+import { c } from "@workerstack/database/pg/columns"
 
 export const post = pgTable("post", {
 	id: c.id("pst"),

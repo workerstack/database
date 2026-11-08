@@ -12,7 +12,7 @@ import { codegen, exportsOf, project, typecheck, useProjects } from "../support/
 useProjects()
 
 const TABLES = `import { sqliteTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const blogPost = sqliteTable("blog_post", { id: c.id("pst"), title: c.text("title") })
 export const table_template = sqliteTable("table_template", { id: c.id("tpl"), name: c.text("name") })
 `

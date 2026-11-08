@@ -20,7 +20,7 @@ import { testContext } from "../../../src/codegen/generators/__fixtures__/contex
 
 const TABLES = `
 import { sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const owner = sqliteTable("owner", { id: c.id("own") })
 export const member = sqliteTable("member", {
 	id: c.id("mem"),

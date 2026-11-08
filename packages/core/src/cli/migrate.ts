@@ -36,7 +36,7 @@ export default defineConfig({
 })
 `
 
-const PG_MIGRATE_CONFIG = `import { defineConfig } from "@lovrozagar/comb/migrate"
+const PG_MIGRATE_CONFIG = `import { defineConfig } from "@workerstack/database/migrate"
 
 export default defineConfig({
 	databases: {

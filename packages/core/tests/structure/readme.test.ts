@@ -45,7 +45,7 @@ const CONFIG = {
 		noEmit: true,
 		noPropertyAccessFromIndexSignature: true,
 		noUncheckedIndexedAccess: true,
-		paths: { "@lovrozagar/comb": ["../src/index.ts"], "@lovrozagar/comb/*": ["../src/*"] },
+		paths: { "@workerstack/database": ["../src/index.ts"], "@workerstack/database/*": ["../src/*"] },
 		skipLibCheck: true,
 		strict: true,
 		target: "es2023",
@@ -106,9 +106,9 @@ describe("README package exports table", () => {
 		const manifest = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { exports: Record<string, string> }
 		const subpaths = Object.keys(manifest.exports)
 			.filter((key) => key !== "./package.json")
-			.map((key) => (key === "." ? "@lovrozagar/comb" : `@lovrozagar/comb/${key.slice(2)}`))
+			.map((key) => (key === "." ? "@workerstack/database" : `@workerstack/database/${key.slice(2)}`))
 		const section = README.slice(README.indexOf("## Package exports"), README.indexOf("## Repository layout"))
-		const listed = [...section.matchAll(/^\| `(@lovrozagar\/comb[^`]*)`/gm)].map((match) => match[1])
+		const listed = [...section.matchAll(/^\| `(@workerstack\/database[^`]*)`/gm)].map((match) => match[1])
 		expect(listed.toSorted()).toEqual(subpaths.toSorted())
 	})
 })

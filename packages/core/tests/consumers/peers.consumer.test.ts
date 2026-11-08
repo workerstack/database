@@ -37,7 +37,7 @@ beforeAll(() => {
 
 /** comb's files in a `tsc --listFiles` run: its declarations, and any of its source tsc loaded */
 function combFiles(output: string): { declarations: string[]; source: string[] } {
-	const files = output.split("\n").filter((line) => line.includes("node_modules/@lovrozagar/comb/"))
+	const files = output.split("\n").filter((line) => line.includes("node_modules/@workerstack/database/"))
 	return {
 		declarations: files.filter((file) => file.endsWith(".d.ts")),
 		source: files.filter((file) => file.endsWith(".ts") && !file.endsWith(".d.ts")),
@@ -172,7 +172,7 @@ describe.each([
 	it.runIf(peers === "all")("falls back to comb's source where its declarations were never emitted", () => {
 		const packed = run(app.dir, "npx", ["tsc", "-p", "tsconfig.bundler.json", "--listFiles"])
 		expect(combFiles(packed.output)).toMatchObject({ source: [] })
-		rmSync(join(app.dir, "node_modules/@lovrozagar/comb/types"), { force: true, recursive: true })
+		rmSync(join(app.dir, "node_modules/@workerstack/database/types"), { force: true, recursive: true })
 		const unpacked = run(app.dir, "npx", ["tsc", "-p", "tsconfig.bundler.json", "--listFiles"])
 		expect(unpacked.output.split("\n").filter((line) => line.includes("error TS"))).toEqual([])
 		expect(unpacked.status).toBe(0)
@@ -196,7 +196,7 @@ describe("a consumer at comb's peer floors", () => {
 		expect(result.status).toBe(0)
 		/* KT2's sibling: the floor reads comb's declarations themselves without an error, NoInfer and Uint8Array<ArrayBuffer> among them */
 		const checked = tscErrors(app.dir, false)
-		expect(checked.filter((line) => line.includes("/@lovrozagar/comb/"))).toEqual([])
+		expect(checked.filter((line) => line.includes("/@workerstack/database/"))).toEqual([])
 	})
 })
 
@@ -218,7 +218,7 @@ describe("a consumer on TypeScript 5.6.3, below comb's floor", () => {
 		expect(installedVersion(app.dir, "typescript")).toBe("5.6.3")
 		const errors = tscErrors(app.dir, skip)
 		/* each import of every subpath names the floor, whose comment says to upgrade */
-		const floor = join(app.dir, "node_modules/@lovrozagar/comb/types/typescript-floor-types.d.ts")
+		const floor = join(app.dir, "node_modules/@workerstack/database/types/typescript-floor-types.d.ts")
 		expect(
 			errors.filter((line) => line.endsWith(`error TS2306: File '${floor}' is not a module.`)).length,
 		).toBeGreaterThan(20)
@@ -231,13 +231,13 @@ describe("a consumer on TypeScript 5.6.3, below comb's floor", () => {
 			"12 TS2578",
 		])
 		/* and nothing inside comb's declarations is read */
-		expect(errors.filter((line) => line.includes("/@lovrozagar/comb/") && !line.includes("TS2306"))).toEqual([])
+		expect(errors.filter((line) => line.includes("/@workerstack/database/") && !line.includes("TS2306"))).toEqual([])
 	})
 
 	it("is refused by npm", () => {
 		const refused = run(app.dir, "npm", ["install", "--no-audit", "--no-fund", "--loglevel=error"])
 		expect(refused.status).not.toBe(0)
-		expect(refused.output).toContain(`peerOptional typescript@"${peerRange("typescript")}" from @lovrozagar/comb`)
+		expect(refused.output).toContain(`peerOptional typescript@"${peerRange("typescript")}" from @workerstack/database`)
 	})
 })
 
@@ -260,7 +260,7 @@ describe.each(admittedOf("drizzle-orm"))("a consumer on drizzle %s", (version) =
 /* K7 of r20: a command whose optional peer is missing names the package, the range comb takes and the install */
 describe("a consumer missing each optional peer", () => {
 	const TABLES = `import { sqliteTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const post = sqliteTable("post", { id: c.id("id", { prefix: "post" }), title: c.text("title", { max: 200 }) })
 `
 	const configOf = (provider: string) =>
@@ -331,7 +331,7 @@ export const post = sqliteTable("post", { id: c.id("id", { prefix: "post" }), ti
 		expect(result.output).toContain(`comb needs ${peer} (${peerRange(peer)}) to `)
 		expect(result.output).toContain(`install "${peer}@${peerRange(peer)}"`)
 		/* no resolver text from comb's own source, and no blame on the tables module */
-		expect(result.output).not.toContain("@lovrozagar/comb/src/")
+		expect(result.output).not.toContain("@workerstack/database/src/")
 		expect(result.output).not.toContain("could not load")
 		/* a refusal under --json is the one JSON object stdout promises (K5 of r19) */
 		if (argv.includes("--json"))

@@ -34,7 +34,7 @@ function read(dtosDir: string, entity: string): { all: string; entity: string; s
 
 const basicSchema = `
 import { sqliteTable as createTable, text, integer, uniqueIndex } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const user = createTable("user", {
 	id: c.id(),
 	email: c.text("email", { min: 5, max: 254, email: true, trim: true, lowercase: true }).notNull(),
@@ -99,7 +99,7 @@ describe("generateDtos — keys and tables", () => {
 		const { entity } = read(
 			await generate(`
 import { sqliteTable as createTable, text } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const member = createTable("member", { id: c.id(), "display-name": c.text("display_name") })
 `),
 			"member",
@@ -111,7 +111,7 @@ export const member = createTable("member", { id: c.id(), "display-name": c.text
 	it("handles multiple tables", async () => {
 		const dtosDir = await generate(`
 import { sqliteTable as createTable, text } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const user = createTable("user", { id: c.id(), name: c.text("name") })
 export const post = createTable("post", { id: c.id(), title: c.text("title") })
 `)
@@ -167,7 +167,7 @@ describe("generateDtos — timestamps and optionality", () => {
 
 const metaSchema = `
 import { sqliteTable as createTable, text, integer, real, uniqueIndex } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const item = createTable("item", {
 	id: c.id("itm"),
 	email: c.text("email", { min: 5, max: 254, email: true }).notNull(),
@@ -246,7 +246,7 @@ describe("generateDtos — meta examples: per field", () => {
 
 const dedupSchema = `
 import { sqliteTable as createTable, text, integer } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const alpha = createTable("alpha", {
 	id: c.id("alp"),
 	owner_id: c.ref("owner_id").notNull(),
@@ -313,7 +313,7 @@ describe("generateDtos — auto-dedup shared schemas", () => {
 /* the 0.12 review's F35: shared schemas numbered by use, so one column renumbered every table's file */
 /** Three tables sharing schemas, `extra` added to the last one's columns */
 const sharingTables = (extra: string) => `import { sqliteTable as createTable } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const book = createTable("book", { id: c.id("bok"), title: c.text("title").notNull(), note: c.text("note") })
 export const shelf = createTable("shelf", { id: c.id("shf"), title: c.text("title").notNull(), note: c.text("note") })
 export const author = createTable("author", { id: c.id("aut"), name: c.text("name").notNull()${extra} })

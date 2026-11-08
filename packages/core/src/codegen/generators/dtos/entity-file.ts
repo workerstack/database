@@ -191,9 +191,10 @@ function importLines(
 	options: EntityFileOptions,
 ): string[] {
 	const lines = [`import * as z from "zod"`]
-	if (table.combMeta) lines.push(`import { combMeta } from "${options.metaImportFrom ?? "@lovrozagar/comb/meta"}"`)
+	if (table.combMeta) lines.push(`import { combMeta } from "${options.metaImportFrom ?? "@workerstack/database/meta"}"`)
 	/* a local schema kept beside a c.json import may name a comb predicate */
-	if (body.some((line) => COMB_NAMESPACE.test(line))) lines.push(combImport(options.combFrom ?? "@lovrozagar/comb"))
+	if (body.some((line) => COMB_NAMESPACE.test(line)))
+		lines.push(combImport(options.combFrom ?? "@workerstack/database"))
 	lines.push(...schemaImportLines(options.schemaImports, options.entityDir, options.importStyle))
 	const shared = sharedImports(table, spread, options.sharedSchemas)
 	if (shared.length > 0) {

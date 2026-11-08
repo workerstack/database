@@ -23,7 +23,7 @@ import { libsqlMemory } from "../support/libsql.ts"
 const TABLES = `
 import { sql } from "drizzle-orm"
 import { sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core"
-import { c } from "@lovrozagar/comb/sqlite/columns"
+import { c } from "@workerstack/database/sqlite/columns"
 export const user = sqliteTable("user", {
 	id: c.id("usr"),
 	email: c.text("email"),

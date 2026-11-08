@@ -1,8 +1,8 @@
 /**
- * @lovrozagar/comb/query — DB-agnostic query helpers.
+ * @workerstack/database/query — DB-agnostic query helpers.
  *
  * Parsers, validators, Zod schemas, and pagination utilities.
- * For SQLite-specific SQL generation, use @lovrozagar/comb/query/sqlite.
+ * For SQLite-specific SQL generation, use @workerstack/database/query/sqlite.
  */
 
 /* Cursor & pagination */

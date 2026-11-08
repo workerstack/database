@@ -1,5 +1,5 @@
 /**
- * Standalone configuration for @lovrozagar/comb migrations.
+ * Standalone configuration for @workerstack/database migrations.
  * No ProjectConfig dependency — accepts a direct CombMigrateConfig object.
  */
 import { existsSync } from "node:fs"

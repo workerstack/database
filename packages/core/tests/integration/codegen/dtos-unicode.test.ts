@@ -174,7 +174,7 @@ describe("the text guard's one source (G1)", () => {
 		const refining = files.filter((source) => source.includes(".refine(comb.isStorableText,"))
 		expect(refining.length).toBeGreaterThan(0)
 		/* under comb's namespace, which no c.json import can take (C2 of r17) */
-		for (const source of refining) expect(source).toContain('import * as comb from "@lovrozagar/comb"')
+		for (const source of refining) expect(source).toContain('import * as comb from "@workerstack/database"')
 		for (const source of files) expect(source).not.toContain("\\u0000\\uD800")
 		const create = dtos["note"]?.["noteDtoCreateSchema"] as z.ZodObject
 		expect(create.safeParse({ body: "a😀b" }).success).toBe(true)
