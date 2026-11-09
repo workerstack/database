@@ -178,7 +178,7 @@ no `anyOf` walk. A nullable trimmed text with a `max` of 9, as codegen publishes
   `maximum` are the standard's range, or a declared one inside it. A read of a text or an integer
   publishes none. The ids, each with its standard and release:
   - `base64url`: RFC 4648 §5 base64url, unpadded.
-  - `bcp47`: BCP 47 language tag, RFC 5646 §2.1 well-formed.
+  - `bcp47`: BCP 47 language tag, RFC 5646 §2.1 well-formed. Predicate: `isBcp47`.
   - `e164`: ITU-T E.164 phone number, + and up to 15 digits.
   - `iana-time-zone`: IANA time zone name, tzdata 2026f. Registry: `isIanaTimeZone`.
   - `ip`: IPv4 dotted quad or IPv6 address, RFC 4291 §2.2.
