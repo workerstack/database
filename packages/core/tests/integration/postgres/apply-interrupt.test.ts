@@ -73,7 +73,10 @@ function childApply(env: NodeJS.ProcessEnv, target: { devUrl: string; dir: strin
 		"sh",
 		[
 			"-c",
-			'bun "$0" "$1"; echo "exit $?"',
+			/* no core file: SIGQUIT's default action dumps one as the process ends, and a bun process's dump, its
+			   address space reserved in terabytes, outlasts STOP_WITHIN_MS on a runner that writes it (CI's did,
+			   on the first run of PA3), though the stop it measures has ended; the shell still reports 128 + 3 */
+			'ulimit -c 0; bun "$0" "$1"; echo "exit $?"',
 			join(import.meta.dirname, "../support/apply-child.ts"),
 			JSON.stringify(target),
 		],
