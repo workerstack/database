@@ -52,6 +52,7 @@ This README is the full usage manual. An agent that reads only this file should 
 - [Package exports](#package-exports)
 - [Repository layout](#repository-layout)
 - [Develop](#develop)
+- [Upgrading to 0.23](#upgrading-to-023)
 - [Upgrading to 0.22.1](#upgrading-to-0221)
 - [Upgrading to 0.22](#upgrading-to-022)
 - [Upgrading to 0.21](#upgrading-to-021)
@@ -412,15 +413,24 @@ A text format trims the value, then writes it in its standard's case, before it 
 
 A text format's rule is its pattern, which Go's RE2, Rust's regex and JavaScript's `u` mode read alike, and its length bounds, published as `pattern`, `minLength` and `maxLength` beside `x-comb-format` and the `x-comb-transform` it runs (`["trim", "uppercase"]` on `iso4217`), and its OpenAPI example is a value of the standard as written (`EUR` on `iso4217`), none where the column's own bounds leave that value out. It takes no `x-comb-text`, as no format's pattern admits U+0000 or a surrogate. The format sets the column's trim, case and length, so codegen refuses a `trim`, `lowercase` or `uppercase` beside it (`users.currency: an iso4217 text takes no lowercase: the format sets its case and trim`), a `min` or `max` outside its range, which the format already holds or which leaves no value (`users.currency: max 4 is past iso4217's length 3: the format holds it`), and an `email`, `url`, `password`, `imageUri` or `name` beside it, each a rule of its own (`users.currency: format and email contradict; declare one`). A bound inside the range, or a `pattern`, beside a format narrows it. `bcp47` sets no maximum, as RFC 5646's 35 characters are the least an implementation must hold, not a cap on a tag, so a column declares its own `max`. An id comb does not know is refused with the list it does (`users.currency: comb knows no format "iso-4217"; text formats: base64url, bcp47, …`).
 
-Where the table names a predicate, a value must also be a member of the pinned registry it reads, which no pattern states: `HRK` matches `^[A-Z]{3}$` and is no `iso4217` value, withdrawn in 2023, and `Europe/Atlantis` matches the zone pattern and names no zone. Each registry is a snapshot of the release the table names, committed in comb's source: nothing fetches at build, test or run time, and a comb release moves to a newer one. The five predicates are root exports, each taking any string, exactly as written, and never throwing; a bundle that calls none of them carries none of their lists.
+Where the table names a predicate, a value must also be a member of the pinned registry it reads, which no pattern states: `HRK` matches `^[A-Z]{3}$` and is no `iso4217` value, withdrawn in 2023, and `Europe/Atlantis` matches the zone pattern and names no zone. Each registry is a snapshot of the release the table names, committed in comb's source: nothing fetches at build, test or run time, and a comb release moves to a newer one. The five registry predicates are root exports, each taking any string, exactly as written, and never throwing; a bundle that calls none of them carries none of their lists. `isBcp47` is the one predicate that checks a pattern alone: it takes what a `format: "bcp47"` column takes before its trim, RFC 5646 §2.1's whole Language-Tag, `x-private` and `i-klingon` among them, from the same grammar.
 
 ```ts
-import { isIanaTimeZone, isIso3166Alpha2, isIso3166Alpha3, isIso4217, isIso639Alpha2 } from "@workerstack/database"
+import {
+	isBcp47,
+	isIanaTimeZone,
+	isIso3166Alpha2,
+	isIso3166Alpha3,
+	isIso4217,
+	isIso639Alpha2,
+} from "@workerstack/database"
 
 isIso4217("EUR") // true
 isIso4217("HRK") // false: withdrawn in 2023
 isIso4217("eur") // false: the DTO uppercases a value first, the predicate does not
 isIso3166Alpha2("UK") // false: reserved, not assigned; GB is the code
+isBcp47("zh-Hant-TW") // true
+isBcp47(" en") // false: the DTO trims a value first, the predicate does not
 ```
 
 A reader that validates from the JSON Schema alone checks such a value with the predicate, or with the release meta-contract §2.1 names beside the id. The `uts35-*` formats are the values of UTS #35's Unicode locale extension keys in CLDR 49, deprecated ones left out (`uts35-hc` is `h11`, `h12`, `h23`, `h24`, `c12` and `c24`); their pattern lists every value, so it is the whole rule, as on every format the table names no registry for.
@@ -1199,27 +1209,27 @@ ULIDs use Crockford base32 with a 10-character timestamp and 16 characters of ra
 
 ## Package exports
 
-| Specifier                                         | Contents                                                                                                                         |
-| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `@workerstack/database`                           | `CombError`, `createUlidFactory`, `generateId`, `generateUlid`, `LruCache`, the format registry predicates, error keys and types |
-| `@workerstack/database/types`                     | `StatusKey`, `ConstraintMap`, `DatabaseErrorHandler`, …                                                                          |
-| `@workerstack/database/cli`                       | `runCli(argv, io)`: run the CLI in process and get its exit code                                                                 |
-| `@workerstack/database/codegen`                   | `analyze`, `validateTables`, `fieldConstraintsOf`, analysis types                                                                |
-| `@workerstack/database/codegen/generators`        | every `generate*` function                                                                                                       |
-| `@workerstack/database/meta`                      | `combMeta`, `readCombMeta`, `readCombEntityMeta`, `readCombQueryMeta`, `carryCombMeta`, meta types                               |
-| `@workerstack/database/migrate`                   | config, providers, apply, parse, Atlas helpers                                                                                   |
-| `@workerstack/database/query`                     | filter, order, select, cursors, Zod builders                                                                                     |
-| `@workerstack/database/query/sqlite`              | SQL generation, FTS5, JSON helpers                                                                                               |
-| `@workerstack/database/sqlite/columns`            | `c` for SQLite                                                                                                                   |
-| `@workerstack/database/sqlite/constraints`        | constraint types                                                                                                                 |
-| `@workerstack/database/sqlite/constraint-handler` | `sqliteErrorHandler`, `classifySqliteError`, `handleConstraintViolation`                                                         |
-| `@workerstack/database/sqlite/d1/session`         | `openD1Session`                                                                                                                  |
-| `@workerstack/database/sqlite/d1/bookmark`        | `BookmarkTracker`                                                                                                                |
-| `@workerstack/database/sqlite/d1/error-handler`   | `d1ErrorHandler`, `classifyD1Error`                                                                                              |
-| `@workerstack/database/sqlite/d1/sharding`        | `ShardRouter`, `shardMap`                                                                                                        |
-| `@workerstack/database/states`                    | `defineStateMachine`, `canTransition`, `assertTransition`, `nextStates`, `isState`, `isTerminal`                                 |
-| `@workerstack/database/pg/columns`                | `c` for PostgreSQL                                                                                                               |
-| `@workerstack/database/pg/error-handler`          | `pgErrorHandler`, `classifyPgError`                                                                                              |
+| Specifier                                         | Contents                                                                                                                                    |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@workerstack/database`                           | `CombError`, `createUlidFactory`, `generateId`, `generateUlid`, `LruCache`, the format registry predicates, `isBcp47`, error keys and types |
+| `@workerstack/database/types`                     | `StatusKey`, `ConstraintMap`, `DatabaseErrorHandler`, …                                                                                     |
+| `@workerstack/database/cli`                       | `runCli(argv, io)`: run the CLI in process and get its exit code                                                                            |
+| `@workerstack/database/codegen`                   | `analyze`, `validateTables`, `fieldConstraintsOf`, analysis types                                                                           |
+| `@workerstack/database/codegen/generators`        | every `generate*` function                                                                                                                  |
+| `@workerstack/database/meta`                      | `combMeta`, `readCombMeta`, `readCombEntityMeta`, `readCombQueryMeta`, `carryCombMeta`, meta types                                          |
+| `@workerstack/database/migrate`                   | config, providers, apply, parse, Atlas helpers                                                                                              |
+| `@workerstack/database/query`                     | filter, order, select, cursors, Zod builders                                                                                                |
+| `@workerstack/database/query/sqlite`              | SQL generation, FTS5, JSON helpers                                                                                                          |
+| `@workerstack/database/sqlite/columns`            | `c` for SQLite                                                                                                                              |
+| `@workerstack/database/sqlite/constraints`        | constraint types                                                                                                                            |
+| `@workerstack/database/sqlite/constraint-handler` | `sqliteErrorHandler`, `classifySqliteError`, `handleConstraintViolation`                                                                    |
+| `@workerstack/database/sqlite/d1/session`         | `openD1Session`                                                                                                                             |
+| `@workerstack/database/sqlite/d1/bookmark`        | `BookmarkTracker`                                                                                                                           |
+| `@workerstack/database/sqlite/d1/error-handler`   | `d1ErrorHandler`, `classifyD1Error`                                                                                                         |
+| `@workerstack/database/sqlite/d1/sharding`        | `ShardRouter`, `shardMap`                                                                                                                   |
+| `@workerstack/database/states`                    | `defineStateMachine`, `canTransition`, `assertTransition`, `nextStates`, `isState`, `isTerminal`                                            |
+| `@workerstack/database/pg/columns`                | `c` for PostgreSQL                                                                                                                          |
+| `@workerstack/database/pg/error-handler`          | `pgErrorHandler`, `classifyPgError`                                                                                                         |
 
 ## Repository layout
 
@@ -1266,6 +1276,22 @@ bun run test:bun     # bun test — the bun:sqlite replay suite
 `tests/bun/` is separate because it imports `bun:sqlite` and `bun:test`, which vitest cannot load. It replays a full Atlas-shaped drift migration against an in-memory database to prove the SQLite transforms survive a real commit with foreign keys enforced.
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org). `bun install` points `core.hooksPath` at `.githooks`, so the `commit-msg` hook enforces it locally; CI re-checks every commit on a pull request.
+
+## Upgrading to 0.23
+
+What changes for a project on 0.22.1. Before deploying it:
+
+1. **Know what changed in the API.** A test holds these three lists to the exports themselves.
+
+   New exports: `isBcp47`.
+
+   Removed: none. **Fix:** none.
+
+   Changed: none.
+
+   `isBcp47(value)` answers whether a string is a well-formed BCP 47 language tag, RFC 5646 §2.1's Language-Tag, exactly as written: it reads the grammar a `format: "bcp47"` column checks, takes what the column takes before its trim, never trims or folds case (`" en"` is false), and never throws, as the registry predicates do ([Formats](#formats)). **Fix:** none.
+
+2. **Expect `format: "bcp47"` to take private-use and grandfathered tags.** The format named RFC 5646 §2.1 but checked its `langtag` alone, so it refused a private-use tag such as `x-private` and the irregular grandfathered tags, `i-klingon`, `i-default`, `en-GB-oed`, `sgn-BE-FR` and the rest of RFC 5646's list, which are well-formed tags of the standard. It now checks the whole Language-Tag, each class case-insensitive, and its published `pattern` grows to match: a column, its generated DTO and `isBcp47` (step 1) take them, and still take every tag they took before. The regular grandfathered tags, such as `zh-min-nan` and `art-lojban`, were already taken as langtags. **Fix:** none, unless code behind a `bcp47` column assumes a tag starts with a language subtag: handle a tag starting `x-` or `i-` there, or narrow the column with a `pattern`; regenerate, so the published spec carries the new pattern.
 
 ## Upgrading to 0.22.1
 
