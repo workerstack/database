@@ -1,5 +1,6 @@
 // index.d.ts
 export { isCidr } from "./cidr.ts";
+export { isBcp47 } from "./formats/bcp47.ts";
 export type { IntegerFormat, TextFormat } from "./formats/catalog.ts";
 export { isIanaTimeZone } from "./formats/iana-time-zone.ts";
 export { isIso3166Alpha2, isIso3166Alpha3 } from "./formats/iso3166-1.ts";
@@ -23,6 +24,16 @@ export { type CombDatabaseErrorKey, type CombErrorKey, combDatabaseErrorKeys, ty
  */
 /** Whether `value` is a network Postgres's `cidr` takes, with no bit set past its prefix length */
 export declare function isCidr(value: string): boolean;
+
+// formats/bcp47.d.ts
+/**
+ * Whether `value` is a well-formed BCP 47 language tag, RFC 5646 §2.1's Language-Tag, exactly as
+ * written: a langtag such as zh-Hant-TW or es-419, a private-use tag such as x-private, or a
+ * grandfathered tag such as i-klingon. It takes what a `format: "bcp47"` column takes before its
+ * trim, from the same grammar: it never trims or folds case, so " en" is no tag. A value that is no
+ * string at runtime is refused, and this never throws.
+ */
+export declare function isBcp47(value: string): boolean;
 
 // formats/catalog.d.ts
 /** The ids `c.text` and `c.enum` take as `format`, sorted by code unit */

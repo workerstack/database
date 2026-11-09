@@ -23,10 +23,20 @@ const CASES: {
 } = {
 	/* length 5 leaves one stray character, which no byte string encodes to */
 	base64url: { takes: ["", "AQID-_8", "AAAA"], refuses: ["AAAAA", "AA==", "a+b/"] },
-	/* a grandfathered irregular tag and a bare private-use tag are no langtag */
+	/* RFC 5646 §2.1's Language-Tag: a langtag, a bare private-use tag, or an irregular grandfathered tag */
 	bcp47: {
-		takes: ["en", "zh-Hant-TW", "zh-yue-HK", "de-CH-1996", "en-US-u-ca-gregory-x-private"],
-		refuses: ["e", "en_US", "en-", "i-klingon", "x-private", "abcdefghi"],
+		takes: [
+			"en",
+			"zh-Hant-TW",
+			"zh-yue-HK",
+			"de-CH-1996",
+			"en-US-u-ca-gregory-x-private",
+			"x-private",
+			"i-klingon",
+			"en-GB-oed",
+			"sgn-BE-FR",
+		],
+		refuses: ["e", "en_US", "en-", "x", "i-foobar", "abcdefghi"],
 	},
 	e164: { takes: ["+14155552671", "+385911234567"], refuses: ["14155552671", "+0123", "+1234567890123456"] },
 	/* the shape alone takes Europe/Atlantis: the registry refuses it */

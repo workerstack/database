@@ -11,7 +11,7 @@ import { afterAll, describe, expect, it } from "vitest"
 import * as z from "zod"
 import * as root from "../../src/index.ts"
 import { CONTRACT_KEYS, CONTRACT_TRANSFORMS, contractReader } from "../../src/__fixtures__/contract-reader.ts"
-import { FORMATS, INTEGER_SPECS } from "../../src/formats/catalog.ts"
+import { FORMATS, INTEGER_SPECS, type TextFormat } from "../../src/formats/catalog.ts"
 import { cleanGeneratedDtos, generatedDtos } from "../integration/support/dtos.ts"
 
 afterAll(() => cleanGeneratedDtos())
@@ -34,12 +34,16 @@ function definedFormats(): Array<[string, string]> {
 	return [...bullet.matchAll(/^ {2}- `([\w-]+)`: (.+)$/gm)].map(([, id, text]) => [id as string, text as string])
 }
 
-/** The sub-bullet §2.1 gives each format, from the catalog: its standard, and the registry a reader checks */
+/* the root predicate of a format that reads no registry, which the catalog its predicate reads cannot name */
+const PREDICATES: { readonly [F in TextFormat]?: string } = { bcp47: "isBcp47" }
+
+/** The sub-bullet §2.1 gives each format, from the catalog: its standard, the registry a reader checks, and its predicate */
 const catalogFormats = (): Array<[string, string]> => [
-	...Object.entries(FORMATS).map(([id, spec]): [string, string] => [
-		id,
-		`${spec.standard}.${spec.member === null ? "" : ` Registry: \`${spec.member}\`.`}`,
-	]),
+	...Object.entries(FORMATS).map(([id, spec]): [string, string] => {
+		const registry = spec.member === null ? "" : ` Registry: \`${spec.member}\`.`
+		const predicate = PREDICATES[id as TextFormat]
+		return [id, `${spec.standard}.${registry}${predicate === undefined ? "" : ` Predicate: \`${predicate}\`.`}`]
+	}),
 	...Object.entries(INTEGER_SPECS).map(([id, spec]): [string, string] => [id, `${spec.standard}.`]),
 ]
 
@@ -195,6 +199,14 @@ describe("the x-comb keys comb publishes (C1, C2; siblings: codegen's transforms
 
 	it("lists, under x-comb-format, every format with its standard and the registry a reader must check", () => {
 		expect(definedFormats()).toEqual(catalogFormats())
+	})
+
+	it("names as a format's predicate a root export that takes the format's example and refuses the empty string", () => {
+		const named = Object.entries(PREDICATES).map(([id, name]) => {
+			const predicate = (root as Record<string, unknown>)[name] as (value: string) => boolean
+			return [id, predicate(FORMATS[id as TextFormat].example), predicate("")]
+		})
+		expect(named).toEqual([["bcp47", true, false]])
 	})
 
 	it("read as §2.1 defines them, take on a written format text what its parse takes", async () => {

@@ -1,4 +1,5 @@
 export { isCidr } from "./cidr.ts"
+export { isBcp47 } from "./formats/bcp47.ts"
 export type { IntegerFormat, TextFormat } from "./formats/catalog.ts"
 export { isIanaTimeZone } from "./formats/iana-time-zone.ts"
 export { isIso3166Alpha2, isIso3166Alpha3 } from "./formats/iso3166-1.ts"

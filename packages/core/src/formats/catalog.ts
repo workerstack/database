@@ -98,13 +98,28 @@ const LOWERCASE: Transforms = ["trim", "lowercase"]
 const UPPERCASE: Transforms = ["trim", "uppercase"]
 
 /*
- * RFC 5646 §2.1's langtag: language (with up to three extlangs), script, region, variants, extensions
- * and private use, each class case-insensitive; a grandfathered tag is no langtag
+ * RFC 5646 §2.1's Language-Tag, each class case-insensitive: a langtag (language with up to three
+ * extlangs, script, region, variants, extensions and private use), a private-use tag alone, or an
+ * irregular grandfathered tag; the regular grandfathered tags, such as zh-min-nan, are langtags
  */
 const LANGUAGE = "(?:[A-Za-z]{2,3}(?:-[A-Za-z]{3}){0,3}|[A-Za-z]{4,8})"
 const VARIANTS = "(?:-(?:[A-Za-z0-9]{5,8}|[0-9][A-Za-z0-9]{3}))*"
 const EXTENSIONS = "(?:-[0-9A-WYZa-wyz](?:-[A-Za-z0-9]{2,8})+)*"
-const LANGTAG = `${LANGUAGE}(?:-[A-Za-z]{4})?(?:-(?:[A-Za-z]{2}|[0-9]{3}))?${VARIANTS}${EXTENSIONS}(?:-[Xx](?:-[A-Za-z0-9]{1,8})+)?`
+const PRIVATE_USE = "[Xx](?:-[A-Za-z0-9]{1,8})+"
+const LANGTAG = `${LANGUAGE}(?:-[A-Za-z]{4})?(?:-(?:[A-Za-z]{2}|[0-9]{3}))?${VARIANTS}${EXTENSIONS}(?:-${PRIVATE_USE})?`
+/* RFC 5646 §2.1's irregular grandfathered tags, which match no langtag */
+const IRREGULAR =
+	"en-GB-oed i-ami i-bnn i-default i-enochian i-hak i-klingon i-lux i-mingo i-navajo i-pwn i-tao i-tay i-tsu sgn-BE-FR sgn-BE-NL sgn-CH-DE"
+
+/** `tag` with each letter a class of its two cases, as the rest of the grammar reads them */
+const anyCase = (tag: string): string =>
+	tag.replace(/[A-Za-z]/gu, (letter) => `[${letter.toUpperCase()}${letter.toLowerCase()}]`)
+
+/** RFC 5646 §2.1's Language-Tag, anchored: langtag / privateuse / grandfathered */
+function languageTagSource(): string {
+	const grandfathered = IRREGULAR.split(" ").map(anyCase).join("|")
+	return `^(?:${LANGTAG}|${PRIVATE_USE}|${grandfathered})$`
+}
 
 /* semver.org 2.0.0's version pattern, its groups non-capturing */
 const NUMBER = "(?:0|[1-9][0-9]*)"
@@ -194,7 +209,15 @@ function specs(): { readonly [F in TextFormat]: FormatSpec } {
 	return {
 		base64url: spec(["RFC 4648 §5 base64url, unpadded", UNPADDED, 0, null, TRIM, null, "dGVzdA"]),
 		/* RFC 5646 §4.4.1's 35 is the buffer an implementation must hold, not a cap on a tag */
-		bcp47: spec(["BCP 47 language tag, RFC 5646 §2.1 well-formed", `^${LANGTAG}$`, 2, null, TRIM, null, "zh-Hant-TW"]),
+		bcp47: spec([
+			"BCP 47 language tag, RFC 5646 §2.1 well-formed",
+			languageTagSource(),
+			2,
+			null,
+			TRIM,
+			null,
+			"zh-Hant-TW",
+		]),
 		e164: spec(["ITU-T E.164 phone number, + and up to 15 digits", "^\\+[1-9][0-9]{1,14}$", 3, 16, TRIM, null, PHONE]),
 		"iana-time-zone": spec(["IANA time zone name, tzdata 2026f", ZONE_NAME, 1, 64, TRIM, "isIanaTimeZone", ZONE]),
 		ip: spec([ADDRESS, `^(?:${ipv4}|${ipv6})$`, 2, 45, LOWERCASE, null, IPV6]),
