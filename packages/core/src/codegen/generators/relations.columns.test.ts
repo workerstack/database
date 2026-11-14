@@ -9,7 +9,7 @@ import { testContext } from "./__fixtures__/context.ts"
 let dir: string
 
 beforeEach(() => {
-	dir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-gen-relations-columns-"))
+	dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-gen-relations-columns-"))
 })
 
 afterEach(() => fs.rmSync(dir, { force: true, recursive: true }))

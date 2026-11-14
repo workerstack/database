@@ -1,5 +1,5 @@
 /**
- * comb's Postgres timestamp columns hold epoch milliseconds (about 1.76e12), past a 4-byte
+ * database's Postgres timestamp columns hold epoch milliseconds (about 1.76e12), past a 4-byte
  * integer's 2147483647. The columns and their defaults must take today's time on a real server.
  */
 import { getTableColumns, type SQL } from "drizzle-orm"

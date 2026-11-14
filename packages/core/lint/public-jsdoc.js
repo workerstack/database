@@ -16,25 +16,25 @@ const FAULTS = {
 
 // lookup-table: the words a doc may hold beside the name and still say nothing
 const STOPWORDS = new Set("a an the of for to this that is are value option options returns type property".split(" "))
-/* comb's own references, which mean nothing to a consumer: a review round (r22, r22b), a milestone (M5, M75, M123), a
+/* database's own references, which mean nothing to a consumer: a review round (r22, r22b), a milestone (M5, M75, M123), a
  * plan (plan 21), a step (B2-3) and a finding (F58, S1n, PA1, AD14). A finding id is one or two capitals and at most
  * two digits, so an SQLSTATE (XX000) and a target such as ES2022 or HS256 stay clean by shape. */
 const INTERNAL = /\br[0-9]{2,}[a-z]?\b|\bM[0-9]{3}\b|\b[Pp]lan [0-9]+\b|\bB[0-9]+-[0-9]+\b/
-/* the reviews, sessions and scratch comb's own work is named by: a round (round two, round-five), a named review (the
- * 0.15.0 review, the area D review, the consumers review), an area (area D), a session (comb-9d) and a scratch log
+/* the reviews, sessions and scratch database's own work is named by: a round (round two, round-five), a named review (the
+ * 0.15.0 review, the area D review, the consumers review), an area (area D), a session (database-9d) and a scratch log
  * (.tmp/grunt/…). Each is internal whatever its number or word, so they report by shape, with no list to keep. */
 const REVIEWS =
 	/\bround[- ](?:[0-9]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b|\b(?:the|[0-9]+(?:\.[0-9]+)+)(?: [\w.'-]+){0,3} review\b/i
-const SESSIONS = /\barea [A-Z]\b|\bcomb-[0-9a-f]{2}\b|\.tmp\/grunt\b/
+const SESSIONS = /\barea [A-Z]\b|\bdatabase-[0-9a-f]{2}\b|\.tmp\/grunt\b/
 const FINDING_ID = /\b[A-Z]{1,2}[0-9]{1,2}[a-z]?\b/g
 /* a finding id written lowercase, two letters and at most two digits (pa10, sl3n, qe8), in prose: a code span or a
- * path segment names code, not a finding, so `pa1` and sl3/probe.log stay clean. comb writes a one-letter id in
+ * path segment names code, not a finding, so `pa1` and sl3/probe.log stay clean. database writes a one-letter id in
  * capitals, so a register (r2), a version (v1) and a name such as utf8, es2022 or h264 stay clean by shape. */
 const LOWER_ID = /(?<![\w./:@#-])[a-z]{2}[0-9]{1,2}[a-z]?(?![\w/:@#-]|\.\w)/g
 /* lookup-table: the real names a finding id's shape takes, each kept because a consumer's doc means the thing itself.
  * A name not listed reports, so a new one is added here by a visible change, never passed in silence. */
 const LOOK_ALIKES = new Map([
-	["D1", "Cloudflare D1, the database comb's sqlite/d1 entries run on"],
+	["D1", "Cloudflare D1, the database that database's sqlite/d1 entries run on"],
 	["PG17", "Postgres 17, a server version"],
 	["RE2", "the regular expression engine a pattern constraint is written for"],
 ])
@@ -255,7 +255,7 @@ export const rule = {
 			Program(program) {
 				for (const { file, form } of surface.unknown) {
 					if (file !== context.filename) continue
-					const message = `comb/public-jsdoc cannot follow ${form} here, so what it exposes goes unchecked: write it as a plain export`
+					const message = `database/public-jsdoc cannot follow ${form} here, so what it exposes goes unchecked: write it as a plain export`
 					context.report({ message, node: program })
 				}
 				const names = surface.names.get(context.filename)

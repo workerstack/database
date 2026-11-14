@@ -1,6 +1,6 @@
 /**
  * What a codegen run commits: every database's staged files at once, the record of what each wrote,
- * and the files a database's last run wrote that this one did not, removed when comb wrote them.
+ * and the files a database's last run wrote that this one did not, removed when database wrote them.
  */
 import fs from "node:fs"
 import path from "node:path"
@@ -9,12 +9,12 @@ import { byCodeUnit } from "../codegen/utils/order.ts"
 import { CliError, type CliIo } from "./output.ts"
 
 /*
- * What each database's last run wrote, in one record beside comb.config.ts (beside the tables file in
+ * What each database's last run wrote, in one record beside database.config.ts (beside the tables file in
  * direct mode), keyed by database name, its paths relative to the record: a run after filePrefix or
  * output.default moved still finds the last run's files, wherever they were. Its name keeps the `.gen.`
  * every formatter config already ignores, so no format pass rewrites what codegen writes.
  */
-const RECORD = ".comb.codegen.gen.json"
+const RECORD = ".database.codegen.gen.json"
 
 type RunRecord = { databases: Record<string, string[]> }
 
@@ -53,7 +53,7 @@ function pruneEmpty(dir: string, root: string): void {
 /** One database's staged run: its name, where its files go, and which of the staged files it wrote */
 export type Run = { name: string; partial: boolean; prefix: string; root: string; wrote: string[] }
 
-/** Delete `file` when comb wrote it, and the directories it leaves empty, up to `top` */
+/** Delete `file` when database wrote it, and the directories it leaves empty, up to `top` */
 function removeStale(file: string, top: string): void {
 	if (!fs.existsSync(file) || !isGeneratedContent(fs.readFileSync(file, "utf8"))) return
 	fs.unlinkSync(file)
@@ -63,7 +63,7 @@ function removeStale(file: string, top: string): void {
 /**
  * Write everything the run staged, once every database's generators have run, record what each
  * wrote, then delete each file a database's last run wrote that no database wrote this time, as
- * long as comb wrote it. A file without comb's header is never touched. A run of some
+ * long as database wrote it. A file without database's header is never touched. A run of some
  * generators (-g) only adds to a database's record: it cannot tell the others' files stale. A run
  * of the whole config names every database it `declared`, and a record entry it does not name is
  * a database renamed or removed, whose files are stale too. Two databases that wrote one path
@@ -105,7 +105,7 @@ export function commitRuns(
 	/* deleted before anything is written: one that will not go fails the run with the record as it was,
 	 * so the next run deletes it */
 	for (const file of before.filter((each) => !now.has(each) && !others.has(each))) removeStale(file, recordDir)
-	writeGenJsonFile(recordPath, record, { generator: "comb", staged })
+	writeGenJsonFile(recordPath, record, { generator: "database", staged })
 	commitStaged(staged)
 	for (const run of runs) fs.rmSync(legacyRecord(run.root, run.prefix), { force: true })
 }

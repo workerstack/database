@@ -9,9 +9,9 @@ const shown = (value: unknown): PropertyDescriptor => ({ configurable: true, enu
  * column it concerns. Its message is `errorKey`; `toJSON()` gives the body a client may see, and the
  * original error stays on `source`, never serialized.
  */
-export class CombError extends Error {
+export class DatabaseError extends Error {
 	/*
-	 * Each field is defined in the constructor, never assigned: Bun compiles comb's
+	 * Each field is defined in the constructor, never assigned: Bun compiles database's
 	 * source under the consumer's tsconfig, and with `useDefineForClassFields: false` an assigned
 	 * `column` landed in JavaScriptCore's own non-enumerable Error.column, out of the JSON body.
 	 */
@@ -19,7 +19,7 @@ export class CombError extends Error {
 	declare readonly cause?: string | undefined
 	/** The SQL name of the column the error concerns; unset when it is private or unknown */
 	declare readonly column?: string | undefined
-	/** What went wrong, as a stable key, one of `combErrorKeys` or a constraint map's own */
+	/** What went wrong, as a stable key, one of `databaseErrorKeys` or a constraint map's own */
 	declare readonly errorKey: string
 	/** The HTTP status code for `statusKey`, such as 409 for `conflict` */
 	declare readonly status: number

@@ -16,12 +16,12 @@ import type { D1Target, ReadConfig } from "./d1-binding.ts"
 import { adoptHashesD1, applyD1, statusD1 } from "./d1-history.ts"
 import { d1HistoryTables } from "./d1-history-tables.ts"
 
-const INTENTS = "_comb_migration_hash_intents"
+const INTENTS = "_database_migration_hash_intents"
 const WRITE = /^--command=(?:CREATE|INSERT|DELETE|UPDATE|DROP|ALTER)\b/m
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-d1-intents-"))
+	dir = mkdtempSync(join(tmpdir(), "database-d1-intents-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
@@ -97,7 +97,7 @@ async function target() {
 		check: () => applyD1(d1, { approve, checkOnly: true, print: () => undefined, read }),
 		d1,
 		file,
-		hashes: () => run.db.prepare("SELECT name, hash FROM _comb_migration_hashes ORDER BY name").all(),
+		hashes: () => run.db.prepare("SELECT name, hash FROM _database_migration_hashes ORDER BY name").all(),
 		intents: () =>
 			run.db.prepare("SELECT name FROM sqlite_master WHERE name = ?").all(INTENTS).length === 0
 				? undefined
@@ -131,7 +131,7 @@ describe("a pre-recorded hash never outlives a lost apply (S1); sibling: a lost 
 		expect(status).toEqual([
 			"Applied: 0001_t1.sql, 0002_t2.sql",
 			"Pending: none",
-			"No hash recorded for 0002_t2.sql, applied before comb recorded them: comb cannot tell whether it was edited since",
+			"No hash recorded for 0002_t2.sql, applied before database recorded them: database cannot tell whether it was edited since",
 		])
 		expect(await t.check()).toEqual([])
 		expect(await t.lines((print) => adoptHashesD1(t.d1, t.read, print))).toEqual(["Hash recorded: 0002_t2.sql"])
@@ -164,7 +164,7 @@ describe("a pre-recorded hash never outlives a lost apply (S1); sibling: a lost 
 		expect(await t.lines((print) => statusD1(t.d1, t.read, print))).toEqual([
 			"Applied: 0001_t1.sql, 0002_t2.sql",
 			"Pending: none",
-			"No hash recorded for 0002_t2.sql, applied before comb recorded them: comb cannot tell whether it was edited since",
+			"No hash recorded for 0002_t2.sql, applied before database recorded them: database cannot tell whether it was edited since",
 		])
 		expect(t.writes()).toBe(before)
 		expect(await t.apply()).toEqual([])
@@ -173,7 +173,7 @@ describe("a pre-recorded hash never outlives a lost apply (S1); sibling: a lost 
 	})
 })
 
-describe("the intent table (S1): a cut move, a D1 without it, comb's own", () => {
+describe("the intent table (S1): a cut move, a D1 without it, database's own", () => {
 	it("an apply that loses its move after wrangler leaves no intent half moved: each name keeps its intent or its hash", async () => {
 		const t = await target()
 		t.file("0001_t1.sql", "CREATE TABLE t1 (id INTEGER);")
@@ -208,7 +208,7 @@ describe("the intent table (S1): a cut move, a D1 without it, comb's own", () =>
 		expect(t.intents()).toBeUndefined()
 	})
 
-	it("is comb's: a history table, never the user's in the schema the proof runs on, nor in an empty target's count", async () => {
+	it("is database's: a history table, never the user's in the schema the proof runs on, nor in an empty target's count", async () => {
 		expect(d1HistoryTables()).toContain(INTENTS)
 		const t = await target()
 		t.file("0001_t1.sql", "CREATE TABLE t1 (id INTEGER);")

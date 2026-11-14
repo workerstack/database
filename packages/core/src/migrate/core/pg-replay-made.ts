@@ -75,7 +75,7 @@ function alterBare(node: Node, sent: string): { bare: boolean; sql: string | und
 		}
 		const clause = KEPT[DefElem.defname]
 		/* ALTER ROLE's grammar has no other option beside these, and ALTER GROUP's rolemembers none beside it */
-		if (clause === undefined) throw new Error(`comb does not know ALTER ROLE's option ${DefElem.defname}`)
+		if (clause === undefined) throw new Error(`database does not know ALTER ROLE's option ${DefElem.defname}`)
 		kept.push(clause(DefElem.arg))
 	}
 	const role = sqlIdentifier(String((node["role"] as Spec).rolename))
@@ -170,7 +170,7 @@ async function runsOnMade(run: Run, type: string, node: Node): Promise<boolean> 
 type Statement = { node: Node; sent: string; type: string }
 
 /**
- * `sent` run by `made`, its writes to the shared catalogs comb's own, as the roles' drop undoes
+ * `sent` run by `made`, its writes to the shared catalogs database's own, as the roles' drop undoes
  * them, with the rows of `roles`, a rename's new name and the replay's database they left
  */
 async function ownMade(

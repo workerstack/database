@@ -1,5 +1,5 @@
 /**
- * PA8 of r22b: comb's NOT VALID recipe has a constraint added NOT VALID, then validated. Atlas runs a
+ * PA8 of r22b: database's NOT VALID recipe has a constraint added NOT VALID, then validated. Atlas runs a
  * file in one transaction, so a VALIDATE in the file that added the constraint scans every row while
  * the ADD's lock is held to COMMIT: ACCESS EXCLUSIVE for a CHECK, which blocks reads, SHARE ROW
  * EXCLUSIVE on both tables for a foreign key, which blocks writes. Probed on Postgres 17

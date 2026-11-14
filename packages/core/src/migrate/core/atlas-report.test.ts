@@ -1,5 +1,5 @@
 /**
- * What Atlas's apply report tells comb, as Atlas v1.3.0 writes it (P8, P9, P10, P20 of the 0.14.1
+ * What Atlas's apply report tells database, as Atlas v1.3.0 writes it (P8, P9, P10, P20 of the 0.14.1
  * review): a report naming no file, an error only its JSON holds, a file run outside a transaction
  * that failed partway, and the last version applied.
  */
@@ -8,7 +8,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { applyWithAtlas, baselineWithAtlas, statusWithAtlas } from "./atlas-apply.ts"
-import type { Run } from "./process.ts"
+import type { MigrateRun } from "./process.ts"
 import { fail, fakeAtlas, file, ok, revision, status } from "../../../tests/support/fake-atlas.ts"
 
 const NONE =
@@ -16,14 +16,14 @@ const NONE =
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-atlas-report-"))
+	dir = mkdtempSync(join(tmpdir(), "database-atlas-report-"))
 	writeFileSync(join(dir, "1_a.sql"), 'CREATE TABLE "a" ("id" int);\n')
 	writeFileSync(join(dir, "2_b.sql"), NONE)
 	writeFileSync(join(dir, "atlas.sum"), "h1:x=\n1_a.sql h1:7=\n2_b.sql h1:7=\n")
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
-function options(exec: Run) {
+function options(exec: MigrateRun) {
 	const out: string[] = []
 	return {
 		approve: async () => ({ ok: true as const }),

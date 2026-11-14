@@ -1,5 +1,5 @@
 /**
- * Whether the statements a replay's window covers can run code comb cannot read, the only way one
+ * Whether the statements a replay's window covers can run code database cannot read, the only way one
  * makes a change past its database that this backend's counts miss (pg-replay-commit.ts): a DO
  * block, a CALL, an EXECUTE, or a call of a function outside pg_catalog, dblink's among them. A
  * statement whose tree holds none of those runs only what its parse says, and BEYOND and SERVER_CALLS
@@ -14,7 +14,7 @@
 import type { Sql } from "./pg-replay-database.ts"
 
 /**
- * What the statements so far can run that comb cannot read: `code` when one surely can, the
+ * What the statements so far can run that database cannot read: `code` when one surely can, the
  * functions they call by a bare name (`calls`), which may be pg_catalog's, and those the file makes
  * (`made`). A file's every later window counts what one ran, as a change a DO block makes in the
  * file's own block commits at its COMMIT
@@ -62,7 +62,7 @@ const NOT_CATALOG = `SELECT EXISTS (
 ) AS hidden`
 
 /**
- * Whether what `hidden` holds can run code comb cannot read, a bare name resolved on `sql`, the
+ * Whether what `hidden` holds can run code database cannot read, a bare name resolved on `sql`, the
  * replay's connection, which sees what its open transaction made
  */
 async function runsHidden(sql: Sql, { calls, code, made }: Hidden): Promise<boolean> {

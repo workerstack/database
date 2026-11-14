@@ -10,7 +10,7 @@ process.env.TZ = "UTC"
  * 0.21.0 and 0.20.1, checked against the engine itself, over generated cases drawn from a fixed seed list and one
  * fresh seed a run, printed. They install the releases from the npm registry and draw a random seed, so they stay
  * out of `test` and its coverage. `bun run test:differential` runs them and their bun:sqlite twin
- * (tests/bun/differential-lists.test.ts); CI runs it in the `differential` job. An oracle's comb ships TypeScript
+ * (tests/bun/differential-lists.test.ts); CI runs it in the `differential` job. An oracle's database ships TypeScript
  * in its box's node_modules, which Node does not strip types from, so vitest transforms it as it does the tip's.
  */
 export default defineConfig({

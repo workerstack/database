@@ -7,14 +7,14 @@ import { createListQuerySchema } from "./schema.ts"
 import { SEALED } from "./__fixtures__/cursor-secret.ts"
 import { built } from "./__fixtures__/built.ts"
 
-describe("queryHelpers.paginate mints the next cursor's id from _combId (Q2 of r17)", () => {
+describe("queryHelpers.paginate mints the next cursor's id from _cursorId (Q2 of r17)", () => {
 	it("reads the tiebreak the builder selected, never the row's own id, and strips it", () => {
 		const schema = createListQuerySchema({ sort: ["_created_at"] })
 		const query = schema.parse({ limit: "2", order: "_created_at.desc" })
 		const rows = [
-			{ _combId: "t3", _created_at: 3, id: "r3" },
-			{ _combId: "t2", _created_at: 2, id: "r2" },
-			{ _combId: "t1", _created_at: 1, id: "r1" },
+			{ _cursorId: "t3", _created_at: 3, id: "r3" },
+			{ _cursorId: "t2", _created_at: 2, id: "r2" },
+			{ _cursorId: "t1", _created_at: 1, id: "r1" },
 		]
 		const [items, meta] = queryHelpers.paginate(rows, built(query, SEALED))
 		expect(items).toEqual([
@@ -22,7 +22,7 @@ describe("queryHelpers.paginate mints the next cursor's id from _combId (Q2 of r
 			{ _created_at: 2, id: "r2" },
 		])
 		expect(openCursor(meta.nextCursor as string, SEALED)).toMatchObject({ id: "t2", values: [2] })
-		const unwired = rows.map(({ _combId, ...row }) => row)
+		const unwired = rows.map(({ _cursorId, ...row }) => row)
 		expect(() => queryHelpers.paginate(unwired, built(query, SEALED))).toThrow(
 			expect.objectContaining({ errorKey: "sort_not_wired" }),
 		)

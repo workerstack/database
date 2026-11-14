@@ -1,5 +1,5 @@
 /**
- * What a read-only connect, as `comb migrate check` and `status` make, throws for a database that is
+ * What a read-only connect, as `database migrate check` and `status` make, throws for a database that is
  * not there, since it creates none; its name is `DatabaseMissing`
  */
 export class DatabaseMissing extends Error {

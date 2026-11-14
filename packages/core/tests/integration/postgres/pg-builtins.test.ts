@@ -1,5 +1,5 @@
 /**
- * M30 of the 0.13 review: every name on comb's list of pure built-ins is a function Postgres 17
+ * M30 of the 0.13 review: every name on database's list of pure built-ins is a function Postgres 17
  * has, and one it marks immutable or stable, so it writes nothing: the few volatile ones that still
  * write nothing (a random value, the clock) are named here, and the extensions' are left out, as the
  * gate database installs none.
@@ -14,7 +14,7 @@ const VOLATILE = new Set(["clock_timestamp", "currval", "gen_random_uuid", "last
 /* uuid-ossp's, unaccent's and pgcrypto's: no extension is installed on the gate database */
 const EXTENSIONS = new Set(["digest", "unaccent", "uuid_generate_v1", "uuid_generate_v4"])
 
-describe("comb's pure Postgres built-ins, against pg_proc", () => {
+describe("database's pure Postgres built-ins, against pg_proc", () => {
 	const sessions = usePg()
 
 	it("are each a function of Postgres 17 marked immutable or stable, the named volatile ones aside", async () => {

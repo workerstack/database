@@ -148,7 +148,9 @@ const nameOf = (i: number) => `20260101${String(i).padStart(6, "0")}_f${i}.sql`
 
 /** Every file of `history` then `pending`, named in order and hashed; the history's files approved */
 async function writeAll(history: readonly string[], pending: string): Promise<void> {
-	history.forEach((sql, i) => writeFileSync(join(dir(), nameOf(i)), `-- comb:allow-unsafe: the test's history\n${sql}`))
+	history.forEach((sql, i) =>
+		writeFileSync(join(dir(), nameOf(i)), `-- database:allow-unsafe: the test's history\n${sql}`),
+	)
 	writeFileSync(join(dir(), nameOf(history.length)), pending)
 	await hashDir(run, dir())
 }
@@ -197,7 +199,7 @@ describe("check on a devUrl whose database holds objects of its own", () => {
 			await exec(dev, "CREATE FUNCTION f() RETURNS int LANGUAGE sql AS 'SELECT 1';")
 			await writeAll(
 				["CREATE TABLE t (id int PRIMARY KEY);\n"],
-				"-- comb:allow-unsafe: the test's view\nCREATE VIEW v AS SELECT f() AS x;\n",
+				"-- database:allow-unsafe: the test's view\nCREATE VIEW v AS SELECT f() AS x;\n",
 			)
 			return checkAll(dev)
 		})
@@ -229,7 +231,7 @@ describe("check of a file that changes the server from inside a statement the re
 			"refuses $label naming the file and the change, every role as it was",
 			async ({ change, sql }) => {
 				const held = await roles()
-				const { refused } = await checked(T, `-- comb:allow-unsafe: the test's change\n${sql}`, url())
+				const { refused } = await checked(T, `-- database:allow-unsafe: the test's change\n${sql}`, url())
 				expect(refused).toContain(`20260102000000_two.sql: devUrl's server counted a change past the database`)
 				expect(refused).toContain(change)
 				expect(await roles()).toEqual(held)
@@ -239,8 +241,8 @@ describe("check of a file that changes the server from inside a statement the re
 		)
 
 		/* P5 of r22: a role a DO makes is the replay's to adopt, as its own CREATE ROLE is */
-		it("passes a CREATE ROLE comb tags and a role a DO makes beside it, adopting that one, and leaves neither", async () => {
-			const tagged = `-- comb:allow-unsafe: the test's role\nCREATE ROLE ${made};\nCREATE TABLE r (id int PRIMARY KEY);\nALTER TABLE r ENABLE ROW LEVEL SECURITY;\nCREATE POLICY p ON r TO ${made} USING (true);\n`
+		it("passes a CREATE ROLE database tags and a role a DO makes beside it, adopting that one, and leaves neither", async () => {
+			const tagged = `-- database:allow-unsafe: the test's role\nCREATE ROLE ${made};\nCREATE TABLE r (id int PRIMARY KEY);\nALTER TABLE r ENABLE ROW LEVEL SECURITY;\nCREATE POLICY p ON r TO ${made} USING (true);\n`
 			expect((await checked(T, tagged, url())).refused).toBeUndefined()
 			const { refused } = await checked(T, `${tagged}DO $$ BEGIN CREATE ROLE ${beside}; END $$;\n`, url())
 			expect(refused).toBeUndefined()
@@ -248,8 +250,8 @@ describe("check of a file that changes the server from inside a statement the re
 		}, 60_000)
 
 		/* the backend's counts carry a committed write into the next transaction's read until they flush */
-		it("passes a file after the one whose CREATE ROLE comb tagged", async () => {
-			const tagged = `${T}-- comb:allow-unsafe: the test's role\nCREATE ROLE ${made};\n`
+		it("passes a file after the one whose CREATE ROLE database tagged", async () => {
+			const tagged = `${T}-- database:allow-unsafe: the test's role\nCREATE ROLE ${made};\n`
 			expect((await checked(tagged, RETYPE, url())).refused).toBeUndefined()
 			expect(await roleOf(made)).toEqual([])
 		}, 60_000)
@@ -262,7 +264,7 @@ describe("check of a file that changes the server from inside a statement the re
 			try {
 				const { refused } = await checked(
 					T,
-					`-- atlas:txmode none\n\n-- comb:allow-unsafe: the test's change\nCREATE TABLE x (id int);\n${sent};\n`,
+					`-- atlas:txmode none\n\n-- database:allow-unsafe: the test's change\nCREATE TABLE x (id int);\n${sent};\n`,
 					url(),
 				)
 				expect(refused).toContain(
@@ -277,7 +279,7 @@ describe("check of a file that changes the server from inside a statement the re
 })
 
 describe("check on a devUrl whose server keeps no counts for its role", () => {
-	const [quiet, made] = [unique("comb_t_quiet"), unique("comb_t_p1a")]
+	const [quiet, made] = [unique("database_t_quiet"), unique("database_t_p1a")]
 	const dev = { quiet: "" }
 	beforeAll(async () => {
 		dev.quiet = await asRole(devUrl(), quiet, "CREATEDB")
@@ -300,7 +302,7 @@ describe("check on a devUrl whose server keeps no counts for its role", () => {
 		async (_how, off) => {
 			const { refused } = await checked(
 				T,
-				`-- comb:allow-unsafe: the test's change\n${off}DO $$ BEGIN CREATE ROLE ${made}; END $$;\n`,
+				`-- database:allow-unsafe: the test's change\n${off}DO $$ BEGIN CREATE ROLE ${made}; END $$;\n`,
 			)
 			expect(refused).toContain("20260102000000_two.sql: the file turned track_counts off")
 			expect(await roleOf(made)).toEqual([])
@@ -312,9 +314,9 @@ describe("check on a devUrl whose server keeps no counts for its role", () => {
 /* P7 of r21: the replay uses a role the server holds, as the history may have made it there, so a pending
    file's CREATE ROLE of one another database's apply made passed check, and apply stopped at it */
 describe("check of a pending CREATE ROLE of a role the target's server already holds", () => {
-	const role = unique("comb_t_held")
+	const role = unique("database_t_held")
 	afterEach(() => dropRoles(role))
-	const make = `-- comb:allow-unsafe: the test's role\nCREATE ROLE ${role};\nCREATE TABLE r (id int PRIMARY KEY);\nGRANT SELECT ON r TO ${role};\n`
+	const make = `-- database:allow-unsafe: the test's role\nCREATE ROLE ${role};\nCREATE TABLE r (id int PRIMARY KEY);\nGRANT SELECT ON r TO ${role};\n`
 
 	it("refuses it, naming the file apply would stop at, once another database on the server applied it", async () => {
 		await withScratchDb((other) =>
@@ -346,10 +348,10 @@ describe("check of a pending CREATE ROLE of a role the target's server already h
 /* PR9 of r22b: a role the history creates needs CREATEROLE on devUrl's server, as the database needs CREATEDB */
 describe("check on a devUrl whose role has CREATEDB and no CREATEROLE", () => {
 	it("refuses a history CREATE ROLE of a role the server lacks, naming CREATEROLE, and makes no role", async () => {
-		const [dev, app] = testRoles("comb_t_nocr", "comb_t_pr9")
+		const [dev, app] = testRoles("database_t_nocr", "database_t_pr9")
 		const { refused } = await checked(`CREATE ROLE ${app};\n${T}`, RETYPE, await asRole(devUrl(), dev, "CREATEDB"))
 		expect(refused).toBe(
-			`20260101000000_one.sql creates the role ${app}, which devUrl's server lacks, and devUrl's role cannot create a role (CREATEROLE), as comb replays the history in a database of its own on that server; grant the role CREATEROLE, or point devUrl at a server where it has it; check applies nothing`,
+			`20260101000000_one.sql creates the role ${app}, which devUrl's server lacks, and devUrl's role cannot create a role (CREATEROLE), as database replays the history in a database of its own on that server; grant the role CREATEROLE, or point devUrl at a server where it has it; check applies nothing`,
 		)
 		expect(await roleOf(app)).toEqual([])
 	}, 60_000)

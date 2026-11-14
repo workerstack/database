@@ -102,7 +102,7 @@ describe("readLiveObjects", () => {
 	it("says why it could not read, with the password masked, and closes the connection still", async () => {
 		const { load, seen } = fakeConnect({ error: new Error("password authentication failed for s3cret") })
 		await expect(readLiveObjects(TARGET, load)).rejects.toThrow(
-			/^comb could not read the database's functions, procedures, triggers, views, materialized views, sequences, policies, domains, composite types, range types, collations, rules, row level security, extensions, aggregates, SECURITY DEFINER, operators, casts, views' options, materialized views' indexes, replica identity, event triggers and publications: password authentication failed for (?!s3cret)/,
+			/^database could not read the database's functions, procedures, triggers, views, materialized views, sequences, policies, domains, composite types, range types, collations, rules, row level security, extensions, aggregates, SECURITY DEFINER, operators, casts, views' options, materialized views' indexes, replica identity, event triggers and publications: password authentication failed for (?!s3cret)/,
 		)
 		expect(seen.ended).toBe(true)
 	})
@@ -119,7 +119,7 @@ function sending() {
 
 describe("loadPostgres", () => {
 	it("loads postgres.js, the optional peer", async () => {
-		expect(typeof (await loadPostgres("comb reads it"))).toBe("function")
+		expect(typeof (await loadPostgres("database reads it"))).toBe("function")
 	})
 
 	/* r22b: postgres.js opens a backend at a connection's first query, which a stopping run must not start */
@@ -150,13 +150,13 @@ describe("loadPostgres", () => {
 		try {
 			const { loadPostgres: missing } = await import("./pg-live-objects.ts")
 			await expect(missing("read it")).rejects.toThrow(
-				`comb needs postgres (>=3.4.9 <4) to read it; install "postgres@>=3.4.9 <4"`,
+				`database needs postgres (>=3.4.9 <4) to read it; install "postgres@>=3.4.9 <4"`,
 			)
 			/* a baseline's own read says why it needs the peer */
 			await expect(
 				(await import("./pg-live-objects.ts")).readLiveObjects({ schema: "app", url: "postgres://db/db" }),
 			).rejects.toThrow(
-				`comb needs postgres (>=3.4.9 <4) to compare the database's functions, procedures, triggers, views, materialized views, sequences, policies, domains, composite types, range types, collations, rules, row level security, extensions, aggregates, SECURITY DEFINER, operators, casts, views' options, materialized views' indexes, replica identity, event triggers and publications, which Atlas OSS does not, in a baseline; install "postgres@>=3.4.9 <4"`,
+				`database needs postgres (>=3.4.9 <4) to compare the database's functions, procedures, triggers, views, materialized views, sequences, policies, domains, composite types, range types, collations, rules, row level security, extensions, aggregates, SECURITY DEFINER, operators, casts, views' options, materialized views' indexes, replica identity, event triggers and publications, which Atlas OSS does not, in a baseline; install "postgres@>=3.4.9 <4"`,
 			)
 		} finally {
 			vi.doUnmock("postgres")
@@ -253,21 +253,21 @@ function recording() {
 
 /*
  * P3, P4 and P14 of the 0.14.1 review: postgres.js reads none of libpq's query keys, and sends each
- * one it does not know to the server as a setting, so comb hands it the server libpq reads
+ * one it does not know to the server as a setting, so database hands it the server libpq reads
  */
 describe("readLiveObjects: the server libpq reads from the URL", () => {
 	it("hands postgres.js the host, port, database and TLS libpq reads, and no libpq key as a setting", async () => {
-		const dir = mkdtempSync(join(tmpdir(), "comb-libpq-"))
+		const dir = mkdtempSync(join(tmpdir(), "database-libpq-"))
 		for (const name of ["root.crt", "client.crt", "client.key"]) writeFileSync(join(dir, name), name)
 		const tls = `sslrootcert=${join(dir, "root.crt")}&sslcert=${join(dir, "client.crt")}&sslkey=${join(dir, "client.key")}`
 		const { calls, load } = recording()
-		const url = `postgres://app:s3%2Fcret@db.example.com/x?port=6000&dbname=app&sslmode=verify-full&${tls}&connect_timeout=5&application_name=comb`
+		const url = `postgres://app:s3%2Fcret@db.example.com/x?port=6000&dbname=app&sslmode=verify-full&${tls}&connect_timeout=5&application_name=database`
 		await readLiveObjects({ ...TARGET, url }, load)
 		expect(calls).toEqual([
 			[
 				{
 					connect_timeout: 5,
-					connection: { application_name: "comb" },
+					connection: { application_name: "database" },
 					database: "app",
 					host: "db.example.com",
 					max: 1,
@@ -326,9 +326,9 @@ describe("readLiveObjects: a socket, verify-ca and no TLS, read as libpq reads t
 })
 
 describe("readLiveObjects on a connection every address refused", () => {
-	it("says nothing more than comb's own words for a failure with no message and no errors", async () => {
+	it("says nothing more than database's own words for a failure with no message and no errors", async () => {
 		await expect(readLiveObjects(TARGET, fakeConnect({ error: new Error("") }).load)).rejects.toThrow(
-			/^comb could not read the database's functions, procedures, triggers, views, materialized views, sequences, policies, domains, composite types, range types, collations, rules, row level security, extensions, aggregates, SECURITY DEFINER, operators, casts, views' options, materialized views' indexes, replica identity, event triggers and publications: $/,
+			/^database could not read the database's functions, procedures, triggers, views, materialized views, sequences, policies, domains, composite types, range types, collations, rules, row level security, extensions, aggregates, SECURITY DEFINER, operators, casts, views' options, materialized views' indexes, replica identity, event triggers and publications: $/,
 		)
 	})
 
@@ -339,26 +339,26 @@ describe("readLiveObjects on a connection every address refused", () => {
 			"",
 		)
 		await expect(readLiveObjects(TARGET, fakeConnect({ error: refused }).load)).rejects.toThrow(
-			"comb could not read the database's functions, procedures, triggers, views, materialized views, sequences, policies, domains, composite types, range types, collations, rules, row level security, extensions, aggregates, SECURITY DEFINER, operators, casts, views' options, materialized views' indexes, replica identity, event triggers and publications: connect ECONNREFUSED ::1:55433; connect ECONNREFUSED 127.0.0.1:55433",
+			"database could not read the database's functions, procedures, triggers, views, materialized views, sequences, policies, domains, composite types, range types, collations, rules, row level security, extensions, aggregates, SECURITY DEFINER, operators, casts, views' options, materialized views' indexes, replica identity, event triggers and publications: connect ECONNREFUSED ::1:55433; connect ECONNREFUSED 127.0.0.1:55433",
 		)
 	})
 })
 
-/* r18 P19: comb's own read of a server without TLS says what to set, on the field it read */
+/* r18 P19: database's own read of a server without TLS says what to set, on the field it read */
 describe("readLiveObjects on a server without TLS", () => {
 	it("says to set sslmode=disable on url", async () => {
 		const { load } = fakeConnect({
 			error: new Error("Client network socket disconnected before secure TLS connection was established"),
 		})
 		await expect(readLiveObjects(TARGET, load)).rejects.toThrow(
-			"the server takes no TLS, which comb and Atlas require where url names no sslmode; set sslmode=disable on url for a server without TLS",
+			"the server takes no TLS, which database and Atlas require where url names no sslmode; set sslmode=disable on url for a server without TLS",
 		)
 	})
 })
 
 /* P2 of r19: the connection is built inside the read's try, so a TLS file it cannot open is named as the read's failure */
 describe("readLiveObjects on a TLS file it cannot open", () => {
-	it("says comb could not read the database, naming the file, never a bare ENOENT", async () => {
+	it("says database could not read the database, naming the file, never a bare ENOENT", async () => {
 		const { load, seen } = fakeConnect({ rows: [] })
 		await expect(
 			readLiveObjects(
@@ -366,7 +366,7 @@ describe("readLiveObjects on a TLS file it cannot open", () => {
 				load,
 			),
 		).rejects.toThrow(
-			/^comb could not read the database's .*: ENOENT: no such file or directory, open '\/nonexistent\/root\.crt'$/,
+			/^database could not read the database's .*: ENOENT: no such file or directory, open '\/nonexistent\/root\.crt'$/,
 		)
 		expect(seen.ended).toBe(false)
 	})

@@ -24,7 +24,7 @@ function read(sql: string, before = BEFORE) {
 }
 
 describe("readGuards", () => {
-	it("reads comb's guard: the statements it is, and the rows it keeps", () => {
+	it("reads database's guard: the statements it is, and the rows it keeps", () => {
 		const guards = read(guardRebuilds(REBUILD, BEFORE))
 		expect(guards.kept).toEqual(new Map([["u", ["post"]]]))
 		expect(guards.guarded.size).toBeGreaterThan(0)
@@ -32,7 +32,7 @@ describe("readGuards", () => {
 	})
 
 	/* M48: a file Atlas wrote already defers its keys (atlas-env.ts), so the guard leaves its own pragma out */
-	it("writes the defer pragma once when the file already opens with it, and reads both forms as comb's guard", () => {
+	it("writes the defer pragma once when the file already opens with it, and reads both forms as database's guard", () => {
 		const deferred = `PRAGMA defer_foreign_keys = on;\n${REBUILD}`
 		const guarded = guardRebuilds(deferred, BEFORE)
 		expect(guarded.match(/PRAGMA defer_foreign_keys = on/g)).toHaveLength(1)

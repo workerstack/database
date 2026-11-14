@@ -2,7 +2,7 @@
  * SL4 of r22: another process holding a local SQLite file's write lock, as the app that serves the
  * file or a second runner does. It runs on the runtime the test runs on, bun:sqlite under Bun and
  * node:sqlite under Node, so vitest and bun test spawn it alike. It opens with a 5 s busy timeout, as an
- * app writer should: comb's wait takes the file's shared lock between its retries, so the holder's COMMIT
+ * app writer should: database's wait takes the file's shared lock between its retries, so the holder's COMMIT
  * can meet that read and would fail at once with SQLITE_BUSY without one, as against any reader.
  */
 import { spawn } from "node:child_process"
@@ -50,10 +50,10 @@ export function otherRun(name = "0002_add.sql", sql = ADD["0002_add.sql"]): stri
 }
 
 /** 0002 of a drizzle-made history's race: a seed, which running twice shows as two rows */
-export const SEED = { "0002_seed.sql": "-- comb:allow-unsafe: seed\n\nINSERT INTO t (v) VALUES (5);\n" }
+export const SEED = { "0002_seed.sql": "-- database:allow-unsafe: seed\n\nINSERT INTO t (v) VALUES (5);\n" }
 
-/** The history as drizzle's migrator makes it and comb's ALTER leaves it: `name` and `hash_v` with no UNIQUE */
-export const DRIZZLE_HISTORY = `ALTER TABLE __drizzle_migrations RENAME TO comb_history;
+/** The history as drizzle's migrator makes it and database's ALTER leaves it: `name` and `hash_v` with no UNIQUE */
+export const DRIZZLE_HISTORY = `ALTER TABLE __drizzle_migrations RENAME TO database_history;
 CREATE TABLE __drizzle_migrations (id SERIAL PRIMARY KEY, hash text NOT NULL, created_at numeric, name TEXT, hash_v INTEGER);
-INSERT INTO __drizzle_migrations (id, hash, created_at, name, hash_v) SELECT id, hash, created_at, name, hash_v FROM comb_history;
-DROP TABLE comb_history;`
+INSERT INTO __drizzle_migrations (id, hash, created_at, name, hash_v) SELECT id, hash, created_at, name, hash_v FROM database_history;
+DROP TABLE database_history;`

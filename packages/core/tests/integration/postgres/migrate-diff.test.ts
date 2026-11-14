@@ -22,7 +22,7 @@ beforeAll(loadPostgresParser)
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-pg-diff-"))
+	dir = mkdtempSync(join(tmpdir(), "database-pg-diff-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
@@ -321,7 +321,7 @@ const yes = () => true
 const no = () => false
 
 describe("dockerDevWanted", () => {
-	it("runs the docker:// case locally only when COMB_TEST_DOCKER=1, since its containers disturb other sessions", () => {
+	it("runs the docker:// case locally only when DATABASE_TEST_DOCKER=1, since its containers disturb other sessions", () => {
 		expect(dockerDevWanted({}, yes)).toBe(false)
 		expect(dockerDevWanted({ [DOCKER_VAR]: "1" }, yes)).toBe(true)
 		expect(dockerDevWanted({ [DOCKER_VAR]: "1" }, no)).toBe(false)
@@ -351,7 +351,7 @@ const dropRole = (role: string) =>
 	`DO $$ BEGIN IF EXISTS (SELECT FROM pg_roles WHERE rolname = '${role}') THEN DROP OWNED BY "${role}"; DROP ROLE "${role}"; END IF; END $$`
 
 /** A role name of this run's own, since roles are cluster-wide */
-const roleName = () => `comb_app_${randomUUID().slice(0, 8)}`
+const roleName = () => `database_app_${randomUUID().slice(0, 8)}`
 
 /* drizzle-kit 1.0.0-rc.4's real export of a pgSequence a column default uses, with a role, a view and a policy */
 const exportWithSequence = (
@@ -438,7 +438,7 @@ describe("migrate diff on Postgres: a policy over another table, and a role anot
 	})
 })
 
-describe("migrate diff on Postgres: hand-written statements about comb's objects", () => {
+describe("migrate diff on Postgres: hand-written statements about database's objects", () => {
 	describe("with Atlas v1.3.0", () => {
 		const VIEW = 'CREATE VIEW "v" AS (select "id" from "post");\n'
 		const MATVIEW = 'CREATE MATERIALIZED VIEW "mv" AS (select "id" from "post");\n'

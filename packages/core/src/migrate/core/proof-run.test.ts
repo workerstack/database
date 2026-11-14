@@ -100,7 +100,7 @@ describe("provePending catches each 0.9.1 review bypass on its own (M1–M5, M8)
 	})
 })
 
-/** comb 0.8's bypasses (G1–G3) as files, and what their proof says */
+/** database 0.8's bypasses (G1–G3) as files, and what their proof says */
 const OLD_BYPASSES: Array<[string, string, string]> = [
 	[
 		"G1: a filtered copy",
@@ -118,7 +118,7 @@ const OLD_BYPASSES: Array<[string, string, string]> = [
 	["G3: a tautological DELETE", "DELETE FROM users WHERE 1 = 1 OR id IS NULL;", "loses"],
 ]
 
-describe("provePending on comb 0.8's bypasses, and on a rebuild that loses nothing", () => {
+describe("provePending on database 0.8's bypasses, and on a rebuild that loses nothing", () => {
 	it.each(OLD_BYPASSES)("%s", async (_, file, found) => {
 		expect((await prove(USERS, file)).unsafe.join("\n")).toContain(found)
 	})
@@ -197,7 +197,7 @@ describe("provePending on what it cannot seed or apply", () => {
 			{ name: "3_after.sql", sql: "DELETE FROM users;" },
 		])
 		expect(proofs.get("2_bad.sql")?.failed).toMatch(
-			/^comb could not run this in the proof copy on SQLite \d+\.\d+\.\d+: .*missing/,
+			/^database could not run this in the proof copy on SQLite \d+\.\d+\.\d+: .*missing/,
 		)
 		expect(proofs.get("3_after.sql")?.failed).toBe(
 			"an earlier pending file, 2_bad.sql, could not run in the proof copy, so this one is unproven",
@@ -359,7 +359,7 @@ describe("provePending lets a signal in between files (S2 of r22; sibling: the r
 	})
 })
 
-/* r22b's pragma sweep: a pragma that renames a read's result columns renamed those of comb's own reads of the copy */
+/* r22b's pragma sweep: a pragma that renames a read's result columns renamed those of database's own reads of the copy */
 describe("provePending on a file that renames result columns", () => {
 	it("proves a file after PRAGMA full_column_names = 1, and still sees what it changes", async () => {
 		const proof = await prove(

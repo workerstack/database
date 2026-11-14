@@ -3,21 +3,21 @@
  * none of the other dialect's tables, so a diff with a config of the other dialect would write a
  * DROP TABLE for each.
  */
-import { loadModule } from "./comb-config.ts"
+import { loadModule } from "./database-config.ts"
 import { CliError } from "./output.ts"
 
 export type Dialect = "postgres" | "sqlite"
 
-// lookup-table: the drizzle dialects each comb dialect takes, the one a fix names first
+// lookup-table: the drizzle dialects each database dialect takes, the one a fix names first
 const DRIZZLE_DIALECTS: Record<Dialect, readonly string[]> = { postgres: ["postgresql"], sqlite: ["sqlite", "turso"] }
 
-// lookup-table: each comb dialect as a message names it
+// lookup-table: each database dialect as a message names it
 export const DIALECT_NAMES: Record<Dialect, string> = { postgres: "Postgres", sqlite: "SQLite" }
 
 /** What a config must state: its dialect, the clause naming who needs it, and any other fix */
 export type Expected = { but: string; dialect: Dialect; otherwise?: string | undefined }
 
-/** The `dialect` the drizzle config `file` exports, loaded as comb loads its own configs, its failure naming the file */
+/** The `dialect` the drizzle config `file` exports, loaded as database loads its own configs, its failure naming the file */
 export async function statedDialect(file: string): Promise<unknown> {
 	const config = (await loadModule(file)).default as { dialect?: unknown } | undefined
 	return config?.dialect

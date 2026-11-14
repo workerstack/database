@@ -35,7 +35,7 @@ describe("targetLocale", () => {
 		const read = targetLocale(connect, TARGET, "check applies nothing")
 		await expect(read).rejects.toThrow(ReplayFailed)
 		await expect(read).rejects.toThrow(
-			/^comb could not read the target database's locale on url, which the replay's database takes: .*authentication failed .*; check applies nothing$/,
+			/^database could not read the target database's locale on url, which the replay's database takes: .*authentication failed .*; check applies nothing$/,
 		)
 		await expect(read).rejects.not.toThrow("secret")
 	})

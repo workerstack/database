@@ -176,7 +176,7 @@ describe("extractSchema: trigger events and FTS sync triggers", () => {
 		expect(synced("INSERT INTO post_fts(post_fts) VALUES ('delete-all');")).toBe(false)
 		expect(synced("INSERT INTO post_fts(post_fts, rowid, title) VALUES ('x', new.id, new.title);")).toBe(false)
 		expect(synced("INSERT OR REPLACE INTO post_fts(rowid, title) VALUES (new.id, new.title);")).toBe(false)
-		/* comb's own sync triggers, as codegen writes them (fts-sql.ts) */
+		/* database's own sync triggers, as codegen writes them (fts-sql.ts) */
 		expect(synced("\n\tINSERT INTO post_fts(rowid, title)\n\tVALUES (new.rowid, new.title);")).toBe(true)
 		expect(
 			synced(

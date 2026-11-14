@@ -1,5 +1,5 @@
 import type { IntegerFormat, TextFormat } from "../formats/catalog.ts"
-import type { CombColumnKind } from "../meta/column.ts"
+import type { ColumnMetaKind } from "../meta/column.ts"
 /**
  * TableMeta — serializable intermediate format produced by TableAnalyzer.
  * No ts-morph or Drizzle dependencies. All generators consume this.
@@ -7,7 +7,7 @@ import type { CombColumnKind } from "../meta/column.ts"
 
 /** Constraint annotations parsed from field type arguments */
 type FieldConstraintsMeta = {
-	/** comb or the database fills the column, so the generated create and update DTOs leave it out; on by default for a `c.createdAt`, `c.updatedAt` or `c.deletedAt` column, and for any `createdAt`, `updatedAt` or `deletedAt` column a default or update hook fills */
+	/** database or the database fills the column, so the generated create and update DTOs leave it out; on by default for a `c.createdAt`, `c.updatedAt` or `c.deletedAt` column, and for any `createdAt`, `updatedAt` or `deletedAt` column a default or update hook fills */
 	autogenerate: boolean
 	/** the generated DTOs take only an email address */
 	email: boolean
@@ -101,8 +101,8 @@ type FieldMeta = {
 	/** drizzle's column class: `SQLiteText`, `PgVarchar` */
 	columnType: string
 	/** the `c` helper that built the column; null for a plain drizzle column */
-	combKind: CombColumnKind | null
-	/** the constraints the `c` helper declared, with comb's defaults applied; for a plain drizzle column, every flag off but `private` on a name starting with `_` and `autogenerate` on a filled timestamp key */
+	databaseKind: ColumnMetaKind | null
+	/** the constraints the `c` helper declared, with database's defaults applied; for a plain drizzle column, every flag off but `private` on a name starting with `_` and `autogenerate` on a filled timestamp key */
 	constraints: FieldConstraintsMeta
 	/** drizzle's data type: `string`, `number int53`, `object json` */
 	dataType: string
@@ -186,9 +186,9 @@ type CheckConstraintMeta = {
 
 /** Timestamp tracking for a table */
 type TimestampsMeta = {
-	/** the creation time is comb's c.createdAt(), read back and NOT NULL, so the generated schemas use comb's shared timestamp fields for it */
+	/** the creation time is database's c.createdAt(), read back and NOT NULL, so the generated schemas use database's shared timestamp fields for it */
 	createdAt: boolean
-	/** the soft-delete time is comb's c.deletedAt(), read back and nullable, so the generated schemas use comb's shared timestamp fields for it */
+	/** the soft-delete time is database's c.deletedAt(), read back and nullable, so the generated schemas use database's shared timestamp fields for it */
 	deletedAt: boolean
 	/** the property name of each epoch-millisecond column named createdAt, updatedAt or deletedAt in either casing; null when the table has none */
 	names: {
@@ -201,7 +201,7 @@ type TimestampsMeta = {
 	}
 	/** the casing every timestamp shares; mixed when they differ, which no shared spread fits */
 	style: "camelCase" | "mixed" | "snake_case"
-	/** the update time is comb's c.updatedAt(), read back and NOT NULL, so the generated schemas use comb's shared timestamp fields for it */
+	/** the update time is database's c.updatedAt(), read back and NOT NULL, so the generated schemas use database's shared timestamp fields for it */
 	updatedAt: boolean
 }
 

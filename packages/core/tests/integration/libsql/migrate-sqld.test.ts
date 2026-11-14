@@ -66,11 +66,11 @@ describe.each(["http", "ws"] as const)(
 		it.each([
 			[
 				"an approved legacy_alter_table rename (r22's 0003)",
-				"-- comb:allow-unsafe: keep the views' old references as written\nPRAGMA legacy_alter_table = ON;\nALTER TABLE {t} RENAME TO {t}_2;\n",
+				"-- database:allow-unsafe: keep the views' old references as written\nPRAGMA legacy_alter_table = ON;\nALTER TABLE {t} RENAME TO {t}_2;\n",
 			],
 			[
 				"an approved ANALYZE",
-				"-- comb:allow-unsafe: refresh the planner's statistics\nCREATE INDEX {t}_v ON {t} (v);\nANALYZE;\n",
+				"-- database:allow-unsafe: refresh the planner's statistics\nCREATE INDEX {t}_v ON {t} (v);\nANALYZE;\n",
 			],
 		])("refuses %s at check and at apply, naming the server, and applies nothing", async (_, text) => {
 			const db = `s1_${scheme}`
@@ -92,7 +92,7 @@ describe.each(["http", "ws"] as const)(
 )
 
 describe("a sqld apply writes through one client (S1 of r22's amendment; sibling: a local libsql file's connection per file, r21 S1)", () => {
-	it("applies three files through the writer comb's history uses: one reader and one writer in all", async () => {
+	it("applies three files through the writer database's history uses: one reader and one writer in all", async () => {
 		const db = "one"
 		const project = await applied("ws", db)
 		try {

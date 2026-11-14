@@ -9,7 +9,7 @@ export default function setup(): void {
 	requireAtlas()
 	if (!dockerDevWanted()) {
 		process.stderr.write(
-			`[comb] the docker:// dev database case skipped: set ${DOCKER_VAR}=1 to run it (it starts containers)\n`,
+			`[database] the docker:// dev database case skipped: set ${DOCKER_VAR}=1 to run it (it starts containers)\n`,
 		)
 	}
 }

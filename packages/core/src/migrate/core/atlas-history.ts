@@ -1,5 +1,5 @@
 /**
- * The Postgres history Atlas reports, checked against the snapshot comb hands it: Atlas
+ * The Postgres history Atlas reports, checked against the snapshot database hands it: Atlas
  * maps a revision to its file by version, the name up to the first `_` or `.sql`, and hashes each
  * file over its name and the files before it. So an applied file renamed under its version, gone,
  * or edited is named for what happened to it, checked in that order, before Atlas runs anything.
@@ -76,7 +76,7 @@ function refuseRenamed(status: AtlasStatus, copy: string): void {
 function goneWhy({ elsewhere, unread }: Pick<Report, "elsewhere" | "unread">): string {
 	if (unread !== undefined) return `; another schema's history could not be read: ${unread}`
 	return elsewhere === true
-		? "; if it is another schema's row from comb 0.12, run apply on that schema first to adopt it"
+		? "; if it is another schema's row from database 0.12, run apply on that schema first to adopt it"
 		: ""
 }
 
@@ -95,7 +95,7 @@ type Report = {
 }
 
 /**
- * Refuses an applied file edited since, as comb does on SQLite: Atlas never runs it again, so the
+ * Refuses an applied file edited since, as database does on SQLite: Atlas never runs it again, so the
  * database does not hold what the file now says, and later files would be classified against it.
  * A file Atlas ran halfway, `partial`, is left to resumable.
  */
@@ -111,7 +111,7 @@ function refuseEdited(status: AtlasStatus, copy: string, partial: AtlasRevision 
 }
 
 /**
- * Refuses a file never applied that sorts by name before the last applied one, as comb does on
+ * Refuses a file never applied that sorts by name before the last applied one, as database does on
  * SQLite: Atlas orders files by name and skips such a file without a word. One that sorts before a
  * gone file is that file's doing, so the gone files are named instead
  */

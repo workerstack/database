@@ -2,7 +2,7 @@
  * AB2 of area B: a list sorted by a drizzle `customType` column, which drizzle gives dataType
  * `custom`, served page 1 and minted a cursor the next request answered `invalid_cursor`, a 400, on
  * the table, the derived and the merged list alike, as the fit check knew no `custom` family. A
- * custom column's value is what its `fromDriver` read, opaque to comb, so a cursor carries it and
+ * custom column's value is what its `fromDriver` read, opaque to database, so a cursor carries it and
  * binds it back through `toDriver`: each list pages every row once. One key is citext-like text, the
  * other a number its mapper scales, so a bound that skipped `toDriver` would compare the wrong value.
  * Ids are out of key order. B2-2 of area B: a mapper that reads an integer as a fraction (cents) was a

@@ -23,7 +23,7 @@ function snapshot(files: Record<string, string>): void {
 	writeFileSync(join(dir, "atlas.sum"), `h1:x=\n${lines.join("\n")}\n`)
 }
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-atlas-history-"))
+	dir = mkdtempSync(join(tmpdir(), "database-atlas-history-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 

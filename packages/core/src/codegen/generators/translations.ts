@@ -65,11 +65,11 @@ export function generateTranslations(ctx: GeneratorContext, config: Translations
 	const translationsDir = path.join(baseDir, "translations", "error-keys")
 	const file: TranslationFile = { dbName, errorKeys, filePrefix: config.filePrefix, importStyle: ctx.importStyle }
 	writeGenFile(path.join(baseDir, `${config.filePrefix}.error-keys.gen.ts`), generateErrorKeysFile(file), {
-		generator: "comb",
+		generator: "database",
 		staged: ctx.staged,
 	})
 	writeGenFile(path.join(translationsDir, `${config.filePrefix}.error-keys.en.gen.ts`), generateEnglishFile(file), {
-		generator: "comb",
+		generator: "database",
 		staged: ctx.staged,
 	})
 

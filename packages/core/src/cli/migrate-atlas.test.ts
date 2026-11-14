@@ -1,7 +1,7 @@
 import { mkdirSync, readdirSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { ATLAS_RANGE, type Run, run as runProcess } from "../migrate/core/process.ts"
+import { ATLAS_RANGE, type MigrateRun, run as runProcess } from "../migrate/core/process.ts"
 import { makeIo, ok, projects, runCliWithFakes } from "./__fixtures__/io.ts"
 import { UNCOMPARED } from "../migrate/core/baseline-compare.ts"
 
@@ -10,10 +10,10 @@ const project = temp.make
 afterEach(temp.clean)
 
 /** Atlas on an empty Postgres database: hash sums file names, status lists `pending`, apply applies them, set records */
-function pgAtlas(pending: string[]): Run & { calls: string[][]; envs: unknown[] } {
+function pgAtlas(pending: string[]): MigrateRun & { calls: string[][]; envs: unknown[] } {
 	const calls: string[][] = []
 	const envs: unknown[] = []
-	const run: Run = async (_cmd, args, options) => {
+	const run: MigrateRun = async (_cmd, args, options) => {
 		calls.push([...args])
 		envs.push(options?.env)
 		const dirAt = args.indexOf("--dir")
@@ -39,7 +39,7 @@ function pgAtlas(pending: string[]): Run & { calls: string[][]; envs: unknown[] 
 	return Object.assign(run, { calls, envs })
 }
 
-/** A project whose comb.migrate.config.ts declares a Postgres `core`, with these migrations hashed into ./pg */
+/** A project whose database.migrate.config.ts declares a Postgres `core`, with these migrations hashed into ./pg */
 async function postgresProject(
 	migrations: Record<string, string>,
 	url = "postgres://app:pw@db.example.com/app?sslmode=verify-full",
@@ -50,7 +50,7 @@ async function postgresProject(
 	for (const [name, sql] of Object.entries(migrations)) writeFileSync(join(dir, "pg", name), sql)
 	await pgAtlas([])("atlas", ["migrate", "hash", "--dir", `file://${join(dir, "pg")}`])
 	writeFileSync(
-		join(dir, "comb.migrate.config.ts"),
+		join(dir, "database.migrate.config.ts"),
 		`export default { databases: { core: { migrationsDir: "./pg", name: "core", provider: { type: "postgres", url: ${JSON.stringify(url)}${devUrl === undefined ? "" : `, devUrl: ${JSON.stringify(devUrl)}`} } } } }\n`,
 	)
 	return dir
@@ -122,7 +122,7 @@ describe("migrate apply and baseline: a Postgres database, through Atlas", () =>
 		expect(await runCliWithFakes(["migrate", "check", "core"], io)).toBe(0)
 		/* the default devUrl is Atlas's own container, so check says it replayed nothing there (P13 of r19) */
 		expect(io.outputs).toEqual([
-			"Check did not replay the pending files on devUrl: docker://postgres/17/dev is Atlas's own container, which comb cannot reach, so a statement Postgres refuses on every database is found only when it applies; set devUrl to a postgres:// scratch database comb can connect to",
+			"Check did not replay the pending files on devUrl: docker://postgres/17/dev is Atlas's own container, which database cannot reach, so a statement Postgres refuses on every database is found only when it applies; set devUrl to a postgres:// scratch database that database can connect to",
 			"\nCheck passed: 1 pending: 1_init.sql",
 		])
 		expect(atlas.calls.some((call) => call[1] === "apply" && !call.includes("--dry-run"))).toBe(false)
@@ -237,7 +237,7 @@ describe("migrate apply, check and status --json on Postgres (C5)", () => {
 		const said = "Error: postgres: querying system variables: dial tcp 127.0.0.1:9: connect: connection refused\n"
 		for (const mode of ["status", "check", "apply"]) {
 			const atlas = pgAtlas([])
-			const refused: Run = async (cmd, args, options) =>
+			const refused: MigrateRun = async (cmd, args, options) =>
 				args[1] === "status" ? { code: 1, stderr: said, stdout: "" } : await atlas(cmd, args, options)
 			const io = makeIo(dir, refused)
 			expect(await runCliWithFakes(["migrate", mode, "core", "--json"], io)).toBe(1)
@@ -255,15 +255,15 @@ describe("no Atlas on PATH: every Postgres command names it (KC6 + PA22; sibling
 		writeFileSync(join(dir, "drizzle.config.ts"), `export default { dialect: "postgresql", schema: "./x.ts" }\n`)
 		for (const mode of ["diff", "status", "check", "apply", "baseline"]) {
 			const calls: string[] = []
-			/* comb's own runner, with a PATH that holds no atlas */
-			const noAtlas: Run = async (cmd, args, options) => {
+			/* database's own runner, with a PATH that holds no atlas */
+			const noAtlas: MigrateRun = async (cmd, args, options) => {
 				calls.push([cmd, ...args].join(" "))
 				return runProcess(cmd, args, { ...options, env: { ...options?.env, PATH: "/nonexistent" } })
 			}
 			const io = { ...makeIo(dir, noAtlas), readAtlasVersion: undefined }
 			expect(await runCliWithFakes(["migrate", mode, "core"], io)).toBe(1)
 			const said = io.errors.join("\n")
-			expect(said).toContain(`comb needs atlas (${ATLAS_RANGE}) to hash, diff and apply migrations`)
+			expect(said).toContain(`database needs atlas (${ATLAS_RANGE}) to hash, diff and apply migrations`)
 			expect(said).toContain("install atlas from https://atlasgo.io/getting-started")
 			expect(said).not.toContain("atlas migrate hash failed")
 			expect(calls).toEqual(["atlas version"])

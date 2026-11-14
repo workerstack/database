@@ -6,8 +6,8 @@
 import type { SQL, SQLWrapper } from "drizzle-orm"
 import type { SQLiteTable } from "drizzle-orm/sqlite-core"
 
-import { CombError } from "../../error.ts"
-import { combErrorKeys } from "../../types.ts"
+import { DatabaseError } from "../../error.ts"
+import { databaseErrorKeys } from "../../types.ts"
 import { type CursorId, type CursorOptions, CursorRef, readKeyset } from "../cursor.ts"
 import { anchored, assertNoReference } from "../cursor-ref.ts"
 import type { SortField } from "../types.ts"
@@ -40,10 +40,10 @@ function cursorWhere({ cursor: given, dialect, keys, merged, options, sort, tabl
 } {
 	const cursor = readKeyset(given, sort, options)
 	if (merged === true && cursor.values.some((value) => value instanceof CursorRef)) {
-		throw new CombError({
+		throw new DatabaseError({
 			cause:
 				"a merged list's cursor carries no reference, as only one shard holds the row it names; this cursor is another list's",
-			errorKey: combErrorKeys.INVALID_CURSOR,
+			errorKey: databaseErrorKeys.INVALID_CURSOR,
 			status: "bad_request",
 		})
 	}

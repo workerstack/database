@@ -11,7 +11,14 @@ import {
 } from "./timestamps.ts"
 
 function table(has: TableInfo["hasTimestamps"], style: TableInfo["timestampStyle"] = "camelCase"): TableInfo {
-	return { combMeta: null, fields: [], hasTimestamps: has, name: "t", needsSharedMeta: false, timestampStyle: style }
+	return {
+		databaseMeta: null,
+		fields: [],
+		hasTimestamps: has,
+		name: "t",
+		needsSharedMeta: false,
+		timestampStyle: style,
+	}
 }
 
 const ALL = { createdAt: true, deletedAt: true, updatedAt: true }
@@ -71,15 +78,15 @@ describe("generateSharedFile", () => {
 		expect(file).toContain('import * as z from "zod"')
 	})
 
-	/* F50: a cidr column's rule refuses a bit past its prefix through comb's own isCidr, imported only for it */
-	it("imports comb's namespace, from where generated code imports comb, only when it keeps cidrSchema (C2 of r17)", () => {
-		const cidr = generateSharedFile(none, new Map(), { combFrom: "~/comb", imported: new Set(["cidrSchema"]) })
-		expect(cidr).toContain('import * as comb from "~/comb"')
-		expect(cidr).toContain(`export const cidrSchema = ${inetRule()}.refine(comb.isCidr, `)
+	/* F50: a cidr column's rule refuses a bit past its prefix through database's own isCidr, imported only for it */
+	it("imports database's namespace, from where generated code imports database, only when it keeps cidrSchema (C2 of r17)", () => {
+		const cidr = generateSharedFile(none, new Map(), { databaseFrom: "~/database", imported: new Set(["cidrSchema"]) })
+		expect(cidr).toContain('import * as database from "~/database"')
+		expect(cidr).toContain(`export const cidrSchema = ${inetRule()}.refine(database.isCidr, `)
 		expect(generateSharedFile(none, new Map(), { imported: new Set(["cidrSchema"]) })).toContain(
-			'import * as comb from "@workerstack/database"',
+			'import * as database from "@workerstack/database"',
 		)
-		expect(generateSharedFile(none, new Map(), { imported: new Set(["timestampSchema"]) })).not.toContain("comb")
+		expect(generateSharedFile(none, new Map(), { imported: new Set(["timestampSchema"]) })).not.toContain("database")
 	})
 
 	it("imports zod only when what it keeps uses it, and is an empty module when it keeps nothing (F12)", () => {

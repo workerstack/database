@@ -1,5 +1,5 @@
 /**
- * comb/public-jsdoc runs as `error` on the entries already documented, through its `entries` option in the src
+ * database/public-jsdoc runs as `error` on the entries already documented, through its `entries` option in the src
  * override of .oxlintrc.json, so an entry stays clean once it is swept. This holds that list to exactly the entries
  * whose own surface lints clean, in `exports` order: a sweep that clears an entry adds it here, and once every entry
  * is listed the option goes and the rule is a plain `error`.
@@ -31,7 +31,7 @@ function sourceEntries(): string[] {
 function setting(): unknown {
 	const config = JSON.parse(readFileSync(join(REPO, ".oxlintrc.json"), "utf8")) as { overrides: Override[] }
 	const src = config.overrides.find((override) => override.files.includes("packages/core/src/**"))
-	return src?.rules?.["comb/public-jsdoc"]
+	return src?.rules?.["database/public-jsdoc"]
 }
 
 /* what the rule reports on `entry`'s surface alone: every file it names a declaration in or finds a form in */
@@ -43,7 +43,7 @@ function reportsThrough(entry: string): string[] {
 	return reports.map(({ file, message }) => `${file}: ${message}`)
 }
 
-describe("comb/public-jsdoc's checked entries", () => {
+describe("database/public-jsdoc's checked entries", () => {
 	it("are exactly the entries whose surface lints clean, or every entry once all are", () => {
 		const entries = sourceEntries()
 		const clean = entries.filter((entry) => reportsThrough(entry).length === 0)

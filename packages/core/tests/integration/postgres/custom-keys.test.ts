@@ -6,10 +6,10 @@
  * numeric, and each path pages every row once, with the cursor's row kept or deleted before the next
  * page. Ids are out of key order.
  *
- * comb-9d's round-two finding on AB2: a customType over text whose toDriver rewrites a numeric-looking
+ * database-9d's round-two finding on AB2: a customType over text whose toDriver rewrites a numeric-looking
  * value (`12` stored as `sku-12`) carries no text, so its cursor holds the value as read, and AB2
  * bound a numeric-looking one past toDriver: ascending repeated one row forever, descending stopped
- * after one. Each path pages it every row once too. comb-9d's ruling on the fix binds a carried text
+ * after one. Each path pages it every row once too. database-9d's ruling on the fix binds a carried text
  * as an untyped parameter, which Postgres types as the key it is compared with; postgres.js infers a
  * parameter's type itself, so both keys page on node-postgres and on postgres.js alike.
  *
@@ -186,7 +186,7 @@ describe("a customType key pages or is refused at the mint, on Postgres (AB2 of 
 		},
 	)
 
-	/* comb-9d's round-two finding on AB2: a numeric-looking value was bound past toDriver */
+	/* database-9d's round-two finding on AB2: a numeric-looking value was bound past toDriver */
 	it.each(CASES)(
 		"pages a customType key over text whose toDriver rewrites a numeric-looking value on the %s list every row once on %s",
 		async (path, driver) => {
@@ -201,23 +201,23 @@ describe("a customType key pages or is refused at the mint, on Postgres (AB2 of 
 })
 
 /*
- * comb-9d's AB2 ruling: a cursor without the carried flag holds every value as read, as every cursor a
- * released comb minted does; refused, every client mid-list would be a 400 at the upgrade. These are
- * the page-1 cursors comb 0.20.1, from its npm tarball, minted for the table list here, sealed under
+ * database-9d's AB2 ruling: a cursor without the carried flag holds every value as read, as every cursor a
+ * released database minted does; refused, every client mid-list would be a 400 at the upgrade. These are
+ * the page-1 cursors database 0.20.1, from its npm tarball, minted for the table list here, sealed under
  * SEALED (.tmp/grunt/p21/oracle/ab2r-mint.ts).
  */
 const MINTED_0_20_1: Record<`${"n" | "s"}.${"asc" | "desc"}`, string> = {
 	"n.asc":
-		"AYVHRs2U6VvQuoIniJaZk6UweU0MoWStrkxAGL_fZe0htrUucZ3m789LRsh2sJr62pWElcbyJ6dKTMxyMHlTzlBr-LS9HnzGbBqE10cigYFaqH1kYOFKRd6OlNE_re-uucvFzNQAS5qrEJ1ZtIfCe4Z4oMTmVVzonIgoCY9-HzNp-NJy89PKD55ZsLOzL5aq9u-T5Na7QPy79FecHVAeo_pk-bC6ne5zZDeXJSvnCYzEdeWueNRVuvBwYbv5hsanh2UBeSDroBcxs7Hj8CVkp2-PPKbilNIFbaf4C2226Xa22JyO7nOdsGtXoos_JocKT5ull2kPVtEBSL30br3PD-S93Sw24YyBNAe3IMfGCwgJoEzXZPqO2q4R1ZFz3wosMqhLlzx-mrQs",
+		"AfwVc0cG3FSEFjc9-x9e5_qqrqLvgN3a4KwfFHYMzD-yo7Y7SzGbT2c7jguG7gWLfs_3XP68xCXkKPnfDPJCSAZ0cCw5Y5atQuyzvQ3fz0sM24HNxQZkRqxPoS8xbbEzAl_Qnyzxk1GL9uNwDCx1ByxxioSZauXMH_WYOFNgVpt0zKNDDjBMrhoWYaHBQyode_ceFwR5ENajkCiITxZMr917vH_bsnpjyxa16KOpG-dpedQC60ZQK6VYEhgf8Ojr2lcn4fuzB-yR5Ywu-gz-TTQ79WAk5Pj-thE9BS7DUQt11pz8x7lwTm4mgWScLKmcD6Y_vu6cPameaRWJMidYtjPCi9DWZuqfpgYqRqetKz7UISUBhPi4Vjj3tOFyBC9FtLZyvDeUqsno",
 	"n.desc":
-		"AZvaSZnr-z-YHpLmwWJm2mBxPTdoASHQ53dVFdhYS9JYh9C722uZKFlbq4BudfeGO3wB78a1j3o_FTG_7P0YNH0ncRmlYD0mwUmo-vJGz9HfTaR5YjVttNoVxkmap0c2EBCJkupJNUZqFZa4_-fUnGfbJpc6tu5j1dnHTZIWqYn0FFA_rHhpDuFpEY5v0ZVt_hCm4B3QZNv_p5VBF8AwQMsqylrP4XqKszdtKjiEJJ7TNVTd-ZeBJ006uRJgIuTlfaXB91LmOVElKcY6ETNGwgm20bFtS02MbWuervXqoFByuGTDDyXTZcD6Q6m0imYpmwCQGlq518klPXmJ47SlDsHZ3H_ssjlCpmBbLG9vhxkRklHW_Ev-tfdrZTpAfQzOsKcHYxn93dzp",
+		"AQymqwxxeOXuYJ61YBNnS6EE6GnzQaM_5nEJJ9GPaeX-GmaECSZEyQFvGffBJhPMFRf3AUKyfBNqGZHpXsrwRTLiZHjxvToTPLL4zp1kSVZOyKtuoceT2W7rxjHozcyd4FuH5ayo3K6iejrVexpkvhMOHcEy4NTGr482TKdwKWjyLmj7-nbG2gPn8ecpYD7kFmDUDCurTqdSfQ8JfkqrAiDWh_Pc9JZ5HSRFWyYlgn7sIoUtsNdJlWhyrJksDQBQbE0l-CrZXVQY98IiEHI-EqPGVTQ9a5AX1IKBofRXuHJY-BKvobUHOtow1_TqNWjbBbQE0jBLVZSJf4D1t-txrZxDuK0mBEPsAdUXxJCDdUoGVPHDD5NdkzJCOSa62cJsAjn_q3Vct5el",
 	"s.asc":
-		"Ab25mXfJRRrwYwTd7v2-vq20fenRoLGpj0lf7gE5p9-ss_q7m3Ps5FlxboNIp-jXEzBQw8fyNsqBQatcRYq8D2miieKke7UniHKnDF4gBIDRxxwsiXrRTB_zxd9iBDto5gAW-uAF1iILBFgY5rDKjg6WvhlUuBkWaBK-YuQaIfZWHx1rJQJIPQQ4OvYkVvCwztPP_a3WqqY-kcWVu_oJbRTRPfm6fitBBKDZcFk1LmOdrwH1kiYa30xyr5JiQ2be0rhMcs4G0oc8uYASMcHS8-IiBtveWvYmtznAMDRLmEbexKDpyXHLt0jg0BB-GtPo9pHb8M1JbO47vR9xV41yEWQl12Ss6V2jue6d8ODXy-OVaYhr277KqPWb25QuluH_U8ntRRPzUIdD",
+		"AesJGSUXN2Au7dCvcPQGl5MYWxhGpxeCdeWtyKrfRYOvZlv8Qb00qNMTZ6XCuRxt4o_Uodls1-fveq1sV-02wYcgID2Fj1zNRTbJeCnyvOtGKwG1J3-FSiM4hkvQcuu9c8uPUSnEqi-qCFi76pfLkXaW096wSasd0FQDH0t3rFeNFCiv9teMTYO9lo704GRy0B12Hp-NidhAX1Z52ZkK_tLsYrzQZ1_3LZ-1lGd2mfFu2AhkUq1xsKrDynDfwdEDidBbdArw-1TiXhvRjI-rtd6UtHguMpum0J_ZUvcW0ttiZD9JwpsQfPnEGBo02ea7KO3BkX29bEqYtz-lU2TMoR45xN-OqCo2chCvEmvj4XzqPSa7GkPYSkf8EGtV5J0Q53ihcQFqBeyh",
 	"s.desc":
-		"AWQAFAAMyLWHAVVBIAksaPuZxuXVlsuUJ3V4-8JWDBCsQlu00uHcOCaa3TCGKllxWWvjM38bxbtJ-BZAjeExW5tRerCBBQj_4kLf73oRyRMKKtCLxRswNifxoEKzp2gRzs2w8bVGeQs15NvTkhrzhGPcwWdaWFql8a5WGMbN876qPXiovX7_RwVq2PoKHurDWFiJaTBLhmMBBjNb2EiIPPlE2XO3et8x8tLIACD6LWIMMr5jeeCDg8x9NFZbjEAmYsBmL3e-Lzp-urFa_IBVe2wDJev6gobckw17W5d-QpJlctQptqH_hV2UNPERhKgdknMMB7yuNX7v6PDMqElxeQu0Hh30HUPqaEUS-VMCRnV2hiARZTU6qeVdnrXT_iD4vboIwudhxcH4",
+		"AeqH1VpTXVmTVIawD8WqAVe1-jSBWt06ybkc1TLMe2WNzUVT1yHxDYc2DJygqrMgD_c1jb1OEGFv5NYXFn3nwUGtdMG9l42n0W77AUH7Rz9HteVxVAdExjjFZuFHqLYuvVzTY4twwX73pjLSCKAQwe4rVbSapwkYW3YwyvmBCkLUKrofequNVxAMTane86saxN2jTZem70ZFYhWFENohS01Ju0wB52INtC15TArZZOPwfcByGJFAEUI-Jc2kxJ1gAhAPatFbaaXvKs4BevMzuPqS2IzjIMoVV0ROqmQ7eYcwaODr1umLGH8kNc65IJ4hV7MXw8yIWKINpD_w65tGyeQwhg37APDnCHOZpLYjvj2pUziAYr8nDW2qqQzCDvo4LZWNY_G_RjVk",
 }
 
-describe("a cursor comb 0.20.1 minted pages on after the upgrade (comb-9d's AB2 ruling; sibling: the flagged cursor above)", () => {
+describe("a cursor database 0.20.1 minted pages on after the upgrade (database-9d's AB2 ruling; sibling: the flagged cursor above)", () => {
 	const sessions = usePg()
 
 	it.each(["n", "s"] as const)(

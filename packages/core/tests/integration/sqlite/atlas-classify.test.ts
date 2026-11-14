@@ -69,7 +69,7 @@ describe("the destructive-change gate on Atlas's SQLite output", () => {
 	let dir: string
 
 	beforeAll(() => {
-		dir = mkdtempSync(join(tmpdir(), "comb-atlas-classify-"))
+		dir = mkdtempSync(join(tmpdir(), "database-atlas-classify-"))
 		writeFileSync(join(dir, "base.sql"), BASE)
 	})
 	afterAll(() => rmSync(dir, { force: true, recursive: true }))

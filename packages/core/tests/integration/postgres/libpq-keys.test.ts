@@ -1,6 +1,6 @@
 /**
- * P15 and P6 of r19: every libpq key comb reads as libpq's own, through real Atlas. A key Atlas's
- * driver sends to the server as a setting fails every Atlas call, so comb strips it from Atlas's URL
+ * P15 and P6 of r19: every libpq key database reads as libpq's own, through real Atlas. A key Atlas's
+ * driver sends to the server as a setting fails every Atlas call, so database strips it from Atlas's URL
  * or refuses it by name; this holds pg-url-keys.ts's table to what Atlas does, key by key.
  */
 import { describe, expect, it } from "vitest"
@@ -17,7 +17,7 @@ const PROBES: Readonly<Record<string, readonly string[]>> = {
 	channel_binding: ["disable", "prefer", "require"],
 	connect_timeout: ["10"],
 	dbname: [server.pathname.slice(1)],
-	fallback_application_name: ["comb"],
+	fallback_application_name: ["database"],
 	gssencmode: ["disable", "prefer", "require"],
 	gsslib: ["gssapi"],
 	host: [server.hostname],
@@ -33,7 +33,7 @@ const PROBES: Readonly<Record<string, readonly string[]>> = {
 	port: [server.port],
 	require_auth: ["password"],
 	requirepeer: ["postgres"],
-	service: ["comb"],
+	service: ["database"],
 	ssl_max_protocol_version: ["TLSv1.3"],
 	ssl_min_protocol_version: ["TLSv1.2"],
 	sslcert: [file],
@@ -43,7 +43,7 @@ const PROBES: Readonly<Record<string, readonly string[]>> = {
 	sslkey: [file],
 	sslmode: ["disable"],
 	sslnegotiation: ["postgres"],
-	sslpassword: ["comb"],
+	sslpassword: ["database"],
 	sslrootcert: [file],
 	sslsni: ["1"],
 	target_session_attrs: ["any"],
@@ -69,7 +69,7 @@ describe("libpq keys through Atlas v1.3.0", () => {
 
 	const cases = Object.entries(PROBES).flatMap(([key, values]) => values.map((value) => [key, value] as const))
 	it.each(cases)(
-		"%s=%s: comb hands Atlas a URL it reads, or refuses it, as Atlas reads the key raw",
+		"%s=%s: database hands Atlas a URL it reads, or refuses it, as Atlas reads the key raw",
 		async (key, value) => {
 			const url = withKey(key, value)
 			const raw = await inspects(url)
@@ -78,8 +78,8 @@ describe("libpq keys through Atlas v1.3.0", () => {
 			const handed = refused
 				? undefined
 				: await withAtlasEnv(target, { allSchemas: true, url: true }, async (env) => {
-						const ran = await inspects(env.env["COMB_ATLAS_URL"] as string, env.env, [...env.args])
-						const kept = new URL(env.env["COMB_ATLAS_URL"] as string).searchParams.has(key)
+						const ran = await inspects(env.env["DATABASE_ATLAS_URL"] as string, env.env, [...env.args])
+						const kept = new URL(env.env["DATABASE_ATLAS_URL"] as string).searchParams.has(key)
 						return ran.code === 0 ? (kept ? "kept" : "stripped") : `Atlas failed: ${ran.stderr}`
 					})
 			/* a key kept is one Atlas reads; one Atlas would send the server is stripped or refused */

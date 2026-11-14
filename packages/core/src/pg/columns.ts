@@ -24,7 +24,7 @@ import {
 	type SetNotNull,
 	text,
 } from "drizzle-orm/pg-core"
-import { enumMeta, withCombColumn } from "../meta/column.ts"
+import { enumMeta, withColumn } from "../meta/column.ts"
 /* Constraint types are dialect-agnostic; they live under sqlite/ because that is
    the published export path and moving them would be a breaking change. */
 import type {
@@ -125,60 +125,60 @@ export type PgColumns = {
 }
 
 /**
- * comb's Postgres column helpers: drizzle columns that also record comb's constraints, which codegen
+ * database's Postgres column helpers: drizzle columns that also record database's constraints, which codegen
  * reads to write the DTOs, constraint map and manifest. The same helpers exist for SQLite in
  * `./sqlite/columns`, so a tables file moves between the dialects by its import
  */
 export const c: PgColumns = {
 	/* Native boolean */
-	boolean: (name: string) => withCombColumn(boolean(name), { kind: "boolean" }),
+	boolean: (name: string) => withColumn(boolean(name), { kind: "boolean" }),
 
 	/* Standard createdAt timestamp */
 	createdAt: (name: CreatedAtName, constraints?: TimestampConstraints) =>
-		withCombColumn(epochMs(name).notNull().default(timestampDefaults.now()), { constraints, kind: "createdAt" }),
+		withColumn(epochMs(name).notNull().default(timestampDefaults.now()), { constraints, kind: "createdAt" }),
 
 	/* Standard deletedAt timestamp (nullable) */
 	deletedAt: (name: DeletedAtName, constraints?: TimestampConstraints) =>
-		withCombColumn(epochMs(name), { constraints, kind: "deletedAt" }),
+		withColumn(epochMs(name), { constraints, kind: "deletedAt" }),
 
 	/* Enum stored as text with type annotation */
 	enum: <T extends readonly string[]>(name: string, values: T, options?: EnumOptions<T[number]>) =>
-		withCombColumn(text(name).$type<T[number]>(), enumMeta(values, options)),
+		withColumn(text(name).$type<T[number]>(), enumMeta(values, options)),
 
 	/* Text primary key — prefix is type-erased metadata for codegen */
 	id: (prefix: string) => {
 		checkPrefix(prefix)
-		return withCombColumn(text("id").primaryKey(), { kind: "id", prefix })
+		return withColumn(text("id").primaryKey(), { kind: "id", prefix })
 	},
 
 	/* Integer */
 	integer: (name: string, constraints?: IntegerConstraints) =>
-		withCombColumn(integer(name), { constraints, kind: "integer" }),
+		withColumn(integer(name), { constraints, kind: "integer" }),
 
 	/* Native JSONB, typed by its Zod schema */
 	json: <TSchema extends z.ZodTypeAny = z.ZodTypeAny>(name: string, schema: TSchema, constraints?: JsonConstraints) =>
-		withCombColumn(jsonb(name).$type<z.infer<TSchema>>(), { constraints, kind: "json", schema }),
+		withColumn(jsonb(name).$type<z.infer<TSchema>>(), { constraints, kind: "json", schema }),
 
 	/* Floating point (double precision) */
 	real: (name: string, constraints?: RealConstraints) =>
-		withCombColumn(doublePrecision(name), { constraints, kind: "real" }),
+		withColumn(doublePrecision(name), { constraints, kind: "real" }),
 
 	/* Foreign key reference - use with .references() */
-	ref: (name: string, constraints?: RefConstraints) => withCombColumn(text(name), { constraints, kind: "ref" }),
+	ref: (name: string, constraints?: RefConstraints) => withColumn(text(name), { constraints, kind: "ref" }),
 
 	/* Auto-increment integer primary key */
-	serialId: () => withCombColumn(serial("id").primaryKey(), { kind: "serialId" }),
+	serialId: () => withColumn(serial("id").primaryKey(), { kind: "serialId" }),
 
 	/* Text: PostgreSQL text has no length limit, so `max` bounds the generated DTOs only */
-	text: (name: string, constraints?: TextConstraints) => withCombColumn(text(name), { constraints, kind: "text" }),
+	text: (name: string, constraints?: TextConstraints) => withColumn(text(name), { constraints, kind: "text" }),
 
 	/* Timestamp as integer (milliseconds) */
 	timestamp: (name: string, constraints?: TimestampConstraints) =>
-		withCombColumn(epochMs(name), { constraints, kind: "timestamp" }),
+		withColumn(epochMs(name), { constraints, kind: "timestamp" }),
 
 	/* Standard updatedAt timestamp with $onUpdate */
 	updatedAt: (name: UpdatedAtName, constraints?: TimestampConstraints) =>
-		withCombColumn(
+		withColumn(
 			epochMs(name)
 				.notNull()
 				.default(timestampDefaults.now())

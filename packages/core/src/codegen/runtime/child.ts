@@ -51,11 +51,11 @@ async function readTables(
 	return snapshotOf(loaded, elementNullsOf(first), unloaded)
 }
 
-/* comb's own source, whose frames are the loader's and never the project's */
-const COMB_SRC = /* @__PURE__ */ path.resolve(import.meta.dirname, "../..")
+/* database's own source, whose frames are the loader's and never the project's */
+const DATABASE_SRC = /* @__PURE__ */ path.resolve(import.meta.dirname, "../..")
 
 /**
- * The first frame of `error`'s stack in the project's own code, `file:line:col`: past comb's own
+ * The first frame of `error`'s stack in the project's own code, `file:line:col`: past database's own
  * source, a package and node's internals, so a throw in a module the tables file imports names
  * that module; undefined when no frame is the project's
  */
@@ -64,7 +64,7 @@ function projectFrame(error: unknown): string | undefined {
 	for (const [, location] of stack.matchAll(/^\s*at (?:.*\()?((?:file:\/\/)?\/[^()]+:\d+:\d+)\)?$/gm)) {
 		const at = (location as string).startsWith("file://") ? fileURLToPath(location as string) : (location as string)
 		const file = at.replace(/:\d+:\d+$/, "")
-		if (!file.includes(`${path.sep}node_modules${path.sep}`) && !file.startsWith(COMB_SRC)) return at
+		if (!file.includes(`${path.sep}node_modules${path.sep}`) && !file.startsWith(DATABASE_SRC)) return at
 	}
 	return undefined
 }

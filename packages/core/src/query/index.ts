@@ -29,7 +29,7 @@ export { filterBySelect, parseSelect } from "./fields.ts"
 
 /* Filter parser + validator + order parser */
 /* The grammar itself — so neither honey nor oat has to guess how a probe value
-   is written. COMB_FILTER_GRAMMAR is the identifier oat calls `grammar`. */
+   is written. FILTER_GRAMMAR is the identifier oat calls `grammar`. */
 export {
 	FILTER_LIMITS,
 	FILTER_OPERATORS,
@@ -47,7 +47,7 @@ export {
 export { escapeLike, globPattern, likePattern } from "./like.ts"
 /* an ISO date filter's validated value: the instant, by its milliseconds and its text */
 export { IsoInstant } from "./iso-date.ts"
-export { COMB_FILTER_GRAMMAR, type CombFilterGrammar } from "../meta.ts"
+export { FILTER_GRAMMAR, type FilterGrammar } from "../meta.ts"
 
 /* Zod schema builders */
 export {

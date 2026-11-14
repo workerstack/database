@@ -2,36 +2,36 @@
  * Where the CLI meets the process: the IO it writes and asks through, and the error it reports
  * as a message and an exit code. The only CLI module that touches the console.
  */
-import type { Run, RunResult } from "../migrate/core/process.ts"
+import type { MigrateRun, RunResult } from "../migrate/core/process.ts"
 import type { LiveRead } from "../migrate/core/pg-live-types.ts"
 import type { replayCatalog } from "../migrate/core/pg-replay.ts"
 
 /** Where the CLI reads its working directory, writes its output, asks, and starts processes. */
 export type CliIo = {
-	/** The folder the CLI finds comb.config.ts, comb.migrate.config.ts and their files in, and resolves relative paths against */
+	/** The folder the CLI finds database.config.ts, database.migrate.config.ts and their files in, and resolves relative paths against */
 	cwd: string
 	/** Writes one line of a command's output, with no trailing newline; with --json, the command's one JSON object */
 	out(line: string): void
 	/** Writes one line of diagnostics, a refusal or a question's context, with no trailing newline; never part of --json output */
 	err(line: string): void
-	/** How the CLI starts a process (atlas, wrangler, drizzle-kit): comb's own, which spawns it and resolves with its exit code and output, unless the embedder supplies one */
-	run?: Run | undefined
+	/** How the CLI starts a process (atlas, wrangler, drizzle-kit): database's own, which spawns it and resolves with its exit code and output, unless the embedder supplies one */
+	run?: MigrateRun | undefined
 	/** Ask the person running the CLI a yes/no question; absent when nobody can answer (no TTY) */
 	confirm?: ((question: string) => Promise<boolean>) | undefined
 }
 
 /**
- * What a command reads besides its io, comb's own unless its tests fake one: typed by
- * comb's internals, so they stay off the public CliIo and reach the CLI through runCliWith alone.
+ * What a command reads besides its io, database's own unless its tests fake one: typed by
+ * database's internals, so they stay off the public CliIo and reach the CLI through runCliWith alone.
  */
 export type CliDeps = {
 	/** How a Postgres baseline reads the database's catalog of what Atlas OSS does not compare, postgres.js unless a test fakes it */
 	readPgObjects?: LiveRead | undefined
-	/** How a Postgres baseline reads the history replayed on its dev database, comb's own (pg-replay.ts) unless a test fakes it */
+	/** How a Postgres baseline reads the history replayed on its dev database, database's own (pg-replay.ts) unless a test fakes it */
 	replayPgHistory?: typeof replayCatalog | undefined
-	/** How a diff, baseline or adoption gives the dev database a non-public target schema, comb's own unless a test fakes it */
+	/** How a diff, baseline or adoption gives the dev database a non-public target schema, database's own unless a test fakes it */
 	readyPgDev?: ((target: { devUrl: string; schema: string }) => Promise<void>) | undefined
-	/** How a migrate command finds an optional peer's entry before its first I/O, as comb and `bun` find it unless a test fakes it */
+	/** How a migrate command finds an optional peer's entry before its first I/O, as database and `bun` find it unless a test fakes it */
 	locatePeer?: ((peer: string) => string) | undefined
 	/** How a migrate command reads Atlas's version before its first I/O, `atlas version` through `run` unless a test fakes it */
 	readAtlasVersion?: (() => Promise<RunResult>) | undefined
@@ -40,7 +40,7 @@ export type CliDeps = {
 /** The io a command runs on, with the seams runCliWith was given */
 export type CliContext = CliIo & CliDeps
 
-/** What `comb migrate check` reports once every pending migration is approved */
+/** What `database migrate check` reports once every pending migration is approved */
 /** What a migrate apply, check or status found: the files it applied, or found applied, and those pending */
 export type MigrateOutcome = { applied: string[]; pending: string[] }
 
@@ -80,10 +80,10 @@ export class ShowHelp extends Error {
 }
 
 /**
- * The streams `processIo` asks its yes/no questions on, typed as the calls comb makes on them, so a
+ * The streams `processIo` asks its yes/no questions on, typed as the calls database makes on them, so a
  * consumer without Node's types reads them too: process.stdin and process.stderr, or any stream like them
  */
-export type Terminal = {
+export type CliTerminal = {
 	/** Where the answers are read, a line each, in the terminal's cooked mode: it echoes and edits the line */
 	input: {
 		/** True when `input` is a terminal; any other value leaves `CliIo.confirm` absent, so nothing is asked */
@@ -122,7 +122,7 @@ type NextLine = () => Promise<string | undefined>
  * of the listeners on it. Once it ends, every call resolves `undefined` at once; once it fails,
  * every call rejects with its error.
  */
-export function lineReader(input: Terminal["input"]): NextLine {
+export function lineReader(input: CliTerminal["input"]): NextLine {
 	const decoder = new TextDecoder()
 	let text = ""
 	/* the last line ended at a `\r` that closed its chunk, so a `\n` opening the next one ends nothing more */
@@ -183,21 +183,21 @@ export function lineReader(input: Terminal["input"]): NextLine {
  * A yes/no question on the terminal; anything but y or yes is no, and so is an input that ends
  * before a line does: an answer counts once Enter ends it
  */
-async function ask(output: Terminal["output"], next: NextLine, question: string): Promise<boolean> {
+async function ask(output: CliTerminal["output"], next: NextLine, question: string): Promise<boolean> {
 	output.write(`${question} (y/N) `)
 	const answer = await next()
 	return answer !== undefined && /^y(?:es)?$/i.test(answer.trim())
 }
 
 /**
- * The IO the comb binary runs with: the process's working directory, stdout for output, stderr for
+ * The IO the database binary runs with: the process's working directory, stdout for output, stderr for
  * diagnostics, and yes/no questions when `input` is a terminal. Questions are written to `output`,
  * stderr by default, so a command's stdout, its --json object among it, holds only what it prints.
  */
 export function processIo({
 	input = process.stdin,
 	output = process.stderr,
-}: { [K in keyof Terminal]?: Terminal[K] | undefined } = {}): CliIo {
+}: { [K in keyof CliTerminal]?: CliTerminal[K] | undefined } = {}): CliIo {
 	/* one reader for every question, so the bytes past one answer are the next one's */
 	const next = lineReader(input)
 	return {

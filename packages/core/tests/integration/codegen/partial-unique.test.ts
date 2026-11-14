@@ -15,7 +15,7 @@ import type { TableMeta } from "../../../src/codegen/analyzer-types.ts"
 import { deriveEntityMeta } from "../../../src/codegen/entity-meta.ts"
 import { generateConstraints } from "../../../src/codegen/generators/constraints.ts"
 import { testContext } from "../../../src/codegen/generators/__fixtures__/context.ts"
-import type { CombError } from "../../../src/error.ts"
+import type { DatabaseError } from "../../../src/error.ts"
 import { sqliteErrorHandler } from "../../../src/sqlite/constraint-handler.ts"
 import type { ConstraintMap } from "../../../src/types.ts"
 import { libsqlMemory } from "../support/libsql.ts"
@@ -43,7 +43,7 @@ let table: TableMeta
 let map: ConstraintMap
 
 beforeAll(async () => {
-	dir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-partial-unique-"))
+	dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-partial-unique-"))
 	const tables = path.join(dir, "db.app.tables.ts")
 	fs.writeFileSync(tables, TABLES)
 	const analysis = await analyze(tables)
@@ -81,7 +81,7 @@ describe("a partial unique index", () => {
 				(error: unknown) => error,
 			)
 			expect(() => sqliteErrorHandler(failure, [map])).toThrow(
-				expect.objectContaining({ errorKey: "user_email_duplicate" }) as CombError,
+				expect.objectContaining({ errorKey: "user_email_duplicate" }) as DatabaseError,
 			)
 		} finally {
 			close()

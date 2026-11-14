@@ -18,7 +18,7 @@ afterEach(() => {
 
 /** Run the script with a curl that succeeds from attempt `tarballAt` on and an npm that knows the version or not */
 function wait(tarballAt: number | null, npmKnows: boolean) {
-	const bin = mkdtempSync(join(tmpdir(), "comb-npm-wait-"))
+	const bin = mkdtempSync(join(tmpdir(), "database-npm-wait-"))
 	dirs.push(bin)
 	const counter = join(bin, "count")
 	writeFileSync(counter, "0")

@@ -1,6 +1,6 @@
 /**
  * FTS5 objects in SQLite migrations. Atlas replays history and diffs on a dev SQLite without the
- * fts5 module, so comb keeps FTS out of what Atlas sees: it strips the FTS statements from the
+ * fts5 module, so database keeps FTS out of what Atlas sees: it strips the FTS statements from the
  * history it replays and from the target, and writes the FTS part of each migration itself.
  *
  * An FTS group is one fts5 virtual table and the triggers that write into it. A group is written

@@ -60,7 +60,7 @@ function renameTable(table: string, target: string, ctx: AlterContext): Finding[
 	return rebuilt.some((rebuild) => nameKey(rebuild.temp, "sqlite") === temp) ? [] : [{ level: "unsafe" }]
 }
 
-/** Every other ALTER TABLE action comb reads; an action not listed is unsafe */
+/** Every other ALTER TABLE action database reads; an action not listed is unsafe */
 const KNOWN_ACTION =
 	/^(?:ADD (?:CONSTRAINT \S+ )?(?:PRIMARY KEY|UNIQUE|EXCLUDE)\b|VALIDATE CONSTRAINT|ALTER CONSTRAINT|SET (?:LOGGED|WITHOUT CLUSTER|\()|RESET \(|REPLICA IDENTITY|CLUSTER ON|ATTACH PARTITION)\b/i
 
@@ -82,16 +82,16 @@ function ruleFindings(table: string, action: string, ctx: AlterContext): Finding
 		: [
 				{
 					level: "unsafe",
-					note: `comb does not recognize ALTER TABLE … ${action.split(" ").slice(0, 2).join(" ")}; approve it in the file`,
+					note: `database does not recognize ALTER TABLE … ${action.split(" ").slice(0, 2).join(" ")}; approve it in the file`,
 				},
 			]
 }
 
-/** The findings of an ALTER TABLE, action by action; one unsafe finding for an ALTER TABLE comb cannot read */
+/** The findings of an ALTER TABLE, action by action; one unsafe finding for an ALTER TABLE database cannot read */
 function alterTableFindings(code: string, ctx: AlterContext): Finding[] {
 	const [, table, actions] = ALTER_TABLE.exec(code) ?? []
 	if (table === undefined || actions === undefined)
-		return [{ level: "unsafe", note: "comb does not recognize this ALTER TABLE; approve it in the file" }]
+		return [{ level: "unsafe", note: "database does not recognize this ALTER TABLE; approve it in the file" }]
 	return splitTopLevel(actions).flatMap((action) => ruleFindings(table, action, ctx))
 }
 

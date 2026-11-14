@@ -3,7 +3,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { type Run, type RunOptions, run as realRun } from "../../migrate/core/process.ts"
+import { type MigrateRun, type RunOptions, run as realRun } from "../../migrate/core/process.ts"
 import { recordWhole, running, runs, type Seen, send, sendGroup } from "../../../tests/support/pid.ts"
 import { fixtureRoot } from "../__fixtures__/temp.ts"
 import { childArgs, LOAD_TIMEOUT_MS, loadSnapshot, watchSupervisor } from "./load.ts"
@@ -11,7 +11,7 @@ import { childArgs, LOAD_TIMEOUT_MS, loadSnapshot, watchSupervisor } from "./loa
 let dir: string
 
 beforeEach(() => {
-	dir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-load-"))
+	dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-load-"))
 })
 
 afterEach(() => {
@@ -30,7 +30,7 @@ const jobOf = (args: readonly string[]): Job => JSON.parse(args.at(-1) as string
 function fakeRun(
 	code: number,
 	{ result, stderr = "", timedOut = false }: { result?: unknown; stderr?: string; timedOut?: boolean } = {},
-): Run & { calls: Array<[string, string[], RunOptions]> } {
+): MigrateRun & { calls: Array<[string, string[], RunOptions]> } {
 	const calls: Array<[string, string[], RunOptions]> = []
 	const run = (async (cmd: string, args: readonly string[], options: RunOptions = {}) => {
 		calls.push([cmd, [...args], options])
@@ -38,7 +38,7 @@ function fakeRun(
 		if (result !== undefined) fs.writeFileSync(job.args.at(-1) as string, JSON.stringify(result))
 		if (timedOut) fs.writeFileSync(job.status, JSON.stringify({ timedOut: true }))
 		return { code, stderr, stdout: "" }
-	}) as Run & { calls: typeof calls }
+	}) as MigrateRun & { calls: typeof calls }
 	run.calls = calls
 	return run
 }
@@ -94,9 +94,9 @@ describe("the loader's watch on its supervisor", () => {
 })
 
 describe("loadSnapshot", () => {
-	/* F58: the child runs where comb runs, as the app and drizzle-kit do, never beside the tables file */
-	it("runs the child with PATH, HOME and NODE_OPTIONS only, a minute to finish, in comb's working directory", async () => {
-		vi.stubEnv("COMB_SECRET", "parent")
+	/* F58: the child runs where database runs, as the app and drizzle-kit do, never beside the tables file */
+	it("runs the child with PATH, HOME and NODE_OPTIONS only, a minute to finish, in database's working directory", async () => {
+		vi.stubEnv("DATABASE_SECRET", "parent")
 		vi.stubEnv("NODE_OPTIONS", "--max-old-space-size=512")
 		const run = fakeRun(0, { result: { snapshot: { tables: [] } } })
 		expect(await loadSnapshot(tables(), { run, runtime: "bun" })).toEqual({ tables: [] })
@@ -122,19 +122,19 @@ describe("loadSnapshot", () => {
 	it("names the file for a load past the timeout, an error the child reports, and a child that wrote nothing", async () => {
 		/* the supervisor's status file says so, whatever code it exits with; codegen's stopping it says so too */
 		await expect(loadSnapshot(tables(), { run: fakeRun(124, { timedOut: true }) })).rejects.toThrow(
-			`comb timed out after 60 s loading ${tables()}`,
+			`database timed out after 60 s loading ${tables()}`,
 		)
 		await expect(loadSnapshot(tables(), { run: fakeRun(124) })).rejects.toThrow(
-			`comb timed out after 60 s loading ${tables()}`,
+			`database timed out after 60 s loading ${tables()}`,
 		)
 		await expect(loadSnapshot(tables(), { run: fakeRun(0, { result: { error: "t.x: bad" } }) })).rejects.toThrow(
-			`comb could not load ${tables()}: t.x: bad`,
+			`database could not load ${tables()}: t.x: bad`,
 		)
 		await expect(loadSnapshot(tables(), { run: fakeRun(1, { stderr: "boom\n" }) })).rejects.toThrow(
-			`comb could not load ${tables()}: boom`,
+			`database could not load ${tables()}: boom`,
 		)
 		await expect(loadSnapshot(tables(), { run: fakeRun(139) })).rejects.toThrow(
-			`comb could not load ${tables()}: the loader exited 139`,
+			`database could not load ${tables()}: the loader exited 139`,
 		)
 	})
 
@@ -144,12 +144,12 @@ describe("loadSnapshot", () => {
 			`import { sqliteTable } from "drizzle-orm/sqlite-core"\nimport { c } from "@workerstack/database/sqlite/columns"\nexport const note = sqliteTable("note", { id: c.id("not") })\n`,
 		)
 		const scratch: string[] = []
-		const run: Run = async (cmd, args, options) => {
+		const run: MigrateRun = async (cmd, args, options) => {
 			scratch.push(path.dirname(jobOf(args).status))
 			return realRun(cmd, args, options)
 		}
 		expect((await loadSnapshot(tables(), { run })).tables.map((table) => table.exportName)).toEqual(["note"])
-		expect(scratch[0]?.startsWith(path.join(os.tmpdir(), "comb-codegen-"))).toBe(true)
+		expect(scratch[0]?.startsWith(path.join(os.tmpdir(), "database-codegen-"))).toBe(true)
 		expect(fs.existsSync(scratch[0] as string)).toBe(false)
 	})
 })
@@ -218,7 +218,7 @@ describe("loadSnapshot on a module stuck in a synchronous loop, with a process o
 	it("times out, naming the file and the time, and leaves neither the loader nor its grandchild", async () => {
 		const loading = loadSnapshot(stuckTables(), { run: realRun, timeoutMs: 10_000 })
 		const { grandchild, loader } = await pidsOf()
-		await expect(loading).rejects.toThrow(`comb timed out after 10 s loading ${tables()}`)
+		await expect(loading).rejects.toThrow(`database timed out after 10 s loading ${tables()}`)
 		await new Promise((r) => setTimeout(r, 200))
 		expect([runs(loader), runs(grandchild)]).toEqual([false, false])
 	})
@@ -239,19 +239,19 @@ describe("loadSnapshot on a module stuck in a synchronous loop, with a process o
 		await new Promise((r) => setTimeout(r, 200))
 		expect([runs(loader), runs(grandchild), fs.readdirSync(tmp)]).toEqual([false, false, []])
 	})
-	it("leaves nothing when comb alone gets SIGTERM while the module loads, and ends by it (KC5 of r22b)", async () => {
+	it("leaves nothing when database alone gets SIGTERM while the module loads, and ends by it (KC5 of r22b)", async () => {
 		const { codegen, ended, tmp } = codegenOf("bun")
 		const { grandchild, loader, supervisor } = await pidsOf()
-		/* a supervisor, a container stop or a CI step timeout signals comb's pid alone, not its group */
+		/* a supervisor, a container stop or a CI step timeout signals database's pid alone, not its group */
 		expect(codegen.kill("SIGTERM")).toBe(true)
 		const end = await ended
 		expect([await leftOf([supervisor, loader, grandchild]), fs.readdirSync(tmp), end]).toEqual([[], [], "SIGTERM"])
 	})
 
-	it("leaves neither the supervisor nor the module when comb is killed outright while it loads (KC5 of r22b)", async () => {
+	it("leaves neither the supervisor nor the module when database is killed outright while it loads (KC5 of r22b)", async () => {
 		const { codegen, ended } = codegenOf("bun")
 		const { grandchild, loader, supervisor } = await pidsOf()
-		/* no step of comb's runs on SIGKILL: the supervisor reads comb's end from its stdin closing */
+		/* no step of database's runs on SIGKILL: the supervisor reads database's end from its stdin closing */
 		expect(codegen.kill("SIGKILL")).toBe(true)
 		await ended
 		expect(await leftOf([supervisor, loader, grandchild])).toEqual([])
@@ -271,7 +271,7 @@ describe("loadSnapshot when the supervisor dies unseen while the module waits", 
 		const loading = loadSnapshot(tables(), { run: realRun })
 		const { grandchild, loader, supervisor } = await pidsOf()
 		expect(send(supervisor, "SIGKILL")).toBe(true)
-		await expect(loading).rejects.toThrow(`comb could not load ${tables()}`)
+		await expect(loading).rejects.toThrow(`database could not load ${tables()}`)
 		expect(await leftOf([loader, grandchild])).toEqual([])
 	})
 })
@@ -336,7 +336,7 @@ describe("loadSnapshot inside a Bun single-file executable", () => {
 	it("refuses before it starts a child", async () => {
 		const run = fakeRun(0, { result: { snapshot: { tables: [] } } })
 		await expect(loadSnapshot(tables(), { moduleUrl: "file:///$bunfs/root/app-exe", run })).rejects.toThrow(
-			"comb codegen loads the tables file in a child process, which cannot read the modules a Bun single-file executable embeds: run codegen with bun or node, not from a compiled executable",
+			"database codegen loads the tables file in a child process, which cannot read the modules a Bun single-file executable embeds: run codegen with bun or node, not from a compiled executable",
 		)
 		expect(run.calls).toEqual([])
 	})

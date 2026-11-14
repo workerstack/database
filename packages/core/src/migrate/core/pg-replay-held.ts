@@ -75,7 +75,7 @@ WHERE d.classid = 'pg_class'::regclass AND d.refclassid = 'pg_class'::regclass A
  */
 type Owned = { key: string; of: string; sequence: boolean }
 
-/** The relations the transaction just begun on `sql` can block, by oid, keyed as comb keys a name under `schema` */
+/** The relations the transaction just begun on `sql` can block, by oid, keyed as database keys a name under `schema` */
 async function heldBefore(sql: Sql, schema: string): Promise<Map<string, Owned>> {
 	const rows = await sql.unsafe(OWNED, [])
 	return new Map(

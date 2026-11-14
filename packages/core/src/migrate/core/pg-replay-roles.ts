@@ -1,7 +1,7 @@
 /**
  * The roles a dev replay makes and grants (pg-replay.ts). A role is the server's, not the
  * database's: a history's CREATE ROLE of one that exists uses it, held by a grant on the replay's
- * database so another replay cannot drop it meanwhile, and one comb creates is tagged with the
+ * database so another replay cannot drop it meanwhile, and one database creates is tagged with the
  * backend that made it and dropped after. The replay needs only a role's name, for a policy, a
  * grant or an owner, so it makes the role NOLOGIN NOSUPERUSER NOREPLICATION NOBYPASSRLS whatever
  * the history says, keeping only its memberships among roles it made itself: no role
@@ -10,7 +10,7 @@
  * (pg-replay-made.ts).
  *
  * A role a statement the replay cannot leave out adds, such as `DO … IF NOT EXISTS … CREATE ROLE`,
- * is adopted as one comb made when nothing else changed beside it: made bare, tagged,
+ * is adopted as one database made when nothing else changed beside it: made bare, tagged,
  * held and dropped after. And a change to a role the replay made or adopts, to its row, its
  * memberships, its settings, its comment or its labels, dies with it, so it is the replay's own,
  * the role made bare again before the COMMIT (pg-replay-commit.ts).
@@ -25,7 +25,7 @@ import { flag } from "./pg-nodes.ts"
  * One replay's state: its connection, the server as committed (`admin`), its database, the backend
  * that owns it, its role (`role`, which CURRENT_USER and its kin name in a file), whether that role
  * is a superuser, which reads pg_authid, whether it has CREATEROLE (`createrole`), and the roles it made; the
- * open transaction's own writes, comb's CREATE ROLEs', with the rows they left; the shared catalogs
+ * open transaction's own writes, database's CREATE ROLEs', with the rows they left; the shared catalogs
  * as last read committed (`seen`)
  */
 type Run = {
@@ -56,7 +56,7 @@ async function devRoleOf(sql: Sql): Promise<{ createrole: boolean; role: string;
 	}
 }
 
-/** `act` run, its writes to the shared catalogs counted as comb's own, with the rows of them that are `mine` */
+/** `act` run, its writes to the shared catalogs counted as database's own, with the rows of them that are `mine` */
 async function own(run: Run, act: () => Promise<void>, mine: (subject: string) => boolean): Promise<void> {
 	const before = (await counts(run.sql)).writes
 	await act()
@@ -137,7 +137,7 @@ async function createRole(
 			[role],
 		)
 		const exists = found !== undefined
-		await mark("SAVEPOINT comb_role")
+		await mark("SAVEPOINT database_role")
 		try {
 			if (!exists) {
 				await sql.unsafe(sent, [])
@@ -145,13 +145,13 @@ async function createRole(
 			}
 			/* the replay that made the role holds it too, so whichever replay using it ends last drops it */
 			await sql.unsafe(`GRANT CONNECT ON DATABASE ${database} TO ${sqlIdentifier(role)}`, [])
-			await mark("RELEASE SAVEPOINT comb_role")
+			await mark("RELEASE SAVEPOINT database_role")
 			return !exists || String(found["description"]).startsWith(`${TAG} `)
 		} catch (error) {
 			const raced = exists ? codeOf(error) === "42704" : codeOf(error) === "42710" || codeOf(error) === "23505"
 			if (!raced) throw error
 			// reason: another replay dropped the role, or made it, since the read: read it again
-			await mark("ROLLBACK TO SAVEPOINT comb_role")
+			await mark("ROLLBACK TO SAVEPOINT database_role")
 		}
 	}
 }
@@ -213,7 +213,7 @@ async function adopt(run: Run, roles: readonly string[]): Promise<void> {
 }
 
 /* the roles of a list the server holds but those a replay made and tagged, which it drops after itself */
-const HELD = `SELECT r.rolname FROM pg_roles r LEFT JOIN pg_shdescription d ON d.objoid = r.oid AND d.classoid = 'pg_authid'::regclass WHERE r.rolname = ANY($1::text[]) AND (d.description IS NULL OR d.description NOT LIKE 'comb\\_replay %')`
+const HELD = `SELECT r.rolname FROM pg_roles r LEFT JOIN pg_shdescription d ON d.objoid = r.oid AND d.classoid = 'pg_authid'::regclass WHERE r.rolname = ANY($1::text[]) AND (d.description IS NULL OR d.description NOT LIKE 'database\\_replay %')`
 
 /** Which of `roles` the server holds, a replay's own left out: another replay's role is gone once it ends */
 async function heldRoles(sql: Sql, roles: readonly string[]): Promise<Set<string>> {

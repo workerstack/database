@@ -1,9 +1,9 @@
 /**
  * The D1 proof's child: what runs each pending file on a scratch local D1 the checked
  * wrangler's own Miniflare opens (`getPlatformProxy({ persist: false })`). d1-engine.ts starts it on
- * the runtime wrangler runs on (node), through process.ts, whatever runtime comb itself runs on, so
+ * the runtime wrangler runs on (node), through process.ts, whatever runtime database itself runs on, so
  * Miniflare runs where wrangler's apply runs it. Plain JavaScript: node does not strip a TypeScript
- * file's types under node_modules, where a project holds comb.
+ * file's types under node_modules, where a project holds database.
  *
  * The seed batch runs first: the copy of the live schema with its seed rows, and the history table.
  * Then each file as wrangler sends it, the file and the history row it appends, through wrangler's
@@ -222,7 +222,7 @@ async function proveFile(scratch, file) {
 	}
 	if (crashed.length === 0) return {}
 	return {
-		unproven: `comb's local D1 (wrangler's workerd) crashed compiling ${crashed.join(", ")} once this file applied, and again on a fresh copy, so D1's engine proves nothing of it; wrangler's apply compiles no such statement, so this does not show the live database refuses the file`,
+		unproven: `database's local D1 (wrangler's workerd) crashed compiling ${crashed.join(", ")} once this file applied, and again on a fresh copy, so D1's engine proves nothing of it; wrangler's apply compiles no such statement, so this does not show the live database refuses the file`,
 	}
 }
 

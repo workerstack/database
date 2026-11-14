@@ -1,5 +1,5 @@
 /**
- * comb's own SQLite history records each file's name beside its hash (M10): an applied file edited
+ * database's own SQLite history records each file's name beside its hash (M10): an applied file edited
  * since was taken for a new one, and apply ran it again.
  */
 import { createClient } from "@libsql/client"
@@ -24,7 +24,7 @@ function configured(migrations: Record<string, string>) {
 	mkdirSync(join(dir, "m"))
 	write(migrations)
 	writeFileSync(
-		join(dir, "comb.migrate.config.ts"),
+		join(dir, "database.migrate.config.ts"),
 		`export default { databases: { core: { migrationsDir: "./m", name: "core-dev", provider: { type: "libsql", url: ${JSON.stringify(url)} } } } }\n`,
 	)
 	return { dir, url, write }
@@ -43,7 +43,7 @@ async function rows(url: string, sql: string): Promise<unknown[][]> {
 const SEED = "INSERT INTO plans (name) VALUES ('pro');"
 const INIT = "CREATE TABLE plans (id INTEGER PRIMARY KEY, name TEXT);"
 
-describe("comb's SQLite history and an applied file edited since (M10)", () => {
+describe("database's SQLite history and an applied file edited since (M10)", () => {
 	it("records each file's name, and refuses an applied file edited since, in apply, check and status", async () => {
 		const { dir, url, write } = configured({ "1_init.sql": INIT, "2_seed.sql": SEED })
 		expect(await runCliWithFakes(["migrate", "apply", "core", "--yes"], makeIo(dir, fakeAtlas()))).toBe(0)
@@ -91,7 +91,7 @@ const unnamedHistory = async (url: string) => {
 }
 
 /* M15 and M16 of the 0.12 round: a recorded row is matched to one file, by its name, or, unnamed, by its hash */
-describe("comb's SQLite history and a row that matches no file, or a file whose text another had (M15, M16)", () => {
+describe("database's SQLite history and a row that matches no file, or a file whose text another had (M15, M16)", () => {
 	it("refuses an unnamed row whose file was edited since, in apply and check, and names it in status (M15)", async () => {
 		const { dir, url, write } = configured({ "1_init.sql": INIT, "2_seed.sql": SEED })
 		await unnamedHistory(url)
@@ -124,7 +124,7 @@ describe("comb's SQLite history and a row that matches no file, or a file whose 
 	})
 })
 
-describe("comb's SQLite history and two files of one text (M16)", () => {
+describe("database's SQLite history and two files of one text (M16)", () => {
 	it("runs a file whose text normalizes to an applied file's: each row matches one file (M16)", async () => {
 		const index = "CREATE INDEX plans_name ON plans (name);"
 		const { dir, url, write } = configured({
@@ -144,7 +144,7 @@ describe("comb's SQLite history and two files of one text (M16)", () => {
 	})
 })
 
-/** comb 0.12's history over `url`: hash unique, each row named as 0.12 named it, the AUTOINCREMENT counter at `seq` */
+/** database 0.12's history over `url`: hash unique, each row named as 0.12 named it, the AUTOINCREMENT counter at `seq` */
 async function history012(
 	url: string,
 	{ recorded, seq = 0, setup }: { recorded: Array<[number, string, string]>; seq?: number; setup: string },
@@ -175,7 +175,7 @@ const LONE = "CREATE TABLE lone (id INTEGER PRIMARY KEY);"
 const names = async (url: string) => (await rows(url, "SELECT name FROM __drizzle_migrations ORDER BY id")).flat()
 
 /* M35 of the 0.13 review: a 0.12 history's named rows, resolved once to the files they name */
-describe("comb's SQLite history from 0.12, its named rows resolved (M35)", () => {
+describe("database's SQLite history from 0.12, its named rows resolved (M35)", () => {
 	it("takes a row 0.12 recorded for a --file outside the directory as one, in check, status and apply", async () => {
 		const { dir, url } = configured({ "1_a.sql": A })
 		await history012(url, {
@@ -225,7 +225,7 @@ describe("comb's SQLite history from 0.12, its named rows resolved (M35)", () =>
 	})
 })
 
-describe("comb's SQLite history from 0.12: what stays refused (M35)", () => {
+describe("database's SQLite history from 0.12: what stays refused (M35)", () => {
 	it("refuses a row whose hash two unrecorded files hold, naming them", async () => {
 		const { dir, url } = configured({ "1_a.sql": A, "2_x.sql": B, "3_y.sql": B })
 		await history012(url, {
@@ -255,7 +255,7 @@ describe("comb's SQLite history from 0.12: what stays refused (M35)", () => {
 })
 
 /* M36 of the 0.13 review: the rebuild keeps the history's AUTOINCREMENT counter, so no id is used twice */
-describe("comb's SQLite history from 0.12, rebuilt (M36)", () => {
+describe("database's SQLite history from 0.12, rebuilt (M36)", () => {
 	it("keeps the AUTOINCREMENT counter above every id it handed out", async () => {
 		const { dir, url } = configured({ "1_a.sql": A })
 		await history012(url, { recorded: [[1, A, "1_a.sql"]], setup: A, seq: 7 })
@@ -291,7 +291,7 @@ describe("migrate apply --file in a subdirectory of the migrations directory (M3
 })
 
 /* M42 of the 0.13 review: a view or trigger over the history moves through the rebuild with it */
-describe("comb's SQLite history from 0.12 with a view and a trigger over it, rebuilt (M42)", () => {
+describe("database's SQLite history from 0.12 with a view and a trigger over it, rebuilt (M42)", () => {
 	it("applies, and keeps the view and the trigger working on the rebuilt history", async () => {
 		const { dir, url, write } = configured({ "1_a.sql": A })
 		await history012(url, {

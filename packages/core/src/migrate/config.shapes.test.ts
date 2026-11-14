@@ -16,11 +16,11 @@ afterEach(() => {
 	for (const dir of dirs.splice(0)) rmSync(dir, { force: true, recursive: true })
 })
 
-/** A comb.migrate.config.ts exporting `body`, its path */
+/** A database.migrate.config.ts exporting `body`, its path */
 function configFile(body: string): string {
-	const dir = mkdtempSync(join(tmpdir(), "comb-config-shapes-"))
+	const dir = mkdtempSync(join(tmpdir(), "database-config-shapes-"))
 	dirs.push(dir)
-	const file = join(dir, "comb.migrate.config.ts")
+	const file = join(dir, "database.migrate.config.ts")
 	writeFileSync(file, body)
 	return file
 }
@@ -87,7 +87,7 @@ describe("loadConfig on an environment whose URL is unset (P5)", () => {
 		const file = configFile(
 			DEFINED(`{ core: { migrationsDir: "m", environments: {
 	dev: { provider: { type: "postgres", url: "postgres://u@db/dev" } },
-	prod: { provider: { type: "postgres", url: process.env["COMB_NO_SUCH_URL"] ?? "" } },
+	prod: { provider: { type: "postgres", url: process.env["DATABASE_NO_SUCH_URL"] ?? "" } },
 } } }`),
 		)
 		const { core } = (await loadConfig(file)).config.databases

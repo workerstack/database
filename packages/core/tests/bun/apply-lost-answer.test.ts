@@ -8,7 +8,7 @@ import { describe, expect, it } from "bun:test"
 import { applyEach, ensureMigrationsTable } from "../../src/migrate/core/apply.ts"
 import { Refused } from "../../src/migrate/core/refused.ts"
 import { createBunSqliteProvider } from "../../src/migrate/drivers/bun-sqlite.ts"
-import type { Connection } from "../../src/migrate/types.ts"
+import type { MigrateConnection } from "../../src/migrate/types.ts"
 
 const DB = { migrationsDir: "m", name: "local", provider: { path: ":memory:", type: "bun-sqlite" as const } }
 
@@ -23,7 +23,7 @@ describe("applyEach on bun:sqlite when a committed batch's answer is lost", () =
 		const conn = await createBunSqliteProvider({ path: ":memory:", type: "bun-sqlite" }).connect(DB)
 		await ensureMigrationsTable(conn)
 		let down = false
-		const losing: Connection = {
+		const losing: MigrateConnection = {
 			...conn,
 			batch: async (statements) => {
 				if (down) throw reset()

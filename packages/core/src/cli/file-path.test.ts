@@ -23,7 +23,7 @@ describe("migrate diff's migration name", () => {
 			const io = makeIo(dir, run)
 			expect(await runCliWithFakes(["migrate", "diff", "core", name], io)).toBe(1)
 			expect(io.errors).toEqual([
-				`Migration name "${name}" names a path: give a name alone, such as add_users\nUsage: comb migrate diff <database> [name] [-e <name>] [--dry-run]`,
+				`Migration name "${name}" names a path: give a name alone, such as add_users\nUsage: database migrate diff <database> [name] [-e <name>] [--dry-run]`,
 			])
 			expect({ calls: run.calls, files: readdirSync(dir) }).toEqual({ calls: [], files: ["drizzle.config.ts"] })
 		},
@@ -39,12 +39,12 @@ describe("migrate diff's migration name", () => {
 	})
 })
 
-/** A project whose src is a directory, with comb.config.ts declaring core's tables as `tables` */
+/** A project whose src is a directory, with database.config.ts declaring core's tables as `tables` */
 function tablesProject(tables: string): string {
 	const dir = temp.make()
 	mkdirSync(join(dir, "src"))
 	writeFileSync(
-		join(dir, "comb.config.ts"),
+		join(dir, "database.config.ts"),
 		`export default { databases: { core: { tables: ${JSON.stringify(tables)} } } }\n`,
 	)
 	return dir
@@ -58,7 +58,7 @@ describe("codegen's tables path", () => {
 		expect(io.errors).toEqual([
 			`--tables ${join(dir, "src")} is a directory, not a file: point it at the module that exports the tables`,
 		])
-		expect(readdirSync(dir).sort()).toEqual(["comb.config.ts", "src"])
+		expect(readdirSync(dir).sort()).toEqual(["database.config.ts", "src"])
 	})
 
 	it("refuses --tables naming what is neither a file nor a directory", async () => {
@@ -68,7 +68,7 @@ describe("codegen's tables path", () => {
 		expect(io.errors).toEqual(["--tables /dev/null is not a file: point it at the module that exports the tables"])
 	})
 
-	it("refuses comb.config.ts tables naming a directory, by name", async () => {
+	it("refuses database.config.ts tables naming a directory, by name", async () => {
 		const dir = tablesProject("./src")
 		const io = makeIo(dir)
 		expect(await runCliWithFakes(["codegen", "core"], io)).toBe(1)
@@ -78,7 +78,7 @@ describe("codegen's tables path", () => {
 	})
 })
 
-/** A D1 project whose comb.migrate.config.ts names `wranglerConfig`, with a wrangler-dir directory beside it */
+/** A D1 project whose database.migrate.config.ts names `wranglerConfig`, with a wrangler-dir directory beside it */
 function d1Project(wranglerConfig: string): string {
 	const dir = temp.make()
 	mkdirSync(join(dir, "wrangler-dir"))
@@ -86,7 +86,7 @@ function d1Project(wranglerConfig: string): string {
 	writeFileSync(join(dir, "atlas-migrations", "20260101000000_init.sql"), "CREATE TABLE post (id TEXT);")
 	writeSum(join(dir, "atlas-migrations"))
 	writeFileSync(
-		join(dir, "comb.migrate.config.ts"),
+		join(dir, "database.migrate.config.ts"),
 		`export default { databases: { core: { name: "DB", migrationsDir: "./atlas-migrations", provider: { type: "d1", databaseName: "DB", local: true, wranglerConfig: ${JSON.stringify(wranglerConfig)} } } } }\n`,
 	)
 	return dir

@@ -1,5 +1,5 @@
 /**
- * The README's Postgres migrate paragraphs say what comb does (nits of r22b, plan 21 leaf 10.8):
+ * The README's Postgres migrate paragraphs say what database does (nits of r22b, plan 21 leaf 10.8):
  * the outside-transaction list names every statement check refuses in a file Atlas runs in one
  * transaction (PA14, pg-outside-transaction.ts), with a 0.21 upgrade note for the partitioned ones
  * 0.20 added; and `status` refuses an applied file edited since, as checkHistory does (PA21,
@@ -27,7 +27,7 @@ function sentence(text: string, marker: string): string {
 describe("the 0.21 upgrade notes these tests read (AE2-10)", () => {
 	it("end where the 0.20.1 notes start", () => {
 		expect(upgrade).not.toContain("\n## Upgrading to 0.20")
-		expect(upgrade).toContain("Run comb on Node 22.13 or later")
+		expect(upgrade).toMatch(/Run \w+ on Node 22\.13 or later/)
 	})
 })
 

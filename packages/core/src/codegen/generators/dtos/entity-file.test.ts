@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { CombEntityMetaInput } from "../../../meta.ts"
+import type { EntityMetaInput } from "../../../meta.ts"
 import type { ImportRef } from "../../analyzer-types.ts"
 import { fieldOf } from "../../__fixtures__/runtime.ts"
 import type { FieldInfo, SchemaType, SharedName, SharedSchema, TableInfo } from "./dto-types.ts"
@@ -11,7 +11,7 @@ const NONE = { createdAt: false, deletedAt: false, updatedAt: false }
 
 function table(fields: FieldInfo[], overrides: Partial<TableInfo> = {}): TableInfo {
 	return {
-		combMeta: null,
+		databaseMeta: null,
 		fields,
 		hasTimestamps: NONE,
 		name: "blog_post",
@@ -35,7 +35,7 @@ function file(t: TableInfo, options: Partial<EntityFileOptions> = {}): string {
 	})
 }
 
-const META: CombEntityMetaInput = {
+const META: EntityMetaInput = {
 	generated: ["id"],
 	identity: "id",
 	immutable: ["id"],
@@ -115,11 +115,13 @@ describe("schemaImportLines", () => {
 describe("generateEntityFile", () => {
 	it("writes each schema type it has fields for, with the stamp on read and the types after", () => {
 		const output = file(
-			table([field("id", "read", "z.string()"), field("id", "create", "z.string().optional()")], { combMeta: META }),
-			{ metaImportFrom: "@app/comb/meta" },
+			table([field("id", "read", "z.string()"), field("id", "create", "z.string().optional()")], {
+				databaseMeta: META,
+			}),
+			{ metaImportFrom: "@app/database/meta" },
 		)
-		expect(output).toContain('import { combMeta } from "@app/comb/meta"')
-		expect(output).toContain("export const blogPostDtoReadSchema = z.object({\n\tid: _str,\n}).meta(combMeta({")
+		expect(output).toContain('import { databaseMeta } from "@app/database/meta"')
+		expect(output).toContain("export const blogPostDtoReadSchema = z.object({\n\tid: _str,\n}).meta(databaseMeta({")
 		expect(output).toContain('\tstates: {\n\t\tcolumn: "status",\n\t\tinitial: null,\n\t\tterminal: ["done"],')
 		expect(output).toContain('\tuniqueIndexes: [{ columns: ["slug"], name: "post_slug" }],')
 		/* C7 of the 0.14.1 review: each partial index with its predicate */
@@ -135,10 +137,10 @@ describe("generateEntityFile", () => {
 	it("renders a stamp without states or indexes, and the default meta import", () => {
 		const output = file(
 			table([field("id", "read", "z.string()")], {
-				combMeta: { ...META, softDelete: "deleted_at", states: null, uniqueIndexes: [] },
+				databaseMeta: { ...META, softDelete: "deleted_at", states: null, uniqueIndexes: [] },
 			}),
 		)
-		expect(output).toContain('import { combMeta } from "@workerstack/database/meta"')
+		expect(output).toContain('import { databaseMeta } from "@workerstack/database/meta"')
 		expect(output).toContain(
 			'\tsoftDelete: "deleted_at",\n\tstates: null,\n\ttenantColumn: null,\n\tuniqueIndexes: [],',
 		)
@@ -185,13 +187,13 @@ describe("generateEntityFile: shared module imports", () => {
 	})
 })
 
-/* C2 of r17: an entity file whose own code names comb's predicate imports comb's namespace, from where comb is imported */
-describe("generateEntityFile: comb's namespace", () => {
-	const guarded = table([field("title", "read", "z.string().refine(comb.isStorableText)")])
+/* C2 of r17: an entity file whose own code names database's predicate imports database's namespace, from where database is imported */
+describe("generateEntityFile: database's namespace", () => {
+	const guarded = table([field("title", "read", "z.string().refine(database.isStorableText)")])
 
-	it("imports it only when the file names it, from the configured specifier or comb's own", () => {
-		expect(file(guarded, { combFrom: "~/comb" })).toContain('import * as comb from "~/comb"')
-		expect(file(guarded)).toContain('import * as comb from "@workerstack/database"')
-		expect(file(table([field("title", "read", "z.string()")]))).not.toContain("import * as comb")
+	it("imports it only when the file names it, from the configured specifier or database's own", () => {
+		expect(file(guarded, { databaseFrom: "~/database" })).toContain('import * as database from "~/database"')
+		expect(file(guarded)).toContain('import * as database from "@workerstack/database"')
+		expect(file(table([field("title", "read", "z.string()")]))).not.toContain("import * as database")
 	})
 })

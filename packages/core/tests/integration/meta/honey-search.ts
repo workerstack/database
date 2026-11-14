@@ -1,5 +1,5 @@
 /**
- * A faithful transcription of honey's schema-key search, so comb can prove its
+ * A faithful transcription of honey's schema-key search, so database can prove its
  * stamps are findable by the consumer that actually reads them.
  *
  * Source of record: `@lovrozagar/honey` `packages/core/src/codegen.ts` at commit
@@ -7,10 +7,10 @@
  * 1.0.0-rc.15 (164a0e4), where it is `children` and `deepSearch` in
  * `packages/core/src/meta/meta-spec-validate.ts`: the same children, levels and dedupe.
  *
- * This is deliberately a copy rather than an import: comb does not depend on
- * honey, and the point of the test is that comb's *output* satisfies honey's
+ * This is deliberately a copy rather than an import: database does not depend on
+ * honey, and the point of the test is that database's *output* satisfies honey's
  * *documented* contract. If honey changes this algorithm, these tests should be
- * updated to match and will show exactly what comb has to do differently.
+ * updated to match and will show exactly what database has to do differently.
  */
 
 type SchemaMetaHit =

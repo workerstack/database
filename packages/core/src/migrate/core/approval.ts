@@ -2,11 +2,11 @@
  * Who may let a destructive migration run. A cautious file runs with `--yes` or a yes on a
  * terminal. An unsafe one loses data, so a standing `--yes` in a pipeline must not cover it: it
  * runs only on a yes from a person at a terminal, or when the file itself carries a reviewed
- * `-- comb:allow-unsafe: <reason>` line. atlas.sum records that line with the rest of the file's
- * bytes; comb's own hash leaves comments out, so it holds the SQL approved, not the approval.
+ * `-- database:allow-unsafe: <reason>` line. atlas.sum records that line with the rest of the file's
+ * bytes; database's own hash leaves comments out, so it holds the SQL approved, not the approval.
  */
 import type { MigrationClassification } from "../migration-types.ts"
-import type { Dialect } from "../types.ts"
+import type { MigrateDialect } from "../types.ts"
 import { extractDropStatements } from "./classify.ts"
 import { segments } from "../../sql-lexer.ts"
 import { dropsQuestion } from "./utils.ts"
@@ -18,7 +18,7 @@ type ApprovalOptions = {
 	/** how to ask the person running the migration; absent when nobody can be asked */
 	confirm?: ((question: string) => Promise<boolean>) | undefined
 	/** how the file is read, so only a real comment approves it; SQLite by default */
-	dialect?: Dialect | undefined
+	dialect?: MigrateDialect | undefined
 	/** the database it runs on, named in the question */
 	target: string
 	/** --yes */
@@ -33,14 +33,14 @@ type Approval =
 	| { approvedBy?: string | undefined; cautions?: string[] | undefined; ok: true }
 	| { message: string; ok: false }
 
-const ALLOW_UNSAFE = /^--[ \t]*comb:allow-unsafe:[ \t]*(\S.*?)[ \t]*$/
-const MARKER = '"-- comb:allow-unsafe: <reason>"'
+const ALLOW_UNSAFE = /^--[ \t]*database:allow-unsafe:[ \t]*(\S.*?)[ \t]*$/
+const MARKER = '"-- database:allow-unsafe: <reason>"'
 
 /**
  * The reason a file gives for approving its own unsafe statements, if it gives one: a line
  * comment on a line of its own, never text inside a string or a function body
  */
-function inFileApproval(sql: string, dialect: Dialect = "sqlite"): string | undefined {
+function inFileApproval(sql: string, dialect: MigrateDialect = "sqlite"): string | undefined {
 	let lineStart = true
 	for (const { kind, text } of segments(sql, dialect)) {
 		const reason = kind === "comment" && lineStart ? ALLOW_UNSAFE.exec(text)?.[1] : undefined

@@ -1,5 +1,5 @@
 /**
- * Everything a differential case builds a list with, from one comb and the drizzle it resolves. Imported in
+ * Everything a differential case builds a list with, from one database and the drizzle it resolves. Imported in
  * place it is the tip: `@workerstack/database` resolves to this package's own src. A copy in an oracle's box
  * (oracles.ts) resolves the published tarball and the drizzle installed beside it, so each version builds its
  * tables, its database handles and its lists with its own drizzle, as an app on that version does.

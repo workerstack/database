@@ -13,7 +13,7 @@ import { project, useProjects } from "../support/codegen-project.ts"
 useProjects()
 
 const SRC = path.join(import.meta.dirname, "../../../src")
-/* node runs comb's TypeScript source through comb's own loader hooks, as the codegen child does */
+/* node runs database's TypeScript source through database's own loader hooks, as the codegen child does */
 const NODE_ARGS = [
 	"--experimental-import-meta-resolve",
 	"--disable-warning=ExperimentalWarning",
@@ -33,10 +33,10 @@ export const item = sqliteTable("item", { id: c.id("itm"), yakId: c.ref("yak_id"
 export const jet = sqliteTable("jet", { id: c.id("jet"), itemId: c.ref("item_id", () => item.id) })
 `
 
-/** Every file `comb codegen` wrote in a fresh project under `lang`, by its path in the project */
+/** Every file `database codegen` wrote in a fresh project under `lang`, by its path in the project */
 function generatedUnder(lang: string): Record<string, string> {
 	const dir = project({
-		"comb.config.ts": `export default { databases: {
+		"database.config.ts": `export default { databases: {
 	zoo: { tables: "./src/db/db.zoo.tables.ts" },
 	aardb: { tables: "./src/aar/db.aardb.tables.ts" },
 } }\n`,
@@ -55,7 +55,7 @@ function generatedUnder(lang: string): Record<string, string> {
 	return files
 }
 
-describe("comb codegen under two locales (F40)", () => {
+describe("database codegen under two locales (F40)", () => {
 	it("writes the same bytes under en_US, da_DK and lt_LT", () => {
 		const english = generatedUnder("en_US.UTF-8")
 		expect(Object.keys(english).length).toBeGreaterThan(10)

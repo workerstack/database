@@ -11,7 +11,7 @@ afterEach(() => {
 })
 
 function temp(): string {
-	const dir = mkdtempSync(join(tmpdir(), "comb-file-open-"))
+	const dir = mkdtempSync(join(tmpdir(), "database-file-open-"))
 	dirs.push(dir)
 	return dir
 }

@@ -60,7 +60,7 @@ describe("classifyMigration lists a statement at its strictest level alone", () 
 		/* one entry for the statement, both notes in it (S6 of r18) */
 		expect(c.unsafeStatements).toEqual([
 			expect.stringMatching(
-				/^CREATE OR REPLACE FUNCTION f\(\).* \(comb rates every function change unsafe; approve it in the file; creates function f, whose body comb does not read\)$/,
+				/^CREATE OR REPLACE FUNCTION f\(\).* \(database rates every function change unsafe; approve it in the file; creates function f, whose body database does not read\)$/,
 			),
 		])
 		expect(c.cautiousStatements).toEqual([])
@@ -143,7 +143,7 @@ describe("classifyMigration on hand-written Postgres that keeps every row", () =
 		"DO $$ BEGIN EXECUTE format('DROP TABLE %I', 'post'); END $$",
 	])("calls %j unsafe: default-deny's rule for triggers and routines", (sql) => {
 		expect(pg(sql).unsafeStatements.join("\n")).toMatch(
-			/comb rates every (?:trigger|function) change unsafe|comb rates every DO block unsafe/,
+			/database rates every (?:trigger|function) change unsafe|database rates every DO block unsafe/,
 		)
 	})
 })
@@ -175,7 +175,7 @@ describe("classifyMigration on SQL that hid a destructive change", () => {
 		expect(pg(sql).safety).toBe("cautious")
 	})
 
-	/* a function that is no pure built-in runs code comb cannot read, whoever created it (pg-tree.ts) */
+	/* a function that is no pure built-in runs code database cannot read, whoever created it (pg-tree.ts) */
 	it("calls a function an earlier file created unsafe, as any that is no pure built-in", () => {
 		const before = { ...schemaWith("users", ["id"]), functions: ["purge"] }
 		expect(classifyMigration("SELECT purge();", { before, dialect: "postgres" }).safety).toBe("unsafe")
@@ -411,10 +411,10 @@ describe("classifyMigration on a call of a routine the file creates (M2)", () =>
 		["CREATE TRIGGER t AFTER INSERT ON users FOR EACH ROW EXECUTE FUNCTION wipe();", "a trigger"],
 	])("rates %j unsafe when the routine's body deletes rows (%s)", (call) => {
 		expect(levelOf(`${wipe}${call}`, call)).toBe("unsafe")
-		expect(pg(wipe).unsafeStatements.join("\n")).toContain("comb rates every function change unsafe")
+		expect(pg(wipe).unsafeStatements.join("\n")).toContain("database rates every function change unsafe")
 	})
 
-	/* a routine's body is code comb does not read, in any language: its creation and every call are unsafe */
+	/* a routine's body is code database does not read, in any language: its creation and every call are unsafe */
 	it("rates every call of a routine the file creates unsafe, whatever its body or language", () => {
 		for (const [routine, call] of [
 			['CREATE PROCEDURE "p"() LANGUAGE sql AS $$ SELECT 1 $$;', 'CALL "p"()'],

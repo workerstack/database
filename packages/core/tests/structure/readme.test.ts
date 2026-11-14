@@ -1,6 +1,6 @@
 /**
  * The README is the manual an agent works from, so its code compiles and its links resolve. Each
- * ```ts block is one module, compiled against comb's real exports under the strict flags a
+ * ```ts block is one module, compiled against database's real exports under the strict flags a
  * consumer may set, with the Workers and Node types loaded together as a Worker that runs codegen
  * would. A `<!-- ts-context … -->` comment right above a block declares what the snippet assumes
  * (a db, a table, a request) without showing it.
@@ -135,7 +135,7 @@ function required(peer: string): string {
 	const sets = new Map<string, string[]>()
 	for (const [provider, commands] of on) {
 		const key = inWords(
-			commands.toSorted().map((command, at) => (at === 0 ? `\`comb migrate ${command}\`` : `\`${command}\``)),
+			commands.toSorted().map((command, at) => (at === 0 ? `\`database migrate ${command}\`` : `\`${command}\``)),
 		)
 		sets.set(key, [...(sets.get(key) ?? []), provider])
 	}
@@ -254,7 +254,7 @@ const PROVIDER_NAMES: Readonly<Record<string, Provider>> = {
 	Turso: "turso",
 }
 
-/** Whether `command` on `provider` loads a peer from the project: any it needs but Atlas, an optional one, and drizzle-kit, which comb spawns */
+/** Whether `command` on `provider` loads a peer from the project: any it needs but Atlas, an optional one, and drizzle-kit, which database spawns */
 const loads = (provider: Provider, command: Command): boolean =>
 	needsOf(command, provider, false).some(
 		(need) => need.peer !== "atlas" && need.peer !== "drizzle-kit" && need.optional !== true,
@@ -272,7 +272,7 @@ const ftsAdds = (): Array<readonly [Provider, Command]> => {
 
 /* D4-6 of the area D round-four review: item 2 promises what a Bun single-file executable refuses */
 const installItem =
-	/^\d+\. \*\*Install `wrangler` and `drizzle-kit` in the project that runs comb\.\*\*.*$/m.exec(README)?.[0] ?? ""
+	/^\d+\. \*\*Install `wrangler` and `drizzle-kit` in the project that runs \w+\.\*\*.*$/m.exec(README)?.[0] ?? ""
 /** Item 2's sentence on what a compiled executable refuses */
 const installRefused = installItem
 	.split(/(?<=\.) /)
@@ -288,7 +288,7 @@ describe("README peer install upgrade item", () => {
 	})
 
 	/* D5-2 follow-up: the commands item 2 says are refused are those whose peer table row loads a peer, drizzle-kit
-	   alone being one comb only spawns (wrangler's module comb loads, through importBin) */
+	   alone being one database only spawns (wrangler's module database loads, through importBin) */
 	it("names, per provider, exactly the commands its peer table row loads no peer for", () => {
 		const commands = [...new Set(Object.values(PEERS).flatMap((row) => Object.keys(row)))].sort() as Command[]
 		const expected = Object.fromEntries(
@@ -315,7 +315,7 @@ describe("README peer install upgrade item", () => {
 		const sqlite = (Object.keys(PEERS) as Provider[]).filter((provider) => provider !== "postgres").sort()
 		expect([...new Set(added.map(([provider]) => provider))].sort()).toEqual(sqlite)
 		for (const verb of new Set(added.map(([, command]) => command)))
-			expect(installRefused).toContain(`a SQLite \`migrate ${verb}\` whose comb.config.ts declares FTS`)
+			expect(installRefused).toMatch(new RegExp(`a SQLite \`migrate ${verb}\` whose \\w+\\.config\\.ts declares FTS`))
 	})
 
 	/* D5-2 of the area D round-five review: libsql, Turso and Postgres load their peers in process too */
@@ -350,10 +350,10 @@ describe("README peer install upgrade item's reason", () => {
 		expect(reason.split(/, | and /)).toEqual(["codegen", ...verbs.map((verb) => `an FTS ${verb}`)])
 	})
 
-	/* AD7-10 of the area D round-seven review: a compiled app refuses `comb --version` (D5-5), which the list left out */
-	it("names `comb --version` while version.ts refuses it in a compiled executable", () => {
+	/* AD7-10 of the area D round-seven review: a compiled app refuses `database --version` (D5-5), which the list left out */
+	it("names `database --version` while version.ts refuses it in a compiled executable", () => {
 		const refuses = readFileSync(join(ROOT, "src/cli/version.ts"), "utf8").includes("refuseCompiled(")
-		const named = installRefused?.includes("`comb --version`, which reads comb's package.json from disk")
+		const named = /`(\w+) --version`, which reads \1's package\.json from disk/.test(installRefused ?? "")
 		expect([refuses, named]).toEqual([true, true])
 	})
 })
@@ -391,7 +391,7 @@ describe("README newest upgrade section's step citations", () => {
 	it("names no review finding, lane or process id outside code", () => {
 		const prose = section.replace(/`[^`]*`/g, "")
 		const tokens = prose.match(
-			/\b(?:[A-Z]{1,4}\d{1,3}[a-z]?(?:-\d+[a-z]?)?|r\d{2}[a-z]?|comb-[0-9a-f]{2})\b|\barea [A-D]\b/g,
+			/\b(?:[A-Z]{1,4}\d{1,3}[a-z]?(?:-\d+[a-z]?)?|r\d{2}[a-z]?|database-[0-9a-f]{2})\b|\barea [A-D]\b/g,
 		)
 		expect([...new Set(tokens)].filter((token) => !["D1", "FTS5", "RE2", "SHA256"].includes(token))).toEqual([])
 	})
@@ -400,9 +400,9 @@ describe("README newest upgrade section's step citations", () => {
 describe("README usage lines", () => {
 	/* a refusal the README quotes is the line the CLI prints, options included */
 	it("quotes each command's usage line as the CLI builds it", () => {
-		const quoted = [...README.matchAll(/`(Usage: comb ([a-z]+(?: [a-z]+)?) [^`]*)`/g)]
+		const quoted = [...README.matchAll(/`Usage: \w+ (([a-z]+(?: [a-z]+)?) [^`]*)`/g)]
 		expect(quoted.length).toBeGreaterThan(0)
-		for (const [, line, command] of quoted) expect(line).toBe(usageOf(command as CliCommand))
+		for (const [, line, command] of quoted) expect(`Usage: database ${line}`).toBe(usageOf(command as CliCommand))
 	})
 })
 

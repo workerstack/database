@@ -1,6 +1,6 @@
 /**
- * A2-1 of r22: a plain JSON value's definition is comb's, not a database's. Each database's
- * `_shared` module defined its own `CombJsonValue`, so one JSON Schema run over the DTOs of two
+ * A2-1 of r22: a plain JSON value's definition is database's, not a database's. Each database's
+ * `_shared` module defined its own `DatabaseJsonValue`, so one JSON Schema run over the DTOs of two
  * databases, as an app's one OpenAPI document is, threw on the id zod saw twice.
  */
 import path from "node:path"
@@ -31,9 +31,9 @@ async function entity(dir: string, name: string, schema: string): Promise<z.ZodT
 }
 
 describe("a plain JSON value across two databases (A2-1)", () => {
-	it("publishes one CombJsonValue in one document over both", async () => {
+	it("publishes one DatabaseJsonValue in one document over both", async () => {
 		const dir = project({
-			"comb.config.ts": CONFIG,
+			"database.config.ts": CONFIG,
 			"db.core.tables.ts": tables("post"),
 			"db.logs.tables.ts": tables("event"),
 		})
@@ -45,7 +45,7 @@ describe("a plain JSON value across two databases (A2-1)", () => {
 			post: await entity(dir, "post", "postDtoCreateSchema"),
 		})
 		const published = JSON.stringify(z.toJSONSchema(both, { io: "input" }))
-		expect(Object.keys((JSON.parse(published) as { $defs: object }).$defs)).toEqual(["CombJsonValue"])
-		expect(published.match(/#\/\$defs\/CombJsonValue/g)?.length).toBeGreaterThanOrEqual(2)
+		expect(Object.keys((JSON.parse(published) as { $defs: object }).$defs)).toEqual(["DatabaseJsonValue"])
+		expect(published.match(/#\/\$defs\/DatabaseJsonValue/g)?.length).toBeGreaterThanOrEqual(2)
 	}, 120_000)
 })

@@ -72,7 +72,7 @@ describe.each([
 		expect(classify(error, maps)).toMatchObject(UNIQUE)
 		expect(warn).toHaveBeenCalledTimes(1)
 		expect(warn).toHaveBeenCalledWith(
-			"comb.constraint-maps.error",
+			"database.constraint-maps.error",
 			expect.objectContaining({ key, message: expect.stringContaining("defineConstraintMaps") }),
 		)
 		/* the client's answer carries nothing of the app's configuration */

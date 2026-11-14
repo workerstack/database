@@ -12,7 +12,7 @@ const SAFE = { max: Number.MAX_SAFE_INTEGER, min: Number.MIN_SAFE_INTEGER }
 describe("numberRules", () => {
 	it.each([
 		{ dialect: "sqlite", name: "a boolean", raw: 'c.boolean("f")', rules: { max: null, min: null } },
-		{ dialect: "sqlite", name: "a timestamp comb fills", raw: 'c.createdAt("f")', rules: { max: null, min: null } },
+		{ dialect: "sqlite", name: "a timestamp database fills", raw: 'c.createdAt("f")', rules: { max: null, min: null } },
 		{ dialect: "sqlite", name: "a written timestamp, a JS number's exact range", raw: 'c.timestamp("f")', rules: SAFE },
 		{
 			dialect: "sqlite",
@@ -111,13 +111,13 @@ describe("an integer format's DTO", () => {
 			maximum: 7,
 			minimum: 1,
 			type: "integer",
-			"x-comb-format": "iso8601-weekday",
+			"x-database-format": "iso8601-weekday",
 		})
 		expect(publishedOf(written('c.integer("f", { format: "iso8601-weekday", max: 5 }).notNull()', "update"))).toEqual({
 			maximum: 5,
 			minimum: 1,
 			type: "integer",
-			"x-comb-format": "iso8601-weekday",
+			"x-database-format": "iso8601-weekday",
 		})
 	})
 

@@ -1,5 +1,5 @@
 /**
- * A consumer's tsc reads every DTO comb writes, so every zod builder codegen emits, with the params it
+ * A consumer's tsc reads every DTO database writes, so every zod builder codegen emits, with the params it
  * passes, must be one zod's types take: z.iso.date({ pattern }) ran, and zod's types refuse it. One
  * project holds a column for each rule the DTO generators write, on both dialects, and tsc reads it
  * under a consumer's strict flags; a builder the generators name that the project never writes fails
@@ -103,10 +103,10 @@ const builders = (): string[] => {
 	return [...new Set(named)].sort()
 }
 
-describe("every zod builder comb's DTOs call, as a consumer's tsc reads it", () => {
+describe("every zod builder database's DTOs call, as a consumer's tsc reads it", () => {
 	it("typechecks the DTOs of a column of every kind, on Postgres and SQLite, each builder written", async () => {
 		const dir = project({
-			"comb.config.ts": `export default { databases: {
+			"database.config.ts": `export default { databases: {
 	core: { tables: "./src/db/db.core.tables.ts" },
 	support: { tables: "./src/pg/db.support.tables.ts", dialect: "postgres" },
 } }\n`,
@@ -121,7 +121,7 @@ describe("every zod builder comb's DTOs call, as a consumer's tsc reads it", () 
 			.map((file) => read(dir, file))
 			.join("\n")
 		expect(builders().filter((builder) => !written.includes(builder))).toEqual([])
-		/* the consumer's strict flags, then typecheck:strict's on top of them: the ones comb holds its own source to */
+		/* the consumer's strict flags, then typecheck:strict's on top of them: the ones database holds its own source to */
 		for (const options of [{}, STRICT, { ...STRICT, lib: ["es2022"], target: "es2022" }])
 			expect(
 				typecheck(dir, [], options)

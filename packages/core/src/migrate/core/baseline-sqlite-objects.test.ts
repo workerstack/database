@@ -7,7 +7,7 @@ import { objectDrift } from "./baseline-sqlite-objects.ts"
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-baseline-objects-"))
+	dir = mkdtempSync(join(tmpdir(), "database-baseline-objects-"))
 	mkdirSync(join(dir, "m"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
@@ -42,7 +42,7 @@ describe("objectDrift on a libsql target (SL3 of r22)", () => {
 		writeFileSync(join(dir, "m", "1_t.sql"), `${TABLE} ${VECTOR}`)
 		const conn = libsqlConnection()
 		await expect(objectDrift(conn, join(dir, "m"), "runtime")).rejects.toThrow(
-			/^comb could not replay 1_t\.sql to compare its triggers and views: .*libsql_vector_idx/,
+			/^database could not replay 1_t\.sql to compare its triggers and views: .*libsql_vector_idx/,
 		)
 		await conn.close()
 	})

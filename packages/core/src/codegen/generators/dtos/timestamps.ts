@@ -1,5 +1,5 @@
 /** The `_shared` file: base aliases, example objects, timestamp schemas and their refinements. */
-import { COMB_NAMESPACE, combImport } from "./comb-namespace.ts"
+import { DATABASE_NAMESPACE, databaseImport } from "./database-namespace.ts"
 import { inetRule } from "./ip-patterns.ts"
 import type { SharedSchema, TableInfo } from "./dto-types.ts"
 import { SHARED_META_KEYS, SHARED_META_VALUES, SHARED_SCHEMAS } from "./example-meta.ts"
@@ -140,11 +140,11 @@ function header(): string[] {
 		"/** Nullable timestamp field */",
 		"export const timestampNullableSchema = _intNN.max(globalThis.Number.MAX_SAFE_INTEGER).nullable()",
 		"",
-		"/** A JSON value that is no null at its top: null is its column's to take; comb's one JSON value below it, so every document publishes it once, whatever the databases */",
-		"export const jsonValueSchema = z.union([z.string(), z.number(), z.boolean(), z.array(comb.jsonValue), z.record(z.string(), comb.jsonValue)])",
+		"/** A JSON value that is no null at its top: null is its column's to take; database's one JSON value below it, so every document publishes it once, whatever the databases */",
+		"export const jsonValueSchema = z.union([z.string(), z.number(), z.boolean(), z.array(database.jsonValue), z.record(z.string(), database.jsonValue)])",
 		"",
-		"/** A Postgres cidr: an address, its prefix length, and no bit set past it, published as x-comb-cidr, which a field that names it states */",
-		`export const cidrSchema = ${inetRule()}.refine(comb.isCidr, { message: "Must be a network with no bit set past its prefix length" })`,
+		"/** A Postgres cidr: an address, its prefix length, and no bit set past it, published as x-database-cidr, which a field that names it states */",
+		`export const cidrSchema = ${inetRule()}.refine(database.isCidr, { message: "Must be a network with no bit set past its prefix length" })`,
 		"",
 	]
 }
@@ -156,7 +156,10 @@ function header(): string[] {
 export function generateSharedFile(
 	used: UsedTimestampCombos,
 	sharedSchemas: Map<string, SharedSchema>,
-	{ combFrom = "@workerstack/database", imported }: { combFrom?: string | undefined; imported: ReadonlySet<string> },
+	{
+		databaseFrom = "@workerstack/database",
+		imported,
+	}: { databaseFrom?: string | undefined; imported: ReadonlySet<string> },
 ): string {
 	const lines = header()
 	/* Auto-deduped shared schema constants — must be before timestamp spreads that reference them */
@@ -169,16 +172,16 @@ export function generateSharedFile(
 	}
 	if (used.camelCase.size > 0) lines.push(...timestampVariants(used.camelCase, "camelCase", sharedSchemas))
 	if (used.snakeCase.size > 0) lines.push(...timestampVariants(used.snakeCase, "snake_case", sharedSchemas))
-	return withoutUnusedImports(keepImported(lines, imported), combFrom).join("\n")
+	return withoutUnusedImports(keepImported(lines, imported), databaseFrom).join("\n")
 }
 
 /**
- * The lines without the zod import when nothing kept uses it, with comb's own predicates under its
+ * The lines without the zod import when nothing kept uses it, with database's own predicates under its
  * namespace when they use one, and an empty module when nothing is kept at all
  */
-function withoutUnusedImports(lines: readonly string[], combFrom: string): readonly string[] {
+function withoutUnusedImports(lines: readonly string[], databaseFrom: string): readonly string[] {
 	const uses = (pattern: RegExp) => lines.some((line) => line !== ZOD_IMPORT && pattern.test(line))
 	const rest = lines.filter((line) => line !== ZOD_IMPORT || uses(/\bz\./))
-	if (uses(COMB_NAMESPACE)) rest.splice(rest.indexOf(ZOD_IMPORT) + 1, 0, combImport(combFrom))
+	if (uses(DATABASE_NAMESPACE)) rest.splice(rest.indexOf(ZOD_IMPORT) + 1, 0, databaseImport(databaseFrom))
 	return rest.some((line) => line.trim() !== "") ? rest : ["export {}", ""]
 }

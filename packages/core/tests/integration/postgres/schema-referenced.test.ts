@@ -1,5 +1,5 @@
 /**
- * QE8 of r22b: a pgSchema table is one table to a client keyed by `CombError.table`. A delete of a
+ * QE8 of r22b: a pgSchema table is one table to a client keyed by `DatabaseError.table`. A delete of a
  * row a child still references named it bare (`org`), where its own unique violation named the
  * qualified key (`<schema>.org`) the constraint maps give it. Run through drizzle's builder, which
  * writes the schema into the SQL, on both Node drivers.
@@ -12,7 +12,7 @@ import { drizzle as drizzlePostgres } from "drizzle-orm/postgres-js"
 import pg from "pg"
 import postgres from "postgres"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import type { CombError } from "../../../src/error.ts"
+import type { DatabaseError } from "../../../src/error.ts"
 import { pgErrorHandler } from "../../../src/pg/error-handler.ts"
 import type { ConstraintMap } from "../../../src/types.ts"
 import { pgUrl } from "../support/pg.ts"
@@ -24,7 +24,7 @@ const org = app.table("org", { id: text("id").primaryKey(), name: text("name").u
 const MAPS: ConstraintMap[] = [{ [`${SCHEMA}.member`]: {}, [`${SCHEMA}.org`]: {} }]
 
 /** What pgErrorHandler throws for the error `run` raises */
-async function handled(run: () => Promise<unknown>): Promise<CombError | undefined> {
+async function handled(run: () => Promise<unknown>): Promise<DatabaseError | undefined> {
 	const failure = await run().then(
 		() => new Error("the statement did not fail"),
 		(error: unknown) => error,
@@ -32,7 +32,7 @@ async function handled(run: () => Promise<unknown>): Promise<CombError | undefin
 	try {
 		pgErrorHandler(failure, MAPS)
 	} catch (thrown) {
-		return thrown as CombError
+		return thrown as DatabaseError
 	}
 	return undefined
 }

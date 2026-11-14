@@ -1,5 +1,5 @@
 /**
- * P10 of the 0.15.0 review: ENABLE TRIGGER, the half of DISABLE comb did not read, was unsafe as
+ * P10 of the 0.15.0 review: ENABLE TRIGGER, the half of DISABLE database did not read, was unsafe as
  * unrecognized under a name no one wrote ("ENABLE TRIG ALL"); an unlisted command is named in the
  * SQL's own words.
  */
@@ -37,7 +37,7 @@ describe("an ALTER TABLE's command on the whole table", () => {
 		["ALTER FOREIGN TABLE t OPTIONS (ADD a 'b')", "GENERIC OPTIONS"],
 	])("rates %j unsafe, naming the command in the SQL's own words", (sql, words) => {
 		expect(rated(sql)).toEqual([
-			{ level: "unsafe", note: `comb does not recognize ALTER TABLE … ${words}; approve it in the file` },
+			{ level: "unsafe", note: `database does not recognize ALTER TABLE … ${words}; approve it in the file` },
 		])
 	})
 })

@@ -2,13 +2,13 @@
  * Column state machines — legal values, legal transitions, and which values are
  * final.
  *
- * A comb concept first: `assertTransition` is a write-side guard an application
+ * A database concept first: `assertTransition` is a write-side guard an application
  * calls at the boundary that cares. The meta contract publishes a subset of the
  * same declaration (§5 of docs/state-machines.md), but nothing here is shaped
  * around a consumer's predicate syntax.
  */
-import { CombError } from "./error.ts"
-import { combErrorKeys } from "./types.ts"
+import { DatabaseError } from "./error.ts"
+import { databaseErrorKeys } from "./types.ts"
 
 /**
  * A declared machine over a column's values.
@@ -90,11 +90,11 @@ function canTransition<T extends string>(machine: StateMachine<T>, from: T, to: 
 /**
  * Throw unless `from → to` is legal.
  *
- * Raises `CombError` with `invalid_state_transition` at 422, the same shape
- * every other comb-detected violation takes, so an HTTP layer needs no special
+ * Raises `DatabaseError` with `invalid_state_transition` at 422, the same shape
+ * every other database-detected violation takes, so an HTTP layer needs no special
  * case for it.
  *
- * Deliberately explicit rather than an ORM hook: comb does not own the write
+ * Deliberately explicit rather than an ORM hook: database does not own the write
  * path, and a backfill or a correction may legitimately need to move a row in a
  * way the product rules forbid. A rule you cannot see at the call site and
  * cannot opt out of is worse than one you must remember to call.
@@ -111,10 +111,10 @@ function assertTransition<T extends string>(machine: StateMachine<T>, from: T, t
 				? `"${String(from)}" is terminal`
 				: `"${String(from)}" does not lead to "${String(to)}"`
 
-	throw new CombError({
+	throw new DatabaseError({
 		cause: `${column}: ${reason}`,
 		column,
-		errorKey: combErrorKeys.INVALID_STATE_TRANSITION,
+		errorKey: databaseErrorKeys.INVALID_STATE_TRANSITION,
 		status: "unprocessable_entity",
 	})
 }

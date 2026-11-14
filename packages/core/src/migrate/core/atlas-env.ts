@@ -48,7 +48,7 @@ export function applySqliteMigrationTransforms(sql: string, before?: ExtractedSc
    (`text("id").primaryKey()` is `` `id` text PRIMARY KEY ``, `.notNull()`
    changes nothing), and SQLite lets every key but a rowid alias hold NULL.
    Atlas reads such a column as nullable, so a history that says NOT NULL
-   would be rebuilt on every diff. comb gives each such column its NOT NULL.
+   would be rebuilt on every diff. database gives each such column its NOT NULL.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* a column line of an export: `\t`name` type…`, its name doubled-backtick escaped */
@@ -101,4 +101,4 @@ export function normalizeSqliteExport(sql: string): string {
  * (atlas-target.ts). Atlas takes a lock across the host named after the dev URL, so each run
  * gets a database name of its own, or two diffs at once fail with "lock … already taken".
  */
-export const sqliteDevUrl = (): string => `sqlite://comb-${randomUUID()}?mode=memory`
+export const sqliteDevUrl = (): string => `sqlite://database-${randomUUID()}?mode=memory`

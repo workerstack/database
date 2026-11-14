@@ -1,6 +1,6 @@
 /**
  * Postgres statements read from Postgres's own parser (libpg-query 17, the parser of the server
- * comb migrates), never from their text, so no spelling hides a write: an inheritance star, a
+ * database migrates), never from their text, so no spelling hides a write: an inheritance star, a
  * Unicode-escaped or unspaced name, a write in a CTE or a rule's action are the nodes they parse to.
  * Every node is walked:
  *
@@ -11,8 +11,8 @@
  * - a write to a table whose trigger the history holds fires it, which is unsafe;
  * - a temp table or view (TEMP, or in `pg_temp`) that takes an existing table's name shadows it for
  *   the rest of the file, as `pg_temp` comes first on the search path; unsafe;
- * - a call of a function that is not a pure built-in (pg-builtins.ts) runs code comb cannot read;
- * - a DO block, and a function, procedure or trigger the file creates, run code comb does not read;
+ * - a call of a function that is not a pure built-in (pg-builtins.ts) runs code database cannot read;
+ * - a DO block, and a function, procedure or trigger the file creates, run code database does not read;
  *   each is unsafe unless the file approves it;
  * - a statement Postgres cannot parse is unsafe.
  *
@@ -105,9 +105,11 @@ function baseOf(key: string, facts: Facts): { column: (name: string) => string; 
 function writeFindings(type: string, node: Node, ctx: TreeContext): Finding[] {
 	const named = tableOf(node["relation"], ctx.facts.schema)
 	const base = baseOf(named.key, ctx.facts)
-	/* a view Postgres writes through only by a trigger or a rule comb cannot follow to one table */
+	/* a view Postgres writes through only by a trigger or a rule database cannot follow to one table */
 	if (base === undefined)
-		return [{ level: "unsafe", note: `writes through the view ${named.key}, which comb cannot follow to one table` }]
+		return [
+			{ level: "unsafe", note: `writes through the view ${named.key}, which database cannot follow to one table` },
+		]
 	const table = { key: base.key, name: named.name }
 	/* a write without ONLY reaches the table's partitions and inheritance children */
 	const target = { inh: flag((node["relation"] as Node)["inh"]), key: named.key }
@@ -148,7 +150,7 @@ function settingFinding(node: Node): Finding | undefined {
 }
 
 /**
- * A set_config of session_replication_role, or of a setting comb cannot read: the SET's finding,
+ * A set_config of session_replication_role, or of a setting database cannot read: the SET's finding,
  * every later trigger counted as firing; undefined for any other call
  */
 function replicationFinding(node: Node, ctx: TreeContext): Finding | undefined {
@@ -165,7 +167,7 @@ function routineFinding(node: Node, ctx: TreeContext): Finding {
 	const kind = flag(node["is_procedure"]) ? "procedure" : "function"
 	const name = names(node["funcname"])
 	ctx.facts.defined.add(keyOf(name, ctx.facts.schema))
-	return { level: "unsafe", note: `creates ${kind} ${name.join(".")}, whose body comb does not read` }
+	return { level: "unsafe", note: `creates ${kind} ${name.join(".")}, whose body database does not read` }
 }
 
 /* the ALTER TABLE actions that turn off what keeps a table's rows whole, and why */
@@ -189,10 +191,10 @@ function unguardingFinding(node: Node, facts: Facts): Finding | undefined {
 	return undefined
 }
 
-/** A node that runs code comb does not read, changes what later names resolve to, or shadows a table: its finding */
+/** A node that runs code database does not read, changes what later names resolve to, or shadows a table: its finding */
 function codeFinding(type: string, node: Node, ctx: TreeContext): Finding | undefined {
 	if (type === "AlterTableStmt") return unguardingFinding(node, ctx.facts)
-	if (type === "DoStmt") return { level: "unsafe", note: "runs a DO block, whose body comb does not read" }
+	if (type === "DoStmt") return { level: "unsafe", note: "runs a DO block, whose body database does not read" }
 	if (type === "CreateFunctionStmt") return routineFinding(node, ctx)
 	if (type === "CreateTrigStmt")
 		return {
@@ -254,7 +256,7 @@ function pgTreeFindings(
 		tree = { stmts: resolveTemps(kept === undefined ? parsePostgres(stmt).stmts : kept, ctx.temps, ctx.facts.indexes) }
 	} catch (error) {
 		// reason: a statement Postgres cannot parse is the statement's finding, unsafe
-		const note = `comb could not parse this as Postgres 17: ${(error as Error).message}`
+		const note = `database could not parse this as Postgres 17: ${(error as Error).message}`
 		return { findings: [{ level: "unsafe", note }], grammar: { treeRated: true } }
 	}
 	const raws = tree.stmts as Array<{ stmt: Node }>

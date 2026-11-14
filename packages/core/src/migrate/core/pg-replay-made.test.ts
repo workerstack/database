@@ -22,7 +22,7 @@ function statement(sql: string): { node: Record<string, unknown>; sent: string; 
 /** A run that made `created`, on a server where another database holds `elsewhere` */
 function made(created: string[], elsewhere: string[] = []): Run {
 	const sql = { unsafe: async () => elsewhere.map((rolname) => ({ rolname })) }
-	return { created, database: "comb_replay_db", sql } as unknown as Run
+	return { created, database: "database_replay_db", sql } as unknown as Run
 }
 
 /** `sql`'s ALTER ROLE as the replay runs it */
@@ -65,12 +65,12 @@ describe("alterBare", () => {
 		})
 	})
 
-	it("refuses an option comb does not know, so a new one is never dropped unsaid", () => {
+	it("refuses an option database does not know, so a new one is never dropped unsaid", () => {
 		const node = {
 			options: [{ DefElem: { defname: "password" } }, { DefElem: { defname: "newthing" } }],
 			role: { rolename: "app" },
 		}
-		expect(() => alterBare(node, "")).toThrow("comb does not know ALTER ROLE's option newthing")
+		expect(() => alterBare(node, "")).toThrow("database does not know ALTER ROLE's option newthing")
 	})
 })
 

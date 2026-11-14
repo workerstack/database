@@ -29,7 +29,7 @@ export function generateMigrationHash(sql: string): string {
 }
 
 /**
- * The hash comb before 0.5.0 recorded. Its regexes stripped `--` and `/* *\/` inside string
+ * The hash database before 0.5.0 recorded. Its regexes stripped `--` and `/* *\/` inside string
  * literals and kept a final comment with no newline, so the same file can hash differently now;
  * a migration recorded under this hash is still applied.
  */
@@ -43,7 +43,7 @@ export function legacyMigrationHash(sql: string): string {
 }
 
 /**
- * The hash comb 0.5.0 to 0.20 recorded, whose normalizing folded every Unicode space, which SQLite
+ * The hash database 0.5.0 to 0.20 recorded, whose normalizing folded every Unicode space, which SQLite
  * reads as part of a name: an edit from `a b` to `a\u00a0b` kept it
  */
 export function foldedMigrationHash(sql: string): string {
@@ -54,8 +54,8 @@ export function foldedMigrationHash(sql: string): string {
 export const V0_5_0: number = 1792284989000
 
 /**
- * The value comb from 0.21 writes in a history row's `hash_v`, beside the hash it records there: the
- * row holds the exact hash. A row without it was written by comb 0.20 or earlier, or by drizzle
+ * The value database from 0.21 writes in a history row's `hash_v`, beside the hash it records there: the
+ * row holds the exact hash. A row without it was written by database 0.20 or earlier, or by drizzle
  */
 export const HASH_VERSION = 2
 
@@ -67,8 +67,8 @@ export type AcceptedHash = { hash: string; marked: boolean; until: number }
 
 /**
  * Every hash `sql` may be recorded under, current first: the current one on any row; the folded one
- * (0.5.0 to 0.20) only on a row `hash_v` does not mark, which no comb from 0.21 wrote, so a space
- * edited to U+00A0 in a file this comb recorded is an edit; the pre-0.5.0 one on an unmarked row
+ * (0.5.0 to 0.20) only on a row `hash_v` does not mark, which no database from 0.21 wrote, so a space
+ * edited to U+00A0 in a file this database recorded is an edit; the pre-0.5.0 one on an unmarked row
  * before V0_5_0
  */
 export function migrationHashes(sql: string): AcceptedHash[] {

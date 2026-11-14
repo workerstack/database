@@ -1,11 +1,11 @@
 /**
  * What a `c` helper records on the column it builds, for codegen to read at runtime: the helper's
  * kind and the very values it was given. Kept under a registered symbol on drizzle's builder
- * config, which the built column keeps, so a second copy of comb reads what the first wrote.
+ * config, which the built column keeps, so a second copy of database reads what the first wrote.
  */
 
 /** The `c` helpers, by name */
-type CombColumnKind =
+type ColumnMetaKind =
 	| "boolean"
 	| "createdAt"
 	| "deletedAt"
@@ -20,29 +20,29 @@ type CombColumnKind =
 	| "timestamp"
 	| "updatedAt"
 
-/** A column's comb metadata: its helper, and the constraints, enum values, states, schema or prefix it took */
-type CombColumnMeta = {
+/** A column's database metadata: its helper, and the constraints, enum values, states, schema or prefix it took */
+type ColumnMeta = {
 	constraints?: Readonly<Record<string, unknown>> | undefined
-	kind: CombColumnKind
+	kind: ColumnMetaKind
 	prefix?: string | undefined
 	schema?: unknown
 	states?: unknown
 	values?: readonly string[] | undefined
 }
 
-const COMB_COLUMN: unique symbol = /* @__PURE__ */ Symbol.for("comb.column")
+const DATABASE_COLUMN: unique symbol = /* @__PURE__ */ Symbol.for("database.column")
 
 /** `builder` with `meta` recorded on its config; the options a helper was not given are left out */
-function withCombColumn<B>(builder: B, meta: { [K in keyof CombColumnMeta]: CombColumnMeta[K] | undefined }): B {
+function withColumn<B>(builder: B, meta: { [K in keyof ColumnMeta]: ColumnMeta[K] | undefined }): B {
 	const recorded = Object.fromEntries(Object.entries(meta).filter(([, value]) => value !== undefined))
-	;(builder as unknown as { config: Record<symbol, unknown> }).config[COMB_COLUMN] = recorded
+	;(builder as unknown as { config: Record<symbol, unknown> }).config[DATABASE_COLUMN] = recorded
 	return builder
 }
 
-/** The comb metadata a built column (or its builder) carries; undefined for a column no `c` helper built */
-function combColumnMeta(column: unknown): CombColumnMeta | undefined {
+/** The database metadata a built column (or its builder) carries; undefined for a column no `c` helper built */
+function columnMeta(column: unknown): ColumnMeta | undefined {
 	const config = (column as { config?: Record<symbol, unknown> | undefined } | null | undefined)?.config
-	return config?.[COMB_COLUMN] as CombColumnMeta | undefined
+	return config?.[DATABASE_COLUMN] as ColumnMeta | undefined
 }
 
 /** `record` without the keys set to undefined, as a key set to undefined is one left out */
@@ -64,7 +64,7 @@ function enumMeta(
 		schema?: unknown
 		tenant?: boolean | undefined
 	} = {},
-): { [K in keyof CombColumnMeta]: CombColumnMeta[K] | undefined } {
+): { [K in keyof ColumnMeta]: ColumnMeta[K] | undefined } {
 	const { format, nomutate, private: hidden, schema, tenant, ...rest } = options
 	const constraints = defined({ format, nomutate, private: hidden, schema, tenant })
 	const states = defined(rest)
@@ -78,4 +78,4 @@ function enumMeta(
 	}
 }
 
-export { combColumnMeta, enumMeta, withCombColumn, type CombColumnKind, type CombColumnMeta }
+export { columnMeta, enumMeta, withColumn, type ColumnMetaKind, type ColumnMeta }

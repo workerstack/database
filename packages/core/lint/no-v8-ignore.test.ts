@@ -5,7 +5,7 @@ import { oxlintReports, reportsOf } from "./rule-harness.ts"
 const rule = plugin.rules["no-v8-ignore"]
 const MESSAGE = "coverage ignore hints are forbidden; delete the code or give it a case"
 
-describe("comb/no-v8-ignore", () => {
+describe("database/no-v8-ignore", () => {
 	it("rejects every coverage-ignore hint the v8 provider honors", () => {
 		const fixture = {
 			"packages/core/src/a.ts": "/* v8 ignore next */\nexport const a = 1\n",
@@ -30,7 +30,7 @@ describe("comb/no-v8-ignore", () => {
 		expect(reportsOf(rule, fixture)).toEqual([])
 	})
 
-	it("fails oxlint through the comb plugin entry", () => {
+	it("fails oxlint through the database plugin entry", () => {
 		const fixture = {
 			"packages/core/src/a.ts": "/* v8 ignore next */\nexport const a = 1\n",
 			"packages/core/src/b.ts": "export const b = 1\n",

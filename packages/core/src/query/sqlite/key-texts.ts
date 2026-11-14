@@ -1,7 +1,7 @@
 /**
  * The SQL a list selects beside each row so paginate reads its sort keys as stored: each key's
- * storage class or type family (`_combKeyTypes`), its stored text where the driver's read rounds it
- * (`_combKeyTexts`), and a SQLite key's value its mode reads as another (`_combTextKeys`). list-finish.ts picks which a list
+ * storage class or type family (`_cursorKeyTypes`), its stored text where the driver's read rounds it
+ * (`_cursorKeyTexts`), and a SQLite key's value its mode reads as another (`_cursorTextKeys`). list-finish.ts picks which a list
  * selects; listOptions selects the texts on every sorted page.
  */
 import { Column, is, type SQL, type SQLWrapper, sql } from "drizzle-orm"

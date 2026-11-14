@@ -6,7 +6,7 @@
    DIALECT
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export type Dialect = "sqlite" | "postgres"
+export type MigrateDialect = "sqlite" | "postgres"
 
 /* ═══════════════════════════════════════════════════════════════════════════
    DRIVER INTERFACE
@@ -21,9 +21,9 @@ export type QueryResult = {
 }
 
 /** An open connection to one database, which a migrate command runs its statements through */
-export type Connection = {
+export type MigrateConnection = {
 	/** the SQL dialect the database speaks */
-	dialect: Dialect
+	dialect: MigrateDialect
 	/**
 	 * The rows `sql` answers, with each `?` in it bound to the next of `params`. On D1 the params are
 	 * written into the SQL as literals, since wrangler binds none
@@ -44,16 +44,16 @@ export type Connection = {
 	): Promise<void>
 	/** Closes the connection; on D1, which keeps none open, it does nothing */
 	close(): Promise<void>
-	/** the prefix of the tables the engine keeps for itself (D1: `_cf_`), which comb never counts or copies */
+	/** the prefix of the tables the engine keeps for itself (D1: `_cf_`), which database never counts or copies */
 	ownedPrefix?: string | undefined
 }
 
 /** How a migrate command opens connections to one database */
 export type ConnectionProvider = {
 	/** the SQL dialect of the database it connects to */
-	dialect: Dialect
+	dialect: MigrateDialect
 	/** A new connection to the database; with `config.readonly`, a missing database is an error, never created */
-	connect(config: ResolvedDatabaseConfig): Promise<Connection>
+	connect(config: ResolvedDatabaseConfig): Promise<MigrateConnection>
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -62,7 +62,7 @@ export type ConnectionProvider = {
 
 /** A Turso database: it names its own database, which the environment's name never does */
 export type TursoProviderConfig = {
-	/** a Turso Platform API token, which comb mints the database's short-lived tokens with */
+	/** a Turso Platform API token, which database mints the database's short-lived tokens with */
 	apiToken: string
 	/** the database's name in the org; a command that writes creates it when it is missing */
 	databaseName: string
@@ -84,7 +84,7 @@ export type LibsqlProviderConfig = {
 	url: string
 }
 
-/** A SQLite file opened with bun:sqlite, when comb runs on Bun */
+/** A SQLite file opened with bun:sqlite, when database runs on Bun */
 export type BunSqliteProviderConfig = {
 	/** the database file, or `:memory:` */
 	path: string
@@ -92,7 +92,7 @@ export type BunSqliteProviderConfig = {
 	type: "bun-sqlite"
 }
 
-/** A Cloudflare D1 database, which comb reaches through the project's wrangler */
+/** A Cloudflare D1 database, which database reaches through the project's wrangler */
 export type D1ProviderConfig = {
 	/** the D1 database's binding or `database_name` in the wrangler config */
 	databaseName: string
@@ -100,13 +100,13 @@ export type D1ProviderConfig = {
 	local?: boolean | undefined
 	/** a D1 database */
 	type: "d1"
-	/** The wrangler config that binds the database, relative to comb.migrate.config.ts; default: the one in its folder */
+	/** The wrangler config that binds the database, relative to database.migrate.config.ts; default: the one in its folder */
 	wranglerConfig?: string | undefined
 	/** The wrangler environment (`--env`) the binding is read from and every wrangler command runs in */
 	wranglerEnv?: string | undefined
 }
 
-/** The providers comb opens a connection to and applies migrations through itself */
+/** The providers database opens a connection to and applies migrations through itself */
 export type ConnectionProviderConfig =
 	| BunSqliteProviderConfig
 	| D1ProviderConfig
@@ -122,7 +122,7 @@ export type PostgresProviderConfig = {
 	devUrl?: string | undefined
 	/** how long a statement waits for a lock before the migration fails, as `5s`, `1500ms` or `0` for no bound; default `5s` */
 	lockTimeout?: string | undefined
-	/** the one schema comb migrates; default `public` */
+	/** the one schema database migrates; default `public` */
 	schema?: string | undefined
 	/** a Postgres database */
 	type: "postgres"
@@ -130,13 +130,13 @@ export type PostgresProviderConfig = {
 	url: string
 }
 
-/** A Postgres provider with comb's defaults filled in */
+/** A Postgres provider with database's defaults filled in */
 export type ResolvedPostgresProviderConfig = {
 	/** the dev database Atlas replays migrations on: the one given, else `docker://postgres/17/dev` */
 	devUrl: string
 	/** the lock wait bound: the one given, else `5s` */
 	lockTimeout: string
-	/** the schema comb migrates: the one given, else `public` */
+	/** the schema database migrates: the one given, else `public` */
 	schema: string
 	/** a Postgres database */
 	type: "postgres"
@@ -144,7 +144,7 @@ export type ResolvedPostgresProviderConfig = {
 	url: string
 }
 
-/** Any database comb migrates, by its `type` */
+/** Any database that database migrates, by its `type` */
 export type ProviderConfig = ConnectionProviderConfig | PostgresProviderConfig
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -153,7 +153,7 @@ export type ProviderConfig = ConnectionProviderConfig | PostgresProviderConfig
 
 /** An environment of a database, which `-e` names by its key */
 export type EnvironmentConfig = {
-	/** the name comb shows for the environment's database in its output and prompts; default: its key */
+	/** the name database shows for the environment's database in its output and prompts; default: its key */
 	name?: string | undefined
 	/** where the environment's database is; default: the database's own `provider` */
 	provider?: ProviderConfig | undefined
@@ -161,11 +161,11 @@ export type EnvironmentConfig = {
 
 /** What every database declares, whichever shape it has */
 export type DatabaseShared = {
-	/** the comb.config.ts database this one's tables and FTS are, when its name there is another */
+	/** the database.config.ts database this one's tables and FTS are, when its name there is another */
 	codegen?: string | undefined
-	/** the drizzle config comb exports the database's schema from, relative to comb.migrate.config.ts; default: drizzle-kit's own in the working folder */
+	/** the drizzle config database exports the database's schema from, relative to database.migrate.config.ts; default: drizzle-kit's own in the working folder */
 	drizzleConfigPath?: string | undefined
-	/** the folder of the database's migration files, relative to comb.migrate.config.ts */
+	/** the folder of the database's migration files, relative to database.migrate.config.ts */
 	migrationsDir: string
 }
 
@@ -173,7 +173,7 @@ export type DatabaseShared = {
 export type SingleDatabaseConfig = DatabaseShared & {
 	/** none: a database of one target takes no `-e` */
 	environments?: undefined
-	/** the name comb shows for the database in its output and prompts */
+	/** the name database shows for the database in its output and prompts */
 	name: string
 	/** where the database is */
 	provider: ProviderConfig
@@ -189,12 +189,12 @@ export type EnvironmentsDatabaseConfig = DatabaseShared & {
 	provider?: ProviderConfig | undefined
 }
 
-/** A database comb.migrate.config.ts declares: of one target, or of environments, never both */
+/** A database that database.migrate.config.ts declares: of one target, or of environments, never both */
 export type DatabaseConfig = EnvironmentsDatabaseConfig | SingleDatabaseConfig
 
 /** One database, in the environment a command names, as `resolveDatabaseConfig` resolves it */
 export type ResolvedDatabaseConfig = {
-	/** the name comb shows for it in its output and prompts: the environment's, else the environment's key, else the database's */
+	/** the name database shows for it in its output and prompts: the environment's, else the environment's key, else the database's */
 	name: string
 	/** the folder of its migration files, as the config gives it */
 	migrationsDir: string
@@ -210,9 +210,9 @@ export type ResolvedDatabaseConfig = {
    MIGRATION CONFIG
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/** What comb.migrate.config.ts declares */
+/** What database.migrate.config.ts declares */
 export type MigrationConfig = {
-	/** each database comb migrates, by the name `comb migrate` takes */
+	/** each database that database migrates, by the name `database migrate` takes */
 	databases: Record<string, DatabaseConfig>
 }
 

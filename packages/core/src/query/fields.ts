@@ -24,8 +24,8 @@
  * Clean break from legacy "~" prefix + "." dot-path nesting — those characters are
  * now literal and downstream validators will reject them as unknown field names.
  */
-import { CombError } from "../error.ts"
-import { combErrorKeys } from "../types.ts"
+import { DatabaseError } from "../error.ts"
+import { databaseErrorKeys } from "../types.ts"
 import type { FieldSelection, ParsedFields } from "./types.ts"
 
 /** Relations nested deeper than this are refused: each level is a join, and the parse recurses per level */
@@ -64,7 +64,7 @@ function parseSelect(selectStr: string | undefined): ParsedFields | null {
 	const read = readSelect(selectStr)
 	if (read !== "too_deep" && read !== "malformed") return read
 	const cause = read === "too_deep" ? TOO_DEEP : "select is malformed"
-	throw new CombError({ cause, errorKey: combErrorKeys.INVALID_SELECT, status: "bad_request" })
+	throw new DatabaseError({ cause, errorKey: databaseErrorKeys.INVALID_SELECT, status: "bad_request" })
 }
 
 const SEPARATORS = /[ ,\t)]/

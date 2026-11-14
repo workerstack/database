@@ -2,6 +2,6 @@
 import type { FieldMeta } from "./analyzer-types.ts"
 
 /** Whether a column references another: `.references(...)`, or the c.ref helper, which always does */
-export function isReference(field: Pick<FieldMeta, "combKind" | "foreignKey">): boolean {
-	return field.foreignKey !== null || field.combKind === "ref"
+export function isReference(field: Pick<FieldMeta, "databaseKind" | "foreignKey">): boolean {
+	return field.foreignKey !== null || field.databaseKind === "ref"
 }

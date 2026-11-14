@@ -3,7 +3,7 @@
  * EXECUTE is pg-tree.ts's): a rule (an INSTEAD NOTHING one discards writes) and its action, a SQLite trigger's body (run by
  * every later write to its table), a sequence reset through setval (a COPY is pg-copy.ts's),
  * ownership handed to a role that bypasses row level security, and SQLite's foreign_keys pragma (writable_schema,
- * which can corrupt the schema, is unsafe; every other pragma comb does not write is unsafe by default-deny's rule alone).
+ * which can corrupt the schema, is unsafe; every other pragma database does not write is unsafe by default-deny's rule alone).
  */
 import type { Finding } from "./classify-alter.ts"
 import { IDENT, lastPart, pragmaOf } from "./sql-code.ts"
@@ -25,12 +25,12 @@ function pragmaFinding(code: string): Finding | undefined {
 	const pragma = pragmaOf(code)
 	/* SQLite ignores it inside a transaction, so the file's own off never turns a cascade or a check off; on is
 	   the state the transaction keeps anyway, so it carries no note. SQLite reads a word it does not
-	   know as off, and SQLite versions read numbers apart (256 is off on 3.53, on on 3.54), so comb keeps no copy
+	   know as off, and SQLite versions read numbers apart (256 is off on 3.53, on on 3.54), so database keeps no copy
 	   of its parser: on, yes, true and 1 are on, and any other value gets the note, however SQLite reads it */
 	if (pragma?.name === "foreign_keys" && pragma.value !== undefined && !/^(?:on|yes|true|1)$/i.test(pragma.value)) {
 		return {
 			level: "cautious",
-			note: "does nothing inside the transaction comb runs each file in: foreign keys stay on, and comb migrate diff writes defer_foreign_keys instead",
+			note: "does nothing inside the transaction database runs each file in: foreign keys stay on, and database migrate diff writes defer_foreign_keys instead",
 		}
 	}
 	if (pragma?.name === "writable_schema") return { level: "unsafe", note: "lets a statement rewrite the schema itself" }
@@ -57,7 +57,7 @@ const CHANGES = /^(?:DELETE|UPDATE|REPLACE|INSERT OR REPLACE)\b|\bON CONFLICT\b.
 /**
  * A trigger's findings: each statement of a SQLite BEGIN … END body that changes or removes rows
  * runs on every later write to its table, so it is unsafe; a trigger that neither has such a body
- * nor executes a function runs code comb cannot read
+ * nor executes a function runs code database cannot read
  */
 function triggerFindings(code: string): Finding[] {
 	const [, on, rest] = TRIGGER.exec(code) ?? []
@@ -66,7 +66,7 @@ function triggerFindings(code: string): Finding[] {
 	if (body === undefined) {
 		return /\bEXECUTE (?:FUNCTION|PROCEDURE)\b/i.test(rest as string)
 			? []
-			: [{ level: "cautious", note: "a trigger whose body comb cannot read" }]
+			: [{ level: "cautious", note: "a trigger whose body database cannot read" }]
 	}
 	const note = `runs on every later write to ${lastPart(on)}`
 	return body

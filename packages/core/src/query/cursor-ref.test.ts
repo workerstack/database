@@ -36,9 +36,11 @@ describe("anchored and assertNoReference", () => {
 		expect(asc).toBeInstanceOf(AnchorBound)
 		expect(sqlite.sqlToQuery((asc as AnchorBound).value)).toEqual({
 			params: ["a𝟘", 7],
-			sql: '(SELECT CASE WHEN substr("doc"."title", 1, 2) = comb_anchor.v AND length("doc"."title") = 9 THEN "doc"."title" ELSE comb_anchor.v END FROM (SELECT ? AS v) AS comb_anchor LEFT JOIN "doc" ON "doc"."id" = ?)',
+			sql: '(SELECT CASE WHEN substr("doc"."title", 1, 2) = database_anchor.v AND length("doc"."title") = 9 THEN "doc"."title" ELSE database_anchor.v END FROM (SELECT ? AS v) AS database_anchor LEFT JOIN "doc" ON "doc"."id" = ?)',
 		})
-		expect(sqlite.sqlToQuery((desc as AnchorBound).value).sql).toContain("ELSE (comb_anchor.v || char(1114111)) END")
+		expect(sqlite.sqlToQuery((desc as AnchorBound).value).sql).toContain(
+			"ELSE (database_anchor.v || char(1114111)) END",
+		)
 		expect(sqlite.sqlToQuery((empty as AnchorBound).value)).toMatchObject({ params: [7] })
 		expect((asc as AnchorBound).ends).toBe(false)
 		expect(plain).toBe("x")
@@ -48,7 +50,7 @@ describe("anchored and assertNoReference", () => {
 		const [bound] = anchored([{ column: pgDoc.title, direction: "asc" }], [new CursorRef("ab", 5)], at(pgDoc, pgDoc))
 		expect((bound as AnchorBound).ends).toBe(true)
 		expect(pg.sqlToQuery((bound as AnchorBound).value).sql).toMatch(
-			/^\(SELECT CASE WHEN left\("doc"\."title", 2\) = comb_anchor\.v AND char_length\("doc"\."title"\) = 5 THEN "doc"\."title" ELSE CASE WHEN \(pg_collation_for/,
+			/^\(SELECT CASE WHEN left\("doc"\."title", 2\) = database_anchor\.v AND char_length\("doc"\."title"\) = 5 THEN "doc"\."title" ELSE CASE WHEN \(pg_collation_for/,
 		)
 	})
 

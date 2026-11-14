@@ -16,7 +16,7 @@ afterEach(() => {
 
 /** A resolved target for `provider`, its migrations directory made */
 function resolved(provider: ConnectionProviderConfig) {
-	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "comb-sqlite-target-"))
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "database-sqlite-target-"))
 	dirs.push(dir)
 	fs.mkdirSync(path.join(dir, "m"))
 	return {

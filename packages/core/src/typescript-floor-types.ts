@@ -1,7 +1,7 @@
 /**
- * What a TypeScript older than 5.7 reads for every subpath of comb: nothing.
+ * What a TypeScript older than 5.7 reads for every subpath of database: nothing.
  *
- * comb's declarations use `NoInfer` (TypeScript 5.4) and `Uint8Array<ArrayBuffer>`. An older
+ * database's declarations use `NoInfer` (TypeScript 5.4) and `Uint8Array<ArrayBuffer>`. An older
  * compiler with `skipLibCheck` on, as every starter template sets it, reads each as `any` and drops
  * the check it carries with no error: a misspelled transition, a `random` that takes no bytes. Each
  * export's `types@>=5.7` condition names the real declarations, and the plain `types` condition after
@@ -9,5 +9,5 @@
  * TS2306, naming this file, in the project's own file. Upgrade to TypeScript 5.7 or later.
  */
 
-/** The floor itself: a TypeScript that reads this file is older than comb supports */
-declare namespace comb_needs_TypeScript_5_7_or_later {}
+/** The floor itself: a TypeScript that reads this file is older than database supports */
+declare namespace database_needs_TypeScript_5_7_or_later {}

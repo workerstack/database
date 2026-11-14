@@ -7,7 +7,7 @@ import { buildSharedSchemas, rewriteBaseTypes, rewriteWithShared } from "./share
 function table(name: string, zodTypes: string[]): TableInfo {
 	const fields: FieldInfo[] = zodTypes.map((zodType, i) => ({ key: `f${i}`, type: "read", uses: [], zodType }))
 	return {
-		combMeta: null,
+		databaseMeta: null,
 		fields,
 		hasTimestamps: { createdAt: false, deletedAt: false, updatedAt: false },
 		name,
@@ -139,7 +139,7 @@ describe("shared-schemas: remaining layers", () => {
 
 	/* C1 of r20: a nullable field's keys sit on its member and on the nullable, so `.unwrap()` keeps them */
 	it("shares the core of a field whose keys sit on its member too, and no variant it never uses", () => {
-		const keys = '.meta({"x-comb-maxLength":5})'
+		const keys = '.meta({"x-database-maxLength":5})'
 		const field = `z.string().max(5)${keys}.nullable()${keys}`
 		const s = buildSharedSchemas([table("a", [field, `${field}.optional()`])], imports())
 		expect([...s.keys()]).toEqual(["z.string().max(5)"])

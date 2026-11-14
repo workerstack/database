@@ -59,10 +59,10 @@ expectTypeOf<keyof PgColumns>().toEqualTypeOf<keyof SqliteColumns>()
 const even = z.int().refine((value) => value % 2 === 0, { error: "Must be even" })
 for (const h of [c, pg]) {
 	h.text("currency", { format: "iso4217" })
-	// @ts-expect-error a format id comb's catalog does not hold
+	// @ts-expect-error a format id database's catalog does not hold
 	h.text("currency", { format: "iso-4217" })
 	h.enum("pay", ["USD", "EUR"], { format: "iso4217" })
-	// @ts-expect-error a format id comb's catalog does not hold
+	// @ts-expect-error a format id database's catalog does not hold
 	h.enum("pay", ["USD", "EUR"], { format: "iso-4217" })
 	h.integer("week_start", { format: "iso8601-weekday" })
 	// @ts-expect-error an integer format takes no text format's id

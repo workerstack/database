@@ -1,5 +1,5 @@
 /**
- * The structure tests that ask a checker about comb's emitted declarations (the export hashes, the
+ * The structure tests that ask a checker about database's emitted declarations (the export hashes, the
  * members walk, the unexported types) see what a consumer's compiler sees only when that checker
  * resolves every import those declarations make. Emitted where nothing resolved drizzle-orm, zod or
  * TypeScript's own libs, 31 public types and values read as `any` with no diagnostic, so every question about
@@ -17,7 +17,7 @@ const ROOT = join(import.meta.dirname, "../..")
 const spellsAny = (node: ts.Node): boolean =>
 	node.kind === ts.SyntaxKind.AnyKeyword || ts.forEachChild(node, (child) => spellsAny(child) || undefined) === true
 
-describe("the checker over comb's emitted declarations", () => {
+describe("the checker over database's emitted declarations", () => {
 	const { diagnostics, unresolved } = withEmitted(ROOT, ({ dir, entries }) => {
 		const { checker, program } = checkerOf(dir, Object.values(entries))
 		const local = (symbol: ts.Symbol) => symbol.declarations?.[0]?.getSourceFile().fileName.startsWith(dir) === true
@@ -61,7 +61,7 @@ describe("the checker over comb's emitted declarations", () => {
 })
 
 /**
- * The projects a consumer without Node's types runs, a Workers one and a browser bundle: comb lists
+ * The projects a consumer without Node's types runs, a Workers one and a browser bundle: database lists
  * @types/node only as a dev dependency, so a declaration naming `NodeJS` fails such a project with
  * TS2503, or under skipLibCheck reads as `any` and accepts anything
  */
@@ -92,14 +92,14 @@ function withoutNode(
 }
 
 describe.each(Object.keys(WITHOUT_NODE) as Array<keyof typeof WITHOUT_NODE>)(
-	"comb's emitted declarations in a %s project, without Node's types",
+	"database's emitted declarations in a %s project, without Node's types",
 	(project) => {
 		const { decay, diagnostics } = withEmitted(ROOT, ({ dir, entries }) => {
 			const cli = entries["./cli"]
 			if (cli === undefined) throw new Error("no ./cli entry")
 			const probe = join(dir, "probe.ts")
 			const from = `./${relative(dir, cli).replace(/\.d\.ts$/, ".js")}`
-			writeFileSync(probe, `import type { Terminal } from "${from}"\nexport const bad: Terminal["output"] = 42\n`)
+			writeFileSync(probe, `import type { CliTerminal } from "${from}"\nexport const bad: CliTerminal["output"] = 42\n`)
 			return {
 				decay: withoutNode(project, { dir, files: [probe], skipLibCheck: true }),
 				diagnostics: withoutNode(project, { dir, files: Object.values(entries), skipLibCheck: false }),
@@ -110,7 +110,7 @@ describe.each(Object.keys(WITHOUT_NODE) as Array<keyof typeof WITHOUT_NODE>)(
 			expect(diagnostics).toEqual([])
 		})
 
-		it("keeps Terminal typed under skipLibCheck, so a number is no output stream", () => {
+		it("keeps CliTerminal typed under skipLibCheck, so a number is no output stream", () => {
 			expect(decay).toEqual([expect.stringMatching(/^probe\.ts: Type 'number' is not assignable to type /)])
 		})
 	},

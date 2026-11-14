@@ -1,7 +1,7 @@
 /**
  * The destructive-change gate on what Atlas really emits for Postgres. Each case diffs a base
  * schema against a changed one with the real binary on a scratch database, in both URL scopes
- * comb may use (database-scoped names are schema-qualified, `search_path` ones are bare), and
+ * database may use (database-scoped names are schema-qualified, `search_path` ones are bare), and
  * classifies the output, so the rules cannot drift from Atlas's SQL.
  */
 import { spawnSync } from "node:child_process"
@@ -15,7 +15,7 @@ import type { MigrationSafety } from "../../../src/migrate/migration-types.ts"
 import { withScratchDb } from "../support/pg.ts"
 import { loadPostgresParser } from "../../../src/migrate/core/pg-parser.ts"
 
-/* a caller of classifyMigration on Postgres loads comb's parser first */
+/* a caller of classifyMigration on Postgres loads database's parser first */
 beforeAll(loadPostgresParser)
 
 const POST = (columns: string) => `CREATE TABLE post (id integer PRIMARY KEY, ${columns});`
@@ -44,7 +44,7 @@ describe("the destructive-change gate on Atlas's Postgres output", () => {
 		let dir: string
 
 		beforeAll(() => {
-			dir = mkdtempSync(join(tmpdir(), "comb-atlas-classify-"))
+			dir = mkdtempSync(join(tmpdir(), "database-atlas-classify-"))
 			writeFileSync(join(dir, "base.sql"), BASE)
 		})
 		afterAll(() => rmSync(dir, { force: true, recursive: true }))

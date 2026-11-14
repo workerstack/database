@@ -11,7 +11,7 @@ const validateTables = async (file: string) => validateAnalysis(await analyze(fi
 let tmpDir: string
 
 beforeEach(() => {
-	tmpDir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-validate-"))
+	tmpDir = fs.mkdtempSync(path.join(fixtureRoot(), "database-validate-"))
 })
 
 afterEach(() => {
@@ -165,7 +165,7 @@ export const post = createTable("post", { id: c.id() })
 
 	it("refuses a table call drizzle cannot build, as the module does not load", async () => {
 		await expect(validateStructure(`\nexport const post = createTable("post")\n`)).rejects.toThrow(
-			"comb could not load",
+			"database could not load",
 		)
 	})
 

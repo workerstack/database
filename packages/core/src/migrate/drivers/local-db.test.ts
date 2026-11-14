@@ -34,7 +34,7 @@ const onNode = (version: string) => {
 	return local.openMemory()
 }
 
-/* bins.consumer on Node 22.12: node:sqlite is a built-in from 22.13 on, so comb names its floor, not a missing module */
+/* bins.consumer on Node 22.12: node:sqlite is a built-in from 22.13 on, so database names its floor, not a missing module */
 describe("openMemory below Node 22.13", () => {
 	const nodeVersion = Object.getOwnPropertyDescriptor(process.versions, "node")
 	afterEach(() => {
@@ -43,7 +43,9 @@ describe("openMemory below Node 22.13", () => {
 	it.each(["22.12.0", "22.5.1", "21.9.0", "20.18.3"])(
 		"refuses on %s, naming the floor and the version",
 		async (version) => {
-			await expect(onNode(version)).rejects.toThrow(`comb needs Node 22.13 or later (node:sqlite); this is ${version}`)
+			await expect(onNode(version)).rejects.toThrow(
+				`database needs Node 22.13 or later (node:sqlite); this is ${version}`,
+			)
 		},
 	)
 	it.each(["22.13.0", "22.20.1", "23.0.0", "24.11.1"])("opens on %s", async (version) => {
@@ -93,7 +95,7 @@ describe("openScratch", () => {
 		const mkdtemp = vi.spyOn(fs, "mkdtempSync")
 		const db = await openScratch()
 		const dir = mkdtemp.mock.results[0]?.value as string
-		expect(path.basename(dir)).toMatch(new RegExp(`^comb-scratch-${process.pid}-[0-9a-f]{8}-`))
+		expect(path.basename(dir)).toMatch(new RegExp(`^database-scratch-${process.pid}-[0-9a-f]{8}-`))
 		expect(path.dirname(dir)).toBe(os.tmpdir())
 		expect(fs.statSync(dir).mode & 0o777).toBe(0o700)
 		expect(fs.readdirSync(dir)).toEqual(["copy.db"])
@@ -129,7 +131,7 @@ describe("openScratch's sweep", () => {
 	it("removes a leftover named for a gone process at a process's first scratch, keeps a live one's, and sweeps once", async () => {
 		vi.resetModules()
 		const { hostMark } = await import("../core/cleanup.ts")
-		const named = (pid: number, what: string) => path.join(os.tmpdir(), `comb-scratch-${pid}-${hostMark()}-${what}`)
+		const named = (pid: number, what: string) => path.join(os.tmpdir(), `database-scratch-${pid}-${hostMark()}-${what}`)
 		/* a pid past any pid_max, so no process runs as it */
 		const [gone, live] = [named(4_194_305, "gone"), named(process.pid, "live")]
 		for (const dir of [gone, live]) fs.mkdirSync(dir)
@@ -149,7 +151,7 @@ describe("openScratch's sweep", () => {
 
 /* CI on 84332342: a --local run that met a lock can end before workerd's line saying so is forwarded */
 describe("writeLocked", () => {
-	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "comb-write-locked-"))
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "database-write-locked-"))
 	it("says true while another connection holds the file's write lock, and false once it lets go", async () => {
 		const { DatabaseSync } = await import("node:sqlite")
 		const file = path.join(dir, "held.sqlite")

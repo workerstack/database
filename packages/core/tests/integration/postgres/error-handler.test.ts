@@ -8,7 +8,7 @@ import { drizzle as drizzlePg } from "drizzle-orm/node-postgres"
 import { drizzle as drizzlePostgres } from "drizzle-orm/postgres-js"
 import pg from "pg"
 import { describe, expect, it } from "vitest"
-import { CombError } from "../../../src/error.ts"
+import { DatabaseError } from "../../../src/error.ts"
 import { pgErrorHandler } from "../../../src/pg/error-handler.ts"
 import type { ConstraintMap } from "../../../src/types.ts"
 import { type PgSessions, pgUrl, usePg } from "../support/pg.ts"
@@ -118,10 +118,10 @@ describe("pgErrorHandler on a real server", () => {
 	for (const [driver, runner] of Object.entries(RUNNERS)) {
 		it.each(CASES)(`${driver}: maps $name`, async ({ column, errorKey, sql: statement }) => {
 			const thrown = await handled(sessions, runner, statement)
-			expect(thrown).toBeInstanceOf(CombError)
+			expect(thrown).toBeInstanceOf(DatabaseError)
 			expect(thrown).toMatchObject({ errorKey, table: "member" })
-			expect((thrown as CombError).column).toBe(column)
-			expect((thrown as CombError).source).toBeInstanceOf(Error)
+			expect((thrown as DatabaseError).column).toBe(column)
+			expect((thrown as DatabaseError).source).toBeInstanceOf(Error)
 		})
 
 		it(`${driver}: says a row is still referenced when a delete fails on a child's key`, async () => {
@@ -130,10 +130,10 @@ describe("pgErrorHandler on a real server", () => {
 				cause: "The record is still referenced by other records",
 				errorKey: "foreign_key_violation",
 			})
-			expect((thrown as CombError).column).toBeUndefined()
+			expect((thrown as DatabaseError).column).toBeUndefined()
 			/* the statement's table, as SQLite names it, wherever the SQL is recorded: on drizzle's wrapper,
 			   and on postgres.js's own error; bare node-postgres records none (R11) */
-			expect((thrown as CombError).table).toBe(driver === "node-postgres" ? undefined : "org")
+			expect((thrown as DatabaseError).table).toBe(driver === "node-postgres" ? undefined : "org")
 		})
 
 		it(`${driver}: finds the primary key of a table whose name Postgres cut`, async () => {
@@ -218,7 +218,7 @@ describe("pgErrorHandler on a real server: a server that refuses or ends the ses
 		const failure = await sessions
 			.sql()
 			.begin("READ ONLY", async (tx) => {
-				await tx`CREATE TABLE comb_read_only_probe (id int)`
+				await tx`CREATE TABLE database_read_only_probe (id int)`
 			})
 			.then(
 				() => null,
@@ -278,7 +278,7 @@ describe("pgErrorHandler on a real server: a busy server", () => {
 	})
 
 	it("maps too many connections for a role (53300) to 503", async () => {
-		const role = `comb_nolimit_${Math.random().toString(36).slice(2, 8)}`
+		const role = `database_nolimit_${Math.random().toString(36).slice(2, 8)}`
 		const admin = sessions.pg()
 		await admin.query(`CREATE ROLE ${role} LOGIN PASSWORD 'x' CONNECTION LIMIT 0`)
 		try {
@@ -410,7 +410,7 @@ async function partitioned(
 		try {
 			pgErrorHandler(failure, maps)
 		} catch (thrown) {
-			return thrown as CombError
+			return thrown as DatabaseError
 		}
 		return undefined
 	})()

@@ -1,5 +1,5 @@
 /**
- * P3 of r20: the docker:// gate (pg-replay-gate.ts) passes a history without comb's replay only when
+ * P3 of r20: the docker:// gate (pg-replay-gate.ts) passes a history without database's replay only when
  * every statement is one it holds inert. Each inert node and ALTER TABLE command runs here on Postgres,
  * in a schema of its own after the fixture's setup, and the catalog read baseline compares
  * (pg-live-catalog.ts) finds nothing after it, so an arm the read gains is held to every entry. OWNED BY
@@ -13,7 +13,7 @@ import { readLiveObjects } from "../../../src/migrate/core/pg-live-objects.ts"
 import { pgUrl } from "../support/pg.ts"
 
 const server = new URL(pgUrl())
-const DATABASE = `comb_gate_${process.pid}`
+const DATABASE = `database_gate_${process.pid}`
 const url = Object.assign(new URL(server.href), { pathname: `/${DATABASE}` }).href
 const admin = new pg.Client({ connectionString: server.href })
 

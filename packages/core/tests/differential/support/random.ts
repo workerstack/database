@@ -1,7 +1,7 @@
 /**
  * The seeds a differential run draws its cases from: a fixed list, the same on every run, so a finding the
  * expectations name is shown on every run, and one seed new to each run, printed, so runs keep reaching new
- * inputs. `COMB_DIFFERENTIAL_SEEDS=4,17` replays exactly the seeds a report printed.
+ * inputs. `DATABASE_DIFFERENTIAL_SEEDS=4,17` replays exactly the seeds a report printed.
  */
 
 /** A generator of numbers in [0, 1) from `seed` alone (mulberry32), so a seed names the same cases on every run */
@@ -28,15 +28,15 @@ export type Random = ReturnType<typeof random>
  */
 export const FIXED_SEEDS: readonly number[] = [1, 2, 3, 4, 5, 6, 26]
 
-/** The seeds of one run: the fixed list and one random seed, or exactly those `COMB_DIFFERENTIAL_SEEDS` names */
+/** The seeds of one run: the fixed list and one random seed, or exactly those `DATABASE_DIFFERENTIAL_SEEDS` names */
 export function runSeeds(env: Record<string, string | undefined> = process.env): {
 	fixed: readonly number[]
 	fresh: readonly number[]
 } {
-	const named = env["COMB_DIFFERENTIAL_SEEDS"]
+	const named = env["DATABASE_DIFFERENTIAL_SEEDS"]
 	if (named !== undefined && named.trim() !== "") {
 		const seeds = named.split(",").map((each) => Number(each.trim()))
-		if (seeds.some((seed) => !Number.isSafeInteger(seed))) throw new Error(`COMB_DIFFERENTIAL_SEEDS: ${named}`)
+		if (seeds.some((seed) => !Number.isSafeInteger(seed))) throw new Error(`DATABASE_DIFFERENTIAL_SEEDS: ${named}`)
 		return {
 			fixed: seeds.filter((seed) => FIXED_SEEDS.includes(seed)),
 			fresh: seeds.filter((seed) => !FIXED_SEEDS.includes(seed)),

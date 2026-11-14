@@ -1,7 +1,7 @@
 /**
  * PA3n of r22b: Atlas reads a file's leading `-- atlas:` line as a directive only in a header a
  * blank line closes; without one it reads the line as a comment and runs the file in one
- * transaction. comb refuses such a file on every dialect, naming the file and the line, as the
+ * transaction. database refuses such a file on every dialect, naming the file and the line, as the
  * stale libsql fixture (3e61144d) showed a writer misses it.
  */
 import { beforeAll, describe, expect, it } from "vitest"

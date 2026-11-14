@@ -10,7 +10,7 @@
 import { type DecodedCursor, readCompared } from "./cursor.ts"
 import { type ColumnCheck, fittedCursor, type KeysetKind } from "./cursor-mint.ts"
 import { assertCursorWired, type CursorOptions } from "./cursor-seal.ts"
-import { carriedTexts, COMB_ID, cursorKeys, refuseUnheld } from "./list-extras.ts"
+import { carriedTexts, DATABASE_ID, cursorKeys, refuseUnheld } from "./list-extras.ts"
 import { filterBySelect } from "./fields.ts"
 import { paginationIn, refuseGoneAnchor, refuseOverRead, refuseUnwired } from "./page-refusals.ts"
 import type { paginationResponseSchema } from "./schema.ts"
@@ -22,7 +22,13 @@ import { UnmintableRow } from "./cursor-refusals.ts"
  * The name of one column a builder selects for `paginate` to read, which no row it returns keeps: the
  * tiebreak, the gone-anchor flag, the count, each sort key's storage class, or its stored text
  */
-type ListExtra = "_combAnchorGone" | "_combId" | "_combKeyTexts" | "_combKeyTypes" | "_combTextKeys" | "_total"
+type ListExtra =
+	| "_cursorAnchorGone"
+	| "_cursorId"
+	| "_cursorKeyTexts"
+	| "_cursorKeyTypes"
+	| "_cursorTextKeys"
+	| "_total"
 
 /**
  * A row as paginate and paginateMerged return it, without the `ListExtra` columns. A union row type
@@ -32,11 +38,11 @@ type ListRow<T> = T extends unknown ? Omit<T, ListExtra> : never
 
 /** The columns a builder selects for paginate alone, stripped from every row it returns */
 const EXTRAS: readonly ListExtra[] = [
-	COMB_ID,
-	"_combAnchorGone",
-	"_combKeyTexts",
-	"_combKeyTypes",
-	"_combTextKeys",
+	DATABASE_ID,
+	"_cursorAnchorGone",
+	"_cursorKeyTexts",
+	"_cursorKeyTypes",
+	"_cursorTextKeys",
 	"_total",
 ]
 
@@ -165,7 +171,7 @@ function applySelect<T extends Record<string, unknown>>(row: T, parsedFields: Pa
 
 /**
  * The cursor after `row`, checked and ready to seal: its sort keys, and the tiebreak the builder
- * selected as `_combId`. A row without one would mint a cursor that repeats or ends the list, a
+ * selected as `_cursorId`. A row without one would mint a cursor that repeats or ends the list, a
  * wiring mistake mintCursor refuses. Any id, 0 and "" included, carries the next page.
  */
 function fitFrom(
@@ -183,7 +189,7 @@ function fitFrom(
 	return fittedCursor(cursorKeys(read, parsedSort), parsedSort, {
 		...options,
 		carried: carriedTexts(read, parsedSort),
-		idField: COMB_ID,
+		idField: DATABASE_ID,
 		read,
 	})
 }
@@ -251,7 +257,7 @@ function paginate<T extends object>(
 
 export {
 	applySelect,
-	COMB_ID,
+	DATABASE_ID,
 	nextCursorOf,
 	type ListExtra,
 	type ListPagination,

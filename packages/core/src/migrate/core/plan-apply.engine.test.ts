@@ -36,7 +36,7 @@ CREATE VIRTUAL TABLE notes USING fts5(body);`
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-engine-"))
+	dir = mkdtempSync(join(tmpdir(), "database-engine-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
@@ -145,7 +145,9 @@ describe("engine ratings: triggers, virtual tables and a file the copy refuses",
 
 	it("says why a file the copy cannot run is unproven, and so unsafe", async () => {
 		const { notes } = await rate(`UPDATE "k"SET a = b;\nCREATE INDEX k_b ON k (b);`)
-		expect(notes.join("\n")).toMatch(/comb could not run this in the proof copy on SQLite \d+\.\d+\.\d+: .*NOT NULL/)
+		expect(notes.join("\n")).toMatch(
+			/database could not run this in the proof copy on SQLite \d+\.\d+\.\d+: .*NOT NULL/,
+		)
 	})
 })
 
@@ -193,13 +195,13 @@ describe("engine ratings: the controls keep theirs", () => {
 		],
 		["an insert whose FTS sync trigger writes the index", `INSERT INTO post (title) VALUES ('t');`, "safe"],
 		["an insert into a virtual table", `INSERT INTO notes (body) VALUES ('x');`, "safe"],
-		["comb's rebuild of an FTS index", `INSERT INTO post_fts(post_fts) VALUES ('rebuild');`, "safe"],
+		["database's rebuild of an FTS index", `INSERT INTO post_fts(post_fts) VALUES ('rebuild');`, "safe"],
 	])("%s", async (_label, sql, safety) => {
 		expect((await rate(sql)).safety).toBe(safety)
 	})
 })
 
-/* a parent, a child that cascades from it and a grandchild: Atlas's rebuild of the parent needs comb's guard */
+/* a parent, a child that cascades from it and a grandchild: Atlas's rebuild of the parent needs database's guard */
 const FAMILY = `CREATE TABLE \`u\` (\`id\` integer PRIMARY KEY, \`name\` text);
 CREATE TABLE \`post\` (\`id\` integer PRIMARY KEY, \`author\` integer REFERENCES \`u\`(\`id\`) ON DELETE CASCADE, \`title\` text);
 CREATE TABLE \`tag\` (\`post\` integer NOT NULL REFERENCES \`post\`(\`id\`), \`name\` text NOT NULL, PRIMARY KEY (\`post\`, \`name\`)) WITHOUT ROWID;`
@@ -210,15 +212,15 @@ DROP TABLE \`u\`;
 ALTER TABLE \`new_u\` RENAME TO \`u\`;
 `
 
-describe("engine ratings: comb's guarded rebuild", () => {
-	it("keeps comb's guard cautious, and the same guard edited unsafe", async () => {
+describe("engine ratings: database's guarded rebuild", () => {
+	it("keeps database's guard cautious, and the same guard edited unsafe", async () => {
 		const guarded = guardRebuilds(REBUILD, extractSchema(FAMILY))
 		expect(await rate(guarded, FAMILY)).toMatchObject({ safety: "cautious" })
 		const edited = guarded.replace("DELETE FROM `tag`;", "DELETE FROM `tag` WHERE 1;")
 		expect((await rate(edited, FAMILY)).safety).toBe("unsafe")
 	})
 	/* M24 of the 0.13 review: a trigger a later file put on a table the guard empties fires as the guard keeps its rows */
-	it("calls comb's guard unsafe when the schema at it has a trigger on a table the guard empties, its FTS sync aside", async () => {
+	it("calls database's guard unsafe when the schema at it has a trigger on a table the guard empties, its FTS sync aside", async () => {
 		const guarded = guardRebuilds(REBUILD, extractSchema(FAMILY))
 		const gone = `${FAMILY}\nCREATE TABLE audit (x TEXT);\nCREATE TRIGGER tag_gone AFTER DELETE ON tag BEGIN DELETE FROM audit WHERE length(x) = 999; END;`
 		const rated = await rate(guarded, gone)

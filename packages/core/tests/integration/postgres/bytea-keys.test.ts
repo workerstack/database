@@ -72,7 +72,7 @@ async function served(client: pg.Client, path: Path, direction: "asc" | "desc"):
 	return ids
 }
 
-describe("a minted cursor is one comb reads, on Postgres (QL5 of r22b; sibling: the SQLite blob walk)", () => {
+describe("a minted cursor is one database reads, on Postgres (QL5 of r22b; sibling: the SQLite blob walk)", () => {
 	const sessions = usePg()
 
 	it.each(["table", "derived", "relational"] as const)(

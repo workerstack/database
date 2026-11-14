@@ -1,11 +1,11 @@
 /**
- * comb's own migration record on SQLite: the `__drizzle_migrations` table, the hashes in it and,
+ * database's own migration record on SQLite: the `__drizzle_migrations` table, the hashes in it and,
  * from 0.11, each file's name beside its hash, so an applied file edited since is told from a new one;
  * from 0.13 the name, not the hash, is unique, so two files of one text are recorded apart; from 0.21
- * each row comb writes carries `hash_v`, which says it holds the exact hash (parse.ts HASH_VERSION)
+ * each row database writes carries `hash_v`, which says it holds the exact hash (parse.ts HASH_VERSION)
  */
 import { chainText } from "../../error-chain.ts"
-import type { Connection } from "../types.ts"
+import type { MigrateConnection } from "../types.ts"
 import { pastStop } from "./cleanup.ts"
 import { HASH_VERSION } from "./parse.ts"
 import { Refused } from "./refused.ts"
@@ -17,7 +17,7 @@ import { type RetryOptions, withRetry } from "./utils.ts"
    MIGRATIONS TABLE
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* comb's history from 0.13: a name is recorded once, a hash as often as files hold that text */
+/* database's history from 0.13: a name is recorded once, a hash as often as files hold that text */
 const TABLE = `(
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       hash TEXT NOT NULL,
@@ -26,8 +26,8 @@ const TABLE = `(
       hash_v INTEGER
     )`
 
-/** Whether a unique index of comb's history holds `column` alone */
-async function uniqueOn(conn: Connection, column: string): Promise<boolean> {
+/** Whether a unique index of database's history holds `column` alone */
+async function uniqueOn(conn: MigrateConnection, column: string): Promise<boolean> {
 	const list = await conn.execute("PRAGMA index_list(__drizzle_migrations)")
 	const unique = list.rows.filter((row) => Number(row[list.columns.indexOf("unique")]) === 1)
 	for (const index of unique) {
@@ -39,33 +39,33 @@ async function uniqueOn(conn: Connection, column: string): Promise<boolean> {
 	return false
 }
 
-/** Whether a unique index of comb's history holds its hash alone, as comb's table did before 0.13 */
-export const hashUnique = (conn: Connection): Promise<boolean> => uniqueOn(conn, "hash")
+/** Whether a unique index of database's history holds its hash alone, as database's table did before 0.13 */
+export const hashUnique = (conn: MigrateConnection): Promise<boolean> => uniqueOn(conn, "hash")
 
 /**
  * A name recorded once, whoever made the table: a history drizzle's migrator made gains `name` by ALTER
  * and no UNIQUE with it, so nothing would refuse a second run's record of a file the first applied.
  * Refused, naming the files, when the history already holds one twice
  */
-async function keepNameUnique(conn: Connection): Promise<void> {
+async function keepNameUnique(conn: MigrateConnection): Promise<void> {
 	if (await uniqueOn(conn, "name")) return
 	const twice = await conn.execute(
 		"SELECT name FROM __drizzle_migrations WHERE name IS NOT NULL GROUP BY name HAVING count(*) > 1 ORDER BY name",
 	)
 	if (twice.rows.length > 0)
 		throw new Error(
-			`__drizzle_migrations records ${twice.rows.map((row) => String(row[0])).join(", ")} more than once, so comb cannot keep a file from being recorded twice: delete the extra rows of each (keep the first), then run it again`,
+			`__drizzle_migrations records ${twice.rows.map((row) => String(row[0])).join(", ")} more than once, so database cannot keep a file from being recorded twice: delete the extra rows of each (keep the first), then run it again`,
 		)
 	await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS __drizzle_migrations_name ON __drizzle_migrations (name)")
 }
 
 /**
- * comb's history, made where it is missing, named from 0.11, and from a history before 0.13
+ * database's history, made where it is missing, named from 0.11, and from a history before 0.13
  * rebuilt in one batch: every row and id kept, each row `renamed` lists taking its new name,
  * and the AUTOINCREMENT counter kept above every id it handed out
  */
 export async function ensureMigrationsTable(
-	conn: Connection,
+	conn: MigrateConnection,
 	renamed: ReadonlyArray<{ id: number; name: string }> = [],
 ): Promise<void> {
 	await conn.execute(`CREATE TABLE IF NOT EXISTS __drizzle_migrations ${TABLE}`)
@@ -117,7 +117,7 @@ export async function ensureMigrationsTable(
 		if (dependents.length === 0) throw error
 		const objects = dependents.map(({ name, type }) => `${type} ${name}`).join(", ")
 		throw new Error(
-			`comb could not rebuild __drizzle_migrations for 0.13 with the ${objects} over it, and changed nothing: ${(error as Error).message}`,
+			`database could not rebuild __drizzle_migrations for 0.13 with the ${objects} over it, and changed nothing: ${(error as Error).message}`,
 			{ cause: error },
 		)
 	}
@@ -127,7 +127,10 @@ export async function ensureMigrationsTable(
  * Whether a migration is recorded under any of `hashes`; pass the hashes of `migrationHashes(sql)`
  * so a file recorded under an earlier hash still counts as applied.
  */
-export async function checkMigrationHash(conn: Connection, hashes: string | readonly string[]): Promise<boolean> {
+export async function checkMigrationHash(
+	conn: MigrateConnection,
+	hashes: string | readonly string[],
+): Promise<boolean> {
 	const list = typeof hashes === "string" ? [hashes] : [...hashes]
 	const marks = list.map(() => "?").join(", ")
 	const result = await conn.execute(`SELECT hash FROM __drizzle_migrations WHERE hash IN (${marks})`, list)
@@ -137,14 +140,14 @@ export async function checkMigrationHash(conn: Connection, hashes: string | read
 const RECORD = `INSERT INTO __drizzle_migrations (hash, created_at, name, hash_v) VALUES (?, ?, ?, ${HASH_VERSION})`
 
 /**
- * Set on every connection comb opens to a local file: a write lock the app serving the
+ * Set on every connection database opens to a local file: a write lock the app serving the
  * file holds, or a second runner, is waited for up to 5 s, as SQLite's own busy handler waits, where
  * SQLite fails at once. It retries no statement that failed, so a `SQLITE_` code is still never retried
  */
 export const BUSY_TIMEOUT = "PRAGMA busy_timeout = 5000"
 
 /** Record `hash` as applied, under the file's `name` when given (an unnamed row is named on the next apply) */
-export async function recordMigrationHash(conn: Connection, hash: string, name?: string): Promise<void> {
+export async function recordMigrationHash(conn: MigrateConnection, hash: string, name?: string): Promise<void> {
 	await conn.execute(RECORD, [hash, Date.now(), name ?? null])
 }
 
@@ -153,15 +156,15 @@ type Recorded = { filename: string; hash: string; statements: readonly string[] 
 
 /**
  * The connection one file applies on: its batch, then its close. It reads nothing, so a libsql file's
- * can run on `exec` alone; a read of comb's history goes through the command's own connection
+ * can run on `exec` alone; a read of database's history goes through the command's own connection
  */
-export type FileConnection = Pick<Connection, "batch" | "close">
+export type FileConnection = Pick<MigrateConnection, "batch" | "close">
 
-/** How a file's batch is retried: the connection that reads comb's history after a lost answer, and the backoff */
-type ApplyOptions = { history: Pick<Connection, "execute">; retry?: RetryOptions | undefined }
+/** How a file's batch is retried: the connection that reads database's history after a lost answer, and the backoff */
+type ApplyOptions = { history: Pick<MigrateConnection, "execute">; retry?: RetryOptions | undefined }
 
-/** Whether comb's history records the file `name` */
-const recorded = async (conn: Pick<Connection, "execute">, name: string): Promise<boolean> =>
+/** Whether database's history records the file `name` */
+const recorded = async (conn: Pick<MigrateConnection, "execute">, name: string): Promise<boolean> =>
 	(await conn.execute("SELECT 1 FROM __drizzle_migrations WHERE name = ?", [name])).rows.length > 0
 
 /** A batch that failed transiently with no read of the history answering after it: whether it committed is unknown */
@@ -178,7 +181,7 @@ class Unconfirmed extends Error {}
  * Returns who applied it.
  */
 export async function applyRecorded(
-	conn: Pick<Connection, "batch">,
+	conn: Pick<MigrateConnection, "batch">,
 	migration: Recorded,
 	{ history, retry }: ApplyOptions,
 ): Promise<"this run" | "another run"> {
@@ -211,7 +214,7 @@ export async function applyRecorded(
 			throw error
 		}
 		throw new Unconfirmed(
-			`${migration.filename} may have committed: its batch failed with ${chainText(lost)}, and no read of comb's history answered after it; comb migrate status says whether it applied`,
+			`${migration.filename} may have committed: its batch failed with ${chainText(lost)}, and no read of database's history answered after it; database migrate status says whether it applied`,
 			{ cause: error },
 		)
 	}

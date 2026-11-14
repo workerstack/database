@@ -15,8 +15,8 @@ import type { GeneratorContext } from "./context-types.ts"
 import type { Column, Relation, Table, TableKey } from "./diagram-types.ts"
 import { generateCompactAI } from "./diagrams-summary.ts"
 
-/* the Postgres type comb's pg columns create for each helper: epoch timestamps are bigint, json jsonb */
-// lookup-table: comb's pg helpers to the types their columns hold
+/* the Postgres type database's pg columns create for each helper: epoch timestamps are bigint, json jsonb */
+// lookup-table: database's pg helpers to the types their columns hold
 const PG_TYPES: Readonly<Record<string, string>> = {
 	boolean: "BOOLEAN",
 	createdAt: "BIGINT",
@@ -29,7 +29,7 @@ const PG_TYPES: Readonly<Record<string, string>> = {
 	updatedAt: "BIGINT",
 }
 
-/** Map a comb helper to its SQL type on the database's engine */
+/** Map a database helper to its SQL type on the database's engine */
 function drizzleHelperToSqlType(helper: string, dialect: "postgres" | "sqlite"): string {
 	if (dialect === "postgres") return Object.hasOwn(PG_TYPES, helper) ? (PG_TYPES[helper] as string) : "TEXT"
 	switch (helper) {
@@ -136,7 +136,7 @@ function transformTables(
 				primaryKey: field.isPrimaryKey,
 				...(reference && { reference }),
 				/* a plain drizzle column is the type drizzle itself writes for it */
-				type: `${field.combKind === null ? field.sqlType.toUpperCase() : drizzleHelperToSqlType(field.combKind, dialect)}${"[]".repeat(field.dimensions ?? 0)}`,
+				type: `${field.databaseKind === null ? field.sqlType.toUpperCase() : drizzleHelperToSqlType(field.databaseKind, dialect)}${"[]".repeat(field.dimensions ?? 0)}`,
 			})
 			if (relation) relations.push(relation)
 			if (tableKey) foreignKeys.push(tableKey)
@@ -239,17 +239,17 @@ export function generateDiagrams(ctx: GeneratorContext, config: DiagramsConfig):
 	const identifiers = new Map(ctx.analysis.tables.map((meta) => [qualifiedName(meta), tableIdentifier(meta)]))
 	const ddl = generateDDL(tables, { dbName, dialect: ctx.dialect, identifiers })
 	const ddlPath = path.join(outputDir, `${dbName}-schema.gen.sql`)
-	writeGenFile(ddlPath, ddl, { generator: "comb", staged: ctx.staged })
+	writeGenFile(ddlPath, ddl, { generator: "database", staged: ctx.staged })
 
 	/* Generate relations JSON */
 	const jsonData = generateRelationsJSON(tables, relations)
 	const jsonPath = path.join(outputDir, `${dbName}-relations.gen.json`)
-	writeGenJsonFile(jsonPath, jsonData, { generator: "comb", staged: ctx.staged })
+	writeGenJsonFile(jsonPath, jsonData, { generator: "database", staged: ctx.staged })
 
 	/* Generate compact AI summary */
 	const compact = generateCompactAI(tables, relations)
 	const compactPath = path.join(outputDir, `${dbName}-ai.gen.txt`)
-	writeGenFile(compactPath, compact, { generator: "comb", staged: ctx.staged })
+	writeGenFile(compactPath, compact, { generator: "database", staged: ctx.staged })
 
 	ctx.log(`Generated diagrams: ${tables.length} tables, ${relations.length} relations`)
 }

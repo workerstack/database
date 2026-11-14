@@ -1,17 +1,17 @@
 /**
- * Which file each row of comb's SQLite history records (`__drizzle_migrations`). A row recorded
+ * Which file each row of database's SQLite history records (`__drizzle_migrations`). A row recorded
  * with a name matches the file of that name, and the file is edited when it no longer has the
  * row's hash. A row from before 0.11 has no name: it matches one file by hash, among the files no
  * named row holds, so two files of one text (an index dropped, then made again) are two files. A
  * row that matches no file was edited or renamed after it was applied; read over the whole
- * directory, comb refuses it. A file applied with --file from outside the directory is recorded by
+ * directory, database refuses it. A file applied with --file from outside the directory is recorded by
  * its path from it (`../lone.sql`), and no file of the directory is expected to match it: a file
  * that has its text, a copy of it moved into the directory, is named, since it would run again.
  * A file's
- * pre-0.5.0 hash matches only a row recorded before comb stopped recording it (migrationHashes): a
+ * pre-0.5.0 hash matches only a row recorded before database stopped recording it (migrationHashes): a
  * later row was recorded under the current hash, so a match by it is an edit its normalizing hides
  * inside a literal. Its folded hash (0.5.0 to 0.20) matches a row of any date that `hash_v` does not
- * mark: a row comb from 0.21 wrote holds the exact hash, and only that matches it.
+ * mark: a row database from 0.21 wrote holds the exact hash, and only that matches it.
  */
 import type { AcceptedHash } from "./parse.ts"
 
@@ -20,11 +20,11 @@ type FileHashes = { hashes: readonly AcceptedHash[]; name: string }
 
 /**
  * One row of the history, with when it was recorded (`created_at`, ms), and whether `hash_v` marks it
- * as written by comb from 0.21 (parse.ts HASH_VERSION)
+ * as written by database from 0.21 (parse.ts HASH_VERSION)
  */
 type HistoryRow = { createdAt: number; hash: string; marked: boolean; name: string | null }
 
-/** Whether `row` records `file`'s text: a hash its text has, on a row recorded while comb recorded that hash */
+/** Whether `row` records `file`'s text: a hash its text has, on a row recorded while database recorded that hash */
 const holds = (file: FileHashes, row: HistoryRow): boolean =>
 	file.hashes.some(({ hash, marked, until }) => row.hash === hash && row.createdAt < until && (marked || !row.marked))
 
@@ -69,11 +69,11 @@ function matchHistory(files: readonly FileHashes[], rows: readonly HistoryRow[],
 	return matched
 }
 
-/** A row of a history comb 0.12 left, by id */
+/** A row of a history database 0.12 left, by id */
 type LegacyRow = HistoryRow & { id: number }
 
 /**
- * The names comb 0.12's named rows take in 0.13, which a rebuild records once. 0.12 named a
+ * The names database 0.12's named rows take in 0.13, which a rebuild records once. 0.12 named a
  * --file by its base name, wherever it was, so a name no file has is resolved in turn: a row whose
  * name a top-level file has keeps it; one whose hash exactly one file no other row holds has takes
  * that file's name (a file renamed under 0.12, so it is not applied again); any other is a file from
@@ -89,7 +89,7 @@ function resolveLegacy(files: readonly FileHashes[], rows: readonly LegacyRow[])
 		const holders = files.filter((file) => !claimed.has(file.name) && holds(file, row))
 		if (holders.length > 1)
 			throw new Error(
-				`${row.name}, applied before 0.13, holds the text of ${holders.map((file) => file.name).join(", ")}, none of them recorded: comb cannot tell which it was; rename all but one`,
+				`${row.name}, applied before 0.13, holds the text of ${holders.map((file) => file.name).join(", ")}, none of them recorded: database cannot tell which it was; rename all but one`,
 			)
 		const name = holders[0]?.name ?? `../${row.name}`
 		if (holders[0] !== undefined) claimed.add(name)

@@ -6,7 +6,7 @@ export { isIso3166Alpha2, isIso3166Alpha3 } from "./formats/iso3166-1.ts"
 export { isIso4217 } from "./formats/iso4217.ts"
 export { isIso639Alpha2 } from "./formats/iso639-1.ts"
 export { jsonValue } from "./json-value.ts"
-export { CombError } from "./error.ts"
+export { DatabaseError } from "./error.ts"
 export {
 	type PasswordHash,
 	passwordText,
@@ -15,35 +15,35 @@ export {
 } from "./password-text.ts"
 export { isStorableText, STORABLE_TEXT_RULE, storableText } from "./storable-text.ts"
 export {
-	carryCombMeta,
-	COMB_FILTER_GRAMMAR,
-	COMB_META_KEY,
-	COMB_META_VERSION,
-	combMeta,
-	type CombEntityMeta,
-	type CombEntityMetaInput,
-	type CombFilterGrammar,
-	type CombMeta,
-	type CombMetaInput,
-	type CombMetaKind,
-	type CombMetaStamp,
-	type CombFilterField,
-	type CombQueryMeta,
-	type CombQueryMetaInput,
-	readCombEntityMeta,
-	readCombMeta,
-	readCombQueryMeta,
+	carryDatabaseMeta,
+	FILTER_GRAMMAR,
+	DATABASE_META_KEY,
+	DATABASE_META_VERSION,
+	databaseMeta,
+	type EntityMeta,
+	type EntityMetaInput,
+	type FilterGrammar,
+	type DatabaseMeta,
+	type DatabaseMetaInput,
+	type DatabaseMetaKind,
+	type DatabaseMetaStamp,
+	type FilterFieldMeta,
+	type QueryMeta,
+	type QueryMetaInput,
+	readEntityMeta,
+	readDatabaseMeta,
+	readQueryMeta,
 } from "./meta.ts"
 export { createUlidFactory, generateId, generateUlid, type UlidFactoryOptions } from "./id.ts"
 export { LruCache, type LruMeta } from "./lru.ts"
 export { defineConstraintMaps } from "./constraint-map.ts"
 export {
-	type CombDatabaseErrorKey,
-	type CombErrorKey,
-	combDatabaseErrorKeys,
+	type DatabaseDriverErrorKey,
+	type DatabaseErrorKey,
+	databaseDriverErrorKeys,
 	type ConstraintMap,
 	type ConstraintMapEntry,
-	combErrorKeys,
+	databaseErrorKeys,
 	type DatabaseErrorHandler,
 	type StatusKey,
 	statusKeyToCode,

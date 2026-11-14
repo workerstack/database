@@ -11,7 +11,7 @@ const ARROW = (from: string, to: string) => `${from} must not import ${to}`
 const BUN =
 	"Bun APIs (the Bun global, bun: modules) belong to src/migrate/core/process.ts, src/migrate/drivers/bun-sqlite.ts and src/bin.ts"
 
-describe("comb/boundaries: feature arrows", () => {
+describe("database/boundaries: feature arrows", () => {
 	it("forbids the dialect and tooling arrows, statically or dynamically", () => {
 		const fixture = {
 			"packages/core/src/pg/columns.ts": 'import { EnumStates } from "../sqlite/constraints.ts"\n',
@@ -48,7 +48,7 @@ describe("comb/boundaries: feature arrows", () => {
 	})
 })
 
-describe("comb/boundaries: allowed imports", () => {
+describe("database/boundaries: allowed imports", () => {
 	it("exempts type-only imports and exports from the arrows", () => {
 		const fixture = {
 			"packages/core/src/pg/columns.ts": 'import type { EnumStates } from "../sqlite/constraints.ts"\n',
@@ -66,15 +66,15 @@ describe("comb/boundaries: allowed imports", () => {
 		const fixture = {
 			"packages/core/src/query/sqlite/keyset.ts": 'import { effectiveNulls } from "../cursor.ts"\n',
 			"packages/core/src/sqlite/d1/error-handler.ts":
-				'import { handleConstraintViolation } from "../constraint-handler.ts"\nimport { CombError } from "../../error.ts"\n',
+				'import { handleConstraintViolation } from "../constraint-handler.ts"\nimport { DatabaseError } from "../../error.ts"\n',
 			"packages/core/src/codegen/generators/dtos/generate.ts": 'import { readMeta } from "../../../meta.ts"\n',
 			"packages/core/src/codegen/utils/validate.ts": 'import { CURSOR_TIEBREAK_COLUMN } from "../../query/cursor.ts"\n',
 			"packages/core/src/cli.ts": 'import { loadConfig } from "./migrate/config.ts"\n',
 			"packages/core/src/sqlite/d1/sharding/router.ts":
-				'import { LruCache } from "../../../lru.ts"\nimport { combErrorKeys } from "../../../types.ts"\n',
+				'import { LruCache } from "../../../lru.ts"\nimport { databaseErrorKeys } from "../../../types.ts"\n',
 			"packages/core/src/pg/error-handler.ts":
-				'import { CombError } from "../error.ts"\nimport { createId } from "../id.ts"\n',
-			"packages/core/src/error.ts": 'import { combErrorKeys } from "./types.ts"\n',
+				'import { DatabaseError } from "../error.ts"\nimport { createId } from "../id.ts"\n',
+			"packages/core/src/error.ts": 'import { databaseErrorKeys } from "./types.ts"\n',
 		}
 		expect(reportsOf(rule, fixture)).toEqual([])
 	})
@@ -94,7 +94,7 @@ describe("comb/boundaries: allowed imports", () => {
 	})
 })
 
-describe("comb/boundaries: packages", () => {
+describe("database/boundaries: packages", () => {
 	it("requires the node: prefix on builtins", () => {
 		const fixture = {
 			"packages/core/src/migrate/core/atlas.ts":
@@ -126,7 +126,7 @@ describe("comb/boundaries: packages", () => {
 	})
 })
 
-describe("comb/boundaries: Bun", () => {
+describe("database/boundaries: Bun", () => {
 	it("keeps the Bun global and bun: modules in the process module, the bun-sqlite driver and the bin shim", () => {
 		const fixture = {
 			"packages/core/src/migrate/drivers/d1.ts":
@@ -158,7 +158,7 @@ describe("comb/boundaries: Bun", () => {
 		expect(reportsOf(rule, fixture)).toEqual([])
 	})
 
-	it("fails oxlint through the comb plugin entry", () => {
+	it("fails oxlint through the database plugin entry", () => {
 		const fixture = {
 			"packages/core/src/pg/columns.ts": 'import { EnumStates } from "../sqlite/constraints.ts"\n',
 			"packages/core/src/sqlite/columns.ts": 'import { sql } from "drizzle-orm"\n',
@@ -173,7 +173,7 @@ describe("comb/boundaries: Bun", () => {
 const BARE_PATH =
 	"import() takes a URL or a package name: Node reads a bare path as a URL (%20 decodes, # starts a fragment), so pass pathToFileURL(path).href"
 
-describe("comb/boundaries: import() takes a URL or a package name", () => {
+describe("database/boundaries: import() takes a URL or a package name", () => {
 	it("refuses a path, however it reaches import()", () => {
 		const fixture = {
 			"packages/core/src/migrate/a.ts":
@@ -219,7 +219,7 @@ describe("comb/boundaries: import() takes a URL or a package name", () => {
 })
 
 /* K7 of r20 */
-describe("comb/boundaries: optional peers", () => {
+describe("database/boundaries: optional peers", () => {
 	const PEER =
 		"an optional peer loads through optionalPeer(name, why, () => import(…)) from src/migrate/core/optional-peer.ts, so a project without it is told the package, its range and the install"
 

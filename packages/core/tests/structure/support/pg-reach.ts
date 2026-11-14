@@ -1,6 +1,6 @@
 /**
  * Whether a test file reaches the Postgres test server, and whether it takes the run's lock itself,
- * read from what its code does, never from its name or path (comb-9d, plan 21): a real import of
+ * read from what its code does, never from its name or path (database-9d, plan 21): a real import of
  * node-postgres, postgres.js or a Postgres test helper, a read of the server's variable, or that
  * variable handed on as a property, as to a child process's env. A string or a comment that only
  * spells one (a lint fixture, a workflow's env line) is no reach, and nor is a type-only import.
@@ -8,7 +8,7 @@
 import { ts } from "ts-morph"
 
 /** The server's variable */
-const PG_VAR = "COMB_TEST_PG_URL"
+const PG_VAR = "DATABASE_TEST_PG_URL"
 
 /** The modules whose import reaches the server: the drivers, and each Postgres test helper (tests/support/pg-suites.ts) */
 const PG_MODULE =

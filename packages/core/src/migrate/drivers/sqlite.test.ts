@@ -211,7 +211,7 @@ describe("createTursoProvider before its API", () => {
 			provider: turso,
 		})
 		await expect(connecting).rejects.toThrow(
-			'comb could not reach the Turso API for "acme/core": fetch failed: connect ECONNREFUSED 127.0.0.1:443',
+			'database could not reach the Turso API for "acme/core": fetch failed: connect ECONNREFUSED 127.0.0.1:443',
 		)
 		await expect(connecting).rejects.toMatchObject({ cause: refused })
 	})
@@ -251,7 +251,7 @@ describe("Turso for a reader (M9)", () => {
 /* M18 of the 0.12 round: libsql reads a URL's scheme in any case, so the read-only guard does too */
 describe("libsql for a reader (M18)", () => {
 	it.each(["file:", "FILE:", "File://"])("refuses a missing file under %s, and creates none", async (scheme) => {
-		const dir = mkdtempSync(join(tmpdir(), "comb-libsql-ro-"))
+		const dir = mkdtempSync(join(tmpdir(), "database-libsql-ro-"))
 		const path = join(dir, "missing.db")
 		const provider = { type: "libsql" as const, url: `${scheme}${path}` }
 		await expect(
@@ -265,7 +265,7 @@ describe("libsql for a reader (M18)", () => {
 /* AD7-8 of the area D round-seven review: the file connection check, status and API callers get waits out a lock */
 describe("libsql on a file", () => {
 	it.each([false, true])("waits up to 5 s for a lock another process holds, read-only %s", async (readonly) => {
-		const dir = mkdtempSync(join(tmpdir(), "comb-libsql-busy-"))
+		const dir = mkdtempSync(join(tmpdir(), "database-libsql-busy-"))
 		const path = join(dir, "a.db")
 		writeFileSync(path, "")
 		const provider = { type: "libsql" as const, url: `file:${path}` }
@@ -294,7 +294,7 @@ describe("libsql for a reader, its file: path decoded as libsql reads it (M80)",
 	})
 
 	it("refuses a URL whose decoded file is missing beside a file named as the URL spells it, and creates none", async () => {
-		const dir = mkdtempSync(join(tmpdir(), "comb-libsql-m80-"))
+		const dir = mkdtempSync(join(tmpdir(), "database-libsql-m80-"))
 		writeFileSync(join(dir, "a%20b.db"), "")
 		await expect(readOnlyAt(`file:${dir}/a%20b.db`)).rejects.toThrow(
 			`${join(dir, "a b.db")} does not exist; check and status open a database read-only, and create none`,
@@ -304,7 +304,7 @@ describe("libsql for a reader, its file: path decoded as libsql reads it (M80)",
 	})
 
 	it("opens a file a URL names percent-encoded, and creates nothing beside it", async () => {
-		const dir = mkdtempSync(join(tmpdir(), "comb-libsql-m80-"))
+		const dir = mkdtempSync(join(tmpdir(), "database-libsql-m80-"))
 		writeFileSync(join(dir, "x y.db"), "")
 		const conn = await readOnlyAt(`file://${dir}/x%20y.db`)
 		await conn.execute("SELECT 1")
@@ -314,7 +314,7 @@ describe("libsql for a reader, its file: path decoded as libsql reads it (M80)",
 	})
 
 	it("leaves a path libsql cannot decode to libsql, which refuses it before opening anything", async () => {
-		const dir = mkdtempSync(join(tmpdir(), "comb-libsql-m80-"))
+		const dir = mkdtempSync(join(tmpdir(), "database-libsql-m80-"))
 		await expect(readOnlyAt(`file:${dir}/bad%ZZ.db`)).rejects.toThrow(/percent encoding/)
 		expect(readdirSync(dir)).toEqual([])
 		rmSync(dir, { force: true, recursive: true })

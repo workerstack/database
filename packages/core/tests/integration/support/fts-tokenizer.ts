@@ -1,6 +1,6 @@
 /**
  * The generator's FTS tokenizer on one engine (U32): `categories` arrived in SQLite 3.30, so each
- * engine comb targets must take it. A table is made with it, a pointed Hebrew word, a Devanagari
+ * engine database targets must take it. A table is made with it, a pointed Hebrew word, a Devanagari
  * word and a Latin word with a diacritic are indexed, and each is found by the term a reader types,
  * a fragment a mark would split off not. No test framework is imported, so vitest and bun:test share it.
  */

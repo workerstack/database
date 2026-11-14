@@ -1,6 +1,6 @@
 /**
  * The VDBE opcodes the proof's walk reads (proof-walk.ts), by what their P1 is. An opcode in none
- * of these lists whose P1 is a write cursor on an existing table is one comb cannot read.
+ * of these lists whose P1 is a write cursor on an existing table is one database cannot read.
  */
 
 /* the opcodes that open a cursor on P1: only OpenWrite on main keeps it a write cursor */

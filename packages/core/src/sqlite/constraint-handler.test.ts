@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { CombError } from "../error.ts"
+import { DatabaseError } from "../error.ts"
 import type { ConstraintMap } from "../types.ts"
 import {
 	classifySqliteError,
@@ -26,7 +26,7 @@ const MAPS: ConstraintMap[] = [
 	},
 ]
 
-function thrown(error: unknown, maps = MAPS): CombError {
+function thrown(error: unknown, maps = MAPS): DatabaseError {
 	const mapped = constraintError(error, maps)
 	if (mapped === null) throw new Error("not mapped")
 	return mapped
@@ -155,8 +155,8 @@ describe("sqliteErrorHandler: the statement behind a foreign key violation", () 
 describe("handleConstraintViolation and sqliteErrorHandler", () => {
 	it("throw the mapped error, and leave non-constraint errors alone", () => {
 		const unique = engine("SQLITE_CONSTRAINT_UNIQUE", "UNIQUE constraint failed: store.slug")
-		expect(() => handleConstraintViolation(unique, MAPS)).toThrow(CombError)
-		expect(() => sqliteErrorHandler(unique, MAPS)).toThrow(CombError)
+		expect(() => handleConstraintViolation(unique, MAPS)).toThrow(DatabaseError)
+		expect(() => sqliteErrorHandler(unique, MAPS)).toThrow(DatabaseError)
 		for (const other of [engine("SQLITE_ERROR", "no such column: x"), new Error("x"), "x"]) {
 			expect(() => handleConstraintViolation(other, MAPS)).not.toThrow()
 			expect(() => sqliteErrorHandler(other, MAPS)).not.toThrow()
@@ -342,7 +342,7 @@ describe("constraintError: a value the column cannot hold (Q10)", () => {
 		)
 	})
 
-	/* C6 of the 0.14.1 review: comb binds every value, so a statement past SQLite's length limit is the server's */
+	/* C6 of the 0.14.1 review: database binds every value, so a statement past SQLite's length limit is the server's */
 	it("leaves a statement too long for the engine to the caller, as no value of the request's", () => {
 		expect(classifySqliteError(engine("SQLITE_TOOBIG", "statement too long"), [])).toBeUndefined()
 	})

@@ -50,9 +50,9 @@ const ORDERS = [
 /** The order string and the cursor's row for `mix` under `order` */
 function request(mix: readonly Kind[], order: readonly string[]) {
 	const row: Record<string, unknown> = {
-		_combId: 7,
-		_combKeyTexts: ",,",
-		_combTextKeys: "",
+		_cursorId: 7,
+		_cursorKeyTexts: ",,",
+		_cursorTextKeys: "",
 		_total: 2,
 		id: 7,
 		r1: 1,
@@ -82,7 +82,7 @@ describe("a three-key cursor's parameters, by every mix of keys", () => {
 				const { order: given, row } = request(mix as Kind[], order)
 				const parsed = schema.parse({ order: given })
 				const [, meta] = queryHelpers.paginate(
-					[row, { ...row, _combId: 8, id: 8 }],
+					[row, { ...row, _cursorId: 8, id: 8 }],
 					queryHelpers.listOptions(parsed, SEALED),
 				)
 				const cursor = meta.nextCursor as string

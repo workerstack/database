@@ -17,7 +17,7 @@ import { withScratchDb } from "../support/pg.ts"
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-pg-adopt-kinds-"))
+	dir = mkdtempSync(join(tmpdir(), "database-pg-adopt-kinds-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
@@ -79,7 +79,7 @@ const KINDS: Readonly<Record<string, (s: string) => string>> = {
 /** What status lists as pending for schema `schema` of `url`, and whether it said public's rows are another schema's */
 async function pendingIn(url: string, schema: string): Promise<{ pending: string[]; theirs: boolean }> {
 	const out: string[] = []
-	const target = { devUrl: "postgres://comb-no-dev.invalid/dev", lockTimeout: "5s", schema, url }
+	const target = { devUrl: "postgres://database-no-dev.invalid/dev", lockTimeout: "5s", schema, url }
 	const { pending } = await statusWithAtlas({ dir, print: (line) => out.push(line), target })
 	return { pending, theirs: out.some((line) => line.includes("are another schema's")) }
 }

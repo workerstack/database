@@ -26,7 +26,7 @@ import { c } from "@workerstack/database/sqlite/columns"
 let tmpDir: string
 
 beforeEach(() => {
-	tmpDir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-meta-entity-"))
+	tmpDir = fs.mkdtempSync(path.join(fixtureRoot(), "database-meta-entity-"))
 })
 
 afterEach(() => {
@@ -158,18 +158,18 @@ describe("entity meta matches the generated DTOs", () => {
 
 	it("stamps the read schema and only the read schema", async () => {
 		const generated = generatedFile(await analyzeSource(fullTable), "post")
-		expect(generated).toContain(`import { combMeta } from "@workerstack/database/meta"`)
-		expect(generated.match(/combMeta\(\{/g)).toHaveLength(1)
-		expect(generated).toMatch(/postDtoReadSchema = z\.object\(\{[\s\S]*?\}\)\.meta\(combMeta\(\{/)
+		expect(generated).toContain(`import { databaseMeta } from "@workerstack/database/meta"`)
+		expect(generated.match(/databaseMeta\(\{/g)).toHaveLength(1)
+		expect(generated).toMatch(/postDtoReadSchema = z\.object\(\{[\s\S]*?\}\)\.meta\(databaseMeta\(\{/)
 	})
 
 	it("emits no stamp and no import when no table has a single identity", async () => {
-		expect(generatedFile(await analyzeSource(compositeTable), "post-tag")).not.toContain("combMeta")
+		expect(generatedFile(await analyzeSource(compositeTable), "post-tag")).not.toContain("databaseMeta")
 	})
 
 	it("honours a custom importFrom, as the entities generator does", async () => {
 		const generated = generatedFile(await analyzeSource(fullTable), "post", { importFrom: "@acme/db" })
-		expect(generated).toContain(`import { combMeta } from "@acme/db/meta"`)
+		expect(generated).toContain(`import { databaseMeta } from "@acme/db/meta"`)
 	})
 
 	it("regenerates byte-identically, so the checksum header does not churn", async () => {
@@ -183,7 +183,7 @@ describe("entity meta matches the generated DTOs", () => {
 
 describe("a mismatch fails loudly", () => {
 	it("warns, but does not block codegen, when the primary key is not the tiebreak column", async () => {
-		/* Plenty of tables are never listed — join tables, lookup maps, comb's own
+		/* Plenty of tables are never listed — join tables, lookup maps, database's own
 		   shard_map. Blocking codegen for those would force a rename of a column
 		   that is named correctly. The exact guarantee lives in buildListQuery. */
 		const result = await validateSource(`
@@ -386,13 +386,13 @@ export const post = createTable("post", {
 		const meta = deriveEntityMeta(table)!
 		const rendered = `[${meta.uniqueIndexes.map((idx) => `{ columns: ${list(idx.columns)}, name: ${JSON.stringify(idx.name)} }`).join(", ")}]`
 
-		expect(generated).toMatch(/postDtoReadSchema = z\.object\(\{[\s\S]*?\}\)\.meta\(combMeta\(\{/)
+		expect(generated).toMatch(/postDtoReadSchema = z\.object\(\{[\s\S]*?\}\)\.meta\(databaseMeta\(\{/)
 		expect(generated).toContain(`uniqueIndexes: ${rendered}`)
 		expect(meta.uniqueIndexes).toEqual(table.uniqueIndexes)
 
-		expect(generated.match(/combMeta\(\{/g)).toHaveLength(1)
-		expect(generated).not.toMatch(/postDtoCreateSchema[\s\S]*?\.meta\(combMeta/)
-		expect(generated).not.toMatch(/postDtoUpdateSchema[\s\S]*?\.meta\(combMeta/)
+		expect(generated.match(/databaseMeta\(\{/g)).toHaveLength(1)
+		expect(generated).not.toMatch(/postDtoCreateSchema[\s\S]*?\.meta\(databaseMeta/)
+		expect(generated).not.toMatch(/postDtoUpdateSchema[\s\S]*?\.meta\(databaseMeta/)
 	})
 })
 

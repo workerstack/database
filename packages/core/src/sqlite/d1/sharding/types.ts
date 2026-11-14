@@ -15,7 +15,7 @@ type ShardMapping = {
 	orgId: string
 	/** the shard the org's rows are on, from 0 up to `totalShards - 1` */
 	shardId: number
-	/** the suffix of the env binding getHandle opens, `SHARD_DB_<target>`; comb writes it as String(shardId) */
+	/** the suffix of the env binding getHandle opens, `SHARD_DB_<target>`; database writes it as String(shardId) */
 	target: string
 	/** when the mapping last changed, in epoch milliseconds */
 	updatedAt: number

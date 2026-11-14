@@ -61,7 +61,7 @@ describe("readyDevSchema", () => {
 		const refused = readyDevSchema(target("app"), load)
 		await expect(refused).rejects.toBeInstanceOf(ReplayFailed)
 		await expect(refused).rejects.toThrow(
-			/^comb could not create schema app on devUrl, where Atlas replays the migrations: /,
+			/^database could not create schema app on devUrl, where Atlas replays the migrations: /,
 		)
 		await expect(refused).rejects.not.toThrow("Dev-Secret-0451")
 		expect(seen.ended).toBe(true)
@@ -75,7 +75,7 @@ describe("readyDevSchema", () => {
 		try {
 			const { readyDevSchema: fresh } = await import("./pg-dev-schema.ts")
 			await expect(fresh(target("app"))).rejects.toThrow(
-				`comb needs postgres (>=3.4.9 <4) to create a non-public schema on devUrl; install "postgres@>=3.4.9 <4"`,
+				`database needs postgres (>=3.4.9 <4) to create a non-public schema on devUrl; install "postgres@>=3.4.9 <4"`,
 			)
 		} finally {
 			vi.doUnmock("postgres")
@@ -117,12 +117,12 @@ describe("readyDevSchema on a connection every address refused", () => {
 	it("says what each address answered when the failure's own message is empty", async () => {
 		const refused = new AggregateError([new Error("connect ECONNREFUSED 127.0.0.1:5433")], "")
 		await expect(readyDevSchema(target("app"), fakeConnect(refused).load)).rejects.toThrow(
-			"comb could not create schema app on devUrl, where Atlas replays the migrations: connect ECONNREFUSED 127.0.0.1:5433",
+			"database could not create schema app on devUrl, where Atlas replays the migrations: connect ECONNREFUSED 127.0.0.1:5433",
 		)
 	})
 })
 
-/* P2 of r19: a devUrl pgUrlProblems refuses is refused before comb connects to anything, whatever the schema */
+/* P2 of r19: a devUrl pgUrlProblems refuses is refused before database connects to anything, whatever the schema */
 describe("readyDevSchema: devUrl checked before any connection", () => {
 	const url = "postgres://app@db.example/app?sslmode=require"
 	it.each([

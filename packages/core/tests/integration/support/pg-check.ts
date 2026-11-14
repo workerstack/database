@@ -39,7 +39,7 @@ function heldScratchDb(): () => string {
 }
 
 /** A directory of migrations for a check */
-const tempDir = (): string => mkdtempSync(join(tmpdir(), "comb-pg-check-replay-"))
+const tempDir = (): string => mkdtempSync(join(tmpdir(), "database-pg-check-replay-"))
 
 /** The options a check of `dir` against `target` takes, collecting what it prints in `out` */
 const optionsOf = (dir: string, target: { devUrl: string; url: string }, out: string[]) => ({
@@ -51,8 +51,8 @@ const optionsOf = (dir: string, target: { devUrl: string; url: string }, out: st
 
 /** `one` then `two`, written in `dir` and hashed: a history of `one` with `two` pending, as check replays them */
 async function filesIn(dir: string, one: string, two: string): Promise<void> {
-	/* CREATE STATISTICS is a kind comb does not rate: the history's own approval lets it pass */
-	writeFileSync(join(dir, "20260101000000_one.sql"), `-- comb:allow-unsafe: the test's history\n${one}`)
+	/* CREATE STATISTICS is a kind database does not rate: the history's own approval lets it pass */
+	writeFileSync(join(dir, "20260101000000_one.sql"), `-- database:allow-unsafe: the test's history\n${one}`)
 	writeFileSync(join(dir, "20260102000000_two.sql"), two)
 	await hashDir(run, dir)
 }

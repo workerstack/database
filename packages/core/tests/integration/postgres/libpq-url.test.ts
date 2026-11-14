@@ -1,5 +1,5 @@
 /**
- * P3, P4 and 18.3 of plan 15: comb reaches the database libpq and Atlas read from a URL, whatever
+ * P3, P4 and 18.3 of plan 15: database reaches the database libpq and Atlas read from a URL, whatever
  * libpq spelling names it. postgres.js reads none of libpq's query keys and sends each one it does
  * not know to the server as a setting, so a `?port=` reached another server, and a `?dbname=` or an
  * `sslrootcert` failed as an unknown setting, where Atlas took each.
@@ -21,7 +21,7 @@ beforeAll(loadPostgresParser)
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-libpq-url-"))
+	dir = mkdtempSync(join(tmpdir(), "database-libpq-url-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
@@ -50,7 +50,7 @@ function spellings(url: string): Record<string, string> {
 	}
 }
 
-describe("comb on a URL in each libpq spelling, as Atlas reads it", () => {
+describe("database on a URL in each libpq spelling, as Atlas reads it", () => {
 	it("reads the live functions of the database each spelling names", async () => {
 		await withScratchDb(async (url) => {
 			await exec(url, FUNCTION)
@@ -71,7 +71,7 @@ describe("comb on a URL in each libpq spelling, as Atlas reads it", () => {
 		})
 	})
 
-	it("baselines a database through a ?port= target and dev URL, Atlas and comb reading one server", async () => {
+	it("baselines a database through a ?port= target and dev URL, Atlas and database reading one server", async () => {
 		await withScratchDb((dev) =>
 			withScratchDb(async (url) => {
 				await exec(url, FUNCTION)

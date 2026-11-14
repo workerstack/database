@@ -7,8 +7,8 @@
  * it in another list. Only an opening call, readCursor, hands back its values; the list schema
  * checks its shape alone, as it holds no secret.
  */
-import { CombError } from "../error.ts"
-import { combErrorKeys } from "../types.ts"
+import { DatabaseError } from "../error.ts"
+import { databaseErrorKeys } from "../types.ts"
 import {
 	CursorRef,
 	decodeId,
@@ -39,7 +39,7 @@ import type { SortDirection, SortField, SortNulls } from "./types.ts"
 const CURSOR_TIEBREAK_COLUMN = "id"
 
 /**
- * The longest cursor a list takes, and so the longest comb mints: it fits a URL. A cursor carries
+ * The longest cursor a list takes, and so the longest database mints: it fits a URL. A cursor carries
  * its sort values, so a long text key could mint one past it, which the next page would refuse.
  */
 const MAX_CURSOR_LENGTH = 8192
@@ -106,7 +106,7 @@ function payloadBytes(payload: CursorPayload): Uint8Array {
 	)
 }
 
-/** Each key's carried flag from the wire; none is every key as read, as every cursor a released comb minted holds */
+/** Each key's carried flag from the wire; none is every key as read, as every cursor a released database minted holds */
 function carriedOf(c: unknown, count: number): boolean[] | undefined {
 	if (c === undefined) return Array.from({ length: count }, () => false)
 	return Array.isArray(c) && c.length === count && c.every((flag) => typeof flag === "boolean") ? c : undefined
@@ -202,14 +202,15 @@ function openCursor(cursor: string, options: CursorOptions): OpenedCursor | null
 	return bytes === null ? null : decodePayload(bytes)
 }
 
-/** The cursor as the keyset binds it, each key's stored value, for this sort; a 400 CombError as readCursor throws */
+/** The cursor as the keyset binds it, each key's stored value, for this sort; a 400 DatabaseError as readCursor throws */
 function readKeyset(cursor: string, parsedSort: readonly SortField[], options: CursorOptions): OpenedCursor {
 	/* options that cannot seal are the handler's 500 whatever the cursor, a long one too */
 	assertCursorWired(options)
-	/* longer than any cursor comb mints: refused before it is decoded */
+	/* longer than any cursor database mints: refused before it is decoded */
 	const decoded = cursor.length > MAX_CURSOR_LENGTH ? null : openCursor(cursor, options)
 	const problem = decoded ? signatureProblem(decoded, parsedSort) : "Invalid cursor"
-	if (problem) throw new CombError({ cause: problem, errorKey: combErrorKeys.INVALID_CURSOR, status: "bad_request" })
+	if (problem)
+		throw new DatabaseError({ cause: problem, errorKey: databaseErrorKeys.INVALID_CURSOR, status: "bad_request" })
 	return decoded as OpenedCursor
 }
 
@@ -223,7 +224,7 @@ function readCompared(cursor: string, parsedSort: readonly SortField[], options:
 }
 
 /**
- * Open a cursor under `options` and decode it for this sort, or throw a 400 CombError. Each key is
+ * Open a cursor under `options` and decode it for this sort, or throw a 400 DatabaseError. Each key is
  * as the cursor's row read it, where the list pages by another value: a time key is the Date the
  * driver read, an Invalid one included, and bytes are a Uint8Array. A value may be a CursorRef: a long sort value
  * carried by reference, its prefix and length, which a keyset of its own must read from the

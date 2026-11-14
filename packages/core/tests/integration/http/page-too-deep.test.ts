@@ -6,16 +6,16 @@
 import { zValidator } from "@hono/zod-validator"
 import { Hono } from "hono"
 import { describe, expect, it } from "vitest"
-import { CombError } from "../../../src/error.ts"
+import { DatabaseError } from "../../../src/error.ts"
 import { createListQuerySchema } from "../../../src/query/index.ts"
 
-/** An app as a consumer wires one: comb's schema in zValidator, and a CombError answered by its key */
+/** An app as a consumer wires one: database's schema in zValidator, and a DatabaseError answered by its key */
 function app(maxPage?: number) {
 	const schema = createListQuerySchema({ sort: ["id"], ...(maxPage ? { pagination: { maxPage } } : {}) })
 	return new Hono()
 		.get("/items", zValidator("query", schema), (c) => c.json({ page: c.req.valid("query").page ?? 1 }))
 		.onError((error, c) => {
-			if (error instanceof CombError) return c.json({ error_key: error.errorKey }, error.status as 400)
+			if (error instanceof DatabaseError) return c.json({ error_key: error.errorKey }, error.status as 400)
 			return c.json({ error_key: "internal" }, 500)
 		})
 }

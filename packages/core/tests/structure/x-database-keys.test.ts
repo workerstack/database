@@ -1,5 +1,5 @@
 /**
- * C1, C2 of r22: every `x-comb-*` key and every `x-comb-transform` value comb publishes is one
+ * C1, C2 of r22: every `x-database-*` key and every `x-database-transform` value database publishes is one
  * meta-contract §2.1 defines, so a reader built from the contract knows each one, and a root
  * export's published schema, read as §2.1 defines its keys, takes what its parse takes. The walk
  * covers each DTO codegen writes for a table of every kind that publishes a key, on both dialects,
@@ -21,16 +21,16 @@ const FIELD_KEYS = CONTRACT.slice(CONTRACT.indexOf("### 2.1 Field keys"), CONTRA
 
 /** The keys §2.1 defines: the backticked names that head each of its top-level bullets, before the colon */
 function definedKeys(): string[] {
-	const bullets = FIELD_KEYS.split(/\n(?=- )/).filter((bullet) => bullet.startsWith("- `x-comb-"))
+	const bullets = FIELD_KEYS.split(/\n(?=- )/).filter((bullet) => bullet.startsWith("- `x-database-"))
 	return bullets.flatMap((bullet) => {
 		const head = bullet.slice(0, bullet.search(/`:/) + 1)
-		return [...head.matchAll(/`(x-comb-[A-Za-z0-9]+)`/g)].map(([, key]) => key as string)
+		return [...head.matchAll(/`(x-database-[A-Za-z0-9]+)`/g)].map(([, key]) => key as string)
 	})
 }
 
-/** Each id the `x-comb-format` bullet of §2.1 lists, one sub-bullet each, with the text after it */
+/** Each id the `x-database-format` bullet of §2.1 lists, one sub-bullet each, with the text after it */
 function definedFormats(): Array<[string, string]> {
-	const bullet = FIELD_KEYS.split(/\n(?=- )/).find((each) => each.startsWith("- `x-comb-format`:")) ?? ""
+	const bullet = FIELD_KEYS.split(/\n(?=- )/).find((each) => each.startsWith("- `x-database-format`:")) ?? ""
 	return [...bullet.matchAll(/^ {2}- `([\w-]+)`: (.+)$/gm)].map(([, id, text]) => [id as string, text as string])
 }
 
@@ -53,13 +53,13 @@ const definedTransforms = (): string[] =>
 
 type Found = { keys: Set<string>; transforms: Set<string> }
 
-/** Each `x-comb-*` key anywhere in `node`, and each transform an `x-comb-transform` lists */
+/** Each `x-database-*` key anywhere in `node`, and each transform an `x-database-transform` lists */
 function collect(node: unknown, found: Found): Found {
 	if (Array.isArray(node)) for (const child of node) collect(child, found)
 	else if (node !== null && typeof node === "object")
 		for (const [key, child] of Object.entries(node)) {
-			if (key.startsWith("x-comb-")) found.keys.add(key)
-			if (key === "x-comb-transform") for (const name of child as string[]) found.transforms.add(name)
+			if (key.startsWith("x-database-")) found.keys.add(key)
+			if (key === "x-database-transform") for (const name of child as string[]) found.transforms.add(name)
 			collect(child, found)
 		}
 	return found
@@ -68,7 +68,7 @@ function collect(node: unknown, found: Found): Found {
 const PG = `import { cidr, inet, integer, interval, json, jsonb, macaddr, numeric, text, time, varchar } from "drizzle-orm/pg-core"
 import * as z from "zod"
 export const Doc = z.object({ a: z.string() })
-export const Reg = z.object({ b: z.string() }).meta({ id: "XcombKeysReg" })
+export const Reg = z.object({ b: z.string() }).meta({ id: "XDatabaseKeysReg" })
 export const DateOrder = z.enum(["iso", "dmy", "mdy"])
 export const row = pgTable("row", {
 	id: c.id("row"),
@@ -136,7 +136,7 @@ async function codegenDocuments(): Promise<unknown[]> {
 		["postgres", PG],
 		["sqlite", SQLITE],
 	] as const) {
-		const dtos = await generatedDtos(`xcomb-keys-${dialect}`, tables, { dialect })
+		const dtos = await generatedDtos(`x-database-keys-${dialect}`, tables, { dialect })
 		for (const schema of Object.values(dtos["row"] as Record<string, unknown>))
 			if (schema instanceof z.ZodType)
 				for (const io of ["input", "output"] as const)
@@ -185,7 +185,7 @@ const PROBES = [
 	`${"x".repeat(15)}\u0000`,
 ]
 
-describe("the x-comb keys comb publishes (C1, C2; siblings: codegen's transforms and a read's stated bounds)", () => {
+describe("the x-database keys database publishes (C1, C2; siblings: codegen's transforms and a read's stated bounds)", () => {
 	it("are each one meta-contract §2.1 defines, and the contract reader knows exactly those", async () => {
 		const found: Found = { keys: new Set(), transforms: new Set() }
 		for (const document of await codegenDocuments()) collect(document, found)
@@ -197,7 +197,7 @@ describe("the x-comb keys comb publishes (C1, C2; siblings: codegen's transforms
 		expect(definedTransforms().toSorted()).toEqual(Object.keys(CONTRACT_TRANSFORMS).toSorted())
 	})
 
-	it("lists, under x-comb-format, every format with its standard and the registry a reader must check", () => {
+	it("lists, under x-database-format, every format with its standard and the registry a reader must check", () => {
 		expect(definedFormats()).toEqual(catalogFormats())
 	})
 
@@ -215,7 +215,7 @@ describe("the x-comb keys comb publishes (C1, C2; siblings: codegen's transforms
 			["postgres", PG],
 			["sqlite", SQLITE],
 		] as const) {
-			const create = (await generatedDtos(`xcomb-formats-${dialect}`, tables, { dialect }))["row"]?.[
+			const create = (await generatedDtos(`x-database-formats-${dialect}`, tables, { dialect }))["row"]?.[
 				"rowDtoCreateSchema"
 			] as z.ZodObject
 			const properties = published(create)["properties"] as Record<string, Record<string, unknown>>

@@ -1,5 +1,5 @@
 /**
- * The bun:sqlite migration driver. Bun's APIs live in this file alone (comb/boundaries), and
+ * The bun:sqlite migration driver. Bun's APIs live in this file alone (database/boundaries), and
  * bun:sqlite is imported on connect, so the module loads under Node too.
  */
 import { BUSY_TIMEOUT } from "../core/apply.ts"
@@ -8,7 +8,7 @@ import { openFileDatabase } from "./file-open.ts"
 import type { Open } from "./local-db.ts"
 import type {
 	BunSqliteProviderConfig,
-	Connection,
+	MigrateConnection,
 	ConnectionProvider,
 	QueryResult,
 	ResolvedDatabaseConfig,
@@ -39,7 +39,7 @@ type BunDatabase = {
 	transaction(run: () => void): { immediate(): void }
 }
 
-function bunSqliteConnection(db: BunDatabase): Connection {
+function bunSqliteConnection(db: BunDatabase): MigrateConnection {
 	return {
 		/* async, so a failing statement rejects the promise instead of throwing past it */
 		async batch(statements: Array<{ sql: string; params?: unknown[] | undefined }>): Promise<void> {
@@ -69,7 +69,7 @@ function bunSqliteConnection(db: BunDatabase): Connection {
  */
 export function createBunSqliteProvider(config: BunSqliteProviderConfig): ConnectionProvider {
 	return {
-		async connect(dbConfig?: ResolvedDatabaseConfig): Promise<Connection> {
+		async connect(dbConfig?: ResolvedDatabaseConfig): Promise<MigrateConnection> {
 			await pastStop()
 			/* an in-memory database holds nothing to protect, and bun opens none read-only */
 			const readonly = dbConfig?.readonly === true && config.path !== ":memory:"

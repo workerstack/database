@@ -1,7 +1,7 @@
 /**
- * M79's structural guard: comb decides on Atlas's text as Atlas wrote it, so every path that
+ * M79's structural guard: database decides on Atlas's text as Atlas wrote it, so every path that
  * prints any of it must scrub it. Each Atlas path here runs against a fake whose stdout and stderr
- * both carry the target's password, and nothing comb throws or prints may hold it.
+ * both carry the target's password, and nothing database throws or prints may hold it.
  */
 import type { LiveObjects } from "./pg-live-types.ts"
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
@@ -10,7 +10,7 @@ import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { applyWithAtlas, baselineWithAtlas, statusWithAtlas } from "./atlas-apply.ts"
 import { sqlFiles } from "./atlas-dir.ts"
-import type { Run, RunResult } from "./process.ts"
+import type { MigrateRun, RunResult } from "./process.ts"
 import { noLive } from "../__fixtures__/live-objects.ts"
 
 const SECRET = "Pw0rd-Secret"
@@ -24,7 +24,7 @@ const LEAK = `dial postgres://app:${SECRET}@db/app: ${SECRET} rejected`
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-atlas-leak-"))
+	dir = mkdtempSync(join(tmpdir(), "database-atlas-leak-"))
 	writeFileSync(join(dir, "1_a.sql"), 'CREATE TABLE "a" ("id" int);\n')
 	writeFileSync(join(dir, "2_b.sql"), 'CREATE TABLE "b" ("id" int);\n')
 	hashed(["migrate", "hash", "--dir", `file://${dir}`])
@@ -65,7 +65,7 @@ function fake(answers: {
 	schemaDiff?: RunResult
 	set?: RunResult
 	status: RunResult
-}): Run {
+}): MigrateRun {
 	return async (_cmd, args) => {
 		if (args[1] === "hash") return hashed(args)
 		if (args[0] === "schema") return (args[1] === "inspect" ? answers.inspect : answers.schemaDiff) ?? failing
@@ -168,15 +168,15 @@ const at = (password: string) => ({ ...target(), url: `postgres://app:${password
 const echo = (password: string) =>
 	`Error: sql/migrate: connected database is not clean: dial postgres://app:${password}@db/app`
 
-/* CI's Postgres password is `comb`: a scrub must touch only what Atlas wrote, never comb's own words */
-describe("comb's own words, whatever the password spells (M79)", () => {
+/* CI's Postgres password is `database`: a scrub must touch only what Atlas wrote, never database's own words */
+describe("database's own words, whatever the password spells (M79)", () => {
 	it("keeps the not-clean refusal whole under CI's password, and masks the password Atlas echoed", async () => {
 		/* CI's path: a database with tables and no history, whose dry run Atlas refuses as not clean */
-		const notClean = fake({ dry: { code: 1, stderr: echo("comb"), stdout: "" }, status: status(PENDING) })
+		const notClean = fake({ dry: { code: 1, stderr: echo("database"), stdout: "" }, status: status(PENDING) })
 		await expect(
-			applyWithAtlas({ approve, dir, exec: notClean, print: () => undefined, target: at("comb") }),
+			applyWithAtlas({ approve, dir, exec: notClean, print: () => undefined, target: at("database") }),
 		).rejects.toThrow(
-			"the database has objects but no migration history, and no shared history row matches this directory's files (a database made by hand, or another directory's history); if its schema matches the migrations, record them with comb migrate baseline",
+			"the database has objects but no migration history, and no shared history row matches this directory's files (a database made by hand, or another directory's history); if its schema matches the migrations, record them with database migrate baseline",
 		)
 	})
 
@@ -188,7 +188,7 @@ describe("comb's own words, whatever the password spells (M79)", () => {
 			["Error: functions are available to logged-in users only", "take them out of the drizzle schema"],
 		]
 		for (const [stderr, sentence] of explained) {
-			for (const password of ["comb", ...sentence.split(/\W+/).filter((word) => word.length > 2)]) {
+			for (const password of ["database", ...sentence.split(/\W+/).filter((word) => word.length > 2)]) {
 				const said = await leaks((print) =>
 					applyWithAtlas({
 						approve,

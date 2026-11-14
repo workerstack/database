@@ -1,5 +1,5 @@
 /**
- * comb.config.ts written through defineCodegenConfig: a valid config compiles, and a mistyped
+ * database.config.ts written through defineCodegenConfig: a valid config compiles, and a mistyped
  * generator, output key or driver is a compile error rather than a run that ignores it.
  */
 import path from "node:path"

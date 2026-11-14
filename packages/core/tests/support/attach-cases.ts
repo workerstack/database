@@ -1,7 +1,7 @@
 /**
  * The ATTACH cases of PA16 of r22b, each a history and an ATTACH after it: IMPLIED those whose bound
- * the history's validated CHECKs imply, so Postgres 17 skips the partition's scan and comb warns of
- * nothing; SCANNED those comb cannot prove, which keep the scan's warning.
+ * the history's validated CHECKs imply, so Postgres 17 skips the partition's scan and database warns of
+ * nothing; SCANNED those database cannot prove, which keep the scan's warning.
  * src/migrate/core/pg-bounds.test.ts rates each, and
  * tests/integration/postgres/attach-implied-oracle.test.ts runs each on Postgres.
  */
@@ -131,7 +131,7 @@ export const SCANNED: readonly AttachCase[] = [
 	["no CHECK", plain, ATTACH],
 	["a key that may be null", `${PARENT}CREATE TABLE o (id int, at date, ${BOUND});\n`, ATTACH],
 	[
-		"a CHECK with a term comb does not read",
+		"a CHECK with a term database does not read",
 		`${plain}ALTER TABLE o ADD CHECK (at >= '2026-01-01' AND at < '2027-01-01' AND id > length('x'));\n`,
 		ATTACH,
 	],
@@ -366,7 +366,7 @@ export const SCANNED: readonly AttachCase[] = [
 ]
 
 /**
- * A case whose files each run in a session of their own, as comb's apply runs them (AE2-5 of r22):
+ * A case whose files each run in a session of their own, as database's apply runs them (AE2-5 of r22):
  * what it is, the history's files, the pending file that ends in an ATTACH, and whether Postgres
  * scans the partition. A temp relation dies with its file's session, and within its file an
  * unqualified name resolves to it first, as pg_temp leads the search path.

@@ -10,14 +10,14 @@ export type MigrateProject = { dir: string; migrationsDir: string; url: string; 
 
 /** A project whose core database is `local.db`, or the libsql `url` given, holding `migrations` in `m/`, hashed */
 export function migrateProject(migrations: Record<string, string>, target?: { url: string }): MigrateProject {
-	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "comb-migrate-"))
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "database-migrate-"))
 	const migrationsDir = path.join(dir, "m")
 	fs.mkdirSync(migrationsDir)
 	for (const [name, sql] of Object.entries(migrations)) fs.writeFileSync(path.join(migrationsDir, name), sql)
 	spawnSync("atlas", ["migrate", "hash", "--dir", `file://${migrationsDir}`])
 	const url = target?.url ?? `file:${path.join(dir, "local.db")}`
 	fs.writeFileSync(
-		path.join(dir, "comb.migrate.config.ts"),
+		path.join(dir, "database.migrate.config.ts"),
 		`export default { databases: { core: { migrationsDir: "./m", environments: {
 	local: { name: "core", provider: { type: "libsql", url: ${JSON.stringify(url)} } },
 } } } }\n`,

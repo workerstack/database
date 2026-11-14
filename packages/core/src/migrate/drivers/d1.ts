@@ -7,10 +7,10 @@ import { hold } from "../core/cleanup.ts"
 import { findWranglerConfig, localHeld, wranglerReader } from "../core/d1-binding.ts"
 import { projectBin } from "../core/optional-peer.ts"
 import { WRANGLER } from "../core/peer-needs.ts"
-import { type ProjectBin, type Run, run, runPeer } from "../core/process.ts"
+import { type ProjectBin, type MigrateRun, run, runPeer } from "../core/process.ts"
 import { segments } from "../../sql-lexer.ts"
 import { LOCAL_LOCK_MS, LOCKER, lockedOut } from "./d1-lock.ts"
-import type { Connection, ConnectionProvider, D1ProviderConfig, QueryResult } from "../types.ts"
+import type { MigrateConnection, ConnectionProvider, D1ProviderConfig, QueryResult } from "../types.ts"
 
 /* wrangler JSON output schema for query results, built on use: each command parses it once */
 const wranglerResultSchema = () =>
@@ -25,7 +25,7 @@ function readAllResults(stdout: string): Array<Array<Record<string, unknown>>> {
 		throw new Error(`wrangler printed output that is not JSON: ${stdout.trim().slice(0, 200)}`)
 	}
 	const parsed = wranglerResultSchema().safeParse(json)
-	if (!parsed.success) throw new Error(`wrangler printed JSON comb cannot read: ${stdout.trim().slice(0, 200)}`)
+	if (!parsed.success) throw new Error(`wrangler printed JSON database cannot read: ${stdout.trim().slice(0, 200)}`)
 	return parsed.data.map((result) => result.results)
 }
 
@@ -39,12 +39,12 @@ function asQueryResult(results: Array<Record<string, unknown>>): QueryResult {
 }
 
 /**
- * wrangler as the D1 commands run it: the project's bin, the one comb checked, through `exec`, and
+ * wrangler as the D1 commands run it: the project's bin, the one database checked, through `exec`, and
  * whether another process holds the local database's write lock now (d1-lock.ts lockedOut)
  */
-type Wrangler = { exec: Run; held: () => Promise<boolean>; wrangler: ProjectBin }
+type Wrangler = { exec: MigrateRun; held: () => Promise<boolean>; wrangler: ProjectBin }
 
-/** Whether `ms` ran out (true), or a signal stopped comb first (its name), after which nothing new starts */
+/** Whether `ms` ran out (true), or a signal stopped database first (its name), after which nothing new starts */
 function waitOut(ms: number): Promise<true | NodeJS.Signals> {
 	return new Promise((resolve) => {
 		const release = hold(async (signal) => {
@@ -64,7 +64,7 @@ function waitOut(ms: number): Promise<true | NodeJS.Signals> {
  * start can outlast the whole window, so the window starts at the lock, not the start): wrangler sends each --command as
  * one request, and miniflare runs each request in one transaction (transactionSync), so the request a held
  * lock failed made no change, and running it again runs it once. Even a read takes the write lock there, and
- * a command cannot set busy_timeout (SQLITE_AUTH), so the wait is comb's. Whether a run met the lock is
+ * a command cannot set busy_timeout (SQLITE_AUTH), so the wait is database's. Whether a run met the lock is
  * workerd's SQLITE_BUSY in its output or, since a run can end before workerd's line is forwarded, SQLite's own
  * answer for the file (d1-lock.ts lockedOut). A remote command runs once.
  */
@@ -83,7 +83,9 @@ async function runWrangler({ exec, held, wrangler }: Wrangler, args: string[]): 
 			throw new Error(`${failed}: the local D1 database stayed locked by ${LOCKER} for 5 s: let it finish and rerun`)
 		const waited = await waitOut(Math.min(delay, left))
 		if (waited !== true)
-			throw new Error(`${failed}: comb stopped (${waited}) while the local D1 database was locked by another process`)
+			throw new Error(
+				`${failed}: database stopped (${waited}) while the local D1 database was locked by another process`,
+			)
 	}
 }
 
@@ -164,7 +166,7 @@ function commands(statements: readonly string[]): string[] {
 	return chunk === "" ? out : [...out, chunk]
 }
 
-function createD1Connection(databaseName: string, flags: readonly string[], spawn: Wrangler): Connection {
+function createD1Connection(databaseName: string, flags: readonly string[], spawn: Wrangler): MigrateConnection {
 	return {
 		async batch(statements: Array<{ sql: string; params?: unknown[] | undefined }>): Promise<void> {
 			/* wrangler binds no parameters in a batch, so they are inlined as literals */
@@ -202,7 +204,7 @@ function createD1Connection(databaseName: string, flags: readonly string[], spaw
  * for them all: wrangler answers a result per statement, and one that fails fails the call
  */
 async function executeAll(
-	exec: Run,
+	exec: MigrateRun,
 	{ flags, held, name, wrangler }: Omit<Wrangler, "exec"> & { flags: readonly string[]; name: string },
 	statements: readonly string[],
 ): Promise<Array<Array<Record<string, unknown>>>> {
@@ -221,7 +223,7 @@ export { executeAll, wranglerFlags }
  * resolved: the D1 database is the provider's databaseName (its binding or database_name), never
  * the environment's name the resolved config carries, which wrangler knows nothing of
  */
-export function connectD1(config: D1ProviderConfig, spawn: Wrangler): Connection {
+export function connectD1(config: D1ProviderConfig, spawn: Wrangler): MigrateConnection {
 	return createD1Connection(config.databaseName, wranglerFlags(config), spawn)
 }
 
@@ -229,9 +231,9 @@ export function connectD1(config: D1ProviderConfig, spawn: Wrangler): Connection
  * A D1 provider whose connection runs the wrangler the project at the working folder holds, checked on connect;
  * its local file is the one the config names, or else the one wrangler finds in the working folder
  */
-export function createD1Provider(config: D1ProviderConfig, exec: Run = run): ConnectionProvider {
+export function createD1Provider(config: D1ProviderConfig, exec: MigrateRun = run): ConnectionProvider {
 	return {
-		connect(): Promise<Connection> {
+		connect(): Promise<MigrateConnection> {
 			return Promise.resolve().then(() => {
 				const wrangler = projectBin(WRANGLER, process.cwd())
 				const held = localHeld(() => wranglerReader(wrangler), {

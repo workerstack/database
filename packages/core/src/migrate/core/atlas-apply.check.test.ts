@@ -10,12 +10,12 @@ import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { applyWithAtlas, type ApplyOptions } from "./atlas-apply.ts"
 import { sumHashes } from "./atlas-dir.ts"
-import type { Run } from "./process.ts"
+import type { MigrateRun } from "./process.ts"
 import { type Fake, fakeAtlas, file, ok, revision, status } from "../../../tests/support/fake-atlas.ts"
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-atlas-check-"))
+	dir = mkdtempSync(join(tmpdir(), "database-atlas-check-"))
 	writeFileSync(join(dir, "1_a.sql"), 'CREATE TABLE "a" ("id" int);\n')
 	writeFileSync(join(dir, "2_b.sql"), 'DROP TABLE "a";\n')
 	writeFileSync(join(dir, "atlas.sum"), "h1:x=\n1_a.sql h1:7=\n2_b.sql h1:7=\n")
@@ -25,7 +25,7 @@ afterEach(() => rmSync(dir, { force: true, recursive: true }))
 const TARGET = { devUrl: "postgres://localhost/dev", lockTimeout: "5s", schema: "public", url: "postgres://db/app" }
 
 /** A run of `exec` approving every file, with the files check's replay on dev was given, by name */
-function options(exec: Run, more: Partial<ApplyOptions> = {}): ApplyOptions & { replayed: string[][] } {
+function options(exec: MigrateRun, more: Partial<ApplyOptions> = {}): ApplyOptions & { replayed: string[][] } {
 	const replayed: string[][] = []
 	return {
 		approve: async () => ({ ok: true }),
@@ -57,7 +57,7 @@ describe("applyWithAtlas: a check (M11)", () => {
 	it("inspects a database with no history instead of the dry run, and refuses one holding a table", async () => {
 		const legacy = ok(JSON.stringify({ schemas: [{ name: "public", tables: [{ name: "legacy" }] }] }))
 		const unclean = fakeAtlas({ inspect: legacy, status: PENDING })
-		await expect(applyWithAtlas({ ...options(unclean), checkOnly: true })).rejects.toThrow("comb migrate baseline")
+		await expect(applyWithAtlas({ ...options(unclean), checkOnly: true })).rejects.toThrow("database migrate baseline")
 		const clean = fakeAtlas({ status: PENDING })
 		expect(await applyWithAtlas({ ...options(clean), checkOnly: true })).toEqual(["1_a.sql", "2_b.sql"])
 		expect(commands(clean)).not.toContain("migrate apply")

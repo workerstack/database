@@ -22,7 +22,8 @@ async function counted(): Promise<Connect> {
 		const unsafe = sql.unsafe.bind(sql)
 		return Object.assign(sql, {
 			unsafe: (query: string, params?: unknown[]) => {
-				if (query.startsWith("DROP DATABASE IF EXISTS comb_replay_")) writeSync(1, `drop ${query.split(" ").at(-1)}\n`)
+				if (query.startsWith("DROP DATABASE IF EXISTS database_replay_"))
+					writeSync(1, `drop ${query.split(" ").at(-1)}\n`)
 				return unsafe(query, params as never)
 			},
 		})

@@ -6,7 +6,7 @@
  * BEGIN ATOMIC function reads, and whatever else Postgres refuses on an empty database, which no
  * rating of the statement's text can list. Each statement whose scope is the server or another
  * database is left out, and check names it. A docker:// devUrl is Atlas's
- * own container, which comb cannot reach, and without the `postgres` package comb cannot connect:
+ * own container, which database cannot reach, and without the `postgres` package database cannot connect:
  * then check says the replay did not run, and rates the files alone.
  *
  * The replay uses a role the server already holds, as the history may have made it on a shared
@@ -27,7 +27,7 @@ import { pgRead } from "./pg-split.ts"
 import { postgresOptionsOf } from "./pg-url.ts"
 import { ReplayFailed } from "./replay-failed.ts"
 
-/* why comb loads postgres.js here */
+/* why database loads postgres.js here */
 const REPLAYS = "replay the history and the pending files on devUrl in a check"
 
 /* the line check prints when it replays nothing, and why */
@@ -38,7 +38,7 @@ const STOPS = "check applies nothing"
 
 /* why check replays nothing on a docker:// devUrl */
 const DOCKER = (devUrl: string): string =>
-	`${devUrl} is Atlas's own container, which comb cannot reach, so a statement Postgres refuses on every database is found only when it applies; set devUrl to a postgres:// scratch database comb can connect to`
+	`${devUrl} is Atlas's own container, which database cannot reach, so a statement Postgres refuses on every database is found only when it applies; set devUrl to a postgres:// scratch database that database can connect to`
 
 /**
  * Each role the `pending` files make, by CREATE ROLE or a rename to it, with the file that makes it
@@ -76,9 +76,12 @@ async function refuseHeldRoles(connect: Connect, target: PgTarget, pending: read
 		held = await heldRoles(sql, [...made.keys()])
 	} catch (error) {
 		const failed = { field: "url", url: target.url, urls: [target.url, target.devUrl] } as const
-		throw new ReplayFailed(`comb could not read the roles url's server holds: ${failureOf(error, failed)}; ${STOPS}`, {
-			cause: error,
-		})
+		throw new ReplayFailed(
+			`database could not read the roles url's server holds: ${failureOf(error, failed)}; ${STOPS}`,
+			{
+				cause: error,
+			},
+		)
 	} finally {
 		await sql.end()
 	}

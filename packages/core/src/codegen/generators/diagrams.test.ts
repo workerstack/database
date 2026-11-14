@@ -21,7 +21,7 @@ type Generated = {
 let tmpDir: string
 
 beforeEach(() => {
-	tmpDir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-gen-diagrams-"))
+	tmpDir = fs.mkdtempSync(path.join(fixtureRoot(), "database-gen-diagrams-"))
 })
 
 afterEach(() => {

@@ -1,6 +1,6 @@
 /**
  * The README's generator table is rendered here from GENERATORS, so it lists each generator the
- * CLI runs by name and no other, and each listed name is one `comb codegen -g` runs (AA4-6 of r24).
+ * CLI runs by name and no other, and each listed name is one `database codegen -g` runs (AA4-6 of r24).
  */
 import { readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
@@ -55,7 +55,7 @@ describe("README generator table", () => {
 		const dir = temp.make()
 		writeTables(dir)
 		writeFileSync(
-			join(dir, "comb.config.ts"),
+			join(dir, "database.config.ts"),
 			`export default { databases: { core: ${JSON.stringify({
 				dialect: "sqlite",
 				driver: "d1",
@@ -65,7 +65,7 @@ describe("README generator table", () => {
 		)
 		const io = makeIo(dir)
 		expect(await runCliWithFakes(["codegen", "-g", name], io), io.errors.join("\n")).toBe(0)
-		const written = readdirSync(dir).filter((file) => !["comb.config.ts", "db.core.tables.ts"].includes(file))
-		expect(written.filter((file) => file !== ".comb.codegen.gen.json")).not.toEqual([])
+		const written = readdirSync(dir).filter((file) => !["database.config.ts", "db.core.tables.ts"].includes(file))
+		expect(written.filter((file) => file !== ".database.codegen.gen.json")).not.toEqual([])
 	})
 })

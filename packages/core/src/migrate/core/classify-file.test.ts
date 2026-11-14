@@ -13,7 +13,7 @@ describe("classifyMigration on a statement that runs only outside a transaction"
 		"DROP INDEX CONCURRENTLY i",
 		"REINDEX TABLE CONCURRENTLY post",
 		"VACUUM post",
-		"-- comb:allow-unsafe: maintenance\nVACUUM post",
+		"-- database:allow-unsafe: maintenance\nVACUUM post",
 	])("refuses %j outside an -- atlas:txmode none file, whatever the approval", (sql) => {
 		expect(() => pg(sql)).toThrow(/-- atlas:txmode none/)
 	})
@@ -77,14 +77,14 @@ describe("classifyMigration on every statement Postgres 17 runs only outside a t
 	})
 })
 
-/* r18 S2: SQLite will not change the journal mode inside the transaction comb runs each file in */
+/* r18 S2: SQLite will not change the journal mode inside the transaction database runs each file in */
 describe("classifyMigration on SQLite's journal_mode", () => {
 	it.each([
 		"PRAGMA journal_mode = WAL",
 		"PRAGMA main.journal_mode=wal",
 		'PRAGMA "main" . JOURNAL_MODE = DELETE',
 		"PRAGMA journal_mode",
-		"-- comb:allow-unsafe: needed\nCREATE TABLE z (id INTEGER PRIMARY KEY);\nPRAGMA journal_mode = WAL;",
+		"-- database:allow-unsafe: needed\nCREATE TABLE z (id INTEGER PRIMARY KEY);\nPRAGMA journal_mode = WAL;",
 	])("refuses %j, whatever the approval", (sql) => {
 		expect(() => lite(sql)).toThrow("journal_mode is the database's setting")
 	})
@@ -95,7 +95,7 @@ describe("classifyMigration on SQLite's journal_mode", () => {
 	})
 })
 
-/* SL1 of r22: an EXCLUSIVE lock outlives its file's COMMIT, so the next file and comb's history are locked out */
+/* SL1 of r22: an EXCLUSIVE lock outlives its file's COMMIT, so the next file and database's history are locked out */
 describe("classifyMigration on SQLite's locking_mode (SL1 of r22; sibling: journal_mode)", () => {
 	const SETS = [
 		"PRAGMA locking_mode = EXCLUSIVE",
@@ -103,7 +103,7 @@ describe("classifyMigration on SQLite's locking_mode (SL1 of r22; sibling: journ
 		"PRAGMA main.locking_mode = exclusive",
 		'PRAGMA "locking_mode" = EXCLUSIVE',
 		"PRAGMA locking_mode(EXCLUSIVE)",
-		"-- comb:allow-unsafe: bulk load\nPRAGMA locking_mode = EXCLUSIVE;\nCREATE TABLE big (x INTEGER);",
+		"-- database:allow-unsafe: bulk load\nPRAGMA locking_mode = EXCLUSIVE;\nCREATE TABLE big (x INTEGER);",
 	]
 
 	it.each(SETS)("refuses %j on a local file, whatever the approval", (sql) => {
@@ -124,7 +124,7 @@ describe("classifyMigration on SQLite's locking_mode (SL1 of r22; sibling: journ
 
 /*
  * S1 of r19: a pragma's name read once, quoted or not, against a table of what each target refuses, with no override:
- * SQLite inside the transaction comb runs each file in, and D1's authorizer (wrangler --local, .tmp/grunt/p18/d1-pragma-probe.log)
+ * SQLite inside the transaction database runs each file in, and D1's authorizer (wrangler --local, .tmp/grunt/p18/d1-pragma-probe.log)
  */
 const d1 = (sql: string) => classifyMigration(sql, { dialect: "sqlite", kind: "d1" })
 describe("classifyMigration on a pragma SQLite refuses inside a transaction, however its name is spelled", () => {
@@ -149,9 +149,9 @@ describe("classifyMigration on a pragma SQLite refuses inside a transaction, how
 		"PRAGMA query_only = 'off'",
 		"PRAGMA wal_checkpoint",
 		"PRAGMA wal_checkpoint(TRUNCATE)",
-		"-- comb:allow-unsafe: needed\nCREATE TABLE z (id INTEGER PRIMARY KEY);\nPRAGMA synchronous = OFF;",
+		"-- database:allow-unsafe: needed\nCREATE TABLE z (id INTEGER PRIMARY KEY);\nPRAGMA synchronous = OFF;",
 	])("refuses %j, whatever the approval, on every SQLite target", (sql) => {
-		expect(() => lite(sql)).toThrow(/inside the transaction comb runs each file in/)
+		expect(() => lite(sql)).toThrow(/inside the transaction database runs each file in/)
 		expect(() => d1(sql)).toThrow()
 	})
 
@@ -171,7 +171,7 @@ describe("classifyMigration on a pragma whose setting is the process's, not the 
 		"PRAGMA temp_store_directory = '/var/tmp'",
 		"PRAGMA soft_heap_limit = 50000000",
 		'PRAGMA "soft_heap_limit"(1)',
-		"-- comb:allow-unsafe: needed\nCREATE TABLE z (id INTEGER PRIMARY KEY);\nPRAGMA main.hard_heap_limit = 0;",
+		"-- database:allow-unsafe: needed\nCREATE TABLE z (id INTEGER PRIMARY KEY);\nPRAGMA main.hard_heap_limit = 0;",
 	])("refuses %j, whatever the approval, on every SQLite target", (sql) => {
 		expect(() => lite(sql)).toThrow(/the process's.*every connection/)
 		expect(() => d1(sql)).toThrow()
@@ -185,18 +185,18 @@ describe("classifyMigration on a pragma whose setting is the process's, not the 
 	)
 })
 
-describe("classifyMigration on the foreign-key pragmas comb writes, however their names are spelled", () => {
+describe("classifyMigration on the foreign-key pragmas database writes, however their names are spelled", () => {
 	it.each([
 		"PRAGMA defer_foreign_keys = on",
 		'PRAGMA "defer_foreign_keys" = 1',
 		"PRAGMA main.[defer_foreign_keys] = true",
 		"PRAGMA defer_foreign_keys = 'on'",
-	])("rates %j safe, as comb writes it", (sql) => {
+	])("rates %j safe, as database writes it", (sql) => {
 		expect(lite(sql).safety).toBe("safe")
 	})
 
 	/* S2 of r20: SQLite reads a single-quoted value as the value, so every rule reads it unquoted, and a value it
-	   does not know as off; inside comb's transaction each is a no-op, so the note is its only finding, and any value
+	   does not know as off; inside database's transaction each is a no-op, so the note is its only finding, and any value
 	   but on, yes, true and 1 gets it, however a SQLite version reads it */
 	it.each([
 		"PRAGMA foreign_keys = 'off'",
@@ -205,19 +205,19 @@ describe("classifyMigration on the foreign-key pragmas comb writes, however thei
 		"PRAGMA foreign_keys = full",
 		"PRAGMA foreign_keys = 256",
 		"PRAGMA foreign_keys = 2",
-	])("notes %j, which comb does not write as on", (sql) => {
+	])("notes %j, which database does not write as on", (sql) => {
 		expect([lite(sql).safety, lite(sql).cautiousStatements.length]).toEqual(["cautious", 1])
 	})
 
 	it.each(["PRAGMA foreign_keys = +1", "PRAGMA foreign_keys = 'yes'", "PRAGMA foreign_keys = TRUE"])(
-		"rates %j, which comb writes as on, safe",
+		"rates %j, which database writes as on, safe",
 		(sql) => {
 			expect(lite(sql).safety).toBe("safe")
 		},
 	)
 
 	it.each(["PRAGMA defer_foreign_keys", "PRAGMA temp.defer_foreign_keys = on", "PRAGMA defer_foreign_keys = 2"])(
-		"rates %j, which comb does not write, as any other pragma",
+		"rates %j, which database does not write, as any other pragma",
 		(sql) => {
 			expect(lite(sql).safety).toBe("unsafe")
 		},
@@ -251,9 +251,9 @@ describe("classifyMigration on SQLite transaction control", () => {
 		"CREATE TABLE z (id INTEGER PRIMARY KEY);\nROLLBACK;",
 		"CREATE TABLE z (id INTEGER PRIMARY KEY);\nROLLBACK TRANSACTION;",
 		"START TRANSACTION;\nCREATE TABLE z (id INTEGER PRIMARY KEY);",
-		"-- comb:allow-unsafe: wrapped by hand\nBEGIN TRANSACTION;\nCREATE TABLE z (id INTEGER PRIMARY KEY);\nCOMMIT;",
+		"-- database:allow-unsafe: wrapped by hand\nBEGIN TRANSACTION;\nCREATE TABLE z (id INTEGER PRIMARY KEY);\nCOMMIT;",
 	])("refuses %j, whatever the approval", (sql) => {
-		expect(() => lite(sql)).toThrow("comb runs each file in a transaction of its own")
+		expect(() => lite(sql)).toThrow("database runs each file in a transaction of its own")
 	})
 
 	it("rates a savepoint, its release and a rollback to it, which nest inside the file's transaction", () => {
@@ -264,13 +264,13 @@ describe("classifyMigration on SQLite transaction control", () => {
 	})
 })
 
-describe("classifyMigration on comb's FTS regroup", () => {
+describe("classifyMigration on database's FTS regroup", () => {
 	it("calls the drop of an external-content FTS index cautious when the file creates it again and rebuilds it", () => {
 		const regroup = `DROP TRIGGER IF EXISTS post_fts_ai;
 DROP TABLE IF EXISTS post_fts;
 CREATE VIRTUAL TABLE IF NOT EXISTS post_fts USING fts5(title, content='post', content_rowid='id');
 INSERT INTO post_fts(post_fts) VALUES ('rebuild');`
-		/* the history comb's FTS migration left: the index and its sync trigger */
+		/* the history database's FTS migration left: the index and its sync trigger */
 		const external = extractSchema(
 			"CREATE TABLE post (id INTEGER PRIMARY KEY, title TEXT);\nCREATE VIRTUAL TABLE post_fts USING fts5(title, content='post', content_rowid='id');\nCREATE TRIGGER post_fts_ai AFTER INSERT ON post BEGIN INSERT INTO post_fts(rowid, title) VALUES (new.id, new.title); END;",
 		)
@@ -299,7 +299,7 @@ describe("classifyMigration on an FTS5 command", () => {
 		"REPLACE INTO post_fts(post_fts) VALUES ('delete-all');",
 		"WITH x AS (SELECT 1) INSERT INTO post_fts(post_fts) VALUES ('delete-all');",
 		"WITH x AS (SELECT 'delete-all' AS c) INSERT OR IGNORE INTO main.post_fts(post_fts) SELECT c FROM x;",
-	])("calls %j unsafe: it removes indexed rows, or comb cannot read which command it runs", (sql) => {
+	])("calls %j unsafe: it removes indexed rows, or database cannot read which command it runs", (sql) => {
 		expect(lite(sql).unsafeStatements.join("\n")).toContain("FTS5 command")
 	})
 
@@ -338,7 +338,7 @@ describe("classifyMigration on a SQLite pragma", () => {
 		["PRAGMA ignore_check_constraints = on;", "unsafe"],
 		["PRAGMA foreign_keys = off;", "cautious"],
 		["PRAGMA defer_foreign_keys = on;", "safe"],
-	])("rates %j %s: only the two foreign-key pragmas are shapes comb recognizes", (sql, safety) => {
+	])("rates %j %s: only the two foreign-key pragmas are shapes database recognizes", (sql, safety) => {
 		expect(lite(sql).safety).toBe(safety)
 	})
 })
@@ -368,7 +368,7 @@ describe("classifyMigration by target kind: what the libsql server (sqld) refuse
 		"PRAGMA [table_info](t)",
 		"PRAGMA nosuch",
 		"SELECT load_extension('x')",
-		"-- comb:allow-unsafe: approved\nCREATE TABLE z (id INTEGER PRIMARY KEY);\nANALYZE;",
+		"-- database:allow-unsafe: approved\nCREATE TABLE z (id INTEGER PRIMARY KEY);\nANALYZE;",
 	])("refuses %j on sqld, whatever the approval, naming the libsql server (sqld)", (sql) => {
 		expect(() => on("sqld")(sql)).toThrow(/libsql server \(sqld\)/)
 	})

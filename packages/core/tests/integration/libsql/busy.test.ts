@@ -1,6 +1,6 @@
 /**
  * SL4 of r22 (sibling: tests/bun/busy.test.ts, the bun-sqlite provider): a local SQLite file is shared
- * with the app that serves it, or a second runner. Another process holding the write lock makes comb's
+ * with the app that serves it, or a second runner. Another process holding the write lock makes database's
  * apply wait for it, as SQLite's busy timeout does, and a second run that applied the file meanwhile
  * makes this one skip it, never apply it twice nor fail on its record.
  */
@@ -72,7 +72,7 @@ describe("migrate apply on a drizzle-made history another process applied a file
 })
 
 /*
- * The holder stands in for an app writer, which commits while comb's apply waits: SQLite's BEGIN IMMEDIATE
+ * The holder stands in for an app writer, which commits while database's apply waits: SQLite's BEGIN IMMEDIATE
  * takes the file's shared lock between its busy-handler sleeps, so the holder's COMMIT can meet a reader
  * and must wait for it under a busy timeout, as an app writer should, where it would fail at once.
  */

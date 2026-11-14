@@ -1,6 +1,6 @@
 /**
  * What the runtime reader writes for the parent: every table the tables module exports, as drizzle
- * built it and as comb's `c` helpers recorded it, in plain JSON. No drizzle object crosses.
+ * built it and as database's `c` helpers recorded it, in plain JSON. No drizzle object crosses.
  */
 
 /**
@@ -10,7 +10,7 @@
 type ModuleExport = { external: boolean; module: string; name: string }
 
 /** What a `c` helper recorded, its values read and its objects located by the export that holds them */
-type SnapshotComb = {
+type SnapshotDatabase = {
 	constraints: Record<string, boolean | number | string>
 	kind: string
 	prefix: string | null
@@ -36,7 +36,7 @@ type SnapshotForeignKey = {
 type SnapshotColumn = {
 	/** SQLite's AUTOINCREMENT on an integer key */
 	autoIncrement: boolean
-	comb: SnapshotComb | null
+	database: SnapshotDatabase | null
 	/** drizzle's column class, `SQLiteText` or `PgVarchar` */
 	columnType: string
 	/** drizzle's data type, `string` or `number int53` */
@@ -94,4 +94,12 @@ type SnapshotTable = {
 
 type Snapshot = { tables: SnapshotTable[] }
 
-export type { ModuleExport, Snapshot, SnapshotColumn, SnapshotComb, SnapshotForeignKey, SnapshotIndex, SnapshotTable }
+export type {
+	ModuleExport,
+	Snapshot,
+	SnapshotColumn,
+	SnapshotDatabase,
+	SnapshotForeignKey,
+	SnapshotIndex,
+	SnapshotTable,
+}

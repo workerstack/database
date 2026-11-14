@@ -19,12 +19,12 @@ import { foldedMigrationHash, legacyMigrationHash } from "./parse.ts"
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-d1-history-"))
+	dir = mkdtempSync(join(tmpdir(), "database-d1-history-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
-/** Records `?` for 1_init.sql as comb 0.20 or a baseline from its pre-0.8 history did, unmarked by hash_v */
-const UNMARKED = "UPDATE _comb_migration_hashes SET hash = ?, hash_v = NULL WHERE name = '1_init.sql'"
+/** Records `?` for 1_init.sql as database 0.20 or a baseline from its pre-0.8 history did, unmarked by hash_v */
+const UNMARKED = "UPDATE _database_migration_hashes SET hash = ?, hash_v = NULL WHERE name = '1_init.sql'"
 
 describe("findWranglerConfig", () => {
 	it("takes wrangler.json over wrangler.jsonc over wrangler.toml, as wrangler does, and none when there is none", () => {
@@ -73,7 +73,7 @@ async function target(binding: Record<string, string>) {
 const executes = (run: { calls: string[][] }) =>
 	run.calls.filter(([cmd, sub, verb]) => cmd === "wrangler" && sub === "d1" && verb === "execute").length
 
-/* R1: every wrangler call is a process of its own, so comb reads its history in one */
+/* R1: every wrangler call is a process of its own, so database reads its history in one */
 describe("applyD1 and statusD1: wrangler calls", () => {
 	it("reads the history in one call, the schema in two, and writes the intents, reads the result and moves the hashes in one each", async () => {
 		const { apply, d1, read, run } = await target({})
@@ -109,10 +109,10 @@ describe("statusD1 and a check on a database without the migrations table", () =
 	})
 })
 
-/* M17 of the 0.12 round: D1's history holds names only, so comb records each applied file's hash itself */
-describe("statusD1 on a hash a 0.13 baseline copied from comb's pre-0.8 history", () => {
+/* M17 of the 0.12 round: D1's history holds names only, so database records each applied file's hash itself */
+describe("statusD1 on a hash a 0.13 baseline copied from database's pre-0.8 history", () => {
 	/* M44: a 0.13 baseline recorded the pre-0.5.0 hash drizzle held; drizzle still holding it proves the record is that old */
-	it("takes a pre-0.5.0 hash only where comb's pre-0.8 history still holds it for the file", async () => {
+	it("takes a pre-0.5.0 hash only where database's pre-0.8 history still holds it for the file", async () => {
 		const { d1, read } = await target({})
 		const sql = "CREATE TABLE post (id TEXT DEFAULT 'a -- b\nc');"
 		writeFileSync(join(d1.migrationsDir, "1_init.sql"), sql)
@@ -155,7 +155,7 @@ describe("statusD1 on a file holding a space SQLite reads as part of a name", ()
 		writeFileSync(join(d1.migrationsDir, "1_init.sql"), unicode)
 		writeSum(d1.migrationsDir)
 		await expect(statusD1(d1, read, () => undefined)).rejects.toThrow(/^1_init\.sql was applied, then edited/)
-		await d1.conn.execute("UPDATE _comb_migration_hashes SET hash_v = NULL WHERE name = '1_init.sql'")
+		await d1.conn.execute("UPDATE _database_migration_hashes SET hash_v = NULL WHERE name = '1_init.sql'")
 		const lines: string[] = []
 		await statusD1(d1, read, (line) => lines.push(line))
 		expect(lines).toEqual(["Applied: 1_init.sql", "Pending: none"])
@@ -180,7 +180,7 @@ describe("applyD1 and statusD1 on an applied file edited since", () => {
 		expect(await applyD1(d1, { approve, print: () => undefined, read })).toEqual(["1_init.sql"])
 		writeFileSync(join(d1.migrationsDir, "1_init.sql"), "CREATE TABLE post (id TEXT, body TEXT);")
 		writeSum(d1.migrationsDir)
-		const refusal = /^1_init\.sql was applied, then edited: its hash is not the one comb recorded/
+		const refusal = /^1_init\.sql was applied, then edited: its hash is not the one database recorded/
 		await expect(applyD1(d1, { approve, checkOnly: true, print: () => undefined, read })).rejects.toThrow(refusal)
 		await expect(applyD1(d1, { approve, print: () => undefined, read })).rejects.toThrow(refusal)
 		await expect(statusD1(d1, read, () => undefined)).rejects.toThrow(refusal)
@@ -197,7 +197,7 @@ describe("applyD1 and statusD1 on an applied file edited since", () => {
 		await expect(statusD1(d1, read, () => undefined)).rejects.toThrow(/^1_init\.sql was applied, then edited/)
 	})
 
-	it("says which applied files comb has no hash for, so cannot tell edited", async () => {
+	it("says which applied files database has no hash for, so cannot tell edited", async () => {
 		const { d1, read } = await target({})
 		await d1.conn.execute(
 			"CREATE TABLE d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL)",
@@ -206,7 +206,7 @@ describe("applyD1 and statusD1 on an applied file edited since", () => {
 		const lines: string[] = []
 		await statusD1(d1, read, (line) => lines.push(line))
 		expect(lines).toContain(
-			"No hash recorded for 1_init.sql, applied before comb recorded them: comb cannot tell whether it was edited since",
+			"No hash recorded for 1_init.sql, applied before database recorded them: database cannot tell whether it was edited since",
 		)
 	})
 
@@ -221,7 +221,7 @@ describe("applyD1 and statusD1 on an applied file edited since", () => {
 		const lines: string[] = []
 		await statusD1(d1, read, (line) => lines.push(line))
 		expect(lines).toContain(
-			"No hash recorded for 1_init.sql, 2_more.sql, applied before comb recorded them: comb cannot tell whether they were edited since",
+			"No hash recorded for 1_init.sql, 2_more.sql, applied before database recorded them: database cannot tell whether they were edited since",
 		)
 	})
 })
@@ -277,16 +277,16 @@ describe("applyD1 when wrangler fails partway", () => {
 		await expect(applyD1(d1, { approve, print: () => undefined, read })).rejects.toThrow(
 			/wrangler d1 migrations apply failed/,
 		)
-		const hashes = await d1.conn.execute("SELECT name FROM _comb_migration_hashes ORDER BY name")
+		const hashes = await d1.conn.execute("SELECT name FROM _database_migration_hashes ORDER BY name")
 		expect(hashes.rows.map((row) => row[0])).toEqual(["1_init.sql", "2_u.sql", "3_b.sql"])
-		expect((await d1.conn.execute("SELECT name FROM _comb_migration_hash_intents")).rows).toEqual([])
+		expect((await d1.conn.execute("SELECT name FROM _database_migration_hash_intents")).rows).toEqual([])
 		const lines: string[] = []
 		await statusD1(d1, read, (line) => lines.push(line))
 		expect(lines.join("\n")).not.toContain("No hash recorded")
 	})
 })
 
-/* S5 of the 0.15.0 review: comb makes no table before wrangler runs, so a failed run may leave none */
+/* S5 of the 0.15.0 review: database makes no table before wrangler runs, so a failed run may leave none */
 describe("applyD1 when wrangler fails before it makes its table", () => {
 	it("passes on wrangler's own error, not the missing table's", async () => {
 		const { d1, read, run } = await target({})
@@ -327,7 +327,7 @@ describe("applyD1 when another process holds the local database's lock", () => {
 			(error: unknown) => error as Error & { pending?: string[] },
 		)
 		expect([failed?.message, failed?.pending, applies]).toEqual([
-			"wrangler d1 migrations apply failed: the local D1 database was locked by another process (wrangler dev, a wrangler command or a second comb migrate) while wrangler applied: let it finish and rerun",
+			"wrangler d1 migrations apply failed: the local D1 database was locked by another process (wrangler dev, a wrangler command or a second database migrate) while wrangler applied: let it finish and rerun",
 			["1_init.sql"],
 			1,
 		])
@@ -339,7 +339,7 @@ describe("applyD1 on a local lock wrangler's output does not name", () => {
 	it.each([
 		[
 			true,
-			"the local D1 database was locked by another process (wrangler dev, a wrangler command or a second comb migrate) while wrangler applied: let it finish and rerun",
+			"the local D1 database was locked by another process (wrangler dev, a wrangler command or a second database migrate) while wrangler applied: let it finish and rerun",
 		],
 		[false, "✘ [ERROR] internal error; reference = x1"],
 	])("with the file held %s, refuses naming %s", async (held, why) => {
@@ -361,13 +361,13 @@ describe("applyD1 on a local lock wrangler's output does not name", () => {
 	})
 })
 
-/* M33 of the 0.13 review: only a local database can be missing where comb looks for it */
-describe("statusD1 on a local database wrangler keeps nowhere comb finds", () => {
+/* M33 of the 0.13 review: only a local database can be missing where database looks for it */
+describe("statusD1 on a local database wrangler keeps nowhere database finds", () => {
 	it("refuses locally, and reads a remote one with no local file", async () => {
 		const { d1, read } = await target({})
 		rmSync(join(dir, ".wrangler"), { force: true, recursive: true })
 		await expect(statusD1(d1, read, () => undefined)).rejects.toThrow(
-			/^comb cannot confirm CORE's local database exists/,
+			/^database cannot confirm CORE's local database exists/,
 		)
 		const remote = { ...d1, flags: ["--remote"] }
 		await expect(statusD1(remote, read, () => undefined)).resolves.toEqual({ applied: [], pending: ["1_init.sql"] })
@@ -423,12 +423,12 @@ describe("applyD1 on a directory wrangler lists otherwise than Atlas", () => {
 })
 
 /* S3, C4 of the 0.14.1 review: what wrangler applied before it stopped is reported, and its hashes kept */
-/** The files comb recorded a hash for */
+/** The files database recorded a hash for */
 const hashed = async (d1: D1Target) =>
-	(await d1.conn.execute("SELECT name FROM _comb_migration_hashes ORDER BY name")).rows.map((row) => row[0])
+	(await d1.conn.execute("SELECT name FROM _database_migration_hashes ORDER BY name")).rows.map((row) => row[0])
 
 describe("applyD1 when wrangler stops short", () => {
-	it("names what wrangler applied and the rest when it records fewer files than comb checked, the hash of each it applied recorded", async () => {
+	it("names what wrangler applied and the rest when it records fewer files than database checked, the hash of each it applied recorded", async () => {
 		const { d1, read, run } = await target({})
 		/* a wrangler that applies the first pending file only, and exits 0 */
 		const short: typeof d1.exec = asWrangler((cmd, args, options) => {
@@ -483,7 +483,7 @@ describe("applyD1 on a pragma D1 does not authorize", () => {
 		async (pragma) => {
 			const { d1, read, run } = await target({})
 			await applyD1(d1, { approve, print: () => undefined, read })
-			writeFileSync(join(d1.migrationsDir, "2_p.sql"), `-- comb:allow-unsafe: needed\n${pragma};\n`)
+			writeFileSync(join(d1.migrationsDir, "2_p.sql"), `-- database:allow-unsafe: needed\n${pragma};\n`)
 			writeSum(d1.migrationsDir)
 			run.calls.length = 0
 			for (const checkOnly of [true, false])

@@ -1,5 +1,5 @@
 /**
- * The database a `comb migrate` command works on, from comb.migrate.config.ts: its provider, its
+ * The database a `database migrate` command works on, from database.migrate.config.ts: its provider, its
  * dialect, and its paths resolved against the config file. `apply` needs an environment when the
  * database declares them; `diff` takes one, and without it reads environments that agree on what a
  * diff reads.
@@ -7,9 +7,9 @@
 import fs from "node:fs"
 import path from "node:path"
 import { blank } from "../blank.ts"
-import type { CombMigrateConfig } from "../migrate/config.ts"
-import type { DatabaseConfig, Dialect, ResolvedDatabaseConfig } from "../migrate/types.ts"
-import { findCombConfig } from "./comb-config.ts"
+import type { MigrateConfig } from "../migrate/config.ts"
+import type { DatabaseConfig, MigrateDialect, ResolvedDatabaseConfig } from "../migrate/types.ts"
+import { findDatabaseConfig } from "./database-config.ts"
 import { CliError } from "./output.ts"
 
 /** What a command asks for: the database, the environment and directory it names, from where */
@@ -23,10 +23,10 @@ type TargetRequest = {
 
 /** A database resolved for one command */
 type MigrateTarget = {
-	/** the comb.config.ts database it maps to: its own name unless it says another */
+	/** the database.config.ts database it maps to: its own name unless it says another */
 	codegen: string
 	database: string
-	dialect: Dialect
+	dialect: MigrateDialect
 	drizzleConfigPath: string | undefined
 	/** how output and prompts name it: the database and its resolved name */
 	label: string
@@ -34,11 +34,11 @@ type MigrateTarget = {
 	/** the database's name in its environment, which a provider connects to */
 	name: string
 	provider: ResolvedDatabaseConfig["provider"]
-	/** the folder of comb.migrate.config.ts, where a D1 database's wrangler config is looked for */
+	/** the folder of database.migrate.config.ts, where a D1 database's wrangler config is looked for */
 	configDir: string
 }
 
-const dialectOf = (type: string): Dialect => (type === "postgres" ? "postgres" : "sqlite")
+const dialectOf = (type: string): MigrateDialect => (type === "postgres" ? "postgres" : "sqlite")
 
 type Resolve = (db: DatabaseConfig, env?: string) => ResolvedDatabaseConfig
 
@@ -93,29 +93,30 @@ function assertOneDialect(name: string, db: DatabaseConfig): void {
 	}
 }
 
-/** comb.config.ts's FTS5 tables are SQLite virtual tables; a Postgres database has no such thing */
+/** database.config.ts's FTS5 tables are SQLite virtual tables; a Postgres database has no such thing */
 async function assertNoFts(cwd: string, name: string): Promise<void> {
-	const fts = (await findCombConfig(cwd))?.databases[name]?.fts
+	const fts = (await findDatabaseConfig(cwd))?.databases[name]?.fts
 	if (fts !== undefined && Object.keys(fts).length > 0) {
 		throw new CliError(
-			`comb.config.ts gives the Postgres database "${name}" FTS5 tables, which are SQLite; use a tsvector column with a GIN index`,
+			`database.config.ts gives the Postgres database "${name}" FTS5 tables, which are SQLite; use a tsvector column with a GIN index`,
 		)
 	}
 }
 
-function databaseIn(config: CombMigrateConfig, configFile: string, name: string): DatabaseConfig {
+function databaseIn(config: MigrateConfig, configFile: string, name: string): DatabaseConfig {
 	if (Object.hasOwn(config.databases, name)) return config.databases[name] as DatabaseConfig
 	const available = Object.keys(config.databases).join(", ")
 	throw new CliError(`${path.basename(configFile)} declares no database "${name}". Available: ${available}`)
 }
 
-/** The database `request.db` names in the project's comb.migrate.config.ts; undefined when the project has none */
+/** The database `request.db` names in the project's database.migrate.config.ts; undefined when the project has none */
 async function resolveMigrateTarget(request: TargetRequest): Promise<MigrateTarget | undefined> {
 	const { findConfigFile, loadConfig, resolveDatabaseConfig } = await import("../migrate/config.ts")
 	const configFile = findConfigFile(request.cwd)
 	if (configFile === undefined) {
 		/* an option is refused, never dropped: diff and every other command alike */
-		if (request.env !== undefined) throw new CliError("-e/--env needs comb.migrate.config.ts to define environments")
+		if (request.env !== undefined)
+			throw new CliError("-e/--env needs database.migrate.config.ts to define environments")
 		return undefined
 	}
 	const { config, configDir } = await loadConfig(configFile, request.cwd)

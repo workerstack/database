@@ -1,6 +1,6 @@
 /**
  * Incremental migrations for a schema with FTS5 tables, on the real Atlas binary. Atlas's dev
- * database has no fts5 module, so comb replays history and diffs the target without FTS, then
+ * database has no fts5 module, so database replays history and diffs the target without FTS, then
  * writes the FTS delta itself. Every migration produced here is then run on SQLite.
  */
 import fs from "node:fs"
@@ -41,7 +41,7 @@ afterEach(() => {
 
 /** A migrations directory whose first migration created `items` and its FTS over `columns` */
 function history(columns: string[]): string {
-	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "comb-atlas-fts-"))
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "database-atlas-fts-"))
 	dirs.push(dir)
 	fs.writeFileSync(path.join(dir, "20260101000000_init.sql"), `${ITEMS}\n${ftsFor("items", columns)}`)
 	return dir

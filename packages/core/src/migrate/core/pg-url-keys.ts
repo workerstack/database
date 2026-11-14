@@ -1,18 +1,18 @@
 /**
  * The query keys libpq reads itself, by what Atlas's driver, lib/pq, does with each
- * (probed on Atlas v1.3.0 and Postgres 17). comb's own connections send none of them to the
+ * (probed on Atlas v1.3.0 and Postgres 17). database's own connections send none of them to the
  * server. lib/pq reads the keys marked "atlas" and sends any other to the server as a setting, which
- * Postgres refuses, so every Atlas call fails. comb strips such a key from the URLs Atlas gets when it
+ * Postgres refuses, so every Atlas call fails. database strips such a key from the URLs Atlas gets when it
  * only tunes the connection, and refuses it, by name, when it asks for something Atlas cannot do.
  */
 
 /**
- * What comb does with a libpq key: leave it to Atlas, strip it from Atlas's URLs, refuse it unless its
+ * What database does with a libpq key: leave it to Atlas, strip it from Atlas's URLs, refuse it unless its
  * value is one of `unless`, or refuse it with the TLS files it belongs to (pg-url.ts's tlsProblems)
  */
 type KeyRule = "atlas" | "strip" | "tls" | { refuse: string; unless?: readonly string[] | undefined }
 
-// lookup-table: each libpq key, and what comb does with it; a refusal names what the key asks for
+// lookup-table: each libpq key, and what database does with it; a refusal names what the key asks for
 const KEYS: Readonly<Record<string, KeyRule>> = {
 	channel_binding: { refuse: "SCRAM channel binding", unless: ["disable", "prefer"] },
 	connect_timeout: "atlas",
@@ -57,7 +57,7 @@ const KEYS: Readonly<Record<string, KeyRule>> = {
 // lookup-table: KEYS's names
 const LIBPQ_KEYS: ReadonlySet<string> = /* @__PURE__ */ new Set(/* @__PURE__ */ Object.keys(KEYS))
 
-/** Whether comb strips `key`, as `value`, from the URLs Atlas gets */
+/** Whether database strips `key`, as `value`, from the URLs Atlas gets */
 function stripsForAtlas(key: string, value: string): boolean {
 	const rule = KEYS[key]
 	return rule === "strip" || (typeof rule === "object" && rule.unless?.includes(value) === true)

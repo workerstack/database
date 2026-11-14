@@ -7,7 +7,7 @@ import { projectFrame, writeSnapshot } from "./child.ts"
 let dir: string
 
 beforeEach(() => {
-	dir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-child-"))
+	dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-child-"))
 })
 
 afterEach(() => fs.rmSync(dir, { force: true, recursive: true }))
@@ -58,12 +58,12 @@ describe("writeSnapshot", () => {
 const thrownAt = (...frames: string[]) => Object.assign(new Error("e"), { stack: ["Error: e", ...frames].join("\n") })
 
 describe("projectFrame", () => {
-	const comb = path.resolve(import.meta.dirname, "load.ts")
+	const database = path.resolve(import.meta.dirname, "load.ts")
 
-	it("skips a package's frames and comb's own, and reads a file URL as its path", () => {
+	it("skips a package's frames and database's own, and reads a file URL as its path", () => {
 		const error = thrownAt(
 			"    at run (/p/node_modules/drizzle-orm/index.js:1:2)",
-			`    at load (${comb}:3:4)`,
+			`    at load (${database}:3:4)`,
 			"    at file:///p/src/db/helper.ts:5:6",
 		)
 		expect(projectFrame(error)).toBe("/p/src/db/helper.ts:5:6")

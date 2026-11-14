@@ -135,7 +135,7 @@ describe("toAnalysis: a schema a package exports", () => {
 	it("imports it by the specifier the project wrote, with no path", () => {
 		const column = {
 			autoIncrement: false,
-			comb: {
+			database: {
 				constraints: {},
 				kind: "json",
 				prefix: null,

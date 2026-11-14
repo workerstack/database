@@ -1,6 +1,6 @@
 /**
- * One Postgres run at a time on the shared test server (comb-9d, plan 21): two processes that run
- * Postgres suites on one COMB_TEST_PG_URL serialize on the server itself, however each was started.
+ * One Postgres run at a time on the shared test server (database-9d, plan 21): two processes that run
+ * Postgres suites on one DATABASE_TEST_PG_URL serialize on the server itself, however each was started.
  * Each window is a child process running the global setup vitest.config.ts gives the project of a
  * Postgres suite (tests/integration/support/run-window.ts), on a scratch database, so the run this
  * test is in, holding the lock on its own database, never meets them.
@@ -32,7 +32,7 @@ function setupOf(file: string): string {
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-run-lock-"))
+	dir = mkdtempSync(join(tmpdir(), "database-run-lock-"))
 	writeFileSync(join(dir, "log"), "")
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
@@ -49,7 +49,7 @@ function window(url: string, { hold, name, peer, projects, settle = 0 }: Window)
 			join(import.meta.dirname, "../support/run-window.ts"),
 			JSON.stringify({ hold, log: join(dir, "log"), name, peer, projects, settle, setup }),
 		],
-		{ env: { ...process.env, COMB_TEST_PG_URL: url }, stdio: ["ignore", "ignore", "pipe"] },
+		{ env: { ...process.env, DATABASE_TEST_PG_URL: url }, stdio: ["ignore", "ignore", "pipe"] },
 	)
 	let said = ""
 	child.stderr.on("data", (chunk: Buffer) => {
@@ -67,7 +67,7 @@ async function until(test: () => boolean): Promise<void> {
 	while (!test()) await new Promise((done) => setTimeout(done, 20))
 }
 
-const WAITING = /^\[comb\] waiting for another run's Postgres suites on .+: advisory lock \(.+\)$/
+const WAITING = /^\[database\] waiting for another run's Postgres suites on .+: advisory lock \(.+\)$/
 
 /** How many lines of `said` say the run waits on the lock */
 const waits = (said: string): number => said.split("\n").filter((line) => WAITING.test(line)).length
@@ -128,7 +128,7 @@ describe("a run's window beside this run", () => {
 	 * never holds off this run's tests: what it does past that database would land among them
 	 */
 	it("sweeps nothing on the shared server, whose roles this run's tests hold", async () => {
-		const [idle] = testRoles("comb_t_window")
+		const [idle] = testRoles("database_t_window")
 		await query(pgUrl(), `CREATE ROLE ${idle}`)
 		await withScratchDb(async (url) => {
 			const holder = window(url, { hold: 0, name: "a", peer: "never", projects: 1 })

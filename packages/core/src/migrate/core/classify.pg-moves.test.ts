@@ -3,7 +3,7 @@
  * of a logged table, a SET UNLOGGED of an unlogged one, a SET ACCESS METHOD to its access method and
  * a SET TABLESPACE to its tablespace each return before the rewrite (ATPrepChangePersistence,
  * ATPrepSetAccessMethod, CheckRelationTableSpaceMove), taking 0 ms with no relfilenode change in
- * .tmp/grunt/r22b/migrate-pg-atlas/lock/matrix.log. comb reads where a relation is from the history,
+ * .tmp/grunt/r22b/migrate-pg-atlas/lock/matrix.log. database reads where a relation is from the history,
  * as PA11 reads a retype: its persistence always, and its access method or tablespace only where the
  * history names it, since one made without USING or TABLESPACE takes the target's
  * default_table_access_method and default_tablespace, which the history cannot say; check and apply

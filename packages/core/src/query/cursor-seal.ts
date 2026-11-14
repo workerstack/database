@@ -12,8 +12,8 @@ import { xchacha20poly1305 } from "@noble/ciphers/chacha.js"
 import { hkdf } from "@noble/hashes/hkdf.js"
 import { sha256 } from "@noble/hashes/sha2.js"
 
-import { CombError } from "../error.ts"
-import { combErrorKeys } from "../types.ts"
+import { DatabaseError } from "../error.ts"
+import { databaseErrorKeys } from "../types.ts"
 import { decodeBase64Url, encodeBase64Url } from "./base64url.ts"
 
 /** What seals and opens the cursors of one list: the app's secret, and the list's scope (route plus tenant) */
@@ -39,11 +39,11 @@ const NONCE_BYTES = 24
 const TAG_BYTES = 16
 /* the shortest payload a cursor holds is longer than one byte */
 const MIN_SEALED_BYTES = 1 + NONCE_BYTES + TAG_BYTES + 2
-const INFO = /* @__PURE__ */ new TextEncoder().encode("comb cursor v1")
+const INFO = /* @__PURE__ */ new TextEncoder().encode("database cursor v1")
 
 /** A wiring mistake in a list's cursor options: a 500 */
-function notWired(cause: string): CombError {
-	return new CombError({ cause, errorKey: combErrorKeys.CURSOR_NOT_WIRED, status: "internal_server_error" })
+function notWired(cause: string): DatabaseError {
+	return new DatabaseError({ cause, errorKey: databaseErrorKeys.CURSOR_NOT_WIRED, status: "internal_server_error" })
 }
 
 /** The secret's UTF-8 bytes; a 500 when it is shorter than the minimum */
@@ -58,7 +58,7 @@ function secretBytes(secret: unknown): Uint8Array {
 // lru-cache: the key of the one secret last asked for; a worker holds one secret, so HKDF runs once for it
 let derived: { key: Uint8Array; secret: string } | undefined
 
-/** The 32-byte key HKDF-SHA256 derives from `secret`, with no salt and comb's info */
+/** The 32-byte key HKDF-SHA256 derives from `secret`, with no salt and database's info */
 function cursorKey(secret: string): Uint8Array {
 	if (derived?.secret === secret) return derived.key
 	const key = hkdf(sha256, secretBytes(secret), undefined, INFO, 32)

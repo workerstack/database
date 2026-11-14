@@ -5,7 +5,7 @@
 import { sql } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/d1"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { CombError } from "../../../src/error.ts"
+import { DatabaseError } from "../../../src/error.ts"
 import { classifyD1Error, d1ErrorHandler } from "../../../src/sqlite/d1/error-handler.ts"
 import type { ConstraintMap } from "../../../src/types.ts"
 import { type D1Harness, d1Memory } from "../support/d1.ts"
@@ -44,7 +44,7 @@ const MAPS: ConstraintMap[] = [
 ]
 
 /** What d1ErrorHandler throws for what `run` raises; undefined when it throws nothing. */
-async function handled(run: () => Promise<unknown>): Promise<CombError | undefined> {
+async function handled(run: () => Promise<unknown>): Promise<DatabaseError | undefined> {
 	const failure = await run().then(
 		() => new Error("the statement did not fail"),
 		(error: unknown) => error,
@@ -52,7 +52,7 @@ async function handled(run: () => Promise<unknown>): Promise<CombError | undefin
 	try {
 		d1ErrorHandler(failure, MAPS)
 	} catch (thrown) {
-		return thrown as CombError
+		return thrown as DatabaseError
 	}
 	return undefined
 }
@@ -78,7 +78,7 @@ describe("d1ErrorHandler on Miniflare through drizzle", () => {
 		["INSERT INTO member (id, role) VALUES ('m5', NULL)", "required_field_missing", 400],
 	])("maps the constraint in %s", async (statement, errorKey, status) => {
 		const error = await handled(run(statement))
-		expect(error).toBeInstanceOf(CombError)
+		expect(error).toBeInstanceOf(DatabaseError)
 		expect(error).toMatchObject({ errorKey, status, table: "member" })
 	})
 

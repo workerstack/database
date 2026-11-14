@@ -3,7 +3,7 @@
  * of r22b). A VALIDATE alone takes SHARE UPDATE EXCLUSIVE and blocks nothing, but every lock an earlier
  * statement of the file took lasts to its COMMIT, so the VALIDATE's scan of every row runs under it.
  * Each case runs a statement, then the VALIDATE, as Atlas runs a file, in one transaction, reads what
- * the transaction holds from pg_locks, and holds comb's warning of the VALIDATE to it: comb warns
+ * the transaction holds from pg_locks, and holds database's warning of the VALIDATE to it: database warns
  * exactly when Postgres holds a lock that blocks reads or writes of a relation another session sees,
  * and names the relations it holds as Postgres does.
  */
@@ -18,7 +18,7 @@ import { heldBy, warningOf } from "../support/pg-locks.ts"
 
 beforeAll(loadPostgresParser)
 
-/** comb's warnings of the VALIDATE after `first`, in its file, after `history` */
+/** database's warnings of the VALIDATE after `first`, in its file, after `history` */
 const validateWarnings = (first: string, history = HISTORY): string[] =>
 	classifyMigration(`${first}\n${VALIDATE}\n`, {
 		before: extractSchema(history, undefined, "postgres"),
@@ -41,7 +41,7 @@ describe("a VALIDATE after a statement of its file that holds a strong lock on P
 	it.each(OWNING)(
 		"after %s on a role, warns of what the role owns, which only Postgres names",
 		async (statement, held) => {
-			const [role] = testRoles("comb_t_own")
+			const [role] = testRoles("database_t_own")
 			await query(pgUrl(), `CREATE ROLE ${role}`)
 			const { history, mapped } = owning(role)
 			const first = statement(role)

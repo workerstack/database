@@ -34,7 +34,7 @@ function refuseOutside(ops: ReadonlyArray<Record<string, unknown>>, sql: string)
 	const outside = outsideReach(ops)
 	if (outside === undefined) return
 	throw new Error(
-		`${preview(sql)}: comb never runs ${outside} in a migration: it reaches outside the database the migration applies to, and D1 refuses it`,
+		`${preview(sql)}: database never runs ${outside} in a migration: it reaches outside the database the migration applies to, and D1 refuses it`,
 	)
 }
 

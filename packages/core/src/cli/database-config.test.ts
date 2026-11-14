@@ -3,68 +3,75 @@ import { writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
 import { makeIo, projects, writeTables } from "./__fixtures__/io.ts"
-import { databaseIn, declaredFts, findCombConfig, ftsSql, loadCombConfig, tablesFile } from "./comb-config.ts"
+import {
+	databaseIn,
+	declaredFts,
+	findDatabaseConfig,
+	ftsSql,
+	loadDatabaseConfig,
+	tablesFile,
+} from "./database-config.ts"
 import { CliError } from "./output.ts"
 
 const temp = projects(fixtureRoot())
 const project = temp.make
 afterEach(temp.clean)
 
-describe("findCombConfig and loadCombConfig", () => {
-	it("reads comb.config.ts, then comb.config.js, by default or namespace export", async () => {
+describe("findDatabaseConfig and loadDatabaseConfig", () => {
+	it("reads database.config.ts, then database.config.js, by default or namespace export", async () => {
 		const ts = project()
-		writeFileSync(join(ts, "comb.config.ts"), 'export default { databases: { core: { tables: "./a.ts" } } }\n')
-		expect(await findCombConfig(ts)).toEqual({ databases: { core: { tables: "./a.ts" } } })
+		writeFileSync(join(ts, "database.config.ts"), 'export default { databases: { core: { tables: "./a.ts" } } }\n')
+		expect(await findDatabaseConfig(ts)).toEqual({ databases: { core: { tables: "./a.ts" } } })
 		const js = project()
-		writeFileSync(join(js, "comb.config.js"), 'export const databases = { core: { tables: "./b.ts" } }\n')
-		expect((await loadCombConfig(js)).databases).toEqual({ core: { tables: "./b.ts" } })
+		writeFileSync(join(js, "database.config.js"), 'export const databases = { core: { tables: "./b.ts" } }\n')
+		expect((await loadDatabaseConfig(js)).databases).toEqual({ core: { tables: "./b.ts" } })
 	})
 
 	it("finds nothing in a project without one, and loading it then is an error", async () => {
 		const empty = project()
-		expect(await findCombConfig(empty)).toBeUndefined()
-		await expect(loadCombConfig(empty)).rejects.toThrow(CliError)
+		expect(await findDatabaseConfig(empty)).toBeUndefined()
+		await expect(loadDatabaseConfig(empty)).rejects.toThrow(CliError)
 	})
 })
 
-/* KC7 of r22b: a comb.config.ts that failed to load was reported without its file */
-describe("findCombConfig on a config that fails to load", () => {
+/* KC7 of r22b: a database.config.ts that failed to load was reported without its file */
+describe("findDatabaseConfig on a config that fails to load", () => {
 	it("names the file, with the error as its cause", async () => {
 		const broken = project()
-		writeFileSync(join(broken, "comb.config.ts"), "export default {\n")
-		await expect(findCombConfig(broken)).rejects.toThrow(`${join(broken, "comb.config.ts")} failed to load: `)
+		writeFileSync(join(broken, "database.config.ts"), "export default {\n")
+		await expect(findDatabaseConfig(broken)).rejects.toThrow(`${join(broken, "database.config.ts")} failed to load: `)
 		const throws = project()
-		writeFileSync(join(throws, "comb.config.ts"), 'throw new RangeError("store unreachable")\n')
-		const thrown = await findCombConfig(throws).catch((error: unknown) => error)
+		writeFileSync(join(throws, "database.config.ts"), 'throw new RangeError("store unreachable")\n')
+		const thrown = await findDatabaseConfig(throws).catch((error: unknown) => error)
 		expect(thrown).toBeInstanceOf(CliError)
-		expect((thrown as Error).message).toBe(`${join(throws, "comb.config.ts")} failed to load: store unreachable`)
+		expect((thrown as Error).message).toBe(`${join(throws, "database.config.ts")} failed to load: store unreachable`)
 		expect((thrown as Error).cause).toEqual(new RangeError("store unreachable"))
 		const value = project()
-		writeFileSync(join(value, "comb.config.ts"), "throw 7\n")
-		await expect(findCombConfig(value)).rejects.toThrow(`${join(value, "comb.config.ts")} failed to load: 7`)
+		writeFileSync(join(value, "database.config.ts"), "throw 7\n")
+		await expect(findDatabaseConfig(value)).rejects.toThrow(`${join(value, "database.config.ts")} failed to load: 7`)
 	})
 })
 
 /* K14 of the 0.15.0 review: a misspelled key fell back to its default, and codegen exited 0 */
-describe("findCombConfig on a config with a key comb does not know", () => {
+describe("findDatabaseConfig on a config with a key database does not know", () => {
 	it("refuses it by name, naming the file and where", async () => {
 		const dir = project()
 		writeFileSync(
-			join(dir, "comb.config.ts"),
+			join(dir, "database.config.ts"),
 			'export default { databases: { core: { tables: "./a.ts", filePrefx: "db.x" } } }\n',
 		)
-		await expect(findCombConfig(dir)).rejects.toThrow(
-			`${join(dir, "comb.config.ts")} is not a valid comb config:\n✖ Unrecognized key: "filePrefx"\n  → at databases.core`,
+		await expect(findDatabaseConfig(dir)).rejects.toThrow(
+			`${join(dir, "database.config.ts")} is not a valid database config:\n✖ Unrecognized key: "filePrefx"\n  → at databases.core`,
 		)
 	})
 
-	it("refuses a generator comb does not have, and a driver it does not write", async () => {
+	it("refuses a generator database does not have, and a driver it does not write", async () => {
 		const dir = project()
 		writeFileSync(
-			join(dir, "comb.config.ts"),
+			join(dir, "database.config.ts"),
 			'export default { databases: { core: { tables: "./a.ts", generators: ["dto"], driver: "pg" } } }\n',
 		)
-		await expect(findCombConfig(dir)).rejects.toThrow(
+		await expect(findDatabaseConfig(dir)).rejects.toThrow(
 			/→ at databases\.core\.driver[\s\S]*→ at databases\.core\.generators\[0\]|→ at databases\.core\.generators\[0\][\s\S]*→ at databases\.core\.driver/,
 		)
 	})
@@ -74,7 +81,7 @@ describe("databaseIn and tablesFile", () => {
 	it("returns the declared database, and names the declared ones when it is not there", () => {
 		const config = { databases: { core: { tables: "t.ts" } } }
 		expect(databaseIn(config, "core")).toEqual({ tables: "t.ts" })
-		expect(() => databaseIn(config, "nope")).toThrow('comb.config.ts declares no database "nope". Available: core')
+		expect(() => databaseIn(config, "nope")).toThrow('database.config.ts declares no database "nope". Available: core')
 		expect(() => databaseIn(config, "toString")).toThrow(CliError)
 	})
 
@@ -91,7 +98,7 @@ describe("declaredFts and ftsSql", () => {
 		const dir = project()
 		expect(await declaredFts(dir, { name: "core" })).toBeUndefined()
 		writeFileSync(
-			join(dir, "comb.config.ts"),
+			join(dir, "database.config.ts"),
 			'export default { databases: { core: { tables: "./db.core.tables.ts", fts: {} } } }\n',
 		)
 		expect(await declaredFts(dir, { name: undefined })).toBeUndefined()
@@ -103,7 +110,7 @@ describe("declaredFts and ftsSql", () => {
 		const dir = project()
 		writeTables(dir)
 		writeFileSync(
-			join(dir, "comb.config.ts"),
+			join(dir, "database.config.ts"),
 			'export default { databases: { core: { tables: "./db.core.tables.ts", fts: { post: { columns: ["title"] } } } } }\n',
 		)
 		const declared = await declaredFts(dir, { name: "core" })

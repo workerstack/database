@@ -5,7 +5,7 @@
  * constraint's index, take; each index cloned onto every partition, attached to a matching one, and
  * followed through renames, moves and drops. Each case lists every index as `name on table`, with
  * `partitioned` when its table is (Postgres's relkind I) and `constraint` when a constraint backs it.
- * src/migrate/core/pg-indexes.test.ts holds comb's facts to these lists, and
+ * src/migrate/core/pg-indexes.test.ts holds database's facts to these lists, and
  * tests/integration/postgres/index-names-oracle.test.ts holds these lists to Postgres 17.
  */
 

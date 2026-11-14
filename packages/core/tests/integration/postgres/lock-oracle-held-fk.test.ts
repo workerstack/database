@@ -4,7 +4,7 @@
  * key, a dropped table's keys and the keys to it, a TRUNCATE CASCADE's referencing tables, a key column
  * retyped, and a partition made, attached or detached under a parent's keys each lock the table at the
  * key's other end. Each case runs a statement, then the VALIDATE, as Atlas runs a file, in one
- * transaction, reads what the transaction holds from pg_locks, and holds comb's warning to it.
+ * transaction, reads what the transaction holds from pg_locks, and holds database's warning to it.
  */
 import { beforeAll, describe, expect, it } from "vitest"
 import { classifyMigration } from "../../../src/migrate/core/classify.ts"
@@ -31,7 +31,7 @@ const HISTORY = [
 const VALIDATE = "ALTER TABLE audit VALIDATE CONSTRAINT pos;"
 const [READS, WRITES] = ["reads and writes", "writes"]
 
-/** comb's warnings of the VALIDATE after `first`, in its file */
+/** database's warnings of the VALIDATE after `first`, in its file */
 const validateWarnings = (first: string): string[] =>
 	classifyMigration(`${first}\n${VALIDATE}\n`, {
 		before: extractSchema(HISTORY, undefined, "postgres"),

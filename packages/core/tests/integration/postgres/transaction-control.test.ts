@@ -1,8 +1,8 @@
 /**
  * PA2 of r22b: a file Atlas runs in one transaction holds no BEGIN, COMMIT or ROLLBACK of its own.
- * Its COMMIT kept what ran before a later failure while comb said the file was rolled back, and in
+ * Its COMMIT kept what ran before a later failure while database said the file was rolled back, and in
  * check's replay it ended the counted transaction, so a role a later DO made stayed on devUrl's
- * server. comb refuses the file from the file alone, before check replays anything and before
+ * server. database refuses the file from the file alone, before check replays anything and before
  * apply runs it; a txmode none file keeps its own.
  */
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
@@ -22,11 +22,11 @@ beforeAll(loadPostgresParser)
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-pg-transaction-control-"))
+	dir = mkdtempSync(join(tmpdir(), "database-pg-transaction-control-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
-const UNSAFE = "-- comb:allow-unsafe: the test's history\n"
+const UNSAFE = "-- database:allow-unsafe: the test's history\n"
 const REFUSAL = "Atlas runs this file in one transaction and records it there, so its own COMMIT ends that transaction"
 
 /** The files, named in order and hashed */
@@ -52,7 +52,7 @@ const tables = async (url: string): Promise<string[]> =>
 
 describe("a transactional file holds no transaction control (PA2; sibling: PA13's inside-only statements)", () => {
 	it("is refused at check before the replay runs a statement of it, so a later DO's role stays off devUrl's server", async () => {
-		const [made] = testRoles("comb_t_commit")
+		const [made] = testRoles("database_t_commit")
 		await write([
 			"CREATE TABLE a (id int PRIMARY KEY);\n",
 			`${UNSAFE}CREATE TABLE b (id int);\nCOMMIT;\nDO $$ BEGIN CREATE ROLE ${made}; END $$;\n`,

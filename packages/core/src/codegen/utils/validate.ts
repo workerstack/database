@@ -11,9 +11,9 @@ import { qualifiedName } from "./table-name.ts"
 
 /** What a check of the tables found before generating */
 export type ValidationResult = {
-	/** problems that would generate broken code; `comb codegen` stops on any of them */
+	/** problems that would generate broken code; `database codegen` stops on any of them */
 	errors: string[]
-	/** suspicious patterns that still generate; `comb codegen` prints each as `warn:` and goes on */
+	/** suspicious patterns that still generate; `database codegen` prints each as `warn:` and goes on */
 	warnings: string[]
 }
 

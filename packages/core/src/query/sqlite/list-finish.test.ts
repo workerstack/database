@@ -96,7 +96,7 @@ function extrasOf(
 	)
 }
 
-describe("finish's stored times on SQLite (QL2 of r22b; sibling: _combKeyTypes)", () => {
+describe("finish's stored times on SQLite (QL2 of r22b; sibling: _cursorKeyTypes)", () => {
 	/* AB3 of area B: a merged list carries them too, an INTEGER's as well, so its merge compares every row in seconds */
 	it("carries a SQLite seconds key's stored seconds on a list that binds it as read, merged or not, another's mark alone", () => {
 		const SECONDS = `case when typeof("ev"."at") in ('integer', 'real') and abs("ev"."at") < 9e999 then ${readBack(`"ev"."at"`)} when (typeof("ev"."at") in ('null', 'integer', 'real')) then '' else '!' || typeof("ev"."at") end`
@@ -106,15 +106,19 @@ describe("finish's stored times on SQLite (QL2 of r22b; sibling: _combKeyTypes)"
 			{ column: ev.n, direction: "asc" },
 			{ column: ev.j, direction: "asc" },
 		])
-		expect(anchorless["_combKeyTexts"]).toBe(`${SECONDS} || ',' || ${MARK} || ',' || ''`)
-		expect(extrasOf("sqlite", [{ column: ev.at, direction: "asc" }], { merged: {} })["_combKeyTexts"]).toBe(SECONDS)
-		expect(extrasOf("sqlite", [{ column: ev.n, direction: "asc" }], { merged: {} })["_combKeyTexts"]).toBe(MARK)
+		expect(anchorless["_cursorKeyTexts"]).toBe(`${SECONDS} || ',' || ${MARK} || ',' || ''`)
+		expect(extrasOf("sqlite", [{ column: ev.at, direction: "asc" }], { merged: {} })["_cursorKeyTexts"]).toBe(SECONDS)
+		expect(extrasOf("sqlite", [{ column: ev.n, direction: "asc" }], { merged: {} })["_cursorKeyTexts"]).toBe(MARK)
 		/* AB4-2 of area B: a JSON key has no set of classes, so nothing marks it */
-		expect(extrasOf("sqlite", [{ column: ev.j, direction: "asc" }], { merged: {} })).not.toHaveProperty("_combKeyTexts")
+		expect(extrasOf("sqlite", [{ column: ev.j, direction: "asc" }], { merged: {} })).not.toHaveProperty(
+			"_cursorKeyTexts",
+		)
 	})
 
 	it("selects classes and times on an anchored list only for a key its anchor row doesn't supply", () => {
-		expect(extrasOf("sqlite", [{ column: ev.at, direction: "asc" }], { table: ev })).not.toHaveProperty("_combKeyTypes")
+		expect(extrasOf("sqlite", [{ column: ev.at, direction: "asc" }], { table: ev })).not.toHaveProperty(
+			"_cursorKeyTypes",
+		)
 		const joined = extrasOf(
 			"sqlite",
 			[
@@ -125,8 +129,8 @@ describe("finish's stored times on SQLite (QL2 of r22b; sibling: _combKeyTypes)"
 				table: ev,
 			},
 		)
-		expect(joined["_combKeyTypes"]).toContain("typeof")
-		expect(joined["_combKeyTexts"]).toMatch(/^'' \|\| ',' \|\| case when typeof\("side"\."at"\)/)
+		expect(joined["_cursorKeyTypes"]).toContain("typeof")
+		expect(joined["_cursorKeyTexts"]).toMatch(/^'' \|\| ',' \|\| case when typeof\("side"\."at"\)/)
 	})
 })
 
@@ -143,35 +147,37 @@ describe("finish's SQLite timestamp keys holding TEXT (B2-3 of area B)", () => {
 			],
 			{ table: ev },
 		)
-		expect(table["_combTextKeys"]).toBe(
+		expect(table["_cursorTextKeys"]).toBe(
 			held([
 				{ column: ev.at, direction: "asc" },
 				{ column: ev.n, direction: "asc" },
 			]),
 		)
-		expect(table["_combTextKeys"]).toMatch(
+		expect(table["_cursorTextKeys"]).toMatch(
 			/^json_array\(case when .* then json_array\('text', "ev"."at"\) .*, case when /,
 		)
-		expect(table).not.toHaveProperty("_combKeyTexts")
+		expect(table).not.toHaveProperty("_cursorKeyTexts")
 		const ms = extrasOf("sqlite", [{ column: evMs.at, direction: "asc" }], { table: evMs })
-		expect(ms["_combTextKeys"]).toBe(held([{ column: evMs.at, direction: "asc" }]))
+		expect(ms["_cursorTextKeys"]).toBe(held([{ column: evMs.at, direction: "asc" }]))
 		/* bound as read: no text, only the mark a 500 names it by, beside a number's stored milliseconds (B2-6 of area B) */
 		const anchorless = extrasOf("sqlite", [{ column: evMs.at, direction: "asc" }])
-		expect(anchorless).not.toHaveProperty("_combTextKeys")
-		expect(anchorless["_combKeyTexts"]).toBe(
+		expect(anchorless).not.toHaveProperty("_cursorTextKeys")
+		expect(anchorless["_cursorKeyTexts"]).toBe(
 			`case when typeof("ev_ms"."at") in ('integer', 'real') and abs("ev_ms"."at") < 9e999 then ${readBack(`"ev_ms"."at"`)} when (typeof("ev_ms"."at") in ('null', 'integer', 'real')) then '' else '!' || typeof("ev_ms"."at") end`,
 		)
 		expect(extrasOf("sqlite", [{ column: ev.at, direction: "asc" }], { merged: {} })).not.toHaveProperty(
-			"_combTextKeys",
+			"_cursorTextKeys",
 		)
-		expect(extrasOf("sqlite", [{ column: ev.j, direction: "asc" }], { table: ev })).not.toHaveProperty("_combTextKeys")
+		expect(extrasOf("sqlite", [{ column: ev.j, direction: "asc" }], { table: ev })).not.toHaveProperty(
+			"_cursorTextKeys",
+		)
 		expect(extrasOf("postgres", [{ column: pgEv.at, direction: "asc" }], { table: pgEv })).not.toHaveProperty(
-			"_combTextKeys",
+			"_cursorTextKeys",
 		)
 		/* a Postgres derived list, anchored or not, selects none either */
-		expect(extrasOf("postgres", [{ column: pgEv.at, direction: "asc" }])).not.toHaveProperty("_combTextKeys")
+		expect(extrasOf("postgres", [{ column: pgEv.at, direction: "asc" }])).not.toHaveProperty("_cursorTextKeys")
 		expect(extrasOf("postgres", [{ column: sql`${pgEv.at}`, direction: "asc" }], { table: pgEv })).not.toHaveProperty(
-			"_combTextKeys",
+			"_cursorTextKeys",
 		)
 	})
 })
@@ -184,19 +190,19 @@ describe("finish's key families and stored times on Postgres (QL1, QL2 of r22b; 
 			{ column: pgEv.label, direction: "asc" },
 			{ column: new DateKey(sql`1`), direction: "asc" },
 		])
-		expect(times["_combKeyTypes"]).toContain("then 'time'")
+		expect(times["_cursorKeyTypes"]).toContain("then 'time'")
 		/* beside a time, only a numeric or a domain over one is carried (AB1 of area B); a float, or a domain over one,
 		   is marked where the session prints it rounded (AB4-4 of area B) */
 		const OVER_NUMERIC = `(pg_typeof("pg_ev"."at")::oid >= 16384 and pg_typeof("pg_ev"."at")::oid = any(array(with recursive d(oid, base) as (select oid, typbasetype from pg_type where typtype = 'd' union all select d.oid, p.typbasetype from d join pg_type p on p.oid = d.base where p.typtype = 'd') select d.oid from d where d.base::regtype in ('numeric'::regtype))))`
 		const OVER_FLOAT = `(pg_typeof("pg_ev"."at") in ('double precision'::regtype, 'real'::regtype) or (pg_typeof("pg_ev"."at")::oid >= 16384 and pg_typeof("pg_ev"."at")::oid = any(array(with recursive d(oid, base) as (select oid, typbasetype from pg_type where typtype = 'd' union all select d.oid, p.typbasetype from d join pg_type p on p.oid = d.base where p.typtype = 'd') select d.oid from d where d.base::regtype in ('double precision'::regtype, 'real'::regtype)))))`
-		expect(times["_combKeyTexts"]).toBe(
+		expect(times["_cursorKeyTexts"]).toBe(
 			`coalesce((to_json("pg_ev"."at") #>> '{}'), '') || ',' || coalesce(case when (pg_typeof("pg_ev"."at") = 'numeric'::regtype or ${OVER_NUMERIC}) then ("pg_ev"."at")::text when ${OVER_FLOAT} and ("pg_ev"."at" is not null and current_setting('extra_float_digits')::int <= 0) then '!f' when pg_typeof("pg_ev"."at") in ('timestamp without time zone'::regtype, 'timestamp with time zone'::regtype, 'date'::regtype) then (to_json("pg_ev"."at") #>> '{}') end, '') || ',' || '' || ',' || ''`,
 		)
-		expect(extrasOf("postgres", [{ column: pgEv.label, direction: "asc" }])).not.toHaveProperty("_combKeyTexts")
+		expect(extrasOf("postgres", [{ column: pgEv.label, direction: "asc" }])).not.toHaveProperty("_cursorKeyTexts")
 		/* AB3-4 of area B: a list that reads the key back carries it too, for a cursor whose row is gone */
 		expect(extrasOf("postgres", [{ column: pgEv.at, direction: "asc" }], { table: pgEv as never })).toEqual({
-			_combId: expect.any(String),
-			_combKeyTexts: `coalesce((to_json("pg_ev"."at") #>> '{}'), '')`,
+			_cursorId: expect.any(String),
+			_cursorKeyTexts: `coalesce((to_json("pg_ev"."at") #>> '{}'), '')`,
 			_total: expect.any(String),
 		})
 	})
@@ -208,10 +214,10 @@ describe("finish's carried numeric texts (QL3 of r22b; sibling: the stored times
 
 	it("carries a numeric in number mode on an anchored list, a table list and the relational one, beside a time", () => {
 		const anchored = extrasOf("postgres", [{ column: amount.n, direction: "asc" }], { table: amount as never })
-		expect(anchored).not.toHaveProperty("_combKeyTypes")
-		expect(anchored["_combKeyTexts"]).toBe(`coalesce(("amount"."n")::text, '')`)
+		expect(anchored).not.toHaveProperty("_cursorKeyTypes")
+		expect(anchored["_cursorKeyTexts"]).toBe(`coalesce(("amount"."n")::text, '')`)
 		const table = extrasOf("sqlite", [{ column: amount.n, direction: "asc" }], { table: amount as never })
-		expect(table["_combKeyTexts"]).toBe(`coalesce(("amount"."n")::text, '')`)
+		expect(table["_cursorKeyTexts"]).toBe(`coalesce(("amount"."n")::text, '')`)
 		const relational = keyTextsSQL(
 			[
 				{ column: amount.n, direction: "asc" },
@@ -226,7 +232,7 @@ describe("finish's carried numeric texts (QL3 of r22b; sibling: the stored times
 
 	it("carries an anchored Postgres expression's text where its type may read rounded or is a time (AB3-4 of area B)", () => {
 		const own = extrasOf("postgres", [{ column: sql`${pgEv.at}`, direction: "asc" }], { table: pgEv as never })
-		expect(own["_combKeyTexts"]).toMatch(/^coalesce\(case when \(pg_typeof\("pg_ev"\."at"\) = 'numeric'::regtype or /)
-		expect(own["_combKeyTexts"]).toContain(`then (to_json("pg_ev"."at") #>> '{}') end`)
+		expect(own["_cursorKeyTexts"]).toMatch(/^coalesce\(case when \(pg_typeof\("pg_ev"\."at"\) = 'numeric'::regtype or /)
+		expect(own["_cursorKeyTexts"]).toContain(`then (to_json("pg_ev"."at") #>> '{}') end`)
 	})
 })

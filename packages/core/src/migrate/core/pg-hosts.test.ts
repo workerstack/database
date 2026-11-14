@@ -4,7 +4,7 @@ import { join } from "node:path"
 import { describe, expect, it } from "vitest"
 import { pgUrlProblems, type PgTarget } from "./atlas-target.ts"
 
-const dir = mkdtempSync(join(tmpdir(), "comb-hosts-"))
+const dir = mkdtempSync(join(tmpdir(), "database-hosts-"))
 const OPEN = join(dir, "open")
 writeFileSync(OPEN, "*:*:*:*:pw\n")
 chmodSync(OPEN, 0o644)
@@ -26,10 +26,11 @@ const plaintext = (reached: string) =>
 	`url reaches ${reached} without sslmode=verify-full or require, so the password may cross the network unencrypted or to an unverified server`
 
 /** What pgUrlProblems says of several hosts in `field` */
-const several = (field: string) => `${field} names several hosts; comb migrates one database, so name its primary alone`
+const several = (field: string) =>
+	`${field} names several hosts; database migrates one database, so name its primary alone`
 
-/* P16 of r19: a URL with no sslmode is require to comb and Atlas alike (P19 of r18), and system is verify-full */
-describe("pgUrlProblems: the plaintext warning reads the sslmode comb connects with", () => {
+/* P16 of r19: a URL with no sslmode is require to database and Atlas alike (P19 of r18), and system is verify-full */
+describe("pgUrlProblems: the plaintext warning reads the sslmode database connects with", () => {
 	it("does not warn of a URL with no sslmode, or with sslrootcert=system alone", () => {
 		expect(problems("postgres://app:pw@db.example.com/app").warnings).toEqual([])
 		expect(problems("postgres://app:pw@db.example.com/app?sslrootcert=system").warnings).toEqual([])
@@ -65,7 +66,7 @@ describe("pgUrlProblems: the plaintext warning on a loopback address", () => {
 	})
 })
 
-/* P23 of r19: comb migrates one database; a host list is refused by name, wherever the URL spells it */
+/* P23 of r19: database migrates one database; a host list is refused by name, wherever the URL spells it */
 describe("pgUrlProblems: several hosts", () => {
 	it.each([
 		"postgres://app:secret@db1.example.com:5432,db2.example.com:5432/app?sslmode=require",
@@ -94,7 +95,7 @@ describe("pgUrlProblems: the passfile", () => {
 		).toEqual([`devUrl's passfile ${OPEN} can be read by others, so libpq ignores it; chmod 600 it`])
 	})
 
-	/* libpq reads a passfile only for a URL without a password, as comb's own read does (runs/*-p55-gates-20261101T215319Z: /dev/null) */
+	/* libpq reads a passfile only for a URL without a password, as database's own read does (runs/*-p55-gates-20261101T215319Z: /dev/null) */
 	it("passes any passfile beside a URL's own password, which libpq never reads", () => {
 		expect(problems(`postgres://app:pw@db.example.com/app?sslmode=require&passfile=${dir}`).errors).toEqual([])
 		expect(problems(`postgres://app:pw@db.example.com/app?sslmode=require&passfile=${OPEN}`).errors).toEqual([])

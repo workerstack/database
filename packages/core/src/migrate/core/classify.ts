@@ -4,7 +4,7 @@
  *
  * unsafe: loses data or breaks deployed code by name (table, column, schema, type, sequence,
  * role drops; CASCADE; retypes; SET NOT NULL; a NOT NULL column without a default; renames;
- * TRUNCATE; a statement comb does not recognize, a trigger or routine made or dropped among them).
+ * TRUNCATE; a statement database does not recognize, a trigger or routine made or dropped among them).
  * cautious: drops nothing a row holds (indexes, constraints, views, policies, defaults), a grant, or
  * a file Atlas runs outside a transaction. A lock warning names a
  * statement that blocks a Postgres table while it runs. What a statement writes is read from the
@@ -15,7 +15,7 @@
  * the file's own BEGIN.
  */
 import type { ExtractedSchema, MigrationClassification } from "../migration-types.ts"
-import type { Dialect } from "../types.ts"
+import type { MigrateDialect } from "../types.ts"
 import { alterTableFindings, type Finding } from "./classify-alter.ts"
 import { createdOf, ftsCommandFindings, refuseHeader, reindexedOf, type Replayed } from "./classify-file.ts"
 import type { TargetKind } from "./classify-target.ts"
@@ -50,7 +50,7 @@ type ClassifyOptions = {
 	/** where a SQLite file applies, whose own rule of what it runs the file is held to; default `local` */
 	kind?: TargetKind | undefined
 	/** how the file is read; default SQLite, as the CLI's */
-	dialect?: Dialect | undefined
+	dialect?: MigrateDialect | undefined
 	/** the Postgres schema the URLs' search_path names, where an unqualified name resolves; default `public` */
 	schema?: string | undefined
 }
@@ -160,7 +160,7 @@ function statementFindings(code: string, ctx: FileContext): Finding[] {
 	const rebuild = rebuildFinding(DROP_LIST.exec(code)?.[2], ctx)
 	if (rebuild !== undefined) return [rebuild]
 	if (dropsRebuiltIndex(code, ctx))
-		return [{ level: "cautious", note: "an FTS index comb rebuilds from its content table" }]
+		return [{ level: "cautious", note: "an FTS index database rebuilds from its content table" }]
 	const findings: Finding[] = ctx.dialect === "postgres" ? pgTextFindings(code) : sqliteDropFindings(code)
 	if (/\bCASCADE\b/i.test(code.replace(/\bON (?:DELETE|UPDATE) CASCADE\b/gi, ""))) findings.push({ level: "unsafe" })
 	findings.push(...runtimeFindings(code))
@@ -206,7 +206,7 @@ type Given = { placing?: Placing | undefined; read?: PgRead | undefined; replaye
  */
 function readFile(
 	sql: string,
-	{ before, dialect, schema }: { before: ExtractedSchema | undefined; dialect: Dialect; schema: string },
+	{ before, dialect, schema }: { before: ExtractedSchema | undefined; dialect: MigrateDialect; schema: string },
 	{ placing, read, replayed }: Given,
 ): Read[] {
 	refuseHeader(sql, dialect)
@@ -247,7 +247,7 @@ function readFile(
 		const scope = tree === undefined ? {} : scoped(tree)
 		const held = replayed?.held.get(i)
 		if (held !== undefined) measured(ctx.held, held)
-		/* comb's own guard around a rebuild, exactly as comb writes it, empties and refills; it loses nothing */
+		/* database's own guard around a rebuild, exactly as database writes it, empties and refills; it loses nothing */
 		/* every other statement is rated by the rules, and only as a shape the grammar recognizes */
 		const findings = guards.guarded.has(i)
 			? []

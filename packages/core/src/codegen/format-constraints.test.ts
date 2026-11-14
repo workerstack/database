@@ -13,8 +13,8 @@ const INTEGER_IDS = "iso8601-month, iso8601-weekday"
 
 describe("a format's id: one the helper's kind knows", () => {
 	it.each([
-		['c.text("f", { format: "iso-4217" })', `comb knows no format "iso-4217"; text formats: ${TEXT_IDS}`],
-		['c.enum("f", ["USD"], { format: "iso-4217" })', `comb knows no format "iso-4217"; text formats: ${TEXT_IDS}`],
+		['c.text("f", { format: "iso-4217" })', `database knows no format "iso-4217"; text formats: ${TEXT_IDS}`],
+		['c.enum("f", ["USD"], { format: "iso-4217" })', `database knows no format "iso-4217"; text formats: ${TEXT_IDS}`],
 		[
 			'c.text("f", { format: "iso8601-weekday" })',
 			`c.text takes no format "iso8601-weekday"; text formats: ${TEXT_IDS}`,
@@ -24,7 +24,7 @@ describe("a format's id: one the helper's kind knows", () => {
 			`c.enum takes no format "iso8601-month"; text formats: ${TEXT_IDS}`,
 		],
 		['c.integer("f", { format: "iso4217" })', `c.integer takes no format "iso4217"; integer formats: ${INTEGER_IDS}`],
-		['c.integer("f", { format: "iso-8601" })', `comb knows no format "iso-8601"; integer formats: ${INTEGER_IDS}`],
+		['c.integer("f", { format: "iso-8601" })', `database knows no format "iso-8601"; integer formats: ${INTEGER_IDS}`],
 	])("refuses %s", (source, said) => {
 		expect(reading(source)).toThrow(new Error(`${at}: ${said}`))
 	})
@@ -116,7 +116,7 @@ describe("an enum format: each value one the standard writes", () => {
 	it("refuses, from a direct call, an id that is no string, and checks no values it is not given", () => {
 		const options = { helper: "enum", place: "t.f" } as const
 		expect(() => formatOf({ format: 4217 }, { ...options, values: null })).toThrow(
-			`t.f: comb knows no format 4217; text formats: ${TEXT_IDS}`,
+			`t.f: database knows no format 4217; text formats: ${TEXT_IDS}`,
 		)
 		expect(formatOf({ format: "iso4217" }, { ...options, values: null })).toBe("iso4217")
 		expect(formatOf({}, { ...options, values: ["usd"] })).toBeNull()

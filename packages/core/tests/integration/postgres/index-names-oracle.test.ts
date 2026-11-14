@@ -1,9 +1,9 @@
 /**
  * Every index Postgres 17 makes, under the name it gives it (PA12 of r22b). Each history of
  * INDEX_CASES runs on a scratch database, and its catalog, rendered as pg-indexes.test.ts renders
- * comb's facts, must equal the case's list. Then each statement Postgres refuses inside a
+ * database's facts, must equal the case's list. Then each statement Postgres refuses inside a
  * transaction block for a partitioned table or index (REINDEX, CLUSTER) runs after its history in
- * one, and comb must refuse it exactly when Postgres does, and rate a partitioned index's move to
+ * one, and database must refuse it exactly when Postgres does, and rate a partitioned index's move to
  * another tablespace, which has no storage to rewrite, without the rewrite's warning.
  */
 import pg from "pg"
@@ -68,14 +68,14 @@ const postgresRefuses = (history: string, statement: string): Promise<boolean> =
 		}
 	})
 
-/** comb's rating of `statement` after `history`, or the refusal it throws */
-const combRates = (history: string, statement: string): ReturnType<typeof classifyMigration> =>
+/** database's rating of `statement` after `history`, or the refusal it throws */
+const databaseRates = (history: string, statement: string): ReturnType<typeof classifyMigration> =>
 	classifyMigration(`${statement};\n`, { before: extractSchema(history, undefined, "postgres"), dialect: "postgres" })
 
-/** Whether comb refuses `statement` after `history` as one Postgres runs only outside a transaction */
-function combRefuses(history: string, statement: string): boolean {
+/** Whether database refuses `statement` after `history` as one Postgres runs only outside a transaction */
+function databaseRefuses(history: string, statement: string): boolean {
 	try {
-		combRates(history, statement)
+		databaseRates(history, statement)
 		return false
 	} catch (error) {
 		if (!(error as Error).message.includes("only outside a transaction")) throw error
@@ -85,7 +85,7 @@ function combRefuses(history: string, statement: string): boolean {
 
 describe("partitioned refusals against Postgres 17", () => {
 	it.each(REFUSALS)("refuses as Postgres does for %s", async (_label, history, statement) => {
-		expect(combRefuses(history, statement)).toBe(await postgresRefuses(history, statement))
+		expect(databaseRefuses(history, statement)).toBe(await postgresRefuses(history, statement))
 	})
 
 	it("moves a partitioned index to another tablespace without a rewrite, as Postgres does", async () => {
@@ -101,6 +101,6 @@ describe("partitioned refusals against Postgres 17", () => {
 			return [before, await read()]
 		})
 		expect(files).toEqual(["0", "0"])
-		expect(combRates(history, statement).lockWarnings).toEqual([])
+		expect(databaseRates(history, statement).lockWarnings).toEqual([])
 	})
 })

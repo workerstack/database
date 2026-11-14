@@ -26,7 +26,7 @@ type IntervalField = "day" | "hour" | "minute" | "month" | "second" | "year"
 const INTERVAL_FIELDS =
 	/^interval(?: (year|month|day|hour|minute|second)(?: to (month|hour|minute|second))?)?(?:\((\d+)\))?$/
 
-/** The modifier drizzle's SQL type `sqlType` declares; a type comb reads none of is `other` */
+/** The modifier drizzle's SQL type `sqlType` declares; a type database reads none of is `other` */
 export function pgModifierOf(sqlType: string): PgModifier {
 	/* drizzle writes `timestamp (3)` in one mode and `timestamp(3)` in another */
 	const time = /^(time|timestamp) ?(?:\((\d+)\))?( with time zone)?$/.exec(sqlType)
@@ -57,7 +57,7 @@ export function pgModifierOf(sqlType: string): PgModifier {
 /** The modifier of `sqlType`, which a rule keyed by its data type knows is of `base` */
 function modifierAs<B extends PgModifier["base"]>(sqlType: string, base: B): Extract<PgModifier, { base: B }> {
 	const modifier = pgModifierOf(sqlType)
-	if (modifier.base !== base) throw new TypeError(`comb reads no ${base} modifier in ${sqlType}`)
+	if (modifier.base !== base) throw new TypeError(`database reads no ${base} modifier in ${sqlType}`)
 	return modifier as Extract<PgModifier, { base: B }>
 }
 
@@ -71,7 +71,7 @@ const OFFSET = "(?:Z|[+-](?:0[0-9]|1[0-5]):[0-5][0-9])"
 /*
  * zod's ISO date, date-time and time regexes, each \d written as [0-9] and nothing else changed (a test
  * holds each copy to zod's own, read as it runs): zod's publish \d, which Rust's regex reads as any
- * Unicode digit, so comb publishes its own, which ECMAScript, Go's RE2 and Rust's regex read alike.
+ * Unicode digit, so database publishes its own, which ECMAScript, Go's RE2 and Rust's regex read alike.
  * Each is a z.stringFormat of zod's format name, which checks and publishes the regex it
  * is given: zod's types refuse a `pattern` param on z.iso.*, which a consumer's tsc reads. One
  * departure: the date's year is 0001 at least, as Postgres's year 0000 is a 22008

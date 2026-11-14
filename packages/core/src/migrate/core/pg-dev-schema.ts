@@ -1,7 +1,7 @@
 /**
  * The target schema on the dev database. Atlas scopes the dev URL to
  * the target schema and inspects it before it replays anything, so a dev database without it
- * fails every diff, replay and adoption proof, and nothing a migration holds can create it: comb
+ * fails every diff, replay and adoption proof, and nothing a migration holds can create it: database
  * creates it there first. devUrl is Atlas's scratch, which Atlas requires empty and cleans, so
  * this one write asks no trust Atlas does not take already. A docker:// dev is Atlas's own
  * container, left alone: whether Atlas makes the schema there is unverified (p15-summary).
@@ -12,15 +12,15 @@ import { ReplayFailed } from "./replay-failed.ts"
 import { type Connect, failureOf, loadPostgres } from "./pg-live-objects.ts"
 import { postgresOptionsOf } from "./pg-url.ts"
 
-/** How a dev database gets the target schema: comb's own, readyDevSchema, unless a test fakes it */
+/** How a dev database gets the target schema: database's own, readyDevSchema, unless a test fakes it */
 type ReadyDev = (target: PgTarget) => Promise<void>
 
-/* why comb loads postgres.js here */
+/* why database loads postgres.js here */
 const CREATES = "create a non-public schema on devUrl"
 
 /**
  * Create `target`'s schema on its dev database, unless it is public or the dev is Atlas's docker
- * container; a devUrl comb refuses is refused first, whatever the schema, so nothing reaches it
+ * container; a devUrl database refuses is refused first, whatever the schema, so nothing reaches it
  */
 async function readyDevSchema(
 	target: PgTarget,
@@ -35,7 +35,7 @@ async function readyDevSchema(
 		await sql.unsafe(`CREATE SCHEMA IF NOT EXISTS ${sqlIdentifier(target.schema)}`, [])
 	} catch (error) {
 		throw new ReplayFailed(
-			`comb could not create schema ${target.schema} on devUrl, where Atlas replays the migrations: ${failureOf(error, { field: "devUrl", url: target.devUrl, urls: [target.devUrl] })}`,
+			`database could not create schema ${target.schema} on devUrl, where Atlas replays the migrations: ${failureOf(error, { field: "devUrl", url: target.devUrl, urls: [target.devUrl] })}`,
 			{ cause: error },
 		)
 	} finally {

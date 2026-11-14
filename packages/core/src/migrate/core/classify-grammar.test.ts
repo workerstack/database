@@ -1,7 +1,7 @@
 /**
- * Default-deny (plan 12, 1.1): a statement rates safe or cautious only as a shape comb recognizes;
+ * Default-deny (plan 12, 1.1): a statement rates safe or cautious only as a shape database recognizes;
  * every other is unsafe and names itself. The 0.10 review's bypasses (M1–M6, M16) and the shapes
- * Atlas and comb write that must keep their ratings.
+ * Atlas and database write that must keep their ratings.
  */
 import { describe, expect, it } from "vitest"
 import type { ExtractedSchema } from "../migration-types.ts"
@@ -89,24 +89,27 @@ describe("default-deny: the 0.10 review's bypasses are unsafe (M1–M6)", () => 
 
 	it("names what it does not recognize, and how to approve it, as written but its TEMP", () => {
 		expect(rate("CREATE TEMP FOO x;", USERS).unsafeStatements).toEqual([
-			"CREATE TEMP FOO x (comb does not recognize CREATE FOO; approve it in the file)",
+			"CREATE TEMP FOO x (database does not recognize CREATE FOO; approve it in the file)",
 		])
 		expect(
 			rate("CREATE OR REPLACE AGGREGATE a (int) (SFUNC = f, STYPE = int);", USERS, "postgres").unsafeStatements.join(),
 			/* named as Postgres tags it, CREATE OR REPLACE AGGREGATE as CREATE AGGREGATE (P21 of r19) */
-		).toContain("comb does not recognize CREATE AGGREGATE; approve it in the file")
+		).toContain("database does not recognize CREATE AGGREGATE; approve it in the file")
 	})
 })
 
-/* S10 and P16 of the 0.15.0 review: a statement comb rates is never also one it "does not recognize" */
+/* S10 and P16 of the 0.15.0 review: a statement database rates is never also one it "does not recognize" */
 describe("default-deny's rule for triggers and routines, named as the rule", () => {
 	it.each([
-		["CREATE TRIGGER t AFTER INSERT ON users BEGIN DELETE FROM users; END;", "comb rates every trigger change unsafe"],
-		["CREATE TEMP TRIGGER t AFTER INSERT ON users BEGIN SELECT 1; END;", "comb rates every trigger change unsafe"],
-		["DROP TRIGGER t;", "comb rates every trigger change unsafe"],
-		/* the rerun of S10 on the RC: a pragma comb does not write, rated by its own rule too */
-		["PRAGMA writable_schema = ON;", "comb rates every pragma it does not write unsafe"],
-		["PRAGMA cache_size = 1000;", "comb rates every pragma it does not write unsafe"],
+		[
+			"CREATE TRIGGER t AFTER INSERT ON users BEGIN DELETE FROM users; END;",
+			"database rates every trigger change unsafe",
+		],
+		["CREATE TEMP TRIGGER t AFTER INSERT ON users BEGIN SELECT 1; END;", "database rates every trigger change unsafe"],
+		["DROP TRIGGER t;", "database rates every trigger change unsafe"],
+		/* the rerun of S10 on the RC: a pragma database does not write, rated by its own rule too */
+		["PRAGMA writable_schema = ON;", "database rates every pragma it does not write unsafe"],
+		["PRAGMA cache_size = 1000;", "database rates every pragma it does not write unsafe"],
 	])("rates %j unsafe by the rule, on SQLite", (sql, rule) => {
 		const notes = rate(sql, USERS).unsafeStatements.join("\n")
 		expect(notes).toContain(`${rule}; approve it in the file`)
@@ -117,18 +120,18 @@ describe("default-deny's rule for triggers and routines, named as the rule", () 
 	it.each(["PRAGMA recursive_triggers = on;", "PRAGMA cache_size = 1000;"])("gives %j no cautious note", (sql) => {
 		const rated = rate(sql, USERS)
 		expect(rated.cautiousStatements).toEqual([])
-		expect(rated.unsafeStatements.join("\n")).toContain("comb rates every pragma it does not write unsafe")
+		expect(rated.unsafeStatements.join("\n")).toContain("database rates every pragma it does not write unsafe")
 	})
 
 	it.each([
 		[
 			"CREATE TRIGGER t2 BEFORE INSERT ON users FOR EACH ROW EXECUTE FUNCTION f();",
-			"comb rates every trigger change unsafe",
+			"database rates every trigger change unsafe",
 		],
-		["DROP FUNCTION dbl(int);", "comb rates every function change unsafe"],
-		["CREATE OR REPLACE PROCEDURE p() LANGUAGE sql AS $$ SELECT 1 $$;", "comb rates every procedure change unsafe"],
-		["CREATE RULE r AS ON INSERT TO users DO INSTEAD NOTHING;", "comb rates every rule change unsafe"],
-		["DO $$ BEGIN PERFORM 1; END $$;", "comb rates every DO block unsafe"],
+		["DROP FUNCTION dbl(int);", "database rates every function change unsafe"],
+		["CREATE OR REPLACE PROCEDURE p() LANGUAGE sql AS $$ SELECT 1 $$;", "database rates every procedure change unsafe"],
+		["CREATE RULE r AS ON INSERT TO users DO INSTEAD NOTHING;", "database rates every rule change unsafe"],
+		["DO $$ BEGIN PERFORM 1; END $$;", "database rates every DO block unsafe"],
 	])("rates %j unsafe by the rule, on Postgres", (sql, rule) => {
 		const rated = rate(sql, "CREATE TABLE users (id int);", "postgres")
 		expect(rated.safety).toBe("unsafe")
@@ -158,15 +161,15 @@ describe("default-deny on Postgres: a temp shadow and a live trigger (M3, M4)", 
 	})
 })
 
-/** comb's DROP and remake of a sync trigger named `name` with `body` */
+/** database's DROP and remake of a sync trigger named `name` with `body` */
 const sync = (name: string, body: string) =>
 	`DROP TRIGGER IF EXISTS "${name}";\nCREATE TRIGGER IF NOT EXISTS ${name} AFTER DELETE ON post BEGIN\n\t${body};\nEND;`
 
-/* comb's own FTS migration drops and remakes an external-content table's sync triggers (fts-migration.ts) */
+/* database's own FTS migration drops and remakes an external-content table's sync triggers (fts-migration.ts) */
 describe("default-deny on FTS sync triggers", () => {
 	const FTS =
 		"CREATE TABLE post (id INTEGER PRIMARY KEY, title TEXT);\nCREATE VIRTUAL TABLE post_fts USING fts5(title, content='post', content_rowid='id');"
-	it("recognizes the sync trigger comb writes, and its drop", () => {
+	it("recognizes the sync trigger database writes, and its drop", () => {
 		const rated = rate(
 			sync("post_fts_ad", "INSERT INTO post_fts(post_fts, rowid, title) VALUES ('delete', old.id, old.title)"),
 			FTS,
@@ -216,14 +219,14 @@ describe("a Postgres statement its parse tree rates, which the grammar's fallbac
 		["LOCK t IN ACCESS SHARE MODE;", []],
 		["REFRESH MATERIALIZED VIEW mv;", ["REFRESH MATERIALIZED VIEW mv (holds an exclusive lock while it runs)"]],
 		["REFRESH MATERIALIZED VIEW CONCURRENTLY mv;", []],
-	])("rates %j by its rule alone, with no note that comb does not recognize it", (sql, locks) => {
+	])("rates %j by its rule alone, with no note that database does not recognize it", (sql, locks) => {
 		const rated = rate(sql, HISTORY, "postgres")
 		expect([rated.safety, rated.unsafeStatements, rated.lockWarnings]).toEqual(["safe", [], locks])
 	})
 
 	it("keeps the rule of a family default-deny rates unsafe when the tree rates it too", () => {
 		const rated = rate("DROP FUNCTION f();", HISTORY, "postgres")
-		expect(rated.unsafeStatements.join("\n")).toContain("comb rates every function change unsafe")
+		expect(rated.unsafeStatements.join("\n")).toContain("database rates every function change unsafe")
 	})
 })
 
@@ -232,8 +235,8 @@ describe("a statement two readings rate, listed once", () => {
 	it("joins writable_schema's own note and default-deny's rule in one entry per statement", () => {
 		const rated = rate("PRAGMA writable_schema = ON;\nPRAGMA writable_schema = OFF;", USERS)
 		expect(rated.unsafeStatements).toEqual([
-			"PRAGMA writable_schema = ON (lets a statement rewrite the schema itself; comb rates every pragma it does not write unsafe; approve it in the file)",
-			"PRAGMA writable_schema = OFF (lets a statement rewrite the schema itself; comb rates every pragma it does not write unsafe; approve it in the file)",
+			"PRAGMA writable_schema = ON (lets a statement rewrite the schema itself; database rates every pragma it does not write unsafe; approve it in the file)",
+			"PRAGMA writable_schema = OFF (lets a statement rewrite the schema itself; database rates every pragma it does not write unsafe; approve it in the file)",
 		])
 	})
 

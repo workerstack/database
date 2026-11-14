@@ -52,7 +52,7 @@ describe("the walk, default-deny", () => {
 		const effects = walkProgram(program(["Destroy", 2], ["OpenWrite", 0, 2], ["ResetSorter", 0]), CTX)
 		expect(engineFindings([{ classified: false, effects, shadows: [], statement: "X" }], new Map()).unsafe).toEqual([
 			"X: drops k outside a DROP TABLE",
-			"X: does what comb cannot read to k (ResetSorter)",
+			"X: does what database cannot read to k (ResetSorter)",
 		])
 	})
 })

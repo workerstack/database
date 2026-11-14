@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { CombError } from "./error.ts"
+import { DatabaseError } from "./error.ts"
 
-describe("CombError", () => {
+describe("DatabaseError", () => {
 	it("sets status from statusKey", () => {
-		const err = new CombError({
+		const err = new DatabaseError({
 			errorKey: "unique_constraint_violation",
 			status: "conflict",
 		})
@@ -14,7 +14,7 @@ describe("CombError", () => {
 	})
 
 	it("stores table and column metadata", () => {
-		const err = new CombError({
+		const err = new DatabaseError({
 			column: "email",
 			errorKey: "unique_constraint_violation",
 			status: "conflict",
@@ -26,7 +26,7 @@ describe("CombError", () => {
 
 	it("keeps the client message as cause and the original error as source", () => {
 		const source = new Error("original")
-		const err = new CombError({
+		const err = new DatabaseError({
 			cause: "Database unavailable",
 			errorKey: "database_io_error",
 			source,
@@ -37,7 +37,7 @@ describe("CombError", () => {
 	})
 
 	it("omits cause option when undefined", () => {
-		const err = new CombError({
+		const err = new DatabaseError({
 			errorKey: "database_io_error",
 			status: "internal_server_error",
 		})
@@ -45,16 +45,16 @@ describe("CombError", () => {
 	})
 
 	it("is an instance of Error", () => {
-		const err = new CombError({
+		const err = new DatabaseError({
 			errorKey: "database_unavailable",
 			status: "service_unavailable",
 		})
 		expect(err).toBeInstanceOf(Error)
-		expect(err).toBeInstanceOf(CombError)
+		expect(err).toBeInstanceOf(DatabaseError)
 	})
 })
 
-describe("CombError status", () => {
+describe("DatabaseError status", () => {
 	it("maps all status keys correctly", () => {
 		const cases: Array<[string, number]> = [
 			["bad_request", 400],
@@ -64,7 +64,7 @@ describe("CombError status", () => {
 			["unprocessable_entity", 422],
 		]
 		for (const [key, code] of cases) {
-			const err = new CombError({
+			const err = new DatabaseError({
 				errorKey: "test",
 				status: key as "bad_request",
 			})
@@ -73,24 +73,24 @@ describe("CombError status", () => {
 	})
 })
 
-describe("CombError source", () => {
+describe("DatabaseError source", () => {
 	it("keeps the original error for logs without serializing it", () => {
 		const source = new Error("UNIQUE constraint failed: user.email; params: secret@x")
-		const err = new CombError({ cause: "Email in use", errorKey: "user_email_taken", source, status: "conflict" })
+		const err = new DatabaseError({ cause: "Email in use", errorKey: "user_email_taken", source, status: "conflict" })
 		expect(err.source).toBe(source)
 		expect(Object.keys(err)).not.toContain("source")
 		expect(JSON.stringify(err)).not.toContain("secret")
 	})
 
 	it("is undefined when not given", () => {
-		expect(new CombError({ errorKey: "x", status: "conflict" }).source).toBeUndefined()
+		expect(new DatabaseError({ errorKey: "x", status: "conflict" }).source).toBeUndefined()
 	})
 })
 
 /* KT5 of r22b: the body is the documented fields, defined rather than assigned; its Bun sibling is tests/bun/error-define-fields.test.ts */
-describe("CombError's JSON body", () => {
+describe("DatabaseError's JSON body", () => {
 	it("holds the documented fields, in order, and its spread the same keys", () => {
-		const err = new CombError({ column: "email", errorKey: "user_email_taken", status: "conflict", table: "user" })
+		const err = new DatabaseError({ column: "email", errorKey: "user_email_taken", status: "conflict", table: "user" })
 		expect(JSON.stringify(err)).toBe(
 			'{"column":"email","errorKey":"user_email_taken","status":409,"statusKey":"conflict","table":"user"}',
 		)
@@ -98,7 +98,7 @@ describe("CombError's JSON body", () => {
 	})
 
 	it("leaves out a column and table it was not given", () => {
-		const err = new CombError({ cause: "Not yours", errorKey: "post_locked", status: "forbidden" })
+		const err = new DatabaseError({ cause: "Not yours", errorKey: "post_locked", status: "forbidden" })
 		expect(err.toJSON()).toEqual({ errorKey: "post_locked", status: 403, statusKey: "forbidden" })
 		expect(JSON.stringify(err)).toBe('{"errorKey":"post_locked","status":403,"statusKey":"forbidden"}')
 	})

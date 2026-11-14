@@ -2,7 +2,7 @@ import { fixtureRoot } from "../codegen/__fixtures__/temp.ts"
 import { readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { ATLAS_RANGE, type Run } from "../migrate/core/process.ts"
+import { ATLAS_RANGE, type MigrateRun } from "../migrate/core/process.ts"
 import { makeIo, projects, writeTables } from "./__fixtures__/io.ts"
 
 const temp = projects(fixtureRoot())
@@ -106,9 +106,9 @@ describe("runCli: help and version", () => {
 	})
 
 	it.each([
-		[["migrate", "apply", "--help"], "Usage: comb migrate apply <database>"],
-		[["migrate", "status", "core", "-h"], "Usage: comb migrate status <database>"],
-		[["codegen", "--help"], "Usage: comb codegen [database...]"],
+		[["migrate", "apply", "--help"], "Usage: database migrate apply <database>"],
+		[["migrate", "status", "core", "-h"], "Usage: database migrate status <database>"],
+		[["codegen", "--help"], "Usage: database codegen [database...]"],
 	])("prints %j's own usage and returns 0", async (argv, usage) => {
 		const { runCli } = await import("./run.ts")
 		const io = makeIo(project())
@@ -119,13 +119,13 @@ describe("runCli: help and version", () => {
 
 	/* K2 of r19: a word after help or version was dropped, and the run exited 0 */
 	it.each([
-		[["help", "migrate"], "Usage: comb help"],
-		[["-h", "extra"], "Usage: comb -h"],
-		[["--help", "extra"], "Usage: comb --help"],
-		[["--version", "extra"], "Usage: comb --version"],
-		[["migrate", "help", "extra"], "Usage: comb migrate help"],
-		[["migrate", "-h", "extra"], "Usage: comb migrate -h"],
-		[["migrate", "--help", "extra"], "Usage: comb migrate --help"],
+		[["help", "migrate"], "Usage: database help"],
+		[["-h", "extra"], "Usage: database -h"],
+		[["--help", "extra"], "Usage: database --help"],
+		[["--version", "extra"], "Usage: database --version"],
+		[["migrate", "help", "extra"], "Usage: database migrate help"],
+		[["migrate", "-h", "extra"], "Usage: database migrate -h"],
+		[["migrate", "--help", "extra"], "Usage: database migrate --help"],
 	])("refuses %j with its usage, returning 1", async (argv, usage) => {
 		const { runCli } = await import("./run.ts")
 		const io = makeIo(project())
@@ -185,11 +185,11 @@ const seam = (): never => {
 	throw new Error("a seam was read")
 }
 
-/* KT7 of r22b: runCli takes the documented io alone; the seams comb's own tests fake reach the CLI only through runCliWith */
+/* KT7 of r22b: runCli takes the documented io alone; the seams database's own tests fake reach the CLI only through runCliWith */
 describe("runCli reads only the io it documents", () => {
 	it("runs Atlas's version through run, not through a seam an io happens to carry", async () => {
 		const calls: string[][] = []
-		const run: Run = async (cmd, args) => {
+		const run: MigrateRun = async (cmd, args) => {
 			calls.push([cmd, ...args])
 			return { code: 127, stderr: "atlas: command not found", stdout: "" }
 		}
@@ -199,7 +199,7 @@ describe("runCli reads only the io it documents", () => {
 		const { runCli } = await import("./run.ts")
 		expect(await runCli(["migrate", "diff", "core"], io)).toBe(1)
 		expect(io.errors).toEqual([
-			`comb needs atlas (${ATLAS_RANGE}) to hash, diff and apply migrations; install atlas from https://atlasgo.io/getting-started`,
+			`database needs atlas (${ATLAS_RANGE}) to hash, diff and apply migrations; install atlas from https://atlasgo.io/getting-started`,
 		])
 		expect(calls).toEqual([["atlas", "version"]])
 	})

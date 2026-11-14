@@ -1,7 +1,7 @@
 /**
  * Plan 21 leaf 10.9: a test run leaves no scratch database behind. withScratchDb drops its database
  * when its test ends, a test vitest timed out too, and the Postgres projects' global setup sweeps,
- * once it holds the run's lock, every comb_scratch_* database a killed run left: one this role owns,
+ * once it holds the run's lock, every database_scratch_* database a killed run left: one this role owns,
  * with no session on it, made over an hour ago. Any other is kept, and said why. Sibling: P4's sweep
  * of what a replay left (replay-sweep.test.ts).
  */
@@ -80,7 +80,7 @@ describe("a test run leaves no scratch database behind (sibling: P4's stale-repl
 		)
 
 		it("leaves nothing of it once the timed-out test has ended", async () => {
-			expect(name).toMatch(/^comb_scratch_/)
+			expect(name).toMatch(/^database_scratch_/)
 			expect(await exists(name)).toBe(false)
 		})
 	})
@@ -89,7 +89,7 @@ describe("a test run leaves no scratch database behind (sibling: P4's stale-repl
 describe("the sweep on a role that may not read a directory's mtime (sibling: the sweep's own pins above)", () => {
 	/* CI's role may lack pg_stat_file (superuser or pg_read_server_files): an unstamped name is then of unknown age */
 	it("keeps an unstamped scratch database, saying why, when the role may not read its directory's mtime", async () => {
-		const legacy = "comb_scratch_0123456789abcdef0123456789abcdef"
+		const legacy = "database_scratch_0123456789abcdef0123456789abcdef"
 		const stale = scratchName(Date.now() - SCRATCH_STALE_MS - 60_000)
 		const sent: string[] = []
 		const denied = {
@@ -108,7 +108,7 @@ describe("the sweep on a role that may not read a directory's mtime (sibling: th
 		expect(swept.dropped).toEqual([stale])
 		expect(sent.filter((text) => text.startsWith("DROP"))).toEqual([`DROP DATABASE "${stale}"`])
 		expect(lines).toContain(
-			`[comb] scratch sweep keeps ${legacy}: its age is unknown: no stamp in its name, and its directory's mtime is unreadable`,
+			`[database] scratch sweep keeps ${legacy}: its age is unknown: no stamp in its name, and its directory's mtime is unreadable`,
 		)
 	})
 })

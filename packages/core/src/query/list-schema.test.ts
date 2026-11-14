@@ -386,7 +386,7 @@ describe("createListQuerySchema — generated examples and facts", () => {
 			sort: ["created_at", "name"],
 		})
 		const json = z.toJSONSchema(schema, { io: "input" }) as Record<string, Record<string, unknown>>
-		const facts = json["x-comb"] as Record<string, unknown>
+		const facts = json["x-database"] as Record<string, unknown>
 		expect(facts["searchable"]).toEqual(["name"])
 		expect(facts["filterFields"]).toEqual([
 			{ field: "created_at", ops: ["eq", "ne", "neq", "gt", "gte", "lt", "lte", "in", "nin", "is"], type: "number" },

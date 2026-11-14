@@ -1,15 +1,15 @@
 // sqlite/d1/error-handler.d.ts
-import { CombError } from "../../error.ts";
+import { DatabaseError } from "../../error.ts";
 import { type ConstraintMap } from "../../types.ts";
 /**
- * The CombError a Cloudflare D1 database error is: a constraint violation through the shared
+ * The DatabaseError a Cloudflare D1 database error is: a constraint violation through the shared
  * SQLite handlers, then a query error (500) or a platform failure (transient 503, storage 422);
  * undefined for an error that is none of these. It throws nothing, so a caller can ask what an
- * error is (a unique violation it expects, say) without catching. The CombError's `cause` is safe
+ * error is (a unique violation it expects, say) without catching. The DatabaseError's `cause` is safe
  * for clients; the original error, which holds the SQL and its bound values, is on `source`.
  */
-declare function classifyD1Error(error: unknown, constraintMaps: readonly ConstraintMap[]): CombError | undefined;
-/** Throw the CombError classifyD1Error finds for `error`; return when it finds none */
+declare function classifyD1Error(error: unknown, constraintMaps: readonly ConstraintMap[]): DatabaseError | undefined;
+/** Throw the DatabaseError classifyD1Error finds for `error`; return when it finds none */
 declare function d1ErrorHandler(error: unknown, constraintMaps: readonly ConstraintMap[]): void;
 export { classifyD1Error, d1ErrorHandler };
 
@@ -20,12 +20,12 @@ import type { StatusKey } from "./types.ts";
  * column it concerns. Its message is `errorKey`; `toJSON()` gives the body a client may see, and the
  * original error stays on `source`, never serialized.
  */
-export declare class CombError extends Error {
+export declare class DatabaseError extends Error {
     /** A message safe to show the client. The original error is on `source`. */
     readonly cause?: string | undefined;
     /** The SQL name of the column the error concerns; unset when it is private or unknown */
     readonly column?: string | undefined;
-    /** What went wrong, as a stable key, one of `combErrorKeys` or a constraint map's own */
+    /** What went wrong, as a stable key, one of `databaseErrorKeys` or a constraint map's own */
     readonly errorKey: string;
     /** The HTTP status code for `statusKey`, such as 409 for `conflict` */
     readonly status: number;
@@ -68,10 +68,10 @@ export declare class CombError extends Error {
 // types.d.ts
 /** Database-relevant HTTP status keys */
 export type StatusKey = "bad_request" | "conflict" | "forbidden" | "internal_server_error" | "service_unavailable" | "unprocessable_entity";
-/** The HTTP status code for each status key, as `CombError.status` carries it */
+/** The HTTP status code for each status key, as `DatabaseError.status` carries it */
 export declare const statusKeyToCode: Record<StatusKey, number>;
 /** Database-related error key constants */
-export declare const combErrorKeys: {
+export declare const databaseErrorKeys: {
     readonly CHECK_CONSTRAINT_VIOLATION: "check_constraint_violation";
     readonly CONSTRAINT_VIOLATION: "constraint_violation";
     readonly CURSOR_NOT_WIRED: "cursor_not_wired";
@@ -98,23 +98,23 @@ export declare const combErrorKeys: {
     readonly UNIQUE_CONSTRAINT_VIOLATION: "unique_constraint_violation";
     readonly VALUE_TOO_LARGE: "value_too_large";
 };
-/** Lowercase error key values from combErrorKeys */
-export type CombErrorKey = (typeof combErrorKeys)[keyof typeof combErrorKeys];
+/** Lowercase error key values from databaseErrorKeys */
+export type DatabaseErrorKey = (typeof databaseErrorKeys)[keyof typeof databaseErrorKeys];
 /** A key a database error classifier answers with: classifyD1Error, classifySqliteError and classifyPgError alike */
-export type CombDatabaseErrorKey = (typeof combErrorKeys)["CHECK_CONSTRAINT_VIOLATION" | "CONSTRAINT_VIOLATION" | "DATABASE_IO_ERROR" | "DATABASE_READONLY" | "DATABASE_UNAVAILABLE" | "EXCLUSION_CONSTRAINT_VIOLATION" | "FOREIGN_KEY_VIOLATION" | "INVALID_VALUE" | "PRIMARY_KEY_VIOLATION" | "REQUIRED_FIELD_MISSING" | "STORAGE_LIMIT_REACHED" | "UNIQUE_CONSTRAINT_VIOLATION" | "VALUE_TOO_LARGE"];
+export type DatabaseDriverErrorKey = (typeof databaseErrorKeys)["CHECK_CONSTRAINT_VIOLATION" | "CONSTRAINT_VIOLATION" | "DATABASE_IO_ERROR" | "DATABASE_READONLY" | "DATABASE_UNAVAILABLE" | "EXCLUSION_CONSTRAINT_VIOLATION" | "FOREIGN_KEY_VIOLATION" | "INVALID_VALUE" | "PRIMARY_KEY_VIOLATION" | "REQUIRED_FIELD_MISSING" | "STORAGE_LIMIT_REACHED" | "UNIQUE_CONSTRAINT_VIOLATION" | "VALUE_TOO_LARGE"];
 /**
- * The keys comb's database error classifiers answer with: the subset of combErrorKeys a consumer's
+ * The keys database's database error classifiers answer with: the subset of databaseErrorKeys a consumer's
  * map of database errors (a translation, a status) iterates to cover each one. The query and router
  * keys are not among them.
  */
-export declare const combDatabaseErrorKeys: readonly CombDatabaseErrorKey[];
+export declare const databaseDriverErrorKeys: readonly DatabaseDriverErrorKey[];
 /** Constraint map entry for mapping DB constraint violations to domain errors */
 export type ConstraintMapEntry = {
-    /** The `CombError.cause` the violation answers with: a message safe to show the client */
+    /** The `DatabaseError.cause` the violation answers with: a message safe to show the client */
     cause: string;
-    /** The `CombError.errorKey` the violation answers with, your domain's key */
+    /** The `DatabaseError.errorKey` the violation answers with, your domain's key */
     errorKey: string;
-    /** The status the violation answers with; `bad_request` for a violation comb reports as one, such as a CHECK, and `conflict` otherwise */
+    /** The status the violation answers with; `bad_request` for a violation database reports as one, such as a CHECK, and `conflict` otherwise */
     statusKey?: "bad_request" | "conflict" | "forbidden" | undefined;
 };
 /** Per-table constraint violation mappings */
@@ -138,7 +138,7 @@ export type ConstraintMap = {
         /**
          * The partitions of this Postgres table, keyed as the map keys a table: Postgres reports a
          * violation on the partition, which is read as this table's, under its keys and its `private`
-         * list. Codegen writes it from comb.config.ts's `partitions`; a table no entry lists or keys
+         * list. Codegen writes it from database.config.ts's `partitions`; a table no entry lists or keys
          * names no column.
          */
         partitions?: readonly string[] | undefined;

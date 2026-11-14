@@ -52,7 +52,7 @@ async function answer(
 	{ schema = LIVE, table = "d1_migrations" }: { schema?: string; table?: string } = {},
 ): Promise<ProofResult> {
 	const live = libsqlConnection()
-	const dir = mkdtempSync(join(tmpdir(), "comb-d1-child-"))
+	const dir = mkdtempSync(join(tmpdir(), "database-d1-child-"))
 	dirs.push(dir)
 	try {
 		await live.client.executeMultiple(schema)
@@ -70,7 +70,7 @@ const proven = async (...args: Parameters<typeof answer>): Promise<string | unde
 /** D1's answer to `sources` over a live database `schema` made, on the scoped copy and on the whole schema's copy */
 async function d1Verdicts(schema: string, sources: readonly string[]): Promise<{ scoped: unknown; whole: unknown }> {
 	const live = libsqlConnection()
-	const dir = mkdtempSync(join(tmpdir(), "comb-d1-child-"))
+	const dir = mkdtempSync(join(tmpdir(), "database-d1-child-"))
 	dirs.push(dir)
 	try {
 		await live.client.executeMultiple(schema)
@@ -222,7 +222,7 @@ describe("prove: a view written through INSTEAD OF triggers", () => {
 })
 
 /* AC2-2 of area C round 2: workerd crashes compiling this DELETE ("other side closed"), though D1 runs the DELETE */
-describe("prove when comb's local D1 crashes on a probe", () => {
+describe("prove when database's local D1 crashes on a probe", () => {
 	it("compiles the probe again alone on a fresh copy, and passes the file D1 then runs", async () => {
 		const files = [
 			{
@@ -235,7 +235,7 @@ describe("prove when comb's local D1 crashes on a probe", () => {
 	}, 120_000)
 
 	it("lists a file whose probe crashes it again on a fresh copy as unproven, and proves the files after it", async () => {
-		const dir = mkdtempSync(join(tmpdir(), "comb-d1-child-"))
+		const dir = mkdtempSync(join(tmpdir(), "database-d1-child-"))
 		dirs.push(dir)
 		writeFileSync(join(dir, "wrangler.mjs"), CRASHING_WRANGLER)
 		const files = [
@@ -252,7 +252,7 @@ describe("prove when comb's local D1 crashes on a probe", () => {
 			unproven: [
 				{
 					name: "1_t.sql",
-					why: `comb's local D1 (wrangler's workerd) crashed compiling DELETE FROM "t" once this file applied, and again on a fresh copy, so D1's engine proves nothing of it; wrangler's apply compiles no such statement, so this does not show the live database refuses the file`,
+					why: `database's local D1 (wrangler's workerd) crashed compiling DELETE FROM "t" once this file applied, and again on a fresh copy, so D1's engine proves nothing of it; wrangler's apply compiles no such statement, so this does not show the live database refuses the file`,
 				},
 			],
 		})
@@ -260,7 +260,7 @@ describe("prove when comb's local D1 crashes on a probe", () => {
 
 	/* AC3-9 of area C round 3: an approval would otherwise let through a file D1 refuses after an unproven one */
 	it("refuses a later file D1 refuses after an unproven one", async () => {
-		const dir = mkdtempSync(join(tmpdir(), "comb-d1-child-"))
+		const dir = mkdtempSync(join(tmpdir(), "database-d1-child-"))
 		dirs.push(dir)
 		writeFileSync(join(dir, "wrangler.mjs"), CRASHING_WRANGLER)
 		const files = [
@@ -281,7 +281,7 @@ describe("prove over a schema with foreign keys, which D1 always enforces", () =
 			"CREATE TABLE child (id INTEGER PRIMARY KEY, p INTEGER NOT NULL REFERENCES parent (id));\nCREATE TABLE parent (id INTEGER PRIMARY KEY);",
 		],
 		[
-			"a parent comb cannot seed, whose child's key cannot be empty",
+			"a parent database cannot seed, whose child's key cannot be empty",
 			"CREATE TABLE parent (id INTEGER PRIMARY KEY, c TEXT NOT NULL CHECK (c = 'x' AND c = 'y'));\nCREATE TABLE child (id INTEGER PRIMARY KEY, p INTEGER NOT NULL REFERENCES parent (id));",
 		],
 	])(
@@ -327,7 +327,7 @@ describe("prove over a schema with foreign keys, which D1 always enforces", () =
    which runs workerd's SQLite out of memory near 3 000 tables */
 describe("prove over a database of 3 000 tables", () => {
 	it("answers a pending ALTER TABLE", async () => {
-		const dir = mkdtempSync(join(tmpdir(), "comb-d1-child-"))
+		const dir = mkdtempSync(join(tmpdir(), "database-d1-child-"))
 		dirs.push(dir)
 		const files = [{ name: "1_add.sql", sql: "ALTER TABLE t0 ADD COLUMN c TEXT;" }]
 		const input = await proofInput([], files, { bin: wranglerBin(), dir, table: "d1_migrations" })
@@ -341,7 +341,7 @@ describe("prove over a database of 3 000 tables", () => {
 
 describe("main: the proof of the input JSON d1-engine.ts writes", () => {
 	it("reads the input from its file and answers as prove does", async () => {
-		const dir = mkdtempSync(join(tmpdir(), "comb-d1-child-"))
+		const dir = mkdtempSync(join(tmpdir(), "database-d1-child-"))
 		dirs.push(dir)
 		const input = await proofInput([], [{ name: "1_a.sql", sql: "CREATE TABLE a (x);" }], {
 			bin: wranglerBin(),

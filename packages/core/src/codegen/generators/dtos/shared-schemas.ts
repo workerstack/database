@@ -46,14 +46,14 @@ function stripMeta(zodType: string): [string, string] {
 
 /**
  * `zodType` split into its layers: the base, `.nullable()` (the keys before it, on its member, so
- * `.unwrap()` keeps them), the `x-comb-*` keys, which finish writes after it so they
+ * `.unwrap()` keeps them), the `x-database-*` keys, which finish writes after it so they
  * publish beside the anyOf, then `.optional()`. The keys stay with the field, so a core
  * is shared whatever keys its columns publish
  */
 function layersOf(zodType: string): { base: string; keys: string; nullable: string; optional: string } {
 	const optional = zodType.endsWith(".optional()") ? ".optional()" : ""
 	const [before, last] = stripMeta(zodType.slice(0, zodType.length - optional.length))
-	const keys = last.startsWith('.meta({"x-comb-') ? last : ""
+	const keys = last.startsWith('.meta({"x-database-') ? last : ""
 	const rest = keys === "" ? zodType.slice(0, zodType.length - optional.length) : before
 	const wrapper = `${keys}.nullable()`
 	const nullable = keys !== "" && rest.endsWith(wrapper) ? wrapper : rest.endsWith(".nullable()") ? ".nullable()" : ""

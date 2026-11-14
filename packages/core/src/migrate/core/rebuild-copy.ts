@@ -211,7 +211,7 @@ const WRITES = /* @__PURE__ */ new RegExp(
 /**
  * The rebuilds a file makes: a copy into a temporary table renamed to the table it copied. A write
  * to the copy between the copy and the rename changes what lands, whatever the copy kept; the
- * statements of comb's own guard, at `guarded`, are no such write.
+ * statements of database's own guard, at `guarded`, are no such write.
  */
 function rebuildsOf(
 	statements: readonly string[],
@@ -222,7 +222,7 @@ function rebuildsOf(
 	const copies = new Map<string, Copy>()
 	const rebuilds: Rebuilds = new Map()
 	for (const [i, code] of codes.entries()) {
-		/* comb's own guard empties and refills a copy it keeps, as written; it changes nothing */
+		/* database's own guard empties and refills a copy it keeps, as written; it changes nothing */
 		const written = guarded.has(i) ? undefined : WRITES.exec(code)?.[1]
 		const changed = written === undefined ? undefined : copies.get(nameKey(written, "sqlite"))
 		if (changed !== undefined) changed.problem = "its copy is changed before the rename"

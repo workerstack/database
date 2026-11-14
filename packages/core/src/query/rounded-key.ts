@@ -3,8 +3,8 @@
  * the key as read cannot page it: a derived list with no anchor row to read the exact key back from,
  * and a merged list, whose shards' keys that round to one double compare equal.
  * A SQLite REAL and a Postgres double precision are doubles, so one past 2^53 is exact: the key's class,
- * which the builder selects as `_combKeyTypes`, decides, and only where none was
- * selected does the value alone. A class is trusted only when it names a double, so one comb cannot
+ * which the builder selects as `_cursorKeyTypes`, decides, and only where none was
+ * selected does the value alone. A class is trusted only when it names a double, so one database cannot
  * place, such as a type no family covers, is refused as an integer is.
  */
 import { storedClasses } from "./list-extras.ts"
@@ -37,7 +37,7 @@ const FRACTION: Readonly<Record<"derived" | "merged" | "unread", string>> = {
  * integer or a fixed class: no driver reads an integer type as a fraction, so one there is the app's
  * mapper's, a customType in cents, which the cursor binds back through its `toDriver`.
  * A Postgres numeric, the one fixed type that holds a fraction, carries its text instead
- * (`_combKeyTexts`), so no number of one reaches here; with no class, only the integer is known
+ * (`_cursorKeyTexts`), so no number of one reaches here; with no class, only the integer is known
  * rounded.
  */
 function roundedKey(
@@ -62,7 +62,7 @@ function roundedKey(
 	return new UnmintableRow(
 		Number.isInteger(value)
 			? `${rounded.field} ${BigInt(value)} is past ±(2^53 − 1), where the driver rounded it: ${ROUNDED[kind]}`
-			: `${rounded.field} ${value} is a fraction under a type no driver reads exactly as a JS number, so the driver may have rounded it: ${FRACTION[kind]}: sort by a Postgres numeric, whose text comb carries, read the key as a string, or sort by a double precision or real`,
+			: `${rounded.field} ${value} is a fraction under a type no driver reads exactly as a JS number, so the driver may have rounded it: ${FRACTION[kind]}: sort by a Postgres numeric, whose text database carries, read the key as a string, or sort by a double precision or real`,
 	)
 }
 

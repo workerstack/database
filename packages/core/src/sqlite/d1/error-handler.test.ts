@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { CombError } from "../../error.ts"
+import { DatabaseError } from "../../error.ts"
 import { classifyD1Error, d1ErrorHandler } from "./error-handler.ts"
 
 /* D1 shapes as workerd produces them; the real-engine cases live in tests/integration/d1 */
@@ -10,11 +10,11 @@ const d1 = (message: string) => {
 const wrapped = (cause: unknown, query: string) =>
 	Object.assign(new Error(`Failed query: ${query}\nparams: reset`, { cause }), { name: "DrizzleQueryError", query })
 
-function thrown(error: unknown): CombError | undefined {
+function thrown(error: unknown): DatabaseError | undefined {
 	try {
 		d1ErrorHandler(error, [])
 	} catch (caught) {
-		return caught as CombError
+		return caught as DatabaseError
 	}
 	return undefined
 }
@@ -71,8 +71,8 @@ describe("d1ErrorHandler", () => {
 		expect(thrown(null)).toBeUndefined()
 	})
 
-	it("throws CombError instances", () => {
-		expect(thrown(new Error("D1_ERROR: overloaded"))).toBeInstanceOf(CombError)
+	it("throws DatabaseError instances", () => {
+		expect(thrown(new Error("D1_ERROR: overloaded"))).toBeInstanceOf(DatabaseError)
 	})
 })
 

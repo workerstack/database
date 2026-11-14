@@ -120,7 +120,7 @@ function fillOf(column: Node, constraints: readonly Node[], facts: Facts) {
 
 /**
  * An added column's rewrite warning; where a default fills a column of a domain with a CHECK, it also
- * says Postgres checks that default on every row, which comb cannot evaluate and an empty dev database
+ * says Postgres checks that default on every row, which database cannot evaluate and an empty dev database
  * never fails (the reviewer's ruling 1 on 4.1)
  */
 function rewriteNote(column: Node, checksDefault: boolean, facts: Facts): string {

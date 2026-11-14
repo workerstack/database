@@ -1,5 +1,5 @@
 /**
- * K3 of r21: comb's D1 modules type a binding by the methods they call, so `wrangler types`'
+ * K3 of r21: database's D1 modules type a binding by the methods they call, so `wrangler types`'
  * globals and `@cloudflare/workers-types` both fit, and a session comes back in the binding's own
  * type, which drizzle() takes. Checked by `bun run typecheck`; nothing here runs.
  */
@@ -187,7 +187,7 @@ function fromKvShard<E extends { DB: D1Database; SHARD_DB_0: KVNamespace }>(give
 }
 expectTypeOf([fromObject, fromNoShard, fromStringShard, fromKvShard]).toBeArray()
 
-/* K4 of r22: a consumer's helper names comb's D1 bound from the subpath it calls, and returns the binding's own session type */
+/* K4 of r22: a consumer's helper names database's D1 bound from the subpath it calls, and returns the binding's own session type */
 function sessionOf<D extends SessionBound>(binding: D): SessionOf<D> | undefined {
 	return openD1Session(binding).session
 }

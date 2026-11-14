@@ -11,7 +11,7 @@ import { syncTriggerOf } from "./fts-sync.ts"
 import { COLUMN, columnKey, columnNames, CONSTRAINT_WORDS, GENERATED, tableDefinition } from "./schema-table.ts"
 import { definitionAffinity } from "./sqlite-affinity.ts"
 import type { ExtractedSchema, TriggerEvent } from "../migration-types.ts"
-import type { Dialect } from "../types.ts"
+import type { MigrateDialect } from "../types.ts"
 
 type SchemaSoFar = ExtractedSchema
 
@@ -187,10 +187,10 @@ function extractSchema(
 	sql: string,
 	from: ExtractedSchema = EMPTY,
 	readAs:
-		| Dialect
+		| MigrateDialect
 		| {
 				/** how the text is read */
-				dialect: Dialect
+				dialect: MigrateDialect
 				/**
 				 * Postgres: the schema the database's URLs set as search_path, where an unqualified name
 				 * resolves; a name in it is keyed bare, one in any other schema as `schema.name`; default `public`

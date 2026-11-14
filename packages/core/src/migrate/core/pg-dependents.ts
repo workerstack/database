@@ -1,5 +1,5 @@
 /**
- * Which of comb's Postgres views and policies a migration must drop and create again (pg-objects.ts):
+ * Which of database's Postgres views and policies a migration must drop and create again (pg-objects.ts):
  * those whose definition changed or went, and those that read a table Atlas alters, since Postgres
  * refuses to retype a column a view or policy reads, with every view over a view that goes.
  */
@@ -29,7 +29,7 @@ const isView = (object: PgObject): boolean => object.kind === "view" || object.k
 const same = (a: PgObject | undefined, b: PgObject | undefined): boolean =>
 	a !== undefined && b !== undefined && normalizeSql(a.sql) === normalizeSql(b.sql)
 
-/** The views and policies of `from` comb must drop: changed, removed, or over what Atlas or comb changes */
+/** The views and policies of `from` database must drop: changed, removed, or over what Atlas or database changes */
 function affected(from: Map<string, PgObject>, to: Map<string, PgObject>, tables: ReadonlySet<string>): Set<string> {
 	const out = new Set<string>()
 	for (const [key, object] of from) {
@@ -42,7 +42,7 @@ function affected(from: Map<string, PgObject>, to: Map<string, PgObject>, tables
 	return withDependentViews(from, out)
 }
 
-/** `out` with each view over a view in it added, until no more join: a view comb drops takes them along */
+/** `out` with each view over a view in it added, until no more join: a view database drops takes them along */
 function withDependentViews(from: Map<string, PgObject>, out: Set<string>): Set<string> {
 	let grew = true
 	while (grew) {

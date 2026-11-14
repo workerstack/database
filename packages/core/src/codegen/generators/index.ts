@@ -5,7 +5,7 @@ export { generateFtsSql } from "./fts-sql.ts"
 export {
 	buildManifest,
 	generateManifest,
-	type Manifest,
+	type CodegenManifest,
 	type ManifestColumn,
 	type ManifestEntity,
 	type ManifestRelation,

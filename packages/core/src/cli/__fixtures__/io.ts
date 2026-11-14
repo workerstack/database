@@ -2,12 +2,12 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import type { Run, RunResult } from "../../migrate/core/process.ts"
+import type { MigrateRun, RunResult } from "../../migrate/core/process.ts"
 import type { LiveObjects } from "../../migrate/core/pg-live-types.ts"
 import type { CliContext, CliIo } from "../output.ts"
 import { noLive, replaying } from "../../migrate/__fixtures__/live-objects.ts"
 
-/** An io that records the lines, with the seams comb fakes in its tests */
+/** An io that records the lines, with the seams database fakes in its tests */
 export type TestIo = CliContext & { errors: string[]; outputs: string[] }
 
 /* a Postgres baseline's catalog read reaches no database: its schema holds no function or trigger */
@@ -22,10 +22,10 @@ const readPgObjects = async (): Promise<LiveObjects> => ({
 /* nor does the history's replay on dev (P5 of r19): it leaves what the faked database holds */
 const replayPgHistory = /* @__PURE__ */ replaying(readPgObjects)
 
-/* every optional peer is comb's own devDependency, found as comb resolves it, wherever the project is */
+/* every optional peer is database's own devDependency, found as database resolves it, wherever the project is */
 const locatePeer = (peer: string): string => import.meta.resolve(peer)
 
-/* the Atlas comb is tested against, which a test's faked Atlas stands for: its version read spawns nothing */
+/* the Atlas database is tested against, which a test's faked Atlas stands for: its version read spawns nothing */
 const readAtlasVersion = async (): Promise<RunResult> =>
 	ok("atlas version v1.3.0\nhttps://github.com/ariga/atlas/releases/tag/v1.3.0\n")
 
@@ -33,7 +33,7 @@ const readAtlasVersion = async (): Promise<RunResult> =>
 const readyPgDev = async (): Promise<void> => undefined
 
 /**
- * The CLI on `argv` with `io`, and the seams `io` carries in place of comb's own (KT7 of r22b).
+ * The CLI on `argv` with `io`, and the seams `io` carries in place of database's own (KT7 of r22b).
  * It loads the CLI when called, so importing this fixture runs none of it.
  */
 export async function runCliWithFakes(argv: readonly string[], io: TestIo): Promise<number> {
@@ -41,7 +41,7 @@ export async function runCliWithFakes(argv: readonly string[], io: TestIo): Prom
 	return runCliWith(argv, io, io)
 }
 
-export function makeIo(cwd: string, run?: Run, confirm?: CliIo["confirm"]): TestIo {
+export function makeIo(cwd: string, run?: MigrateRun, confirm?: CliIo["confirm"]): TestIo {
 	const outputs: string[] = []
 	const errors: string[] = []
 	return {
@@ -62,7 +62,7 @@ export function makeIo(cwd: string, run?: Run, confirm?: CliIo["confirm"]): Test
 
 /**
  * Fresh project directories under `base`; `clean` removes every one made so far (register it with
- * afterEach). A codegen test makes them inside the package, so the tables it loads import drizzle and comb
+ * afterEach). A codegen test makes them inside the package, so the tables it loads import drizzle and database
  */
 export function projects(base: string = tmpdir()): { clean: () => void; make: () => string } {
 	const dirs: string[] = []
@@ -71,7 +71,7 @@ export function projects(base: string = tmpdir()): { clean: () => void; make: ()
 			for (const dir of dirs.splice(0)) rmSync(dir, { force: true, recursive: true })
 		},
 		make: () => {
-			const dir = mkdtempSync(join(base, "comb-cli-"))
+			const dir = mkdtempSync(join(base, "database-cli-"))
 			dirs.push(dir)
 			return dir
 		},

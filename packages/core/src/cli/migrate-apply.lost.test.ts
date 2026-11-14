@@ -16,7 +16,7 @@ import { makeIo, projects, runCliWithFakes } from "./__fixtures__/io.ts"
 
 /* the batch whose answer is lost once it commits, the error the link then fails each call with, and the file serving the server */
 const lose: { db?: string; error?: unknown; file?: string } = {}
-/* the project's libsql server, which the clients comb opens reach as the file lose.db; lostRequest's own reach its stub */
+/* the project's libsql server, which the clients database opens reach as the file lose.db; lostRequest's own reach its stub */
 const SERVER = "http://lost.invalid"
 
 vi.mock("@libsql/client", async (original) => {
@@ -62,7 +62,7 @@ afterEach(() => {
 	delete lose.file
 })
 
-/** A project with comb.migrate.config.ts over a libsql server, its file core.db, and three migrations in ./m */
+/** A project with database.migrate.config.ts over a libsql server, its file core.db, and three migrations in ./m */
 function configured(): string {
 	const dir = temp.make()
 	mkdirSync(join(dir, "m"))
@@ -71,7 +71,7 @@ function configured(): string {
 	writeSum(join(dir, "m"))
 	lose.db = join(dir, "core.db")
 	writeFileSync(
-		join(dir, "comb.migrate.config.ts"),
+		join(dir, "database.migrate.config.ts"),
 		`export default { databases: { core: { migrationsDir: "./m", name: "core-dev", provider: { type: "libsql", url: ${JSON.stringify(SERVER)} } } } }\n`,
 	)
 	return dir

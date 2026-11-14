@@ -53,7 +53,7 @@ type Published = Record<string, unknown> & { allOf?: Published[]; anyOf?: Publis
 function publishedOf(field: FieldMeta, dialect: "postgres" | "sqlite"): Published {
 	const imports: ImportsMeta = { enumImports: new Map(), identifiers: new Map(), jsonSchemaImports: new Set() }
 	const code = generateFieldSchema({ ...field, jsonSchemaName: "Profile" }, "create", { dialect, imports }) as string
-	const schema = new Function("z", "comb", "_m", "Profile", "jsonValueSchema", `return ${code}`)(
+	const schema = new Function("z", "database", "_m", "Profile", "jsonValueSchema", `return ${code}`)(
 		z,
 		{ isStorableText },
 		META,
@@ -86,7 +86,7 @@ function enforced(published: Published): Pick<ManifestColumn, "max" | "maxBytes"
 	const number = published["type"] === "integer" || published["type"] === "number"
 	return {
 		max: bound(number ? "maximum" : "maxLength"),
-		maxBytes: bound("x-comb-maxBytes"),
+		maxBytes: bound("x-database-maxBytes"),
 		min: bound(number ? "minimum" : "minLength"),
 		/* an email's own check is zod's email pattern, which textKind names, published alone (A2-8 of r22) */
 		patterns: patternsOf(published).filter((pattern) => pattern !== z.regexes.email.source),
@@ -124,7 +124,7 @@ describe("the manifest states what the DTO enforces (C2 of r20)", () => {
 				patterns: [String.raw`^[^\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]{1,48}$`],
 			})
 			/* the cases the review named, stated outright */
-			/* a password column holds the hash: its declared bounds and pattern, none of comb's own (C1 of r21) */
+			/* a password column holds the hash: its declared bounds and pattern, none of database's own (C1 of r21) */
 			expect(stated["pw"]).toEqual({ max: 255, maxBytes: null, min: null, patterns: [] })
 			expect(stated["pw_pattern"]).toEqual({ max: null, maxBytes: null, min: null, patterns: ["[0-9]"] })
 			expect([stated["email"]?.min, stated["required"]?.min, stated["doc"]?.maxBytes]).toEqual([6, 1, 16])

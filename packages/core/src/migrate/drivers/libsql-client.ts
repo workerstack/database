@@ -1,5 +1,5 @@
 /**
- * The surface of @libsql/client comb calls, declared here: the client is an optional peer, loaded by
+ * The surface of @libsql/client database calls, declared here: the client is an optional peer, loaded by
  * a string-typed specifier, so a project without it still type-checks /migrate, and
  * through optionalPeer, so a project that needs it and lacks it is told the package and its range.
  */

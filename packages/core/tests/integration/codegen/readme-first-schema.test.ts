@@ -1,6 +1,6 @@
 /**
  * F6 of the 0.14.1 review: the README's "First schema" runs as written. Its tables file and its
- * comb.config.ts are taken from the README's own blocks, by the path each names on its first line,
+ * database.config.ts are taken from the README's own blocks, by the path each names on its first line,
  * and codegen runs over them, as a reader following the README would.
  */
 import fs from "node:fs"
@@ -24,7 +24,7 @@ function block(file: string): string {
 describe("README: First schema", () => {
 	it("generates from the tables and config the README shows, and the result compiles", async () => {
 		const dir = project({
-			"comb.config.ts": block("comb.config.ts"),
+			"database.config.ts": block("database.config.ts"),
 			"src/db/core.tables.ts": block("src/db/core.tables.ts"),
 		})
 		await codegen(dir)

@@ -20,7 +20,7 @@ function configured(db: string): string {
 	writeSum(join(dir, "m"))
 	const provider = { path: join(dir, db), type: "bun-sqlite" }
 	writeFileSync(
-		join(dir, "comb.migrate.config.ts"),
+		join(dir, "database.migrate.config.ts"),
 		`export default { databases: { core: { migrationsDir: "./m", name: "core-dev", provider: ${JSON.stringify(provider)} } } }\n`,
 	)
 	return dir

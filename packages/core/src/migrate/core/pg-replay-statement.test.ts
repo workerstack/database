@@ -81,7 +81,7 @@ describe("runStatement", () => {
 	it("refuses a CREATE ROLE devUrl's role lacks CREATEROLE for, naming the privilege, as NO_CREATEDB names CREATEDB", async () => {
 		const { run: on } = run([], 'CREATE ROLE "app"')
 		await expect(runStatement(on, statement("CREATE ROLE app;"), replaying())).rejects.toThrow(
-			"2_b.sql creates the role app, which devUrl's server lacks, and devUrl's role cannot create a role (CREATEROLE), as comb replays the history in a database of its own on that server; grant the role CREATEROLE, or point devUrl at a server where it has it; check",
+			"2_b.sql creates the role app, which devUrl's server lacks, and devUrl's role cannot create a role (CREATEROLE), as database replays the history in a database of its own on that server; grant the role CREATEROLE, or point devUrl at a server where it has it; check",
 		)
 	})
 

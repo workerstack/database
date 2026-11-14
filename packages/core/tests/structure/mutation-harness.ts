@@ -1,7 +1,7 @@
 /**
  * The mutation check: a guard is load-bearing only if the adversarial suite goes red without it.
  * For each registered guard, run tests/integration/security with that guard disabled
- * (COMB_MUTANT=<id>, applied by the suite through vi.doMock) and require a failing run; with every
+ * (DATABASE_MUTANT=<id>, applied by the suite through vi.doMock) and require a failing run; with every
  * guard in place the suite must pass.
  *
  *     bun packages/core/tests/structure/mutation-harness.ts
@@ -11,7 +11,7 @@ import { createRequire } from "node:module"
 import { dirname, join, resolve } from "node:path"
 import { eq } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/d1"
-import { CombError } from "../../src/error.ts"
+import { DatabaseError } from "../../src/error.ts"
 import type { SqliteErrorRead } from "../../src/sqlite/read-error.ts"
 import { openD1Session } from "../../src/sqlite/d1/session.ts"
 import { shardMap } from "../../src/sqlite/d1/sharding/shard-map.ts"
@@ -60,7 +60,7 @@ export const GUARDS: readonly Guard[] = [
 					try {
 						return filterToSQL(...args)
 					} catch (error) {
-						if (error instanceof CombError && error.errorKey === "filter_not_wired") return null
+						if (error instanceof DatabaseError && error.errorKey === "filter_not_wired") return null
 						throw error
 					}
 				},
@@ -118,7 +118,7 @@ export const GUARDS: readonly Guard[] = [
 				d1ErrorHandler: (error: unknown, maps: never) => {
 					const text = error instanceof Error ? `${error.message} ${String(error.cause)}` : String(error)
 					if (/reset|network|unavailable/i.test(text)) {
-						throw new CombError({ errorKey: "database_unavailable", source: error, status: "service_unavailable" })
+						throw new DatabaseError({ errorKey: "database_unavailable", source: error, status: "service_unavailable" })
 					}
 					return d1ErrorHandler(error as never, maps)
 				},
@@ -139,7 +139,7 @@ const CORE = resolve(import.meta.dirname, "../..")
 const SUITE = "tests/integration/security"
 const VITEST = join(dirname(createRequire(import.meta.url).resolve("vitest/package.json")), "vitest.mjs")
 
-/** The guard COMB_MUTANT names; undefined for the plain suite; a typo throws */
+/** The guard DATABASE_MUTANT names; undefined for the plain suite; a typo throws */
 export function guardNamed(id: string | undefined): Guard | undefined {
 	if (id === undefined || id === "") return undefined
 	const guard = GUARDS.find((g) => g.id === id)
@@ -155,7 +155,7 @@ type SuiteRun = { output: string; status: number }
 
 /** The adversarial suite run with `mutant` disabled when given: its status, and its output, signal or start error */
 export function suiteRun(mutant: string | undefined): SuiteRun {
-	const env = { ...process.env, COMB_MUTANT: mutant ?? "" }
+	const env = { ...process.env, DATABASE_MUTANT: mutant ?? "" }
 	/* past spawnSync's 1 MiB default a run would end ENOBUFS, read as a failure of the suite */
 	const run = spawnSync(process.execPath, [VITEST, "run", SUITE], {
 		cwd: CORE,

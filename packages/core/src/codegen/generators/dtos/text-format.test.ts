@@ -1,12 +1,12 @@
 /**
  * Plan 24: a text format's DTO normalizes to the standard's case and trim, then holds the value to
- * its source and its pinned registry, one invalid_format issue with no message of comb's when it
+ * its source and its pinned registry, one invalid_format issue with no message of database's when it
  * fails, and publishes the format, its transforms, its source and its bounds. Read through the
  * text base, as the generated field writes it.
  */
 import { describe, expect, it } from "vitest"
 import * as z from "zod"
-import * as comb from "../../../index.ts"
+import * as database from "../../../index.ts"
 import { parseField } from "../../__fixtures__/runtime.ts"
 import type { FieldMeta, ImportsMeta } from "../../analyzer-types.ts"
 import type { Build } from "./build-types.ts"
@@ -22,8 +22,8 @@ function text(raw: string, schemaType: SchemaType, over: Partial<FieldMeta> & { 
 	return Object.keys(keys).length === 0 ? code : `${code}.meta(${JSON.stringify(keys)})`
 }
 
-/* generated code under comb's real root namespace, so a registry predicate it names is one comb exports */
-const run = (code: string) => new Function("z", "comb", `return ${code}`)(z, comb) as z.ZodType
+/* generated code under database's real root namespace, so a registry predicate it names is one database exports */
+const run = (code: string) => new Function("z", "database", `return ${code}`)(z, database) as z.ZodType
 
 /** `raw`'s written field in a create DTO, built */
 const created = (raw: string) => run(text(raw, "create"))
@@ -82,24 +82,24 @@ describe("what a text format publishes", () => {
 			minLength: 3,
 			pattern: "^[A-Z]{3}$",
 			type: "string",
-			"x-comb-format": "iso4217",
-			"x-comb-transform": ["trim", "uppercase"],
+			"x-database-format": "iso4217",
+			"x-database-transform": ["trim", "uppercase"],
 		})
 		expect(publishedOf(text('c.text("t", { format: "uts35-hc" })', "update"))).toEqual({
 			maxLength: 3,
 			minLength: 3,
 			pattern: "^(?:c12|c24|h11|h12|h23|h24)$",
 			type: "string",
-			"x-comb-format": "uts35-hc",
-			"x-comb-transform": ["trim", "lowercase"],
+			"x-database-format": "uts35-hc",
+			"x-database-transform": ["trim", "lowercase"],
 		})
 		expect(publishedOf(text('c.text("t", { format: "iana-time-zone" })', "create"))).toEqual({
 			maxLength: 64,
 			minLength: 1,
 			pattern: "^[A-Za-z0-9_+-]+(?:/[A-Za-z0-9_+-]+){0,2}$",
 			type: "string",
-			"x-comb-format": "iana-time-zone",
-			"x-comb-transform": ["trim"],
+			"x-database-format": "iana-time-zone",
+			"x-database-transform": ["trim"],
 		})
 	})
 
@@ -109,8 +109,8 @@ describe("what a text format publishes", () => {
 			minLength: 36,
 			pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
 			type: "string",
-			"x-comb-format": "uuid-v7",
-			"x-comb-transform": ["trim", "lowercase"],
+			"x-database-format": "uuid-v7",
+			"x-database-transform": ["trim", "lowercase"],
 		})
 	})
 

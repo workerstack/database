@@ -1,6 +1,6 @@
 /**
  * The declarations a consumer's compiler reads for a package, and the walk from a public
- * declaration to the comb-local types it names (KT3 and KT6 of r22b). A tree's are emitted from its
+ * declaration to the database-local types it names (KT3 and KT6 of r22b). A tree's are emitted from its
  * tsconfig.strict.json, as the pack emits them; a release's are the ones its tarball ships.
  */
 import { spawnSync } from "node:child_process"
@@ -92,7 +92,7 @@ export function checkerOf(dir: string, files: readonly string[]): { checker: ts.
 			noEmit: true,
 			strict: true,
 			target: ts.ScriptTarget.ES2023,
-			/* comb's declarations name `NodeJS` and node's modules, as its own tsconfig's `types` does */
+			/* database's declarations name `NodeJS` and node's modules, as its own tsconfig's `types` does */
 			types: ["node"],
 		},
 		skipAddingFilesFromTsConfig: true,

@@ -1,7 +1,7 @@
 /**
- * comb's lock warnings held to Postgres's own locks (PA8, PA9 and PA10 of r22b). Each case runs a file
+ * database's lock warnings held to Postgres's own locks (PA8, PA9 and PA10 of r22b). Each case runs a file
  * as Atlas does, in one transaction after the files before it, reads what that transaction holds from
- * pg_locks, and rates the same file: comb warns of a statement where the lock it scans or builds
+ * pg_locks, and rates the same file: database warns of a statement where the lock it scans or builds
  * under blocks the table, and names its sibling where the lock does not.
  */
 import pg from "pg"
@@ -26,14 +26,14 @@ const HISTORY = [
 /** What the transaction of `file` holds blocked by table at its end, the `earlier` files committed after HISTORY */
 const heldIn = (url: string, file: string, earlier: readonly string[] = []) => heldBy(url, [HISTORY, ...earlier], file)
 
-/** comb's lock warnings on `file`, the `earlier` files read into its history */
+/** database's lock warnings on `file`, the `earlier` files read into its history */
 const warned = (file: string, earlier: readonly string[] = []): string[] =>
 	classifyMigration(file, {
 		before: extractSchema([HISTORY, ...earlier].join("\n"), undefined, "postgres"),
 		dialect: "postgres",
 	}).lockWarnings
 
-/** Postgres's locks at the end of `file` beside comb's warnings on it */
+/** Postgres's locks at the end of `file` beside database's warnings on it */
 const both = async (url: string, file: string, earlier: readonly string[] = []) => ({
 	held: await heldIn(url, file, earlier),
 	warned: warned(file, earlier),
@@ -100,7 +100,7 @@ describe("a domain's VALIDATE on Postgres 17 (PA9; sibling: the table CHECK's VA
 	}, 60_000)
 })
 
-/** comb's recipe for an index on partitioned ev, which CREATE INDEX CONCURRENTLY refuses */
+/** database's recipe for an index on partitioned ev, which CREATE INDEX CONCURRENTLY refuses */
 const PARTITIONED_RECIPE =
 	"ev is partitioned, which CREATE INDEX CONCURRENTLY refuses: create it ON ONLY ev, then CREATE INDEX CONCURRENTLY on each partition in its own -- atlas:txmode none file, then ALTER INDEX … ATTACH PARTITION each to it"
 
@@ -182,8 +182,8 @@ async function refusedBy(url: string, file: string): Promise<string> {
 	}
 }
 
-/** comb's refusal of `file` in a txmode none file after PREAMBLE, as Postgres runs it */
-function combRefusal(file: string): string {
+/** database's refusal of `file` in a txmode none file after PREAMBLE, as Postgres runs it */
+function databaseRefusal(file: string): string {
 	try {
 		warned(`-- atlas:txmode none\n\n${file}`, [PREAMBLE])
 		return "ran"
@@ -205,17 +205,17 @@ describe("what Postgres refuses on a partitioned table on Postgres 17 (PA10; sib
 		async (file, refusal) => {
 			await withScratchDb(async (url) => {
 				expect(await refusedBy(url, file)).toBe(refusal)
-				expect(combRefusal(`${file};`)).toContain(`("${refusal}")`)
+				expect(databaseRefusal(`${file};`)).toContain(`("${refusal}")`)
 			})
 		},
 		60_000,
 	)
 
-	it("runs a partition's own USING INDEX, which comb refuses not", async () => {
+	it("runs a partition's own USING INDEX, which database refuses not", async () => {
 		const file = "ALTER TABLE ev_old ADD CONSTRAINT ev_old_k UNIQUE USING INDEX ev_old_p"
 		await withScratchDb(async (url) => {
 			expect(await refusedBy(url, file)).toBe("ran")
-			expect(combRefusal(`${file};`)).toBe("ran")
+			expect(databaseRefusal(`${file};`)).toBe("ran")
 		})
 	}, 60_000)
 })

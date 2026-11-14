@@ -25,7 +25,7 @@ const CATALOG_MARKERS = ["^[A-Z]{3}$", "islamic-umalqura", ...REGISTRY_MARKERS]
 let dir: string
 
 beforeAll(() => {
-	dir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-tree-shake-"))
+	dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-tree-shake-"))
 })
 
 afterAll(() => {
@@ -70,7 +70,7 @@ describe("a bundle of the root entry", () => {
 	it("leaves the registries out when the app reaches isCidr through a namespace import", async () => {
 		const code = await bundle(
 			"namespace",
-			`import * as comb from ${ROOT}\nexport const taken = comb.isCidr("10.0.0.0/8")\n`,
+			`import * as database from ${ROOT}\nexport const taken = database.isCidr("10.0.0.0/8")\n`,
 		)
 		expect(found(code, REGISTRY_MARKERS)).toEqual([])
 	})

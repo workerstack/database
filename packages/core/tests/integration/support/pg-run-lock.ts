@@ -1,5 +1,5 @@
 /**
- * One run of the Postgres suites at a time on COMB_TEST_PG_URL (comb-9d, plan 21): the global setup
+ * One run of the Postgres suites at a time on DATABASE_TEST_PG_URL (database-9d, plan 21): the global setup
  * of the Postgres projects (vitest.config.ts) holds the run's lock (tests/support/pg-lock.ts) for the
  * whole run, so two processes running Postgres suites on the shared test server serialize on the
  * server itself, however each was started. heavy.lock stays for the machine's CPU and memory.

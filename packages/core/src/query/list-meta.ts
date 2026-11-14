@@ -1,8 +1,8 @@
 /**
- * The query facts a list query schema publishes on `x-comb`. Every value comes from the config
+ * The query facts a list query schema publishes on `x-database`. Every value comes from the config
  * that parses the request, so the published facts cannot drift from behavior (docs §6).
  */
-import { COMB_FILTER_GRAMMAR, type CombMetaStamp, type CombQueryMeta, combMeta } from "../meta.ts"
+import { FILTER_GRAMMAR, type DatabaseMetaStamp, type QueryMeta, databaseMeta } from "../meta.ts"
 import { EMPTY_OBJ } from "../empty.ts"
 import { CURSOR_TIEBREAK_COLUMN } from "./cursor.ts"
 import { OPERATORS_BY_TYPE } from "./filter.ts"
@@ -40,10 +40,10 @@ function tiebreakOf(tiebreak: string | undefined): string {
 	throw new TypeError(`createListQuerySchema: tiebreak must name the column the list breaks ties on; got ""`)
 }
 
-/** The `x-comb` stamp of a list query schema built from `config` under `limits` */
-function listQueryStamp(config: PublishedConfig, limits: ListQueryLimits): CombMetaStamp<CombQueryMeta> {
+/** The `x-database` stamp of a list query schema built from `config` under `limits` */
+function listQueryStamp(config: PublishedConfig, limits: ListQueryLimits): DatabaseMetaStamp<QueryMeta> {
 	const filterConfig: Record<string, FieldType> = config.filter ?? EMPTY_OBJ
-	return combMeta({
+	return databaseMeta({
 		defaultOrder: buildDefaultOrder(config.sort),
 		filterFields: Object.entries(filterConfig).map(([field, type]) => ({
 			field,
@@ -51,7 +51,7 @@ function listQueryStamp(config: PublishedConfig, limits: ListQueryLimits): CombM
 			type,
 		})),
 		filterable: Object.keys(filterConfig),
-		grammar: COMB_FILTER_GRAMMAR,
+		grammar: FILTER_GRAMMAR,
 		kind: "query",
 		maxFilterConditions: limits.maxConditions,
 		maxFilterDepth: limits.maxDepth,

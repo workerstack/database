@@ -7,7 +7,7 @@ import { project, runCodegen, useProjects } from "../support/codegen-project.ts"
 
 useProjects()
 
-describe("comb codegen: a c.id prefix generateId refuses (F55)", () => {
+describe("database codegen: a c.id prefix generateId refuses (F55)", () => {
 	it.each(["Org", "memberships", "tag_v2"])(
 		"fails on c.id(%j), naming the file and the rule",
 		async (prefix) => {

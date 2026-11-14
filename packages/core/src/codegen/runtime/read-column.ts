@@ -1,4 +1,4 @@
-/** What codegen reads of a drizzle column beside its comb record: its unique name, its default and its dimensions */
+/** What codegen reads of a drizzle column beside its database record: its unique name, its default and its dimensions */
 import { type Column, getTableName, is, type Table } from "drizzle-orm"
 import { PgTable } from "drizzle-orm/pg-core"
 import { pgObjectName } from "../../identifier.ts"

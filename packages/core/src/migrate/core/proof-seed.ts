@@ -200,7 +200,7 @@ function seedTable(db: LocalDb, seeding: Seeding): string | undefined {
 
 /** What every table's seeding shares: the definitions, the parents' rows so far, and the seed */
 type Context = {
-	/** each table comb could not seed, by folded name, with why */
+	/** each table database could not seed, by folded name, with why */
 	unproven: Map<string, string>
 	tables: ReadonlyMap<string, string>
 	parents: Map<string, Array<Record<string, unknown>>>
@@ -263,7 +263,7 @@ function seedCycle(db: LocalDb, context: Context, group: readonly string[]): voi
 
 /**
  * Seed every table of `tables` (by name, each with its CREATE TABLE) in the copy, foreign keys on, as D1 holds them;
- * returns each table comb could not seed, by its folded name, with why. Foreign keys are left as they were.
+ * returns each table database could not seed, by its folded name, with why. Foreign keys are left as they were.
  */
 function seedTables(
 	db: LocalDb,

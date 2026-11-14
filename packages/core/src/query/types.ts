@@ -36,7 +36,7 @@ type FilterOperator =
 	| "like"
 	| "ilike"
 	| "is"
-	/** Parsed for callers that validate and run it themselves (JSON-array membership); comb's own validator and SQL take none */
+	/** Parsed for callers that validate and run it themselves (JSON-array membership); database's own validator and SQL take none */
 	| "contains"
 
 /** A filterable field's type, which decides the operators it takes and how its value is read: a `date` as epoch milliseconds unless its spec says `iso` */

@@ -1,6 +1,6 @@
 /**
- * `comb migrate apply` and `baseline` as the README documents them, on a real SQLite file: the
- * database and its environment come from comb.migrate.config.ts, a destructive migration needs
+ * `database migrate apply` and `baseline` as the README documents them, on a real SQLite file: the
+ * database and its environment come from database.migrate.config.ts, a destructive migration needs
  * --yes or a confirmation, and each file is applied and recorded together or not at all.
  */
 import { createClient } from "@libsql/client"
@@ -21,16 +21,16 @@ afterEach(() => {
 	for (const dir of dirs.splice(0)) fs.rmSync(dir, { force: true, recursive: true })
 })
 
-/** A project with comb.migrate.config.ts (a local and a staging environment) and its migrations */
+/** A project with database.migrate.config.ts (a local and a staging environment) and its migrations */
 function project(migrations: Record<string, string>) {
-	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "comb-migrate-cli-"))
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "database-migrate-cli-"))
 	dirs.push(dir)
 	fs.mkdirSync(path.join(dir, "atlas-migrations"))
 	for (const [name, sql] of Object.entries(migrations)) fs.writeFileSync(path.join(dir, "atlas-migrations", name), sql)
 	spawnSync("atlas", ["migrate", "hash", "--dir", `file://${path.join(dir, "atlas-migrations")}`])
 	const url = (file: string) => `file:${path.join(dir, file)}`
 	fs.writeFileSync(
-		path.join(dir, "comb.migrate.config.ts"),
+		path.join(dir, "database.migrate.config.ts"),
 		`export default { databases: { core: { migrationsDir: "./atlas-migrations", environments: {
 	local: { name: "core-local", provider: { type: "libsql", url: ${JSON.stringify(url("local.db"))} } },
 	staging: { name: "core-staging", provider: { type: "libsql", url: ${JSON.stringify(url("staging.db"))} } },
@@ -71,7 +71,7 @@ async function tables(url: string): Promise<string[]> {
 	}
 }
 
-describe("migrate apply through comb.migrate.config.ts (A-H4)", () => {
+describe("migrate apply through database.migrate.config.ts (A-H4)", () => {
 	it("applies the pending migrations to the environment -e names, and skips them the next time", async () => {
 		const { dir, url } = project({ "20260101000000_init.sql": "CREATE TABLE post (id TEXT PRIMARY KEY);" })
 		const first = io(dir)
@@ -96,14 +96,14 @@ describe("migrate apply through comb.migrate.config.ts (A-H4)", () => {
 	})
 })
 
-describe("migrate apply through comb.migrate.config.ts (A-H4): destructive and legacy migrations", () => {
+describe("migrate apply through database.migrate.config.ts (A-H4): destructive and legacy migrations", () => {
 	it("refuses a destructive migration without --yes or a confirmation, and applies nothing", async () => {
 		const { dir, url } = project({
 			"20260101000000_init.sql": "CREATE TABLE post (id TEXT PRIMARY KEY);",
 			"20260102000000_drop.sql": "DROP TABLE post;",
 		})
 		await keep(url("local.db"))
-		/* every pending file is approved before any applies, so a refusal leaves even the first unapplied, and comb's history unmade (S7) */
+		/* every pending file is approved before any applies, so a refusal leaves even the first unapplied, and database's history unmade (S7) */
 		expect(await runCli(["migrate", "apply", "core", "-e", "local"], io(dir))).toBe(1)
 		expect(await tables(url("local.db"))).toEqual(["keep"])
 
@@ -134,7 +134,7 @@ describe("migrate apply through comb.migrate.config.ts (A-H4): destructive and l
 		expect(await tables(url("local.db"))).toEqual(["keep"])
 		fs.writeFileSync(
 			path.join(dir, "atlas-migrations", "3_drop.sql"),
-			"-- comb:allow-unsafe: post is retired\nDROP TABLE post;",
+			"-- database:allow-unsafe: post is retired\nDROP TABLE post;",
 		)
 		spawnSync("atlas", ["migrate", "hash", "--dir", `file://${path.join(dir, "atlas-migrations")}`])
 		expect(await runCli(["migrate", "apply", "core", "-e", "local", "--yes"], io(dir))).toBe(0)
@@ -142,7 +142,7 @@ describe("migrate apply through comb.migrate.config.ts (A-H4): destructive and l
 	})
 })
 
-/** A project whose 2_row.sql is recorded, as an earlier comb did, under its pre-0.5.0 hash at `at` */
+/** A project whose 2_row.sql is recorded, as an earlier database did, under its pre-0.5.0 hash at `at` */
 async function legacyRecorded(at: number) {
 	const sql = "INSERT INTO t VALUES ('a -- b\nc');"
 	const { dir, url } = project({ "1_t.sql": "CREATE TABLE t (v TEXT);", "2_row.sql": sql })
@@ -158,7 +158,7 @@ async function legacyRecorded(at: number) {
 	return dir
 }
 
-describe("migrate apply through comb.migrate.config.ts (A-H4): files recorded by an earlier comb", () => {
+describe("migrate apply through database.migrate.config.ts (A-H4): files recorded by an earlier database", () => {
 	it("skips a file recorded under its pre-0.5.0 hash before 0.5.0", async () => {
 		const run = io(await legacyRecorded(Date.parse("2026-10-17T12:00:00Z")))
 		expect(await runCli(["migrate", "apply", "core", "-e", "local"], run)).toBe(0)
@@ -173,7 +173,7 @@ describe("migrate apply through comb.migrate.config.ts (A-H4): files recorded by
 	})
 })
 
-/* a table with an FTS5 index over it, as comb's fts generator writes one */
+/* a table with an FTS5 index over it, as database's fts generator writes one */
 const WITH_FTS = {
 	"1_init.sql": "CREATE TABLE post (id TEXT PRIMARY KEY, title TEXT);",
 	"2_fts.sql":
@@ -320,7 +320,7 @@ describe("migrate apply and check --json on libsql (C5)", () => {
 
 	it("reports a config that throws a string as that string in refused, naming the config", async () => {
 		const { dir } = project({ "20260101000000_init.sql": "CREATE TABLE post (id TEXT PRIMARY KEY);" })
-		const config = path.join(dir, "comb.migrate.config.ts")
+		const config = path.join(dir, "database.migrate.config.ts")
 		fs.writeFileSync(config, `throw "plain string from config"\n`)
 		const status = io(dir)
 		expect(await runCli(["migrate", "status", "core", "--json"], status)).toBe(1)
@@ -368,13 +368,13 @@ describe("migrate never runs a file that reaches outside its database (M40)", ()
 		for (const [file, args] of [
 			[attach(live.path), ["check", "core", "-e", "local"]],
 			[attach(live.path), ["apply", "core", "-e", "local", "--yes"]],
-			[attach(live.path, "-- comb:allow-unsafe: reads the old store\n"), ["apply", "core", "-e", "local", "--yes"]],
+			[attach(live.path, "-- database:allow-unsafe: reads the old store\n"), ["apply", "core", "-e", "local", "--yes"]],
 		] as const) {
 			fs.writeFileSync(path.join(dir, "atlas-migrations", "20260102000000_attach.sql"), file)
 			spawnSync("atlas", ["migrate", "hash", "--dir", `file://${path.join(dir, "atlas-migrations")}`])
 			const run = io(dir)
 			expect(await runCli(["migrate", ...args], run)).toBe(1)
-			expect(run.errors.join("\n")).toContain("comb never runs ATTACH in a migration")
+			expect(run.errors.join("\n")).toContain("database never runs ATTACH in a migration")
 			expect(await live.ids()).toEqual([1, 2])
 		}
 		expect(await tables(url("local.db"))).toEqual(["__drizzle_migrations", "post"])
@@ -387,7 +387,7 @@ describe("migrate never runs a file that reaches outside its database (M40)", ()
 		spawnSync("atlas", ["migrate", "hash", "--dir", `file://${path.join(dir, "atlas-migrations")}`])
 		const run = io(dir)
 		expect(await runCli(["migrate", "apply", "core", "-e", "local"], run)).toBe(1)
-		expect(run.errors.join("\n")).toContain("comb never runs ATTACH in a migration")
+		expect(run.errors.join("\n")).toContain("database never runs ATTACH in a migration")
 		expect(await live.ids()).toEqual([1, 2])
 		expect(fs.existsSync(url("local.db").slice("file:".length)) ? await tables(url("local.db")) : []).not.toContain(
 			"users",

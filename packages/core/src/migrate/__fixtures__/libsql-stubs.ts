@@ -61,7 +61,7 @@ export async function lostRequest(scheme: Scheme, answer: Answer): Promise<unkno
 	}
 }
 
-/** What the real client throws for a request after comb closed it */
+/** What the real client throws for a request after database closed it */
 export async function closedClient(scheme: Scheme): Promise<unknown> {
 	const client = createClient({ url: `${scheme}://127.0.0.1:1` })
 	client.close()

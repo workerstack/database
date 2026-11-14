@@ -1,11 +1,11 @@
 /**
- * `comb migrate apply`, `check`, `baseline` and `status`. The database comes from
- * comb.migrate.config.ts (its environment from -e) when the project has one, else it is the D1
+ * `database migrate apply`, `check`, `baseline` and `status`. The database comes from
+ * database.migrate.config.ts (its environment from -e) when the project has one, else it is the D1
  * database named on the command line. Postgres goes through Atlas (migrate-atlas.ts) and D1
- * through wrangler (migrate-d1.ts); the other SQLite databases keep comb's own history,
+ * through wrangler (migrate-d1.ts); the other SQLite databases keep database's own history,
  * `__drizzle_migrations`. There, `check` runs the check every apply runs first (plan-apply.ts):
  * the sum, the order, and each pending migration classified against the schema the earlier files
- * leave and approved as its safety needs (unsafe: a yes on a terminal or `-- comb:allow-unsafe:
+ * leave and approved as its safety needs (unsafe: a yes on a terminal or `-- database:allow-unsafe:
  * <reason>` in the file; cautious: --yes too). `apply` then applies each in one batch with the
  * record of its hash, so it is applied and recorded or neither.
  */
@@ -29,7 +29,7 @@ import { binOf, type Peers, requirePeers } from "../migrate/core/optional-peer.t
 import type { Command, Provider } from "../migrate/core/peer-needs.ts"
 import { planApply, refuseSkipping } from "../migrate/core/plan-apply.ts"
 import { run as runProcess } from "../migrate/core/process.ts"
-import type { Connection } from "../migrate/types.ts"
+import type { MigrateConnection } from "../migrate/types.ts"
 import { parseArgs, type ParsedArgs } from "./args.ts"
 import { fileName, openSqliteTarget, type SqliteTarget } from "./migrate-sqlite-target.ts"
 import { resolveMigrateTarget } from "./migrate-target.ts"
@@ -49,7 +49,7 @@ const option = (args: ParsedArgs, name: string) => args.options[name] as string 
  * The history `__drizzle_migrations` holds, row by row: nothing when it is missing, which only a write
  * would create; a table without `hash_v`, which only a write adds, marks no row
  */
-async function recordedHistory(conn: Connection): Promise<LegacyRow[]> {
+async function recordedHistory(conn: MigrateConnection): Promise<LegacyRow[]> {
 	const table = await conn.execute(
 		"SELECT name FROM sqlite_master WHERE type = 'table' AND name = '__drizzle_migrations'",
 	)
@@ -71,7 +71,7 @@ async function recordedHistory(conn: Connection): Promise<LegacyRow[]> {
  * resolveLegacy), and those names, which apply's rebuild then records; `legacy` while it awaits that rebuild
  */
 async function readHistory(
-	conn: Connection,
+	conn: MigrateConnection,
 	dir: string,
 ): Promise<{ legacy: boolean; renamed: Array<{ id: number; name: string }>; rows: HistoryRow[] }> {
 	const rows = await recordedHistory(conn)
@@ -98,7 +98,7 @@ function refuseUnmatched(matched: Matched, { dir, io, mode }: { dir: string; io:
 	/* a copy of a --file is what baseline records, so only check and apply refuse it */
 	const copies = matched.copies.map(
 		({ file, row }) =>
-			`${file} has the text of ${row}, applied with --file; run comb migrate baseline to record it, or remove it`,
+			`${file} has the text of ${row}, applied with --file; run database migrate baseline to record it, or remove it`,
 	)
 	const [copy] = copies
 	if (copy !== undefined && (mode === "check" || mode === "apply")) throw new CliError(copy)
@@ -110,7 +110,10 @@ function refuseUnmatched(matched: Matched, { dir, io, mode }: { dir: string; io:
 }
 
 /** Name each row a history from before 0.11 left unnamed, by the file it matched */
-async function nameRecorded(conn: Connection, named: ReadonlyArray<{ hash: string; name: string }>): Promise<void> {
+async function nameRecorded(
+	conn: MigrateConnection,
+	named: ReadonlyArray<{ hash: string; name: string }>,
+): Promise<void> {
 	for (const { hash, name } of named)
 		await conn.execute(
 			"UPDATE __drizzle_migrations SET name = ? WHERE id = (SELECT id FROM __drizzle_migrations WHERE hash = ? AND name IS NULL ORDER BY id LIMIT 1)",
@@ -119,7 +122,7 @@ async function nameRecorded(conn: Connection, named: ReadonlyArray<{ hash: strin
 }
 
 /**
- * Record each file not yet recorded, once the database's schema is the one the files leave: comb
+ * Record each file not yet recorded, once the database's schema is the one the files leave: database
  * compares the two (baseline-compare.ts) and refuses any difference, so nothing is recorded as
  * applied that the database does not reflect
  */
@@ -149,7 +152,7 @@ async function baseline(
 	io.out(`\nBaseline done: ${marked} marked, ${files.length - marked} already tracked`)
 }
 
-/** status's lines and outcome: each of `names` applied or pending, as comb's history records it */
+/** status's lines and outcome: each of `names` applied or pending, as database's history records it */
 function statusOf(names: readonly string[], applied: ReadonlySet<string>, io: CliContext): MigrateOutcome {
 	const done = names.filter((name) => applied.has(name))
 	const unapplied = names.filter((name) => !applied.has(name))
@@ -159,7 +162,7 @@ function statusOf(names: readonly string[], applied: ReadonlySet<string>, io: Cl
 }
 
 /**
- * `request.mode` on a SQLite database whose history is comb's own `__drizzle_migrations`; check and
+ * `request.mode` on a SQLite database whose history is database's own `__drizzle_migrations`; check and
  * status only read it, and create neither it nor the database. Each recorded row is matched to one
  * file (history-match.ts): a named row by its name, an unnamed one by its hash.
  */
@@ -175,7 +178,7 @@ async function migrateSqlite({ args, io, mode }: Request, target: Target): Promi
 	const files = hashed(dir, relative === undefined ? sqlFiles(dir) : [relative])
 	const matched = matchHistory(files, rows, single === undefined)
 	refuseUnmatched(matched, { dir, io, mode })
-	/* comb's history is written only once nothing refuses the run: its table, and each name a row lacks;
+	/* database's history is written only once nothing refuses the run: its table, and each name a row lacks;
 	   only when a file applies or the history awaits its rebuild or names, so a Turso database
 	   with nothing to change is never opened for writing */
 	const record = async (applying: boolean) => {
@@ -258,7 +261,7 @@ async function runMode(request: Request): Promise<MigrateOutcome> {
 		mode: "apply",
 	})
 	/* every peer the command needs, before it connects, fetches, spawns or asks Atlas anything; a
-	   project without comb.migrate.config.ts names a D1 binding */
+	   project without database.migrate.config.ts names a D1 binding */
 	const peers = await needPeers(io, mode, { provider: resolved?.provider.type ?? "d1" })
 	if (resolved?.provider.type === "postgres") {
 		const { migratePostgres } = await import("./migrate-atlas.ts")

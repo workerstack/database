@@ -21,7 +21,7 @@ beforeAll(loadPostgresParser)
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-pg-replay-locale-"))
+	dir = mkdtempSync(join(tmpdir(), "database-pg-replay-locale-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 

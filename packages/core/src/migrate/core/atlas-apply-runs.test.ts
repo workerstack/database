@@ -25,7 +25,7 @@ const NAMES = FILES.map(([name]) => name)
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-atlas-apply-runs-"))
+	dir = mkdtempSync(join(tmpdir(), "database-atlas-apply-runs-"))
 	for (const [name, sql] of FILES) writeFileSync(join(dir, name), sql)
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
@@ -114,7 +114,7 @@ describe("applyRuns, a call that ran nothing", () => {
 	})
 })
 
-/** `atlas`, with SIGTERM to comb once its first apply call answered, and `after` for each status read past it */
+/** `atlas`, with SIGTERM to database once its first apply call answered, and `after` for each status read past it */
 function signalledAfterFirstCall(atlas: ReturnType<typeof fakeAtlas>, after?: RunResult) {
 	let signalled = false
 	return Object.assign(
@@ -174,7 +174,7 @@ describe("applyRuns stopped by a signal (PA4 of r22)", () => {
 	it("says it could not read what was applied when the history read fails, and still ends by the signal", async () => {
 		const [lines, ends] = await stoppedLines({ code: 1, stderr: "connection refused", stdout: "" })
 		expect([lines, ends]).toEqual([
-			[expect.stringMatching(/^Stopped by SIGTERM: comb could not read what was applied: .*connection refused/)],
+			[expect.stringMatching(/^Stopped by SIGTERM: database could not read what was applied: .*connection refused/)],
 			[[process.pid, "SIGTERM"]],
 		])
 	})

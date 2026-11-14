@@ -31,8 +31,8 @@ import { flag } from "./pg-nodes.ts"
 type Sql = ReturnType<Connect>
 
 /* what names a replay's database and tags a role it made, with the backend that made it */
-const PREFIX = "comb_replay_"
-const TAG = "comb_replay"
+const PREFIX = "database_replay_"
+const TAG = "database_replay"
 
 /* how old 0.19's database or role, marked with its run's start alone, is before a run counts it leaked */
 const STALE_MS: number = 60 * 60_000
@@ -90,32 +90,46 @@ function over(owner: string | undefined, sessions: readonly Session[], now: numb
 }
 
 /**
- * What a replay whose run is over left: its databases, each with the backends it left in it and
- * whether it is a template, and its tagged roles
+ * The server's backends, and of them those of the replays over at `now`, in any database: a killed
+ * replay's own, which may still commit what its statement was making (a tagged role) until it ends
  */
-type Leftovers = { databases: Array<{ name: string; pids: unknown[]; template: boolean }>; roles: string[] }
+async function overBackends(sql: Sql, now: number): Promise<{ pids: unknown[]; sessions: Session[] }> {
+	const sessions = await sql.unsafe(SESSIONS, [])
+	const owned = new RegExp(`^${TAG} (\\d+(?:_\\d+)?)$`)
+	const pids = sessions
+		.filter((each) => over(owned.exec(String(each["app"]))?.[1], sessions, now))
+		.map((each) => each["pid"])
+	return { pids, sessions }
+}
+
+/** What a replay whose run is over left: its databases, each with whether it is a template, and its tagged roles */
+type Leftovers = { databases: Array<{ name: string; template: boolean }>; roles: string[] }
 
 /**
  * What replays over at `now` left on `sql`'s server, which a sweep takes: the replay databases of
  * any role, or only those `sql`'s role may drop (`droppable`), but one with a session in it other
- * than the backends its own replay left, and the tagged roles
+ * than the backends its own replay left, and the tagged roles; read with `sessions` when given
  */
-async function leftovers(sql: Sql, now: number, droppable: boolean): Promise<Leftovers> {
-	const sessions = await sql.unsafe(SESSIONS, [])
+async function leftovers(
+	sql: Sql,
+	now: number,
+	{ droppable, sessions: read }: { droppable: boolean; sessions?: readonly Session[] | undefined },
+): Promise<Leftovers> {
+	const sessions = read ?? (await sql.unsafe(SESSIONS, []))
 	const names = await sql.unsafe(
-		`SELECT datname, datistemplate FROM pg_database WHERE datname LIKE 'comb\\_replay\\_%'${droppable ? " AND pg_has_role(datdba, 'USAGE')" : ""}`,
+		`SELECT datname, datistemplate FROM pg_database WHERE datname LIKE 'database\\_replay\\_%'${droppable ? " AND pg_has_role(datdba, 'USAGE')" : ""}`,
 		[],
 	)
 	const databases: Leftovers["databases"] = []
 	for (const { datistemplate, datname } of names) {
 		const name = String(datname)
-		const owner = /^comb_replay_(\d+(?:_\d+)?)_[^_]+$/.exec(name)?.[1]
+		const owner = /^database_replay_(\d+(?:_\d+)?)_[^_]+$/.exec(name)?.[1]
 		const inIt = sessions.filter((each) => each["datname"] === name)
 		if (over(owner, sessions, now) && inIt.every((each) => each["app"] === `${TAG} ${owner}`))
-			databases.push({ name, pids: inIt.map((each) => each["pid"]), template: datistemplate === true })
+			databases.push({ name, template: datistemplate === true })
 	}
 	const tagged = await sql.unsafe(
-		`SELECT r.rolname, d.description FROM pg_roles r JOIN pg_shdescription d ON d.objoid = r.oid AND d.classoid = 'pg_authid'::regclass WHERE d.description LIKE 'comb\\_replay %'`,
+		`SELECT r.rolname, d.description FROM pg_roles r JOIN pg_shdescription d ON d.objoid = r.oid AND d.classoid = 'pg_authid'::regclass WHERE d.description LIKE 'database\\_replay %'`,
 		[],
 	)
 	const roles = tagged
@@ -259,6 +273,7 @@ export {
 	leftovers,
 	literal,
 	makeDatabase,
+	overBackends,
 	replayOptions,
 	replayUrl,
 	type Sql,

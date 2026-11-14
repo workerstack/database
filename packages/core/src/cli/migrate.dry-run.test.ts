@@ -11,7 +11,7 @@ const project = temp.make
 afterEach(temp.clean)
 const diffProject = () => diffProjectIn(project)
 
-describe("comb migrate diff --dry-run", () => {
+describe("database migrate diff --dry-run", () => {
 	it("writes nothing: exit 0 in sync, exit 1 printing the SQL a diff would write", async () => {
 		const dir = diffProject()
 		const run = fakeAtlas((replayed) =>
@@ -21,7 +21,7 @@ describe("comb migrate diff --dry-run", () => {
 		expect(await runCliWithFakes(["migrate", "diff", "core", "--dry-run"], drift)).toBe(1)
 		expect(drift.outputs).toEqual(["-- 20260101000000_init.sql", "CREATE TABLE post (id TEXT PRIMARY KEY);\n"])
 		expect(drift.errors).toEqual([
-			"core has drifted from its migrations: comb migrate diff core would write the SQL above",
+			"core has drifted from its migrations: database migrate diff core would write the SQL above",
 		])
 		expect(readdirSync(dir)).toEqual(["drizzle.config.ts"])
 		mkdirSync(join(dir, "atlas-migrations"))
@@ -35,13 +35,13 @@ describe("comb migrate diff --dry-run", () => {
 		expect(readdirSync(join(dir, "atlas-migrations"))).toEqual(["1_init.sql"])
 	})
 
-	/* KC2 of r22b: 0.20 diffed a new ./atlas-migrations against no history, whatever comb.migrate.config.ts said */
+	/* KC2 of r22b: 0.20 diffed a new ./atlas-migrations against no history, whatever database.migrate.config.ts said */
 	it("refuses no database named, with its usage, writing nothing, as a check that could not run (exit 2)", async () => {
 		const dir = diffProject()
 		const run = fakeAtlas((replayed) => writeFileSync(join(replayed, "20260101000000_x.sql"), "SELECT 1;\n"))
 		const io = makeIo(dir, run)
 		expect(await runCliWithFakes(["migrate", "diff", "--dry-run"], io)).toBe(2)
-		expect(io.errors).toEqual(["Usage: comb migrate diff <database> [name] [-e <name>] [--dry-run]"])
+		expect(io.errors).toEqual(["Usage: database migrate diff <database> [name] [-e <name>] [--dry-run]"])
 		expect({ calls: run.calls, files: readdirSync(dir) }).toEqual({ calls: [], files: ["drizzle.config.ts"] })
 	})
 
@@ -51,7 +51,7 @@ describe("comb migrate diff --dry-run", () => {
 		const io = makeIo(dir, run)
 		expect(await runCliWithFakes(["migrate", "diff", "core", "--dry-run"], io)).toBe(1)
 		expect(io.errors).toEqual([
-			"core has drifted from its migrations: comb migrate diff core would write the SQL above",
+			"core has drifted from its migrations: database migrate diff core would write the SQL above",
 		])
 		expect(readdirSync(dir)).toEqual(["drizzle.config.ts"])
 	})
@@ -73,7 +73,7 @@ const drifting = (replayed: string) =>
 /** An Atlas diff that fails, so the check cannot run */
 const failing = () => ({ code: 1, stderr: "Error: dial tcp: connection refused", stdout: "" })
 
-describe("comb migrate diff --dry-run's exit", () => {
+describe("database migrate diff --dry-run's exit", () => {
 	it("is 1 for drift, 2 when the check could not run, and 0 in sync", async () => {
 		const codes = []
 		for (const diff of [drifting, failing, () => undefined]) {
@@ -95,7 +95,7 @@ describe("comb migrate diff --dry-run's exit", () => {
 
 	it("is 2 when a migrate config throws what is not an Error, saying it", async () => {
 		const dir = diffProject()
-		writeFileSync(join(dir, "comb.migrate.config.ts"), 'throw "no DATABASE_URL"\n')
+		writeFileSync(join(dir, "database.migrate.config.ts"), 'throw "no DATABASE_URL"\n')
 		const io = makeIo(dir, fakeAtlas(drifting))
 		expect(await runCliWithFakes(["migrate", "diff", "core", "--dry-run"], io)).toBe(2)
 		expect(io.errors.join("\n")).toContain("no DATABASE_URL")
@@ -111,7 +111,7 @@ describe("comb migrate diff --dry-run's exit", () => {
 	})
 })
 
-describe("comb migrate diff: its migrations dir", () => {
+describe("database migrate diff: its migrations dir", () => {
 	/* D2-7 of the area D round-two review: a file there fell through to ENOTDIR after drizzle-kit and Atlas ran;
 	   Atlas's version read bypasses `run`, so it is counted on its own (D4-7 of round four) */
 	it("refuses a migrations dir that is a file before anything runs, Atlas's version read included, as the other commands do", async () => {
@@ -164,7 +164,7 @@ describe("comb migrate diff: its migrations dir", () => {
 })
 
 /* KC5 of r22b: a Ctrl-C mid dry run left its copy of the migrations dir in the temp directory */
-describe("comb migrate diff --dry-run stopped by a signal (KC5 of r22b; sibling: S2 of r22's proof scratch)", () => {
+describe("database migrate diff --dry-run stopped by a signal (KC5 of r22b; sibling: S2 of r22's proof scratch)", () => {
 	it.each([["SIGINT"], ["SIGTERM"]] as const)(
 		"on %s leaves nothing in the temp directory, then ends by it",
 		async (signal) => {
@@ -172,7 +172,7 @@ describe("comb migrate diff --dry-run stopped by a signal (KC5 of r22b; sibling:
 			const tmp = project()
 			vi.stubEnv("TMPDIR", tmp)
 			const kill = vi.spyOn(process, "kill").mockImplementation(() => true)
-			/* the worker's own listeners stand aside, so comb's is the only one, as in the CLI's process */
+			/* the worker's own listeners stand aside, so database's is the only one, as in the CLI's process */
 			const worker = process.listeners(signal)
 			process.removeAllListeners(signal)
 			try {

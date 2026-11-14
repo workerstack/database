@@ -8,7 +8,7 @@ const COMMENT = (label: string) =>
 const STRING = (label: string) =>
 	`a shipped string cites the review label "${label}", which generated code or a message would carry`
 
-describe("comb/no-review-label", () => {
+describe("database/no-review-label", () => {
 	it("rejects a review label in a src comment, wrapped or bare", () => {
 		const fixture = {
 			"packages/core/src/a.ts": "/* the cap holds (KC2 of r22b) */\nexport const a = 1\n",
@@ -57,7 +57,7 @@ describe("comb/no-review-label", () => {
 		expect(reportsOf(rule, fixture)).toEqual([])
 	})
 
-	it("fails oxlint through the comb plugin entry", () => {
+	it("fails oxlint through the database plugin entry", () => {
 		const fixture = {
 			"packages/core/src/a.ts": "/* the cap (KC2 of r22b) */\nexport const a = 1\n",
 			"packages/core/src/b.ts": "export const b = 1\n",

@@ -7,7 +7,7 @@
  * detach, a REINDEX of a schema, a database or the system, ALTER SYSTEM, CREATE and DROP DATABASE,
  * ALTER DATABASE SET TABLESPACE, CREATE and DROP TABLESPACE, DISCARD ALL, COMMIT and ROLLBACK
  * PREPARED, and a subscription's slot work: CREATE SUBSCRIPTION making a slot (its default unless
- * `connect` or `create_slot` is false), DROP SUBSCRIPTION (whose slot comb cannot see), and ALTER
+ * `connect` or `create_slot` is false), DROP SUBSCRIPTION (whose slot database cannot see), and ALTER
  * SUBSCRIPTION's REFRESH, a publication change that refreshes (its default) and a SET of failover,
  * and a CLUSTER, a REINDEX TABLE and a REINDEX INDEX of a partitioned table or index,
  * which the caller says it is. A plain table's or index's

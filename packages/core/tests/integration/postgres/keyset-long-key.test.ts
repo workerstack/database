@@ -11,7 +11,7 @@ import { defineRelations } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/node-postgres"
 import { integer, pgTable, text } from "drizzle-orm/pg-core"
 import { describe, expect, it } from "vitest"
-import { CombError } from "../../../src/error.ts"
+import { DatabaseError } from "../../../src/error.ts"
 import { queryHelpers } from "../../../src/query/drizzle.ts"
 import { buildDerivedListQuery } from "../../../src/query/sqlite/build-list-query.ts"
 import { createListQuerySchema } from "../../../src/query/schema.ts"
@@ -48,7 +48,7 @@ async function pageAll(
 	sessions: Sessions,
 	order: string,
 	edit: Edit | false,
-): Promise<{ deleted: number[]; refused?: CombError; seen: number[] }> {
+): Promise<{ deleted: number[]; refused?: DatabaseError; seen: number[] }> {
 	const client = sessions.pg()
 	const db = drizzle({ client, relations: defineRelations({ doc }) })
 	const seen: number[] = []
@@ -61,7 +61,7 @@ async function pageAll(
 		try {
 			paged = queryHelpers.paginate(rows as Array<{ id: number; title: string }>, pagedAs(query, SEALED))
 		} catch (error) {
-			if (error instanceof CombError) return { deleted, refused: error, seen }
+			if (error instanceof DatabaseError) return { deleted, refused: error, seen }
 			throw error
 		}
 		const [items, meta] = paged
@@ -78,7 +78,7 @@ async function pageAll(
 	throw new Error(`${order} did not end in 30 pages`)
 }
 
-/** The ids in Postgres's own order, NULLs last ascending and first descending as comb orders them */
+/** The ids in Postgres's own order, NULLs last ascending and first descending as database orders them */
 async function inOrder(sessions: Sessions, order: string): Promise<number[]> {
 	const direction = order.endsWith("desc") ? "DESC NULLS FIRST" : "ASC NULLS LAST"
 	const result = await sessions.pg().query(`SELECT id FROM doc ORDER BY title ${direction}, id ${direction}`)
@@ -257,11 +257,11 @@ describe("a gone anchor on Postgres, whatever builds the list (Q3)", () => {
 			{ ...twoAPage.parse({ order: "title.asc" }), cursor: meta.nextCursor as string },
 			SEALED,
 		)
-		const { _combAnchorGone, ...without } = next.extras
-		expect(_combAnchorGone).toBeTypeOf("function")
+		const { _cursorAnchorGone, ...without } = next.extras
+		expect(_cursorAnchorGone).toBeTypeOf("function")
 		const rows = await db.query.doc.findMany({ ...next, extras: without } as never)
 		expect(() => queryHelpers.paginate(rows, next)).toThrow(
-			expect.objectContaining({ cause: expect.stringContaining("_combAnchorGone"), errorKey: "page_not_wired" }),
+			expect.objectContaining({ cause: expect.stringContaining("_cursorAnchorGone"), errorKey: "page_not_wired" }),
 		)
 	})
 })

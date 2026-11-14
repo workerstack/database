@@ -38,9 +38,9 @@ function runOf(server: { counts?: number[]; on?: string; outside?: boolean; snap
 		admin,
 		created: [],
 		createrole: false,
-		database: "comb_replay_7_9_00000000",
+		database: "database_replay_7_9_00000000",
 		ours: { rows: new Map(), writes: new Map() },
-		owner: "comb_replay_7_9",
+		owner: "database_replay_7_9",
 		role: "dev",
 		seen: new Map([["role kept", { names: ["kept"], row: { rolconnlimit: -1 } }]]),
 		sql,
@@ -50,7 +50,7 @@ function runOf(server: { counts?: number[]; on?: string; outside?: boolean; snap
 	return { run, sent }
 }
 
-/* statements that run a DO block, which comb cannot read */
+/* statements that run a DO block, which database cannot read */
 const DO: Hidden = { ...nothingHidden(), code: true }
 
 const at = (names: string[], sent?: string, hidden: Hidden = DO): At => ({
@@ -69,7 +69,7 @@ const refusal = (ran: Promise<unknown>): Promise<string | undefined> =>
 	)
 
 describe("begin and commit", () => {
-	it("opens a transaction with its counts so far as comb's own, and commits one that wrote nothing past its database", async () => {
+	it("opens a transaction with its counts so far as database's own, and commits one that wrote nothing past its database", async () => {
 		const { run, sent } = runOf({ counts: [4, 4], snapshot: [["role", "kept", ["kept"], { rolconnlimit: -1 }]] })
 		await begin(run)
 		expect(run.ours.writes).toEqual(new Map([["pg_authid", 4]]))
@@ -81,7 +81,7 @@ describe("begin and commit", () => {
 		const { run, sent } = runOf({ on: "off" })
 		await begin(run)
 		expect(await refusal(commit(run, at([])))).toBe(
-			"2_b.sql: the file turned track_counts off, so devUrl's server counted nothing it changed past the database the replay runs in, and comb rolled it back and refuses the file; leave track_counts on; check stops here",
+			"2_b.sql: the file turned track_counts off, so devUrl's server counted nothing it changed past the database the replay runs in, and database rolled it back and refuses the file; leave track_counts on; check stops here",
 		)
 		expect(sent).not.toContain("COMMIT")
 	})
@@ -109,7 +109,7 @@ describe("window", () => {
 		async (word) => {
 			const { run } = runOf({ snapshot: [["setting", "every database for dev", ["dev"], { work_mem: "9MB" }]] })
 			expect(await refusal(window(run, at([word])))).toContain(
-				"comb leaves setting every database for dev added on devUrl's server",
+				"database leaves setting every database for dev added on devUrl's server",
 			)
 		},
 	)
@@ -119,7 +119,7 @@ describe("window", () => {
 		expect(await refusal(window(run, at(["svc"])))).toBeUndefined()
 	})
 
-	it("refuses a change the file names beside code comb cannot read, and leaves it, as another session may have made it (PR1 of r23)", async () => {
+	it("refuses a change the file names beside code database cannot read, and leaves it, as another session may have made it (PR1 of r23)", async () => {
 		const { run } = runOf({
 			snapshot: [
 				["role", "kept", ["kept"], { rolconnlimit: 5 }],
@@ -132,7 +132,7 @@ describe("window", () => {
 			/^2_b\.sql: devUrl's server changed past the database the replay runs in while "SELECT f\(\)" ran: database Big added, role kept changed \(rolconnlimit\), role svc added\. /,
 		)
 		expect(refused).toMatch(
-			/apply runs; comb leaves database Big added, role kept changed \(rolconnlimit\), role svc added on devUrl's server, as another session may have made those changes: undo there each that is the file's; check stops here$/,
+			/apply runs; database leaves database Big added, role kept changed \(rolconnlimit\), role svc added on devUrl's server, as another session may have made those changes: undo there each that is the file's; check stops here$/,
 		)
 	})
 
@@ -144,16 +144,16 @@ describe("window", () => {
 			],
 		})
 		expect(await refusal(window(added.run, at(["svc"])))).toMatch(
-			/while the file ran: role svc added\. .*; comb leaves role svc added on devUrl's server, as another session may have made that change: undo there each that is the file's; check stops here$/,
+			/while the file ran: role svc added\. .*; database leaves role svc added on devUrl's server, as another session may have made that change: undo there each that is the file's; check stops here$/,
 		)
 		const changed = runOf({ snapshot: [["role", "kept", ["kept"], { rolconnlimit: 5 }]] })
 		expect(await refusal(window(changed.run, at(["kept"])))).toMatch(
-			/apply runs; comb leaves role kept changed \(rolconnlimit\) on devUrl's server, as another session may have made that change: undo there each that is the file's; check stops here$/,
+			/apply runs; database leaves role kept changed \(rolconnlimit\) on devUrl's server, as another session may have made that change: undo there each that is the file's; check stops here$/,
 		)
 	})
 })
 
-/* PR1 of r23: Postgres keeps no creator for a role or a database, so a change is the file's only beside code comb cannot read */
+/* PR1 of r23: Postgres keeps no creator for a role or a database, so a change is the file's only beside code database cannot read */
 /* devUrl's server after another session made a role and a database the file names */
 const NAMED: Row[] = [
 	["role", "kept", ["kept"], { rolconnlimit: -1 }],
@@ -161,7 +161,7 @@ const NAMED: Row[] = [
 	["database", "Big", ["Big"], {}],
 ]
 
-/** Statements that call the functions `names` by a bare name, and run nothing else comb cannot read */
+/** Statements that call the functions `names` by a bare name, and run nothing else database cannot read */
 const calls = (...names: string[]): Hidden => ({ ...nothingHidden(), calls: new Set(names) })
 
 describe("window beside statements that run only what their parse says", () => {
@@ -198,27 +198,27 @@ describe("window on the replay's own database", () => {
 		const { run } = runOf({
 			snapshot: [
 				["role", "kept", ["kept"], { rolconnlimit: -1 }],
-				["database", "comb_replay_7_9_00000000", ["comb_replay_7_9_00000000"], { datistemplate: true }],
-				["subscription", "feed", ["feed", "comb_replay_7_9_00000000"], {}],
+				["database", "database_replay_7_9_00000000", ["database_replay_7_9_00000000"], { datistemplate: true }],
+				["subscription", "feed", ["feed", "database_replay_7_9_00000000"], {}],
 			],
 		})
-		run.seen.set("database comb_replay_7_9_00000000", { names: [run.database], row: { datistemplate: false } })
+		run.seen.set("database database_replay_7_9_00000000", { names: [run.database], row: { datistemplate: false } })
 		const refused = await refusal(window(run, at(["svc"], undefined, nothingHidden())))
 		expect(refused).toMatch(
-			/ran: database comb_replay_7_9_00000000 changed \(datistemplate\), subscription feed added\. .*apply runs; comb drops the database it replays in, and subscription feed in it; check stops here$/,
+			/ran: database database_replay_7_9_00000000 changed \(datistemplate\), subscription feed added\. .*apply runs; database drops the database it replays in, and subscription feed in it; check stops here$/,
 		)
 	})
 
-	it("refuses its own database's change alone when the file runs no code comb cannot read, and names no other", async () => {
+	it("refuses its own database's change alone when the file runs no code database cannot read, and names no other", async () => {
 		const { run } = runOf({
 			snapshot: [
 				["role", "kept", ["kept"], { rolconnlimit: -1 }],
 				["role", "svc", ["svc"], {}],
-				["database", "comb_replay_7_9_00000000", ["comb_replay_7_9_00000000"], {}],
+				["database", "database_replay_7_9_00000000", ["database_replay_7_9_00000000"], {}],
 			],
 		})
 		expect(await refusal(window(run, at(["svc"], undefined, nothingHidden())))).toMatch(
-			/ran: database comb_replay_7_9_00000000 added\. .*apply runs; comb drops the database it replays in; check stops here$/,
+			/ran: database database_replay_7_9_00000000 added\. .*apply runs; database drops the database it replays in; check stops here$/,
 		)
 	})
 })
@@ -263,8 +263,8 @@ describe("guarded", () => {
 
 /* P3 of r22: the replay's database is dropped after it, so a change to it outlives nothing; P5 and PR6 of r22b: so are the roles it made or adopts */
 describe("ownOf", () => {
-	const own = ownOf({ ...runOf({}).run, database: "comb_replay_1" }, new Set(["made"]))
-	const D = "comb_replay_1"
+	const own = ownOf({ ...runOf({}).run, database: "database_replay_1" }, new Set(["made"]))
+	const D = "database_replay_1"
 	it.each<[string, { fields: string[]; names: Array<string | null> }, boolean]>([
 		[`database ${D}`, { fields: ["datacl"], names: [D] }, true],
 		[`database ${D}`, { fields: ["datacl", "datistemplate"], names: [D] }, false],

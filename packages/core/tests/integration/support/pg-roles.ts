@@ -49,7 +49,7 @@ export async function dropRoles(...roles: string[]): Promise<void> {
 	)
 	const held = await query(
 		pgUrl(),
-		`SELECT datname FROM pg_database WHERE datname LIKE 'comb\\_replay\\_%' AND (${holds.join(" OR ")})`,
+		`SELECT datname FROM pg_database WHERE datname LIKE 'database\\_replay\\_%' AND (${holds.join(" OR ")})`,
 	)
 	for (const { datname } of held) await query(pgUrl(), `DROP DATABASE IF EXISTS ${String(datname)} WITH (FORCE)`)
 	for (const role of roles) {
@@ -141,7 +141,7 @@ export function shapeRoles(serverUrl: () => string): {
 	mgrUrl: () => string
 	pre: string
 } {
-	const [pre, made, beside, mgr] = ["pre", "made", "beside", "mgr"].map((name) => unique(`comb_t_${name}`)) as [
+	const [pre, made, beside, mgr] = ["pre", "made", "beside", "mgr"].map((name) => unique(`database_t_${name}`)) as [
 		string,
 		string,
 		string,

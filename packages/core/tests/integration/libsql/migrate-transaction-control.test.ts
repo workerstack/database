@@ -24,7 +24,7 @@ describe("migrate check and apply on a file holding a COMMIT", () => {
 		await sqliteRows(url, "INSERT INTO post (body) VALUES ('dup'), ('dup')")
 		const check = await migrateCli(dir, ["migrate", "check", "core"])
 		expect(check.code).toBe(1)
-		expect(check.errors.join("\n")).toContain("comb runs each file in a transaction of its own")
+		expect(check.errors.join("\n")).toContain("database runs each file in a transaction of its own")
 		for (const _ of [1, 2]) expect((await migrateCli(dir, ["migrate", "apply", "core", "--yes"])).code).toBe(1)
 		expect(await sqliteRows(url, "SELECT count(*) FROM post WHERE body = 'x'")).toEqual([[0]])
 		expect(await sqliteRows(url, "SELECT count(*) FROM __drizzle_migrations")).toEqual([[1]])

@@ -98,7 +98,7 @@ describe("classifyMigration", () => {
 		expect(classifyMigration("DROP INDEX IF EXISTS idx_old;").safety).toBe("cautious")
 	})
 
-	it("classifies a trigger's drop unsafe, unless it is an FTS sync trigger comb wrote", () => {
+	it("classifies a trigger's drop unsafe, unless it is an FTS sync trigger database wrote", () => {
 		expect(classifyMigration("DROP TRIGGER t_ai;").safety).toBe("unsafe")
 	})
 

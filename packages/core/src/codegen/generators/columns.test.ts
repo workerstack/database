@@ -17,7 +17,7 @@ type Options = Omit<Parameters<typeof generateColumns>[1], "output">
 let tmpDir: string
 
 beforeEach(() => {
-	tmpDir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-gen-columns-"))
+	tmpDir = fs.mkdtempSync(path.join(fixtureRoot(), "database-gen-columns-"))
 })
 
 afterEach(() => {

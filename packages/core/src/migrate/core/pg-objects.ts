@@ -1,8 +1,8 @@
 /**
  * Postgres objects Atlas OSS will not diff: views, materialized views, policies, sequences, roles
- * and extensions ("available to logged-in users only"). comb keeps them out of what Atlas sees, as
+ * and extensions ("available to logged-in users only"). database keeps them out of what Atlas sees, as
  * it keeps FTS5 out on SQLite (fts-migration.ts): they are taken out of the history Atlas replays
- * and of the target, and comb writes their part of each migration around Atlas's statements.
+ * and of the target, and database writes their part of each migration around Atlas's statements.
  *
  * A table may still need them where Atlas works: a default may call a sequence's nextval, a column
  * may have an extension's type. So the history and target Atlas loads start with a DO block that
@@ -35,7 +35,7 @@ type PgObject = {
 	/** the name unquoted, with its table for a policy: `post_owner on post` */
 	key: string
 	kind: PgObjectKind
-	/** the name as written, for the statements comb writes */
+	/** the name as written, for the statements database writes */
 	name: string
 	/** a policy's table as written */
 	on?: string | undefined
@@ -45,7 +45,7 @@ type PgObject = {
 	extras: string[]
 }
 
-/** What a sequence of migrations leaves of what comb owns */
+/** What a sequence of migrations leaves of what database owns */
 type PgObjects = {
 	/** the objects, by `${kind} ${key}`, in the order they were made */
 	objects: Map<string, PgObject>
@@ -56,13 +56,13 @@ type PgObjects = {
 const emptyPgObjects = (): PgObjects => ({ objects: new Map(), rls: new Map() })
 
 /**
- * A file split: the comb-owned objects it makes, the statements Atlas may see (`plain`), and what Atlas
+ * A file split: the database-owned objects it makes, the statements Atlas may see (`plain`), and what Atlas
  * replays on the dev database (`replay`): the plain statements, with each view's create and drop in
  * place, handed over in a DO block
  */
 type Separated = { objects: PgObject[]; plain: string[]; replay: string[]; state: PgObjects }
 
-// per-process-constant: the statements that make or drop a comb-owned object, composed once
+// per-process-constant: the statements that make or drop a database-owned object, composed once
 const CREATE_VIEW = /* @__PURE__ */ new RegExp(
 	`^CREATE (?:OR REPLACE )?(MATERIALIZED )?VIEW (?:IF NOT EXISTS )?(${QNAME})`,
 	"i",
@@ -89,15 +89,15 @@ const RENAME_TABLE = /* @__PURE__ */ new RegExp(
 )
 const stateKey = (kind: PgObjectKind, key: string) => `${kind} ${key}`
 
-/* comb's guard around a role it creates: the cluster may hold it already */
+/* database's guard around a role it creates: the cluster may hold it already */
 const ROLE_GUARD =
-	/^DO \$comb\$ BEGIN IF NOT EXISTS \(SELECT FROM pg_roles WHERE rolname = '(?:[^']|'')*'\) THEN (CREATE ROLE .*); END IF; END \$comb\$$/is
+	/^DO \$database\$ BEGIN IF NOT EXISTS \(SELECT FROM pg_roles WHERE rolname = '(?:[^']|'')*'\) THEN (CREATE ROLE .*); END IF; END \$database\$$/is
 
 /** `CREATE ROLE`, run only when the cluster has no role of that name: roles outlive any one database */
 const roleIfMissing = (role: PgObject): string =>
-	`DO $comb$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${role.key.replaceAll("'", "''")}') THEN ${role.sql}; END IF; END $comb$`
+	`DO $database$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${role.key.replaceAll("'", "''")}') THEN ${role.sql}; END IF; END $database$`
 
-/** The object a CREATE statement defines, if it defines one comb owns; a role read through comb's guard too */
+/** The object a CREATE statement defines, if it defines one database owns; a role read through database's guard too */
 function defined(code: string, sql: string): PgObject | undefined {
 	const guarded = ROLE_GUARD.exec(normalizeSql(sql))?.[1]
 	if (guarded !== undefined) return defined(codeOf(guarded, "postgres"), guarded)
@@ -137,7 +137,7 @@ function followTables(code: string, { objects, rls }: PgObjects): void {
 	}
 }
 
-/** A drop of objects comb owns, taken off `objects`: true when the statement is one */
+/** A drop of objects database owns, taken off `objects`: true when the statement is one */
 function followDrops(code: string, objects: Map<string, PgObject>): boolean {
 	const [, kind, names] = DROP_OBJECTS.exec(code) ?? []
 	if (kind !== undefined && names !== undefined) {
@@ -151,7 +151,7 @@ function followDrops(code: string, objects: Map<string, PgObject>): boolean {
 	return true
 }
 
-/** What one statement does to `state`: true when it is about an object comb owns */
+/** What one statement does to `state`: true when it is about an object database owns */
 function follow(statement: Statement, state: PgObjects, source: string): boolean {
 	const { code, sql } = statement
 	const { objects } = state
@@ -175,7 +175,7 @@ function follow(statement: Statement, state: PgObjects, source: string): boolean
 }
 
 /**
- * `sql`'s statements split into those Atlas may see and the comb-owned objects, continuing from
+ * `sql`'s statements split into those Atlas may see and the database-owned objects, continuing from
  * `state`; `source` names `sql` in a refusal
  */
 function separatePgObjects(sql: string, state: PgObjects = emptyPgObjects(), source = "the target schema"): Separated {
@@ -220,7 +220,7 @@ function needsAdding(object: PgObject, from: Map<string, PgObject>): boolean {
 
 type Delta = { after: string[]; before: string[] }
 
-/** The statements comb writes around Atlas's: `before` and `after` them */
+/** The statements database writes around Atlas's: `before` and `after` them */
 function pgDelta({ atlasSql, from: state, to }: { atlasSql: string; from: PgObjects; to: Separated }): Delta {
 	const from = state.objects
 	const tables = atlasTables(atlasSql)
@@ -267,7 +267,7 @@ function devPrelude(...states: PgObjects[]): string {
 			}
 		}
 	}
-	return made.size === 0 ? "" : `DO $comb$ BEGIN ${[...made.values()].join("; ")}; END $comb$;\n`
+	return made.size === 0 ? "" : `DO $database$ BEGIN ${[...made.values()].join("; ")}; END $database$;\n`
 }
 
 /**
@@ -279,7 +279,7 @@ function withDirectivesFirst(head: string, body: string): string {
 	return directives === "" ? body : `${directives}\n\n${body.replace(/^\n+/, "")}`
 }
 
-/** Atlas's migration file with comb's statements around its own, under its header */
+/** Atlas's migration file with database's statements around its own, under its header */
 function wrapAtlasFile(file: string, { after, before }: Delta): string {
 	if (after.length === 0 && before.length === 0) return file
 	const head = atlasHeader(file).text

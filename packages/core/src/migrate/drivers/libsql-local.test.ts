@@ -38,7 +38,7 @@ describe("libsqlLocal (SL3 of r22)", () => {
 		db.exec('CREATE TABLE t ("a?" , b)')
 		db.run("INSERT INTO t (\"a?\", b) VALUES (?, '?')", [Uint8Array.from([0xb0, 1])])
 		expect(db.all('SELECT hex("a?") AS a, b FROM t WHERE typeof("a?") = ?', ["blob"])).toEqual([{ a: "B001", b: "?" }])
-		expect(() => db.run("INSERT INTO t (b) VALUES (?)", [true])).toThrow("comb binds no boolean as a SQL literal")
+		expect(() => db.run("INSERT INTO t (b) VALUES (?)", [true])).toThrow("database binds no boolean as a SQL literal")
 		db.close()
 	})
 

@@ -58,18 +58,18 @@ A release's version bump rides in the final push, and the `v*` tag goes on that
 commit once ci-wait passes on it. The release workflow reruns no test: it waits
 for that commit's ci.yml push run and publishes on its success.
 
-The Postgres and Atlas suites need `atlas` on `PATH` and `COMB_TEST_PG_URL` set;
+The Postgres and Atlas suites need `atlas` on `PATH` and `DATABASE_TEST_PG_URL` set;
 without either the run fails rather than skipping them. On this machine a
 user-level PostgreSQL 17 serves
-`COMB_TEST_PG_URL='postgres://lovro:comb@localhost:55432/postgres?sslmode=disable'`
+`DATABASE_TEST_PG_URL='postgres://lovro:database@localhost:55432/postgres?sslmode=disable'`
 in UTC, as CI's does. `node ~/.cache/pg17-embedded/start.mjs` starts it after a
 reboot, and `node .tmp/grunt/pg17/start.mjs` rebuilds it from nothing. Do not
 bind 55432 from docker here. Elsewhere, a `postgres:17` container on that port
 serves the same URL where docker is set up. The local server checks passwords
-over TCP (scram-sha-256, `lovro`'s is `comb`), as CI's does, so a test that
+over TCP (scram-sha-256, `lovro`'s is `database`), as CI's does, so a test that
 depends on a password fails here as it fails there; only its Unix socket trusts.
 
-`typecheck:strict` exists because comb ships TypeScript source, so a consumer's
+`typecheck:strict` exists because database ships TypeScript source, so a consumer's
 strict flags apply to it. Must stay at zero — see
 `packages/core/docs/meta-contract.md` §10.
 

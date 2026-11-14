@@ -24,7 +24,7 @@ beforeAll(loadPostgresParser)
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-pg-apply-"))
+	dir = mkdtempSync(join(tmpdir(), "database-pg-apply-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
@@ -46,7 +46,7 @@ function command(
 ) {
 	const out: string[] = []
 	/* apply and status never use the dev database, and no test here may start a container; baseline's compare gets a scratch one */
-	const devUrl = more.devUrl ?? "postgres://comb-no-dev.invalid/dev"
+	const devUrl = more.devUrl ?? "postgres://database-no-dev.invalid/dev"
 	const target = { devUrl, lockTimeout: more.lockTimeout ?? "5s", schema: more.schema ?? "public", url }
 	const approve = more.approve ?? ((m: ParsedMigration) => approveMigration(m, { target: "core", yes: false }))
 	/* no exec: applyWithAtlas runs the real atlas by default */
@@ -112,7 +112,7 @@ describe("migrate apply on Postgres", () => {
 				await migrations({ "20260102000000_drop.sql": 'DROP TABLE "a";\n' })
 				await expect(applyWithAtlas(command(url))).rejects.toThrow("20260102000000_drop.sql is unsafe")
 				expect(await tables(url)).toEqual(["a"])
-				await migrations({ "20260102000000_drop.sql": '-- comb:allow-unsafe: a is retired\nDROP TABLE "a";\n' })
+				await migrations({ "20260102000000_drop.sql": '-- database:allow-unsafe: a is retired\nDROP TABLE "a";\n' })
 				const approved = command(url)
 				await applyWithAtlas(approved)
 				expect(approved.out).toContain("Approved in 20260102000000_drop.sql: a is retired")
@@ -186,7 +186,7 @@ describe("migrate check on Postgres reads only (M11)", () => {
 				await migrations({ "20260101000000_init.sql": "CREATE TABLE post (id integer PRIMARY KEY);" })
 				await query(url, "CREATE TABLE legacy (id integer); INSERT INTO legacy VALUES (1)")
 				const refusal =
-					"the database has objects but no migration history, and no shared history row matches this directory's files (a database made by hand, or another directory's history); if its schema matches the migrations, record them with comb migrate baseline"
+					"the database has objects but no migration history, and no shared history row matches this directory's files (a database made by hand, or another directory's history); if its schema matches the migrations, record them with database migrate baseline"
 				await expect(applyWithAtlas(command(url))).rejects.toThrow(refusal)
 				await query(url, "DROP SCHEMA IF EXISTS atlas_schema_revisions CASCADE")
 				await expect(applyWithAtlas({ ...command(url), checkOnly: true })).rejects.toThrow(refusal)
@@ -271,7 +271,7 @@ describe("migrate baseline and status on Postgres", () => {
 					"20260101000000_a.sql": 'CREATE TABLE "a" ("id" integer);\n',
 					"20260102000000_b.sql": "SELECT 1;\n",
 				})
-				await expect(applyWithAtlas(command(url))).rejects.toThrow("record them with comb migrate baseline")
+				await expect(applyWithAtlas(command(url))).rejects.toThrow("record them with database migrate baseline")
 				const baseline = command(url, { devUrl })
 				expect(await baselineWithAtlas(baseline)).toEqual(["20260101000000_a.sql", "20260102000000_b.sql"])
 				expect(await revisions(url)).toEqual(["20260101000000", "20260102000000"])
@@ -298,7 +298,7 @@ describe("migrate baseline and status on Postgres", () => {
 			})
 		}, 60_000)
 
-		/* G1-a: Atlas's status skips the clean check on public, where its revisions table is missing; comb makes it */
+		/* G1-a: Atlas's status skips the clean check on public, where its revisions table is missing; database makes it */
 		it("refuses a public schema holding a table and no history in status, as apply does, and lists an empty one's files", async () => {
 			await withScratchDb(async (url) => {
 				await migrations({ "20260101000000_t.sql": 'CREATE TABLE "t" ("id" integer);\n' })
@@ -379,7 +379,7 @@ describe("migrate apply on Postgres: one history per schema", () => {
 				await query(url, 'CREATE SCHEMA tenant_a; CREATE TABLE tenant_a."t" ("id" integer)')
 				await migrations({ "20260101000000_t.sql": 'CREATE TABLE "t" ("id" integer);\n' })
 				const refusal =
-					/no shared history row matches this directory's files \(a database made by hand, or another directory's history\)[\s\S]*comb migrate baseline/
+					/no shared history row matches this directory's files \(a database made by hand, or another directory's history\)[\s\S]*database migrate baseline/
 				await expect(applyWithAtlas(command(url, { schema: "tenant_a" }))).rejects.toThrow(refusal)
 				expect(await baselineWithAtlas(command(url, { devUrl, schema: "tenant_a" }))).toEqual(["20260101000000_t.sql"])
 				expect(await applyWithAtlas(command(url, { schema: "tenant_a" }))).toEqual([])
@@ -394,7 +394,7 @@ const approveWithYes = (m: ParsedMigration) => approveMigration(m, { target: "co
 /* each writer, given a txmode none file, keeps its header first with the blank line Atlas needs */
 const HEADED = '-- atlas:txmode none\n\nCREATE INDEX CONCURRENTLY "a_x" ON "a" ("x");\n'
 
-describe("migrate apply on Postgres: files comb rewrites keep their directives", () => {
+describe("migrate apply on Postgres: files database rewrites keep their directives", () => {
 	describe("with Atlas v1.3.0", () => {
 		it("applies each rewritten txmode none file statement by statement, so CREATE INDEX CONCURRENTLY runs", async () => {
 			await withScratchDb(async (url) => {
@@ -429,7 +429,7 @@ describe("migrate apply on Postgres: files comb rewrites keep their directives",
 const approveAll = () => Promise.resolve({ ok: true as const })
 
 /*
- * M72 of the 0.13.0 round: comb scopes the URL to search_path=<schema>, so an unqualified name is the
+ * M72 of the 0.13.0 round: database scopes the URL to search_path=<schema>, so an unqualified name is the
  * schema's own; a trigger the history wrote on app.users fires on a later INSERT INTO users
  */
 describe("migrate check on Postgres under a configured schema", () => {
@@ -496,5 +496,5 @@ CREATE VIEW v AS SELECT * FROM users;
 })
 
 it("keeps the scratch directory per test", () => {
-	expect(dir).toContain("comb-pg-apply-")
+	expect(dir).toContain("database-pg-apply-")
 })

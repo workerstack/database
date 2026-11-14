@@ -1,11 +1,11 @@
 /**
  * D1 migrations through wrangler. `wrangler d1 migrations apply` runs each file with its row in
  * the binding's `migrations_table` (`d1_migrations` by default) as one batch, so that table is the
- * history and wrangler the applier. comb resolves the binding from the wrangler config the way
+ * history and wrangler the applier. database resolves the binding from the wrangler config the way
  * wrangler does, reads the table, checks the pending files (plan-apply.ts) in wrangler's order,
  * hands them to wrangler with stdin closed, and fails unless the table then holds exactly the
  * files it checked. wrangler takes no backup; bookmark a production database before an apply.
- * That table records names only, so comb records each applied file's hash in its own table, and
+ * That table records names only, so database records each applied file's hash in its own table, and
  * refuses a file applied, then edited, as it does on its other engines.
  */
 import type { ParsedMigration } from "../migration-types.ts"
@@ -79,7 +79,7 @@ async function history(
 	const copied = hashes === undefined ? [] : recordedByDrizzle(files, hashes, applied)
 	if (copied.length > 0) {
 		throw new Error(
-			`${target.name} records ${copied.join(", ")} in ${DRIZZLE_HISTORY_TABLE}, comb's history before 0.8, but not in ${table}, wrangler's; run comb migrate baseline once to copy the record`,
+			`${target.name} records ${copied.join(", ")} in ${DRIZZLE_HISTORY_TABLE}, database's history before 0.8, but not in ${table}, wrangler's; run database migrate baseline once to copy the record`,
 		)
 	}
 	const edited = files.find(
@@ -87,7 +87,7 @@ async function history(
 	)
 	if (edited !== undefined) {
 		throw new Error(
-			`${edited.name} was applied, then edited: its hash is not the one comb recorded; restore the file, or put the change in a new one`,
+			`${edited.name} was applied, then edited: its hash is not the one database recorded; restore the file, or put the change in a new one`,
 		)
 	}
 	const { hasIntents, settle } = settled(files, rows)
@@ -124,7 +124,7 @@ async function appliedAfter(
 			: (await readHistory(read, target, table)).applied
 	} catch (error) {
 		throw new Refused(
-			`wrangler d1 migrations apply ${ok ? "ran" : "failed"}, then reading back what it recorded in ${table} failed: ${(error as Error).message}; comb migrate status says which of the files it applied`,
+			`wrangler d1 migrations apply ${ok ? "ran" : "failed"}, then reading back what it recorded in ${table} failed: ${(error as Error).message}; database migrate status says which of the files it applied`,
 			{ pending: [], unknown: names },
 		)
 	}
@@ -178,7 +178,7 @@ async function applyD1(target: D1Target, options: D1Apply): Promise<string[]> {
 		files,
 		engine: (proving, live) => proveOnD1(live, proving, { bin: target.wrangler, exec: target.exec, table }),
 		kind: "d1",
-		/* the binding's own history table, and comb's records of hashes and intents */
+		/* the binding's own history table, and database's records of hashes and intents */
 		historyTables: [table, D1_HASH_TABLE, D1_HASH_INTENT_TABLE],
 		print: options.print,
 	})
@@ -199,12 +199,12 @@ async function applyD1(target: D1Target, options: D1Apply): Promise<string[]> {
 	const moved = await moveIntents(
 		target.conn,
 		hashed.filter(({ name }) => after.has(name)),
-		marks || settle.length > 0 /* that batch gave comb's table hash_v */,
+		marks || settle.length > 0 /* that batch gave database's table hash_v */,
 	)
 	refuseUnlike(ran, { added: [...after].filter((name) => !applied.has(name)), locked, names, table })
 	if (moved !== undefined) {
 		throw new Refused(
-			`wrangler applied ${names.join(", ")}, then recording their hashes failed: ${moved}; comb migrate status reads them as recorded, and the next apply or baseline records them`,
+			`wrangler applied ${names.join(", ")}, then recording their hashes failed: ${moved}; database migrate status reads them as recorded, and the next apply or baseline records them`,
 			{ applied: names, pending: [] },
 		)
 	}
@@ -212,7 +212,7 @@ async function applyD1(target: D1Target, options: D1Apply): Promise<string[]> {
 }
 
 /**
- * Copy comb's history before 0.8 into wrangler's: each file whose hash `__drizzle_migrations` records
+ * Copy database's history before 0.8 into wrangler's: each file whose hash `__drizzle_migrations` records
  * gets its hash row and its name in the migrations table, in wrangler's order, wherever it lacks
  * either, so a baseline a lost call left half done, by this version or 0.17.0, is finished by the
  * next. Any other file is left for apply to run. Returns the names marked applied and the names
@@ -252,13 +252,13 @@ async function baselineD1(
 	for (const name of marked) print(`Marked applied: ${name}`)
 	for (const name of hashed) print(`Hash recorded: ${name}`)
 	for (const { name } of files.filter((file) => !applied.has(file.name) && !marked.includes(file.name))) {
-		print(`Not marked: ${name} (${DRIZZLE_HISTORY_TABLE} has no record of it; comb migrate apply runs it)`)
+		print(`Not marked: ${name} (${DRIZZLE_HISTORY_TABLE} has no record of it; database migrate apply runs it)`)
 	}
 	return { hashed, marked }
 }
 
 /**
- * Record the current hash of each applied file comb has none for, as applied before comb recorded
+ * Record the current hash of each applied file database has none for, as applied before database recorded
  * hashes, and print each; returns them. The operator vouches that the files are what was
  * applied, having checked them against git; the history's own checks run first, so a pre-0.8
  * record to copy, an applied file edited since, or a name no file has refuses it. What a lost move
@@ -289,7 +289,7 @@ async function statusD1(
 	print(`Pending: ${pending.join(", ") || "none"}`)
 	if (unhashed.length > 0)
 		print(
-			`No hash recorded for ${unhashed.join(", ")}, applied before comb recorded them: comb cannot tell whether ${unhashed.length === 1 ? "it was" : "they were"} edited since`,
+			`No hash recorded for ${unhashed.join(", ")}, applied before database recorded them: database cannot tell whether ${unhashed.length === 1 ? "it was" : "they were"} edited since`,
 		)
 	return { applied, pending }
 }

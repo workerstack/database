@@ -11,7 +11,7 @@
 import { sqlIdentifier } from "../../codegen/utils/case.ts"
 import type { PgTarget } from "./atlas-target.ts"
 import { type Connect, failureOf, loadPostgres } from "./pg-live-objects.ts"
-import { codeOf, leftovers, type Sql } from "./pg-replay-database.ts"
+import { codeOf, leftovers, overBackends, type Sql } from "./pg-replay-database.ts"
 import type { Run } from "./pg-replay-roles.ts"
 import { postgresOptionsOf } from "./pg-url.ts"
 
@@ -44,7 +44,7 @@ type Drops = { into: (database: string) => Sql; leave: Leave }
 function leaving(print: (line: string) => void, failed: Parameters<typeof failureOf>[1]): Leave {
 	return (left, error) =>
 		print(
-			`comb could not drop ${left}, which a replay left on devUrl's server: ${failureOf(error, failed)}; the next check or apply that reaches that server drops it`,
+			`database could not drop ${left}, which a replay left on devUrl's server: ${failureOf(error, failed)}; the next check or apply that reaches that server drops it`,
 		)
 }
 
@@ -105,7 +105,7 @@ async function dropRole(admin: Sql, role: string): Promise<void> {
 
 /* whether a role is a replay's, tagged with the backend that made it */
 const TAGGED_ROLE =
-	"SELECT 1 FROM pg_roles r JOIN pg_shdescription d ON d.objoid = r.oid AND d.classoid = 'pg_authid'::regclass WHERE r.rolname = $1 AND d.description LIKE 'comb\\_replay %'"
+	"SELECT 1 FROM pg_roles r JOIN pg_shdescription d ON d.objoid = r.oid AND d.classoid = 'pg_authid'::regclass WHERE r.rolname = $1 AND d.description LIKE 'database\\_replay %'"
 
 /**
  * Drop `role`, one the replay made or adopted, while it is still a replay's: a name the replay
@@ -115,16 +115,40 @@ async function dropMade(admin: Sql, role: string): Promise<void> {
 	if ((await admin.unsafe(TAGGED_ROLE, [role])).length > 0) await dropRole(admin, role)
 }
 
+/* how long a sweep waits for a dead replay's backends to end once it ended them, in milliseconds */
+const ENDING_MS = 5000
+
 /**
- * Drop what replays over at `now` left, each drop that fails `leave`d: every replay database this
- * role may drop, whichever role made it, once the backends its replay left in it are
- * ended, its subscriptions and slots dropped and one a template no more, and the tagged roles
+ * End `pids` and wait, up to ENDING_MS, until none is left: a backend ends its transaction as it
+ * goes, so what it commits is there to read once it is gone. One that outlives the wait leaves
+ * what it makes to the drop that then fails, which says it
+ */
+async function endBackends(admin: Sql, pids: readonly unknown[]): Promise<void> {
+	if (pids.length === 0) return
+	for (const pid of pids) await settle(() => admin.unsafe("SELECT pg_terminate_backend($1)", [pid]))
+	const left = `SELECT 1 FROM pg_stat_activity WHERE pid IN (${pids.map(Number).join(", ")})`
+	for (const until = Date.now() + ENDING_MS; Date.now() < until;) {
+		if ((await admin.unsafe(left, [])).length === 0) return
+		await new Promise((done) => setTimeout(done, 50))
+	}
+}
+
+/**
+ * Drop what replays over at `now` left, each drop that fails `leave`d: first their backends, ended
+ * and gone, so nothing they were making lands after the read; then every replay database this role
+ * may drop, whichever role made it, once its subscriptions and slots are dropped and it is a
+ * template no more, and the tagged roles
  */
 async function sweep(admin: Sql, now: number, drops: Drops): Promise<void> {
 	const { leave } = drops
-	const { databases, roles } = await leftovers(admin, now, true)
-	for (const { name, pids, template } of databases) {
-		for (const pid of pids) await settle(() => admin.unsafe("SELECT pg_terminate_backend($1)", [pid]))
+	const { pids, sessions } = await overBackends(admin, now)
+	await endBackends(admin, pids)
+	/* what ended changed the server's backends, which are read again */
+	const { databases, roles } = await leftovers(admin, now, {
+		droppable: true,
+		sessions: pids.length === 0 ? sessions : undefined,
+	})
+	for (const { name, template } of databases) {
 		await settle(() => emptyDatabase(admin, name, drops))
 		/* Postgres drops no template, which a committing DO can make the replay's database */
 		if (template) await settle(() => admin.unsafe(`ALTER DATABASE ${sqlIdentifier(name)} IS_TEMPLATE false`, []))
@@ -133,7 +157,7 @@ async function sweep(admin: Sql, now: number, drops: Drops): Promise<void> {
 	for (const role of roles) await dropOr(leave, `role ${role}`, () => dropRole(admin, role))
 }
 
-/* why comb loads postgres.js in an apply */
+/* why database loads postgres.js in an apply */
 const SWEEPS = "sweep what a killed check left on a postgres:// devUrl's server"
 
 /* how long apply waits to reach devUrl's server for its sweep, in seconds, where the URL sets no connect_timeout */
@@ -158,7 +182,7 @@ async function sweepDev(
 		const connect = await load()
 		const server = connect({ ...postgresOptionsOf(target.url, "url"), max: 1, onnotice: () => undefined })
 		try {
-			const { databases, roles } = await leftovers(server, Date.now(), false)
+			const { databases, roles } = await leftovers(server, Date.now(), { droppable: false })
 			if (databases.length + roles.length === 0) return
 		} finally {
 			await server.end()

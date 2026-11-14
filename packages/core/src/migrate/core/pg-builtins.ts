@@ -2,7 +2,7 @@
  * The Postgres functions a migration may call without a rating of its own (pg-tree.ts): built-ins
  * that read their arguments and return a value, writing nothing and running no SQL, plus the
  * extensions' few that do the same (uuid-ossp, unaccent, pgcrypto's digest). A call of any other
- * function runs code comb cannot read, and is unsafe; `setval` is cautious, as a RESTART is, and
+ * function runs code database cannot read, and is unsafe; `setval` is cautious, as a RESTART is, and
  * so is `nextval`, whose advance a rollback does not undo. `current_setting` is no pure call: it
  * copies a setting, an application's secret among them, into what it writes.
  * Names are as the parser gives them, a `pg_catalog.` qualifier dropped.
@@ -229,8 +229,8 @@ function builtinFinding(
 	if (key === "setval") return { level: "cautious", note: "sets a sequence, as a RESTART does" }
 	if (key === "nextval") return { level: "cautious", note: "advances a sequence; a rollback does not undo it" }
 	if (key === "dblink" || key === "dblink_exec")
-		return { level: "unsafe", note: `calls ${key}, which runs SQL comb cannot read` }
-	return { level: "unsafe", note: `calls ${key}, which comb cannot read` }
+		return { level: "unsafe", note: `calls ${key}, which runs SQL database cannot read` }
+	return { level: "unsafe", note: `calls ${key}, which database cannot read` }
 }
 
 export { builtinFinding, PURE as PURE_BUILTINS }

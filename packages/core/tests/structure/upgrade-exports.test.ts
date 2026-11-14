@@ -171,8 +171,9 @@ function becamePromises(exports: Exports): string[] {
 	return [...new Set(names)].sort()
 }
 
-/** Whether `type`, past `readonly`, `| undefined` and parentheses, is `Run` */
-const isRun = (type: ts.TypeNode | undefined): boolean => bare(type)?.getText() === "Run"
+/** Whether `type`, past `readonly`, `| undefined` and parentheses, is `Run`, which 0.24 names `MigrateRun` */
+const RUN_NAMES = new Set(["Run", "MigrateRun"])
+const isRun = (type: ts.TypeNode | undefined): boolean => RUN_NAMES.has(bare(type)?.getText() ?? "")
 
 /**
  * Each place a snapshot's declarations take a `Run`, which returns a promise since 0.21: a function's
@@ -226,15 +227,18 @@ const promised = (section: string, required: boolean): string[] =>
 /**
  * What the newest section's async paragraph names since the release: each public callable, and member
  * of a public type, that returned no promise there and returns one now (`became`), and every public
- * place that takes a `Run` when `Run`, or a type or function taking one, changed since then (`sites`,
- * of `all` the places now); the paragraph is required when either names anything
+ * place that takes a `Run` when `Run`, or a type or function taking one, changed since then while
+ * something became a promise (`sites`, of `all` the places now): a rename changes every place's
+ * declaration and makes nothing async, so it asks for no paragraph. The paragraph is required when
+ * either names anything
  */
 function asyncChange(now: Exports): { all: string[]; became: string[]; required: boolean; sites: string[] } {
 	const became = becamePromises(RELEASED.exports)
 	const changed = differing(RELEASED.exports, now)
 	const all = publicRunSites(now)
-	const touched = changed.includes("Run") || all.some((site) => changed.includes(site.split(/[.(]/)[0] as string))
-	const sites = touched ? all : []
+	const touched =
+		changed.some((name) => RUN_NAMES.has(name)) || all.some((site) => changed.includes(site.split(/[.(]/)[0] as string))
+	const sites = touched && became.length > 0 ? all : []
 	return { all, became, required: became.length > 0 || sites.length > 0, sites }
 }
 
@@ -340,7 +344,7 @@ describe("the newest upgrade section's exports", () => {
 		expect(lists, `changed since ${RELEASED.version}, against "Upgrading to ${version}"`).toEqual(since)
 	})
 
-	/* comb-44's 0005 dropped `ManifestConfig.filePrefix`, which 0.20.1's generateManifest takes, and no list could name it */
+	/* database-44's 0005 dropped `ManifestConfig.filePrefix`, which 0.20.1's generateManifest takes, and no list could name it */
 	it("names each member a released type lost or made required, or a type a released callable took gained as required, since then", () => {
 		const unnamed = unnamedIn(section, changedMembers(api.members))
 		expect(

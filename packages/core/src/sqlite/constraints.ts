@@ -7,7 +7,7 @@ import type { IntegerFormat, TextFormat } from "../formats/catalog.ts"
 
 /** What every helper's constraints take: the DTO, mutation, privacy, relation and tenant flags */
 type BaseConstraints = {
-	/** Field is filled by comb or the database: generated create and update DTOs leave it out */
+	/** Field is filled by database or the database: generated create and update DTOs leave it out */
 	autogenerate?: boolean | undefined
 	/**
 	 * A foreign key that may move after creation (a person to another team): generated update DTOs
@@ -31,7 +31,7 @@ type BaseConstraints = {
 	/**
 	 * This column scopes rows to a tenant.
 	 *
-	 * Declared, never inferred: comb can see that a column is a foreign key but
+	 * Declared, never inferred: database can see that a column is a foreign key but
 	 * not that the table it points at is the tenant, and a wrong tenant boundary
 	 * is worse than a missing one. Saying so here makes it a hand-reviewed fact.
 	 * At most one column per table may carry it.
@@ -91,7 +91,7 @@ export type TextConstraints = BaseConstraints &
 	StringValidationConstraints & {
 		/**
 		 * The standard a written text holds: the generated DTOs run the format's trim and case, then hold the
-		 * value to its pattern and, where it names one, its pinned registry, and publish the id as `x-comb-format`.
+		 * value to its pattern and, where it names one, its pinned registry, and publish the id as `x-database-format`.
 		 * A value it refuses is one zod `invalid_format` issue carrying the id, worded by zod's locale. One of:
 		 * - `base64url`: RFC 4648 §5 base64url, unpadded; `dGVzdA`; pattern only
 		 * - `bcp47`: BCP 47 language tag, RFC 5646 §2.1 well-formed; `zh-Hant-TW`; pattern only
@@ -127,7 +127,7 @@ export type TextConstraints = BaseConstraints &
 		/**
 		 * An exported zod schema the generated DTOs pipe the value into after every other rule, on the
 		 * transformed value; its issues reach the caller as zod yields them, and its input JSON Schema is
-		 * published beside `x-comb-schema`. Codegen imports it as it imports a `c.json` schema, so export it
+		 * published beside `x-database-schema`. Codegen imports it as it imports a `c.json` schema, so export it
 		 * from a module of its own, or above the table that names it
 		 */
 		schema?: z.ZodType<string, string> | undefined
@@ -141,7 +141,7 @@ export type RealConstraints = BaseConstraints &
 	NumericRangeConstraints & {
 		/**
 		 * An exported zod schema the generated DTOs pipe the value into after its bounds; its issues reach
-		 * the caller as zod yields them, and its input JSON Schema is published beside `x-comb-schema`.
+		 * the caller as zod yields them, and its input JSON Schema is published beside `x-database-schema`.
 		 * Codegen imports it as it imports a `c.json` schema, so export it from a module of its own, or
 		 * above the table that names it
 		 */
@@ -155,7 +155,7 @@ export type RealConstraints = BaseConstraints &
 export type IntegerConstraints = RealConstraints & {
 	/**
 	 * The standard that numbers the value: its range bounds the generated DTOs, the tighter of it and a
-	 * declared `min` or `max` winning, and they publish the id as `x-comb-format`. One of:
+	 * declared `min` or `max` winning, and they publish the id as `x-database-format`. One of:
 	 * - `iso8601-month`: ISO 8601 month number, 1 January to 12 December; `3`
 	 * - `iso8601-weekday`: ISO 8601 §3.2.2 weekday number, 1 Monday to 7 Sunday; `1`
 	 */
@@ -204,13 +204,13 @@ export type EnumStates<TState extends string = string> = {
 /**
  * What `c.enum` takes beside its values: its state machine, the `nomutate`, `private` and `tenant`
  * flags every helper takes, and the standard `format` its values are written in, which codegen holds
- * each value to and publishes as `x-comb-format`
+ * each value to and publishes as `x-database-format`
  */
 export type EnumOptions<TState extends string = string> = EnumStates<TState> &
 	Pick<BaseConstraints, "nomutate" | "private" | "tenant"> & {
 		/**
 		 * The standard the values are written in: codegen refuses a value the format does not take as written,
-		 * and the DTOs publish the id as `x-comb-format`; the values stay the rule. One of:
+		 * and the DTOs publish the id as `x-database-format`; the values stay the rule. One of:
 		 * - `base64url`: RFC 4648 §5 base64url, unpadded; `dGVzdA`; pattern only
 		 * - `bcp47`: BCP 47 language tag, RFC 5646 §2.1 well-formed; `zh-Hant-TW`; pattern only
 		 * - `e164`: ITU-T E.164 phone number, + and up to 15 digits; `+385911234567`; pattern only

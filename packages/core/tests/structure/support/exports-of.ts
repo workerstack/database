@@ -1,7 +1,7 @@
 /**
  * Every name each export subpath of a package exports, values and types alike, sorted, each with a
  * hash of what a consumer's compiler reads for it: its declaration, and the declaration of every
- * comb-local type it names, followed through those (KT3 of r22b), exported or not, so a type that
+ * database-local type it names, followed through those (KT3 of r22b), exported or not, so a type that
  * only becomes exported changes no hash. The hashes read the declarations, a tree's as
  * tsconfig.strict.json emits them and a release's as its tarball ships them, printed without
  * comments, layout, `export` or `declare`: a hash changes when a consumer's compiler would see a
@@ -98,7 +98,7 @@ const isPublic = (member: ts.Symbol): boolean =>
  * an interface or a class holds with its local bases', what every arm of a union holds, and what an
  * intersection, a mapped type, a computed key or a `z.infer` resolves to. A member a dependency
  * declares, such as `Error`'s `message` or a `z.ZodObject`'s `parse`, is left out: it is the
- * dependency's to change, and comb's declarations hash already moves when comb's own use of it does.
+ * dependency's to change, and database's declarations hash already moves when database's own use of it does.
  * Undefined for a type that is not an object, or a union with an arm that is not.
  */
 function membersOf(

@@ -1,7 +1,7 @@
 /**
  * The generator of list cases: a SQLite table whose key columns mix storage classes (numeric-looking TEXT, NULLs,
  * integers past 2^53, REAL ±0, ±Infinity and values near the edge of a double, BLOBs, odd and very long text),
- * and a list over it: its path through comb, one or two sort keys with their directions and NULL placement, a
+ * and a list over it: its path through database, one or two sort keys with their directions and NULL placement, a
  * limit, a filter, a `select`, and a walk by cursor (deleting what each page served, or not) or by page number.
  * A case is plain data, its columns named by kind, so every version builds it with its own drizzle (lists.ts).
  */
@@ -128,7 +128,7 @@ export const KINDS: readonly KeyKind[] = [
 /* the kinds of QL2's shape (support/judge.ts) */
 const HELD = ["text-held", "blob-held", "text-mixed"]
 
-/** The ways a list reaches comb: a table list, derived lists with an anchor or none, over a column or an expression, joined, merged over shards, and listOptions on the relational query API */
+/** The ways a list reaches database: a table list, derived lists with an anchor or none, over a column or an expression, joined, merged over shards, and listOptions on the relational query API */
 export const PATHS = [
 	"table",
 	"anchored",
@@ -142,7 +142,7 @@ export const PATHS = [
 ] as const
 export type ListPath = (typeof PATHS)[number]
 
-/* the paths comb builds the filter for from the parsed request; a derived list and listOptions AND their caller's own */
+/* the paths database builds the filter for from the parsed request; a derived list and listOptions AND their caller's own */
 const FILTERED: readonly ListPath[] = ["table", "merged"]
 
 export type ListCase = {
@@ -162,7 +162,7 @@ export type ListCase = {
 	shards: number
 }
 
-/** The filter of a case on a path comb filters for, or none */
+/** The filter of a case on a path database filters for, or none */
 function filterOf(random: Random, path: ListPath): ListCase["filter"] {
 	if (!FILTERED.includes(path) || !random.chance(0.3)) return undefined
 	const [a, b] = [random.int(4), random.int(4)]

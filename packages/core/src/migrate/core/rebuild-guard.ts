@@ -6,10 +6,10 @@
  * come back under the new table, not the dropped one. `PRAGMA defer_foreign_keys` defers the
  * checks, never the actions.
  *
- * So comb takes the reached rows out of the way first. The closure is every table with a
+ * So database takes the reached rows out of the way first. The closure is every table with a
  * foreign-key path to `T` over any ON DELETE action, Atlas's `new_T` included when it references
- * `T` (a self-reference points at the original). Between Atlas's copy and its drop, comb saves
- * each closure table into `_comb_keep_<t>` (generated columns left out), saves `T`'s
+ * `T` (a self-reference points at the original). Between Atlas's copy and its drop, database saves
+ * each closure table into `_database_keep_<t>` (generated columns left out), saves `T`'s
  * sqlite_sequence value, and empties the closure, each table after the tables that reference it.
  * The guard opens with `PRAGMA defer_foreign_keys = on` unless the file set it before the drop (as
  * Atlas's file does, atlas-env.ts), so the refill's
@@ -20,7 +20,7 @@
  *
  * The rowids end as they were too. A table whose key is its rowid keeps them with its key; any
  * other rowid table carries them apart, in the keep table and, for `T`, in Atlas's copy, which
- * comb rewrites to `INSERT INTO new_T (rowid, …) SELECT rowid, …`. D1 caps a SELECT at 100 result
+ * database rewrites to `INSERT INTO new_T (rowid, …) SELECT rowid, …`. D1 caps a SELECT at 100 result
  * columns, so a table carries its rowid beside at most 99 columns; at 100 its rows are kept whole
  * under new rowids, and the classification names it.
  *
@@ -37,7 +37,7 @@ import { codeOf } from "../../sql-lexer.ts"
 import { nameKey, QNAME } from "./sql-code.ts"
 import { splitSqlStatements } from "./sql-scan.ts"
 
-const KEEP = "_comb_keep_"
+const KEEP = "_database_keep_"
 
 const keep = (table: string): string => quote(`${KEEP}${table}`)
 const literal = (text: string): string => `'${text.replaceAll("'", "''")}'`
@@ -131,12 +131,12 @@ function guardOf(
 	const sequence = schema.tableInfo.get(table)?.autoincrement === true
 	const save = (t: string) => {
 		const { columns, rowid } = kept(t, schema, legacy)
-		return `CREATE TABLE ${keep(t)} AS SELECT ${[...(rowid ? ["rowid AS `_comb_rowid`"] : []), ...columns].join(", ")} FROM ${quote(t)}`
+		return `CREATE TABLE ${keep(t)} AS SELECT ${[...(rowid ? ["rowid AS `_database_rowid`"] : []), ...columns].join(", ")} FROM ${quote(t)}`
 	}
 	const refill = (t: string) => {
 		const { columns, rowid } = kept(t, schema, legacy)
 		const into = [...(rowid ? ["rowid"] : []), ...columns].join(", ")
-		const from = [...(rowid ? ["`_comb_rowid`"] : []), ...columns].join(", ")
+		const from = [...(rowid ? ["`_database_rowid`"] : []), ...columns].join(", ")
 		return `INSERT INTO ${quote(t === temp ? table : t)} (${into}) SELECT ${from} FROM ${keep(t)}`
 	}
 	const name = literal(table)
@@ -161,7 +161,7 @@ function guardOf(
 	return { after, before }
 }
 
-/** The trigger names comb's FTS groups own in `fts` */
+/** The trigger names database's FTS groups own in `fts` */
 const ftsTriggers = (fts: FtsState | undefined): Set<string> =>
 	new Set([...(fts ?? [])].filter(([, object]) => object.kind === "trigger").map(([name]) => name))
 
@@ -188,7 +188,7 @@ function refuseUnguardable({ table }: Rebuild, schema: ExtractedSchema, fts: Fts
 	const reserved = [...schema.tables.keys()].find((name) => name.startsWith(KEEP))
 	if (reserved !== undefined) {
 		throw new Error(
-			`the schema has a table named ${reserved}; comb's guard around a table rebuild reserves the ${KEEP} prefix`,
+			`the schema has a table named ${reserved}; database's guard around a table rebuild reserves the ${KEEP} prefix`,
 		)
 	}
 	const closure = reached(table, schema)

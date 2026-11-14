@@ -1,7 +1,7 @@
 /// <reference types="bun-types" />
 /**
  * SL4 of r22 on a bun:sqlite file (sibling: tests/integration/libsql/busy.test.ts, the libsql provider):
- * another process holding the write lock makes comb's apply wait for it, and a second run that applied
+ * another process holding the write lock makes database's apply wait for it, and a second run that applied
  * the file meanwhile makes this one skip it, never apply it twice nor fail on its record.
  */
 import { Database } from "bun:sqlite"

@@ -1,7 +1,7 @@
 /**
  * C1 of r18: every generated DTO module, `_shared` among them, loads. zod builds a schema's regexes
  * when its module is imported, so a range zod cannot build fails here and never on an app's import.
- * Each dialect's columns sit at the edge of the range comb holds them to.
+ * Each dialect's columns sit at the edge of the range database holds them to.
  */
 import path from "node:path"
 import { describe, expect, it } from "vitest"
@@ -54,7 +54,7 @@ describe("every generated DTO module loads", () => {
 	it.each(Object.entries(TABLES))(
 		"on %s, _shared among them",
 		async (_, tables) => {
-			const dir = project({ "comb.config.ts": CONFIG, "src/db/db.core.tables.ts": tables })
+			const dir = project({ "database.config.ts": CONFIG, "src/db/db.core.tables.ts": tables })
 			await codegen(dir)
 			const modules = generatedFiles(dir).filter((file) => file.includes("dtos") && file.endsWith(".gen.ts"))
 			expect(modules.some((file) => file.includes("_shared"))).toBe(true)

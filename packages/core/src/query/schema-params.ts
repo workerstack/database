@@ -80,7 +80,7 @@ const DECIMAL_DIGITS = /^\d+$/
  * `raw` as a number: as given, or read from decimal digits, at most `max`'s unless the first is no
  * zero; NaN for any other string, which a number schema refuses. Digits past `max`'s that start with
  * no zero hold a number past it, which its bound refuses; leading zeros past them hold none, so the
- * query string comb accepts stays within maxQueryBytes
+ * query string database accepts stays within maxQueryBytes
  */
 function fromDigits(raw: unknown, max: number): unknown {
 	if (typeof raw !== "string") return raw

@@ -1,9 +1,9 @@
 /**
  * A column's constraints, from the record its `c` helper was given: every key one the column
- * types allow, a pattern one comb can emit, and `autogenerate` defaulting to true on a column
+ * types allow, a pattern one database can emit, and `autogenerate` defaulting to true on a column
  * something other than the caller fills.
  */
-import type { CombColumnKind } from "../meta/column.ts"
+import type { ColumnMetaKind } from "../meta/column.ts"
 import type { ConstantValue, FieldConstraintsMeta } from "./analyzer-types.ts"
 import { formatOf } from "./format-constraints.ts"
 import { patternLiteral } from "./utils/pattern.ts"
@@ -129,20 +129,20 @@ export const CONSTRAINT_KEYS: ConstraintKeys = {
 	updatedAt: NUMBER_KEYS,
 }
 
-/* every key any helper takes, so a key none takes is named as one comb does not read */
+/* every key any helper takes, so a key none takes is named as one database does not read */
 const KNOWN: readonly string[] = [...TEXT_KEYS, "maxBytes"]
 
 /** Refuses a key the helper's constraint type does not take, naming the helper: its rule would be dropped without a word */
 function refuseForeignKeys(
 	constraints: Readonly<Record<string, ConstantValue>>,
-	{ helper, place }: { helper: CombColumnKind | null; place: string },
+	{ helper, place }: { helper: ColumnMetaKind | null; place: string },
 ): void {
 	if (helper !== null && !Object.hasOwn(CONSTRAINT_KEYS, helper))
-		throw new Error(`${place}: comb has no helper c.${helper}`)
+		throw new Error(`${place}: database has no helper c.${helper}`)
 	const allowed: readonly string[] = helper === null ? [] : CONSTRAINT_KEYS[helper]
 	const key = Object.keys(constraints).find((each) => !allowed.includes(each))
 	if (key === undefined) return
-	if (!KNOWN.includes(key)) throw new Error(`${place}: comb reads no constraint named ${key}`)
+	if (!KNOWN.includes(key)) throw new Error(`${place}: database reads no constraint named ${key}`)
 	throw new Error(`${place}: ${helper === null ? "a drizzle column" : `c.${helper}`} takes no ${key}`)
 }
 
@@ -203,15 +203,15 @@ function refuseEmptyBounds(
 
 /**
  * A field's constraints from the record its column helper was given, every key one the column
- * types allow, a pattern one comb can emit and bounds that hold a value; an error at `place`
- * otherwise. `filled` says what fills the column, never its name: comb's own timestamp
+ * types allow, a pattern one database can emit and bounds that hold a value; an error at `place`
+ * otherwise. `filled` says what fills the column, never its name: database's own timestamp
  * helpers, or a timestamp's default or update hook; a column named createdAt that nothing fills is
  * the caller's to give. `measure` says whether min and max bound a length (text) or a value
  */
 /** Refuses what no field can be declared with: an unknown measure or constraint, a contradiction, a bad relation, empty bounds */
 function refuseMalformed(
 	constraints: Readonly<Record<string, ConstantValue>>,
-	{ helper, measure, place }: { helper: CombColumnKind | null; measure: "length" | "value"; place: string },
+	{ helper, measure, place }: { helper: ColumnMetaKind | null; measure: "length" | "value"; place: string },
 ): void {
 	/* a JavaScript caller's measure reaches here unchecked by tsc */
 	if (measure !== "length" && measure !== "value") throw new Error(`${place}: measure must be "length" or "value"`)
@@ -230,7 +230,7 @@ function refuseMalformed(
 }
 
 /**
- * A column's declared constraints, checked and with comb's defaults applied. Throws on a key the
+ * A column's declared constraints, checked and with database's defaults applied. Throws on a key the
  * helper does not take, a value of the wrong type, two keys that contradict, or bounds no value
  * meets, or a format the helper cannot hold, each message prefixed with `place`
  */
@@ -249,7 +249,7 @@ export function fieldConstraintsOf(
 		/** whether something other than the caller fills the column, a `c.createdAt`, `c.updatedAt` or `c.deletedAt` column, or a timestamp key's default or update hook, which turns `autogenerate` on unless it is declared false */
 		filled: boolean
 		/** the c helper that built the column, whose constraint type names the keys it takes; null for a drizzle column, which takes none */
-		helper: CombColumnKind | null
+		helper: ColumnMetaKind | null
 		/** what `min` and `max` bound: a text's length, or the value itself */
 		measure: "length" | "value"
 		/** where the column is declared, as each error message names it */

@@ -1,5 +1,5 @@
 /**
- * S6 of the 0.15.0 review: a Turso apply that comb refused had created the Turso database first,
+ * S6 of the 0.15.0 review: a Turso apply that database refused had created the Turso database first,
  * since the provider's connect POSTs /databases on a 404 before any check runs. A Turso run now
  * checks on a read-only connection, a missing database read as an empty one, and creates the
  * database and mints a full-access token only when there is something to apply. The Turso API is
@@ -49,7 +49,7 @@ function tursoProject(migrations: Record<string, string>): MigrateProject {
 	projects.push(project)
 	routed.url = project.url
 	fs.writeFileSync(
-		path.join(project.dir, "comb.migrate.config.ts"),
+		path.join(project.dir, "database.migrate.config.ts"),
 		`export default { databases: { core: { migrationsDir: "./m", environments: {
 	local: { name: "core", provider: { type: "turso", org: "acme", apiToken: "fake", databaseName: "core" } },
 } } } }\n`,

@@ -1,8 +1,8 @@
 /**
- * Plan 14's 4.18: comb builds no code from strings. workerd refuses `new Function` ("Code generation
+ * Plan 14's 4.18: database builds no code from strings. workerd refuses `new Function` ("Code generation
  * from strings disallowed"), so a compiled schema never compiled on Workers and only added zod's
  * compiler to the bundle. Under `jitless`, zod's own setting for a runtime without eval, which a
- * Worker gets from its user agent, every comb schema builds and parses with no Function made: the
+ * Worker gets from its user agent, every database schema builds and parses with no Function made: the
  * query schemas, the pagination meta and a generated entity's DTOs. The consumer suite runs the same
  * on workerd itself.
  */
@@ -34,7 +34,7 @@ afterAll(() => {
 	cleanGeneratedDtos()
 })
 
-describe("comb's schemas under jitless (4.18)", () => {
+describe("database's schemas under jitless (4.18)", () => {
 	it("build and parse with no Function made from a string", async () => {
 		const { createListQuerySchema, createRetrieveQuerySchema, paginationResponseSchema } =
 			await import("../../../src/query/schema.ts")

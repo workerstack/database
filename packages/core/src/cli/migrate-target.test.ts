@@ -12,21 +12,21 @@ afterEach(temp.clean)
 const PG = { type: "postgres", url: "postgres://app@db.example.com/app?sslmode=verify-full" }
 const LITE = { type: "libsql", url: "file:core.db" }
 
-/** A project whose comb.migrate.config.ts (in ./db) declares `databases`, and optionally a comb.config.ts */
-function project(databases: Record<string, unknown>, combConfig?: string): string {
+/** A project whose database.migrate.config.ts (in ./db) declares `databases`, and optionally a database.config.ts */
+function project(databases: Record<string, unknown>, databaseConfig?: string): string {
 	const dir = temp.make()
 	mkdirSync(join(dir, "db"))
-	writeFileSync(join(dir, "comb.migrate.config.ts"), `export default { databases: ${JSON.stringify(databases)} }\n`)
-	if (combConfig !== undefined) writeFileSync(join(dir, "comb.config.ts"), combConfig)
+	writeFileSync(join(dir, "database.migrate.config.ts"), `export default { databases: ${JSON.stringify(databases)} }\n`)
+	if (databaseConfig !== undefined) writeFileSync(join(dir, "database.config.ts"), databaseConfig)
 	return dir
 }
 
-/** A comb.config.ts giving database `db` an FTS5 table */
+/** A database.config.ts giving database `db` an FTS5 table */
 const fts = (db: string) =>
 	`export default { databases: { ${db}: { tables: "t.ts", fts: { post_fts: { columns: ["title"] } } } } }\n`
 
 describe("resolveMigrateTarget", () => {
-	it("is undefined in a project without comb.migrate.config.ts", async () => {
+	it("is undefined in a project without database.migrate.config.ts", async () => {
 		expect(await resolveMigrateTarget({ cwd: temp.make(), db: "core", mode: "diff" })).toBeUndefined()
 	})
 
@@ -94,14 +94,14 @@ describe("resolveMigrateTarget refusals", () => {
 	it("names the databases when the config declares none by that name", async () => {
 		const cwd = project({ core: { migrationsDir: "m", name: "core", provider: LITE } })
 		await expect(resolveMigrateTarget({ cwd, db: "blog", mode: "diff" })).rejects.toThrow(
-			'comb.migrate.config.ts declares no database "blog". Available: core',
+			'database.migrate.config.ts declares no database "blog". Available: core',
 		)
 	})
 
 	it("refuses FTS5 tables on a Postgres database, and allows them on SQLite", async () => {
 		const pg = project({ core: { migrationsDir: "m", name: "core", provider: PG } }, fts("core"))
 		await expect(resolveMigrateTarget({ cwd: pg, db: "core", mode: "diff" })).rejects.toThrow(
-			'comb.config.ts gives the Postgres database "core" FTS5 tables, which are SQLite; use a tsvector column with a GIN index',
+			'database.config.ts gives the Postgres database "core" FTS5 tables, which are SQLite; use a tsvector column with a GIN index',
 		)
 		const lite = project({ core: { migrationsDir: "m", name: "core", provider: LITE } }, fts("core"))
 		expect((await resolveMigrateTarget({ cwd: lite, db: "core", mode: "diff" }))?.dialect).toBe("sqlite")
@@ -163,7 +163,7 @@ describe("diff reads the environment it is told (KC4; sibling: the D1 environmen
 		})
 	})
 
-	it("passes comb migrate diff's -e through, and refuses the diff without it", async () => {
+	it("passes database migrate diff's -e through, and refuses the diff without it", async () => {
 		const cwd = project({ core: { environments: envs(["local", "ci"], libsqlOrD1), migrationsDir: "m" } })
 		writeFileSync(join(cwd, "drizzle.config.ts"), 'export default { dialect: "sqlite" }\n')
 		const told = makeIo(cwd, fakeAtlas())

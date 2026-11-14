@@ -18,7 +18,7 @@ export const authUsers = auth.table("users", { id: text("id").primaryKey(), emai
 export const users = pgTable("users", { id: text("id").primaryKey(), email: text("email").unique(), authId: text("auth_id").references(() => authUsers.id) })
 `
 
-describe("comb codegen: one table name in two Postgres schemas (F51)", () => {
+describe("database codegen: one table name in two Postgres schemas (F51)", () => {
 	it("generates both, each under its own name", async () => {
 		const dir = project({ "src/db/db.core.tables.ts": TABLES })
 		const { code, err } = await runCodegen(dir, ["--tables", "src/db/db.core.tables.ts"])

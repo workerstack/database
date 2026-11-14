@@ -1,7 +1,7 @@
 /**
- * How run stops a child (PA4 of r22, comb-9d's read of it): every stop, a timeout's, maxBuffer's or a
- * signal comb forwards, reaches the child's whole process group on POSIX, so a grandchild goes too,
- * and a child that traps SIGTERM is killed with SIGKILL killAfterMs later, which comb reports. Each
+ * How run stops a child (PA4 of r22, database-9d's read of it): every stop, a timeout's, maxBuffer's or a
+ * signal database forwards, reaches the child's whole process group on POSIX, so a grandchild goes too,
+ * and a child that traps SIGTERM is killed with SIGKILL killAfterMs later, which database reports. Each
  * case bounds itself: past BOUND_MS it kills what it started and fails with the pids it found alive.
  */
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
@@ -20,7 +20,7 @@ const KILL_AFTER_MS = 300
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-run-stop-"))
+	dir = mkdtempSync(join(tmpdir(), "database-run-stop-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
@@ -75,14 +75,14 @@ describe("run stopping a child that traps SIGTERM (PA4 of r22)", () => {
 			code: 124,
 			limit: { timeoutMs: 300 },
 			out: 0,
-			stderr: `node: stopped after 300 ms; node did not end ${KILL_AFTER_MS} ms after SIGTERM: comb killed it with SIGKILL`,
+			stderr: `node: stopped after 300 ms; node did not end ${KILL_AFTER_MS} ms after SIGTERM: database killed it with SIGKILL`,
 			stop: "past timeoutMs",
 		},
 		{
 			code: 1,
 			limit: { maxBuffer: 1024 },
 			out: 2048,
-			stderr: `node: output exceeded 1024 bytes; node did not end ${KILL_AFTER_MS} ms after SIGTERM: comb killed it with SIGKILL`,
+			stderr: `node: output exceeded 1024 bytes; node did not end ${KILL_AFTER_MS} ms after SIGTERM: database killed it with SIGKILL`,
 			stop: "past maxBuffer",
 		},
 	])(
@@ -97,7 +97,7 @@ describe("run stopping a child that traps SIGTERM (PA4 of r22)", () => {
 	)
 })
 
-describe("run stopped by a signal to comb (PA4 of r22)", () => {
+describe("run stopped by a signal to database (PA4 of r22)", () => {
 	const kill = stubKill()
 
 	it("leaves no process of the child's group, a grandchild it started included", async () => {
@@ -108,7 +108,7 @@ describe("run stopped by a signal to comb (PA4 of r22)", () => {
 		const [child, grandchild] = await pidsOf(pids)
 		await deliver("SIGTERM")
 		await bounded(
-			until(() => kill.calls().length > 0, "comb's end"),
+			until(() => kill.calls().length > 0, "database's end"),
 			[child, grandchild],
 		)
 		expect([await leftOf([child, grandchild]), kill.calls()]).toEqual([[], [[process.pid, "SIGTERM"]]])
@@ -122,13 +122,13 @@ describe("run stopped by a signal to comb (PA4 of r22)", () => {
 			const [child, grandchild] = await pidsOf(pids)
 			await deliver("SIGTERM")
 			await bounded(
-				until(() => kill.calls().length > 0, "comb's end"),
+				until(() => kill.calls().length > 0, "database's end"),
 				[child, grandchild],
 			)
 			expect([await leftOf([child, grandchild]), write.mock.calls.map(([text]) => String(text)), kill.calls()]).toEqual(
 				[
 					[],
-					[`node did not end ${KILL_AFTER_MS} ms after SIGTERM: comb killed it with SIGKILL\n`],
+					[`node did not end ${KILL_AFTER_MS} ms after SIGTERM: database killed it with SIGKILL\n`],
 					[[process.pid, "SIGTERM"]],
 				],
 			)

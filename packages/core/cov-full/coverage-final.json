@@ -1,6 +1,6 @@
 {
-	"/home/lovro/Development/comb/packages/core/lint/boundaries.js": {
-		"path": "/home/lovro/Development/comb/packages/core/lint/boundaries.js",
+	"/home/lovro/Development/database/packages/core/lint/boundaries.js": {
+		"path": "/home/lovro/Development/database/packages/core/lint/boundaries.js",
 		"statementMap": {
 			"0": { "start": { "line": 9, "column": 22 }, "end": { "line": 9, "column": null } },
 			"1": { "start": { "line": 10, "column": 17 }, "end": { "line": 10, "column": null } },
@@ -677,8 +677,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/lint/index.js": {
-		"path": "/home/lovro/Development/comb/packages/core/lint/index.js",
+	"/home/lovro/Development/database/packages/core/lint/index.js": {
+		"path": "/home/lovro/Development/database/packages/core/lint/index.js",
 		"statementMap": {},
 		"fnMap": {},
 		"branchMap": {},
@@ -687,8 +687,8 @@
 		"b": {},
 		"meta": { "lastBranch": 0, "lastFunction": 0, "lastStatement": 0, "seen": {}, "fnNames": {} }
 	},
-	"/home/lovro/Development/comb/packages/core/lint/no-console.js": {
-		"path": "/home/lovro/Development/comb/packages/core/lint/no-console.js",
+	"/home/lovro/Development/database/packages/core/lint/no-console.js": {
+		"path": "/home/lovro/Development/database/packages/core/lint/no-console.js",
 		"statementMap": {
 			"0": { "start": { "line": 5, "column": 14 }, "end": { "line": 5, "column": null } },
 			"1": { "start": { "line": 7, "column": 20 }, "end": { "line": 21, "column": null } },
@@ -779,8 +779,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/lint/no-module-side-effects.js": {
-		"path": "/home/lovro/Development/comb/packages/core/lint/no-module-side-effects.js",
+	"/home/lovro/Development/database/packages/core/lint/no-module-side-effects.js": {
+		"path": "/home/lovro/Development/database/packages/core/lint/no-module-side-effects.js",
 		"statementMap": {
 			"0": { "start": { "line": 6, "column": 16 }, "end": { "line": 6, "column": null } },
 			"1": { "start": { "line": 8, "column": 21 }, "end": { "line": 21, "column": null } },
@@ -1127,8 +1127,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/lint/no-module-state.js": {
-		"path": "/home/lovro/Development/comb/packages/core/lint/no-module-state.js",
+	"/home/lovro/Development/database/packages/core/lint/no-module-state.js": {
+		"path": "/home/lovro/Development/database/packages/core/lint/no-module-state.js",
 		"statementMap": {
 			"0": { "start": { "line": 6, "column": 15 }, "end": { "line": 6, "column": null } },
 			"1": { "start": { "line": 9, "column": 1 }, "end": { "line": 9, "column": null } },
@@ -1356,8 +1356,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/lint/no-silent-catch.js": {
-		"path": "/home/lovro/Development/comb/packages/core/lint/no-silent-catch.js",
+	"/home/lovro/Development/database/packages/core/lint/no-silent-catch.js": {
+		"path": "/home/lovro/Development/database/packages/core/lint/no-silent-catch.js",
 		"statementMap": {
 			"0": { "start": { "line": 6, "column": 16 }, "end": { "line": 6, "column": null } },
 			"1": { "start": { "line": 8, "column": 17 }, "end": { "line": 8, "column": null } },
@@ -1960,8 +1960,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/lint/no-v8-ignore.js": {
-		"path": "/home/lovro/Development/comb/packages/core/lint/no-v8-ignore.js",
+	"/home/lovro/Development/database/packages/core/lint/no-v8-ignore.js": {
+		"path": "/home/lovro/Development/database/packages/core/lint/no-v8-ignore.js",
 		"statementMap": {
 			"0": { "start": { "line": 3, "column": 13 }, "end": { "line": 3, "column": null } },
 			"1": { "start": { "line": 5, "column": 20 }, "end": { "line": 19, "column": null } },
@@ -2018,8 +2018,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/lint/raw-sql-allowlist.js": {
-		"path": "/home/lovro/Development/comb/packages/core/lint/raw-sql-allowlist.js",
+	"/home/lovro/Development/database/packages/core/lint/raw-sql-allowlist.js": {
+		"path": "/home/lovro/Development/database/packages/core/lint/raw-sql-allowlist.js",
 		"statementMap": {
 			"0": { "start": { "line": 5, "column": 14 }, "end": { "line": 5, "column": null } },
 			"1": { "start": { "line": 7, "column": 14 }, "end": { "line": 7, "column": null } },
@@ -2306,8 +2306,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/lint/rule-harness.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/lint/rule-harness.ts",
+	"/home/lovro/Development/database/packages/core/lint/rule-harness.ts": {
+		"path": "/home/lovro/Development/database/packages/core/lint/rule-harness.ts",
 		"statementMap": {
 			"0": { "start": { "line": 29, "column": 15 }, "end": { "line": 29, "column": null } },
 			"1": { "start": { "line": 30, "column": 15 }, "end": { "line": 30, "column": null } },
@@ -2756,8 +2756,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/lint/scope.js": {
-		"path": "/home/lovro/Development/comb/packages/core/lint/scope.js",
+	"/home/lovro/Development/database/packages/core/lint/scope.js": {
+		"path": "/home/lovro/Development/database/packages/core/lint/scope.js",
 		"statementMap": {
 			"0": { "start": { "line": 1, "column": 12 }, "end": { "line": 1, "column": null } },
 			"1": { "start": { "line": 5, "column": 14 }, "end": { "line": 5, "column": null } },
@@ -2894,8 +2894,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/constraint-map.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/constraint-map.ts",
+	"/home/lovro/Development/database/packages/core/src/constraint-map.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/constraint-map.ts",
 		"statementMap": {
 			"0": { "start": { "line": 23, "column": 13 }, "end": { "line": 24, "column": null } },
 			"1": { "start": { "line": 24, "column": 1 }, "end": { "line": 24, "column": null } },
@@ -2936,7 +2936,7 @@
 				"line": 45
 			},
 			"3": {
-				"name": "toCombError",
+				"name": "toDatabaseError",
 				"decl": { "start": { "line": 56, "column": 16 }, "end": { "line": 56, "column": 28 } },
 				"loc": { "start": { "line": 56, "column": 99 }, "end": { "line": 60, "column": null } },
 				"line": 56
@@ -3087,8 +3087,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/empty.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/empty.ts",
+	"/home/lovro/Development/database/packages/core/src/empty.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/empty.ts",
 		"statementMap": {
 			"0": { "start": { "line": 3, "column": 41 }, "end": { "line": 3, "column": null } },
 			"1": { "start": { "line": 5, "column": 41 }, "end": { "line": 5, "column": null } }
@@ -3106,8 +3106,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/error.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/error.ts",
+	"/home/lovro/Development/database/packages/core/src/error.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/error.ts",
 		"statementMap": {
 			"0": { "start": { "line": 23, "column": 2 }, "end": { "line": 23, "column": null } },
 			"1": { "start": { "line": 24, "column": 2 }, "end": { "line": 24, "column": null } },
@@ -3157,8 +3157,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/id.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/id.ts",
+	"/home/lovro/Development/database/packages/core/src/id.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/id.ts",
 		"statementMap": {
 			"0": { "start": { "line": 15, "column": 17 }, "end": { "line": 15, "column": null } },
 			"1": { "start": { "line": 16, "column": 21 }, "end": { "line": 16, "column": null } },
@@ -3518,8 +3518,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/lru.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/lru.ts",
+	"/home/lovro/Development/database/packages/core/src/lru.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/lru.ts",
 		"statementMap": {
 			"0": { "start": { "line": 13, "column": 6 }, "end": { "line": 13, "column": null } },
 			"1": { "start": { "line": 13, "column": 50 }, "end": { "line": 13, "column": null } },
@@ -4022,8 +4022,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/meta.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/meta.ts",
+	"/home/lovro/Development/database/packages/core/src/meta.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/meta.ts",
 		"statementMap": {
 			"0": { "start": { "line": 36, "column": 1 }, "end": { "line": 36, "column": null } },
 			"1": { "start": { "line": 50, "column": 14 }, "end": { "line": 50, "column": null } },
@@ -4037,13 +4037,13 @@
 		},
 		"fnMap": {
 			"0": {
-				"name": "combMeta",
+				"name": "databaseMeta",
 				"decl": { "start": { "line": 35, "column": 9 }, "end": { "line": 35, "column": 18 } },
 				"loc": { "start": { "line": 35, "column": 54 }, "end": { "line": 37, "column": null } },
 				"line": 35
 			},
 			"1": {
-				"name": "carryCombMeta",
+				"name": "carryDatabaseMeta",
 				"decl": { "start": { "line": 49, "column": 9 }, "end": { "line": 49, "column": 26 } },
 				"loc": { "start": { "line": 49, "column": 71 }, "end": { "line": 53, "column": null } },
 				"line": 49
@@ -4121,8 +4121,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/states.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/states.ts",
+	"/home/lovro/Development/database/packages/core/src/states.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/states.ts",
 		"statementMap": {
 			"0": { "start": { "line": 47, "column": 1 }, "end": { "line": 47, "column": null } },
 			"1": { "start": { "line": 52, "column": 1 }, "end": { "line": 52, "column": null } },
@@ -4471,8 +4471,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/types.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/types.ts",
+	"/home/lovro/Development/database/packages/core/src/types.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/types.ts",
 		"statementMap": {
 			"0": { "start": { "line": 10, "column": 58 }, "end": { "line": 17, "column": null } },
 			"1": { "start": { "line": 20, "column": 29 }, "end": { "line": 43, "column": null } }
@@ -4490,8 +4490,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/value-error.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/value-error.ts",
+	"/home/lovro/Development/database/packages/core/src/value-error.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/value-error.ts",
 		"statementMap": {
 			"0": { "start": { "line": 14, "column": 51 }, "end": { "line": 31, "column": null } },
 			"1": { "start": { "line": 38, "column": 17 }, "end": { "line": 38, "column": null } },
@@ -4559,8 +4559,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/cli/args.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/cli/args.ts",
+	"/home/lovro/Development/database/packages/core/src/cli/args.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/cli/args.ts",
 		"statementMap": {
 			"0": { "start": { "line": 26, "column": 46 }, "end": { "line": 75, "column": null } },
 			"1": { "start": { "line": 83, "column": 6 }, "end": { "line": 83, "column": null } },
@@ -4914,8 +4914,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/cli/codegen-record.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/cli/codegen-record.ts",
+	"/home/lovro/Development/database/packages/core/src/cli/codegen-record.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/cli/codegen-record.ts",
 		"statementMap": {
 			"0": { "start": { "line": 14, "column": 15 }, "end": { "line": 14, "column": null } },
 			"1": { "start": { "line": 19, "column": 1 }, "end": { "line": 19, "column": null } },
@@ -5181,8 +5181,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/cli/codegen.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/cli/codegen.ts",
+	"/home/lovro/Development/database/packages/core/src/cli/codegen.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/cli/codegen.ts",
 		"statementMap": {
 			"0": { "start": { "line": 20, "column": 37 }, "end": { "line": 30, "column": null } },
 			"1": { "start": { "line": 45, "column": 6 }, "end": { "line": 45, "column": null } },
@@ -6092,8 +6092,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/cli/comb-config.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/cli/comb-config.ts",
+	"/home/lovro/Development/database/packages/core/src/cli/database-config.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/cli/database-config.ts",
 		"statementMap": {
 			"0": { "start": { "line": 12, "column": 1 }, "end": { "line": 20, "column": null } },
 			"1": { "start": { "line": 13, "column": 13 }, "end": { "line": 13, "column": null } },
@@ -6126,13 +6126,13 @@
 		},
 		"fnMap": {
 			"0": {
-				"name": "findCombConfig",
+				"name": "findDatabaseConfig",
 				"decl": { "start": { "line": 11, "column": 22 }, "end": { "line": 11, "column": 37 } },
 				"loc": { "start": { "line": 11, "column": 86 }, "end": { "line": 22, "column": null } },
 				"line": 11
 			},
 			"1": {
-				"name": "loadCombConfig",
+				"name": "loadDatabaseConfig",
 				"decl": { "start": { "line": 24, "column": 22 }, "end": { "line": 24, "column": 37 } },
 				"loc": { "start": { "line": 24, "column": 74 }, "end": { "line": 28, "column": null } },
 				"line": 24
@@ -6332,8 +6332,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/cli/migrate-apply.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/cli/migrate-apply.ts",
+	"/home/lovro/Development/database/packages/core/src/cli/migrate-apply.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/cli/migrate-apply.ts",
 		"statementMap": {
 			"0": { "start": { "line": 36, "column": 6 }, "end": { "line": 36, "column": null } },
 			"1": { "start": { "line": 36, "column": 51 }, "end": { "line": 36, "column": null } },
@@ -7122,8 +7122,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/cli/migrate-atlas.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/cli/migrate-atlas.ts",
+	"/home/lovro/Development/database/packages/core/src/cli/migrate-atlas.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/cli/migrate-atlas.ts",
 		"statementMap": {
 			"0": { "start": { "line": 23, "column": 1 }, "end": { "line": 26, "column": null } },
 			"1": { "start": { "line": 24, "column": 2 }, "end": { "line": 25, "column": null } },
@@ -7286,8 +7286,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/cli/migrate-d1.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/cli/migrate-d1.ts",
+	"/home/lovro/Development/database/packages/core/src/cli/migrate-d1.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/cli/migrate-d1.ts",
 		"statementMap": {
 			"0": { "start": { "line": 31, "column": 17 }, "end": { "line": 31, "column": null } },
 			"1": { "start": { "line": 35, "column": 1 }, "end": { "line": 43, "column": null } },
@@ -7677,8 +7677,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/cli/migrate-target.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/cli/migrate-target.ts",
+	"/home/lovro/Development/database/packages/core/src/cli/migrate-target.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/cli/migrate-target.ts",
 		"statementMap": {
 			"0": { "start": { "line": 37, "column": 6 }, "end": { "line": 37, "column": null } },
 			"1": { "start": { "line": 37, "column": 46 }, "end": { "line": 37, "column": null } },
@@ -8018,8 +8018,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/cli/migrate.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/cli/migrate.ts",
+	"/home/lovro/Development/database/packages/core/src/cli/migrate.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/cli/migrate.ts",
 		"statementMap": {
 			"0": { "start": { "line": 11, "column": 23 }, "end": { "line": 11, "column": null } },
 			"1": { "start": { "line": 20, "column": 26 }, "end": { "line": 20, "column": null } },
@@ -8489,8 +8489,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/cli/output.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/cli/output.ts",
+	"/home/lovro/Development/database/packages/core/src/cli/output.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/cli/output.ts",
 		"statementMap": {
 			"0": { "start": { "line": 22, "column": 13 }, "end": { "line": 23, "column": null } },
 			"1": { "start": { "line": 23, "column": 1 }, "end": { "line": 23, "column": null } },
@@ -8635,8 +8635,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/cli/run.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/cli/run.ts",
+	"/home/lovro/Development/database/packages/core/src/cli/run.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/cli/run.ts",
 		"statementMap": {
 			"0": { "start": { "line": 10, "column": 50 }, "end": { "line": 19, "column": null } },
 			"1": { "start": { "line": 22, "column": 13 }, "end": { "line": 31, "column": null } },
@@ -8772,8 +8772,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/analyze-field.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/analyze-field.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/analyze-field.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/analyze-field.ts",
 		"statementMap": {
 			"0": { "start": { "line": 15, "column": 15 }, "end": { "line": 15, "column": null } },
 			"1": { "start": { "line": 16, "column": 1 }, "end": { "line": 16, "column": null } },
@@ -8966,8 +8966,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/analyze-options.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/analyze-options.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/analyze-options.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/analyze-options.ts",
 		"statementMap": {
 			"0": { "start": { "line": 21, "column": 13 }, "end": { "line": 21, "column": null } },
 			"1": { "start": { "line": 22, "column": 1 }, "end": { "line": 22, "column": null } },
@@ -9589,8 +9589,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/analyze-table.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/analyze-table.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/analyze-table.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/analyze-table.ts",
 		"statementMap": {
 			"0": { "start": { "line": 22, "column": 80 }, "end": { "line": 29, "column": null } },
 			"1": { "start": { "line": 32, "column": 22 }, "end": { "line": 32, "column": null } },
@@ -10206,8 +10206,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/analyzer-types.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/analyzer-types.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/analyzer-types.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/analyzer-types.ts",
 		"statementMap": {},
 		"fnMap": {},
 		"branchMap": {},
@@ -10216,8 +10216,8 @@
 		"b": {},
 		"meta": { "lastBranch": 0, "lastFunction": 0, "lastStatement": 0, "seen": {}, "fnNames": {} }
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/analyzer.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/analyzer.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/analyzer.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/analyzer.ts",
 		"statementMap": {
 			"0": { "start": { "line": 16, "column": 30 }, "end": { "line": 21, "column": null } },
 			"1": { "start": { "line": 22, "column": 1 }, "end": { "line": 27, "column": null } },
@@ -10443,8 +10443,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/annotations.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/annotations.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/annotations.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/annotations.ts",
 		"statementMap": {
 			"0": { "start": { "line": 14, "column": 30 }, "end": { "line": 31, "column": null } },
 			"1": { "start": { "line": 43, "column": 21 }, "end": { "line": 43, "column": null } },
@@ -10585,8 +10585,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/config.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/config.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/config.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/config.ts",
 		"statementMap": {
 			"0": { "start": { "line": 11, "column": 26 }, "end": { "line": 25, "column": null } },
 			"1": { "start": { "line": 49, "column": 1 }, "end": { "line": 49, "column": null } }
@@ -10611,8 +10611,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/entity-meta.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/entity-meta.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/entity-meta.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/entity-meta.ts",
 		"statementMap": {
 			"0": { "start": { "line": 23, "column": 1 }, "end": { "line": 30, "column": null } },
 			"1": { "start": { "line": 48, "column": 18 }, "end": { "line": 48, "column": null } },
@@ -11116,8 +11116,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/generators/columns.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/generators/columns.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/generators/columns.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/generators/columns.ts",
 		"statementMap": {
 			"0": { "start": { "line": 32, "column": 1 }, "end": { "line": 32, "column": null } },
 			"1": { "start": { "line": 40, "column": 22 }, "end": { "line": 40, "column": null } },
@@ -11431,8 +11431,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/generators/constraints.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/generators/constraints.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/generators/constraints.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/generators/constraints.ts",
 		"statementMap": {
 			"0": { "start": { "line": 31, "column": 6 }, "end": { "line": 31, "column": null } },
 			"1": { "start": { "line": 31, "column": 67 }, "end": { "line": 31, "column": null } },
@@ -12147,8 +12147,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/generators/context-types.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/generators/context-types.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/generators/context-types.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/generators/context-types.ts",
 		"statementMap": {},
 		"fnMap": {},
 		"branchMap": {},
@@ -12157,8 +12157,8 @@
 		"b": {},
 		"meta": { "lastBranch": 0, "lastFunction": 0, "lastStatement": 0, "seen": {}, "fnNames": {} }
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/generators/diagrams.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/generators/diagrams.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/generators/diagrams.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/generators/diagrams.ts",
 		"statementMap": {
 			"0": { "start": { "line": 42, "column": 1 }, "end": { "line": 58, "column": null } },
 			"1": { "start": { "line": 51, "column": 3 }, "end": { "line": 51, "column": null } },
@@ -12808,8 +12808,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/generators/entities.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/generators/entities.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/generators/entities.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/generators/entities.ts",
 		"statementMap": {
 			"0": { "start": { "line": 20, "column": 20 }, "end": { "line": 20, "column": null } },
 			"1": { "start": { "line": 21, "column": 17 }, "end": { "line": 21, "column": null } },
@@ -12986,8 +12986,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/generators/enum-checks.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/generators/enum-checks.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/generators/enum-checks.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/generators/enum-checks.ts",
 		"statementMap": {
 			"0": { "start": { "line": 33, "column": 29 }, "end": { "line": 33, "column": null } },
 			"1": { "start": { "line": 35, "column": 1 }, "end": { "line": 42, "column": null } },
@@ -13222,8 +13222,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/generators/field-names.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/generators/field-names.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/generators/field-names.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/generators/field-names.ts",
 		"statementMap": {
 			"0": { "start": { "line": 22, "column": 15 }, "end": { "line": 22, "column": null } },
 			"1": { "start": { "line": 24, "column": 1 }, "end": { "line": 26, "column": null } },
@@ -13485,8 +13485,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/generators/fts-sql.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/generators/fts-sql.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/generators/fts-sql.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/generators/fts-sql.ts",
 		"statementMap": {
 			"0": { "start": { "line": 15, "column": 26 }, "end": { "line": 15, "column": null } },
 			"1": { "start": { "line": 19, "column": 1 }, "end": { "line": 19, "column": null } },
@@ -14057,8 +14057,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/generators/fts.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/generators/fts.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/generators/fts.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/generators/fts.ts",
 		"statementMap": {
 			"0": { "start": { "line": 23, "column": 28 }, "end": { "line": 23, "column": null } },
 			"1": { "start": { "line": 24, "column": 17 }, "end": { "line": 24, "column": null } },
@@ -14222,8 +14222,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/generators/manifest.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/generators/manifest.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/generators/manifest.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/generators/manifest.ts",
 		"statementMap": {
 			"0": { "start": { "line": 21, "column": 25 }, "end": { "line": 21, "column": null } },
 			"1": { "start": { "line": 89, "column": 25 }, "end": { "line": 89, "column": null } },
@@ -14487,8 +14487,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/generators/orm.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/generators/orm.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/generators/orm.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/generators/orm.ts",
 		"statementMap": {
 			"0": { "start": { "line": 29, "column": 1 }, "end": { "line": 32, "column": null } },
 			"1": { "start": { "line": 37, "column": 1 }, "end": { "line": 47, "column": null } },
@@ -14805,8 +14805,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/generators/relations.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/generators/relations.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/generators/relations.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/generators/relations.ts",
 		"statementMap": {
 			"0": { "start": { "line": 21, "column": 1 }, "end": { "line": 21, "column": null } },
 			"1": { "start": { "line": 21, "column": 49 }, "end": { "line": 21, "column": 64 } },
@@ -15388,8 +15388,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/generators/rows.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/generators/rows.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/generators/rows.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/generators/rows.ts",
 		"statementMap": {
 			"0": { "start": { "line": 19, "column": 20 }, "end": { "line": 19, "column": null } },
 			"1": { "start": { "line": 20, "column": 29 }, "end": { "line": 20, "column": null } },
@@ -15527,8 +15527,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/generators/translations.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/generators/translations.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/generators/translations.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/generators/translations.ts",
 		"statementMap": {
 			"0": { "start": { "line": 25, "column": 1 }, "end": { "line": 32, "column": null } },
 			"1": { "start": { "line": 27, "column": 18 }, "end": { "line": 27, "column": null } },
@@ -15809,8 +15809,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/generators/dtos/dto-types.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/generators/dtos/dto-types.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/generators/dtos/dto-types.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/generators/dtos/dto-types.ts",
 		"statementMap": {},
 		"fnMap": {},
 		"branchMap": {},
@@ -15819,8 +15819,8 @@
 		"b": {},
 		"meta": { "lastBranch": 0, "lastFunction": 0, "lastStatement": 0, "seen": {}, "fnNames": {} }
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/generators/dtos/entity-file.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/generators/dtos/entity-file.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/generators/dtos/entity-file.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/generators/dtos/entity-file.ts",
 		"statementMap": {
 			"0": { "start": { "line": 10, "column": 43 }, "end": { "line": 15, "column": null } },
 			"1": { "start": { "line": 17, "column": 35 }, "end": { "line": 17, "column": null } },
@@ -15971,7 +15971,7 @@
 				"line": 52
 			},
 			"6": {
-				"name": "renderCombMeta",
+				"name": "renderDatabaseMeta",
 				"decl": { "start": { "line": 59, "column": 9 }, "end": { "line": 59, "column": 24 } },
 				"loc": { "start": { "line": 59, "column": 59 }, "end": { "line": 73, "column": null } },
 				"line": 59
@@ -16856,8 +16856,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/generators/dtos/example-meta.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/generators/dtos/example-meta.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/generators/dtos/example-meta.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/generators/dtos/example-meta.ts",
 		"statementMap": {
 			"0": { "start": { "line": 7, "column": 21 }, "end": { "line": 7, "column": null } },
 			"1": { "start": { "line": 8, "column": 27 }, "end": { "line": 8, "column": null } },
@@ -17418,8 +17418,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/generators/dtos/field-schema.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/generators/dtos/field-schema.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/generators/dtos/field-schema.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/generators/dtos/field-schema.ts",
 		"statementMap": {
 			"0": { "start": { "line": 17, "column": 13 }, "end": { "line": 17, "column": null } },
 			"1": { "start": { "line": 22, "column": 6 }, "end": { "line": 22, "column": null } },
@@ -18815,8 +18815,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/generators/dtos/generate.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/generators/dtos/generate.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/generators/dtos/generate.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/generators/dtos/generate.ts",
 		"statementMap": {
 			"0": { "start": { "line": 21, "column": 35 }, "end": { "line": 21, "column": null } },
 			"1": { "start": { "line": 25, "column": 29 }, "end": { "line": 25, "column": null } },
@@ -19221,8 +19221,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/generators/dtos/package-exports.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/generators/dtos/package-exports.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/generators/dtos/package-exports.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/generators/dtos/package-exports.ts",
 		"statementMap": {
 			"0": { "start": { "line": 12, "column": 6 }, "end": { "line": 12, "column": null } },
 			"1": { "start": { "line": 12, "column": 31 }, "end": { "line": 12, "column": null } },
@@ -19420,8 +19420,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/generators/dtos/shared-schemas.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/generators/dtos/shared-schemas.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/generators/dtos/shared-schemas.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/generators/dtos/shared-schemas.ts",
 		"statementMap": {
 			"0": { "start": { "line": 12, "column": 58 }, "end": { "line": 20, "column": null } },
 			"1": { "start": { "line": 24, "column": 15 }, "end": { "line": 24, "column": null } },
@@ -20147,8 +20147,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/generators/dtos/timestamps.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/generators/dtos/timestamps.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/generators/dtos/timestamps.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/generators/dtos/timestamps.ts",
 		"statementMap": {
 			"0": { "start": { "line": 14, "column": 1 }, "end": { "line": 16, "column": null } },
 			"1": { "start": { "line": 27, "column": 1 }, "end": { "line": 27, "column": null } },
@@ -20970,8 +20970,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/utils/case.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/utils/case.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/utils/case.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/utils/case.ts",
 		"statementMap": {
 			"0": { "start": { "line": 7, "column": 1 }, "end": { "line": 7, "column": null } },
 			"1": { "start": { "line": 7, "column": 46 }, "end": { "line": 7, "column": 64 } },
@@ -21205,8 +21205,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/utils/constraint-text.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/utils/constraint-text.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/utils/constraint-text.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/utils/constraint-text.ts",
 		"statementMap": {
 			"0": { "start": { "line": 13, "column": 52 }, "end": { "line": 13, "column": null } },
 			"1": { "start": { "line": 20, "column": 13 }, "end": { "line": 20, "column": null } },
@@ -22141,8 +22141,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/utils/enum-source.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/utils/enum-source.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/utils/enum-source.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/utils/enum-source.ts",
 		"statementMap": {
 			"0": { "start": { "line": 18, "column": 33 }, "end": { "line": 24, "column": null } },
 			"1": { "start": { "line": 26, "column": 17 }, "end": { "line": 26, "column": null } },
@@ -22864,8 +22864,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/utils/fs.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/utils/fs.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/utils/fs.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/utils/fs.ts",
 		"statementMap": {
 			"0": { "start": { "line": 10, "column": 1 }, "end": { "line": 12, "column": null } },
 			"1": { "start": { "line": 11, "column": 2 }, "end": { "line": 11, "column": null } },
@@ -23384,8 +23384,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/utils/node-text.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/utils/node-text.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/utils/node-text.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/utils/node-text.ts",
 		"statementMap": {
 			"0": { "start": { "line": 6, "column": 13 }, "end": { "line": 6, "column": null } },
 			"1": { "start": { "line": 6, "column": 47 }, "end": { "line": 6, "column": null } },
@@ -23494,8 +23494,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/utils/package-json.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/utils/package-json.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/utils/package-json.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/utils/package-json.ts",
 		"statementMap": {
 			"0": { "start": { "line": 15, "column": 17 }, "end": { "line": 15, "column": null } },
 			"1": { "start": { "line": 16, "column": 1 }, "end": { "line": 16, "column": null } },
@@ -23801,8 +23801,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/utils/schema-source.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/utils/schema-source.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/utils/schema-source.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/utils/schema-source.ts",
 		"statementMap": {
 			"0": { "start": { "line": 21, "column": 16 }, "end": { "line": 21, "column": null } },
 			"1": { "start": { "line": 22, "column": 1 }, "end": { "line": 22, "column": null } },
@@ -24187,8 +24187,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/utils/table-builders.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/utils/table-builders.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/utils/table-builders.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/utils/table-builders.ts",
 		"statementMap": {
 			"0": { "start": { "line": 7, "column": 21 }, "end": { "line": 7, "column": null } },
 			"1": { "start": { "line": 9, "column": 41 }, "end": { "line": 9, "column": null } },
@@ -24337,8 +24337,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/utils/ts-morph.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/utils/ts-morph.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/utils/ts-morph.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/utils/ts-morph.ts",
 		"statementMap": {
 			"0": { "start": { "line": 11, "column": 1 }, "end": { "line": 17, "column": null } },
 			"1": { "start": { "line": 31, "column": 15 }, "end": { "line": 31, "column": null } },
@@ -24651,8 +24651,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/codegen/utils/validate.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/codegen/utils/validate.ts",
+	"/home/lovro/Development/database/packages/core/src/codegen/utils/validate.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/codegen/utils/validate.ts",
 		"statementMap": {
 			"0": { "start": { "line": 22, "column": 6 }, "end": { "line": 27, "column": null } },
 			"1": { "start": { "line": 22, "column": 41 }, "end": { "line": 27, "column": null } },
@@ -25718,8 +25718,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/meta/contract.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/meta/contract.ts",
+	"/home/lovro/Development/database/packages/core/src/meta/contract.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/meta/contract.ts",
 		"statementMap": {
 			"0": { "start": { "line": 11, "column": 22 }, "end": { "line": 11, "column": null } },
 			"1": { "start": { "line": 18, "column": 26 }, "end": { "line": 18, "column": null } },
@@ -25738,8 +25738,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/meta/read.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/meta/read.ts",
+	"/home/lovro/Development/database/packages/core/src/meta/read.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/meta/read.ts",
 		"statementMap": {
 			"0": { "start": { "line": 29, "column": 1 }, "end": { "line": 29, "column": null } },
 			"1": { "start": { "line": 33, "column": 1 }, "end": { "line": 33, "column": null } },
@@ -25887,7 +25887,7 @@
 				"line": 33
 			},
 			"3": {
-				"name": "readCombMeta",
+				"name": "readDatabaseMeta",
 				"decl": { "start": { "line": 46, "column": 9 }, "end": { "line": 46, "column": 22 } },
 				"loc": { "start": { "line": 46, "column": 87 }, "end": { "line": 72, "column": null } },
 				"line": 46
@@ -25965,13 +25965,13 @@
 				"line": 245
 			},
 			"16": {
-				"name": "readCombEntityMeta",
+				"name": "readEntityMeta",
 				"decl": { "start": { "line": 252, "column": 9 }, "end": { "line": 252, "column": 28 } },
 				"loc": { "start": { "line": 252, "column": 95 }, "end": { "line": 255, "column": null } },
 				"line": 252
 			},
 			"17": {
-				"name": "readCombQueryMeta",
+				"name": "readQueryMeta",
 				"decl": { "start": { "line": 258, "column": 9 }, "end": { "line": 258, "column": 27 } },
 				"loc": { "start": { "line": 258, "column": 93 }, "end": { "line": 261, "column": null } },
 				"line": 258
@@ -26980,8 +26980,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/config-schema.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/config-schema.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/config-schema.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/config-schema.ts",
 		"statementMap": {
 			"0": { "start": { "line": 12, "column": 27 }, "end": { "line": 12, "column": null } },
 			"1": { "start": { "line": 15, "column": 1 }, "end": { "line": 15, "column": null } },
@@ -27084,8 +27084,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/config.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/config.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/config.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/config.ts",
 		"statementMap": {
 			"0": { "start": { "line": 28, "column": 1 }, "end": { "line": 43, "column": null } },
 			"1": { "start": { "line": 30, "column": 3 }, "end": { "line": 36, "column": null } },
@@ -27593,8 +27593,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/types.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/types.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/types.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/types.ts",
 		"statementMap": {},
 		"fnMap": {},
 		"branchMap": {},
@@ -27603,8 +27603,8 @@
 		"b": {},
 		"meta": { "lastBranch": 0, "lastFunction": 0, "lastStatement": 0, "seen": {}, "fnNames": {} }
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/apply.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/apply.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/apply.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/apply.ts",
 		"statementMap": {
 			"0": { "start": { "line": 11, "column": 1 }, "end": { "line": 17, "column": null } },
 			"1": { "start": { "line": 25, "column": 14 }, "end": { "line": 25, "column": null } },
@@ -27675,8 +27675,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/approval.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/approval.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/approval.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/approval.ts",
 		"statementMap": {
 			"0": { "start": { "line": 28, "column": 21 }, "end": { "line": 28, "column": null } },
 			"1": { "start": { "line": 29, "column": 15 }, "end": { "line": 29, "column": null } },
@@ -27982,8 +27982,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/atlas-apply.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/atlas-apply.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/atlas-apply.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/atlas-apply.ts",
 		"statementMap": {
 			"0": { "start": { "line": 45, "column": 1 }, "end": { "line": 48, "column": null } },
 			"1": { "start": { "line": 49, "column": 21 }, "end": { "line": 49, "column": null } },
@@ -29022,8 +29022,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/atlas-dir.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/atlas-dir.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/atlas-dir.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/atlas-dir.ts",
 		"statementMap": {
 			"0": { "start": { "line": 13, "column": 1 }, "end": { "line": 15, "column": null } },
 			"1": { "start": { "line": 14, "column": 20 }, "end": { "line": 14, "column": 41 } },
@@ -29337,8 +29337,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/atlas-env.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/atlas-env.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/atlas-env.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/atlas-env.ts",
 		"statementMap": {
 			"0": { "start": { "line": 30, "column": 11 }, "end": { "line": 33, "column": null } },
 			"1": { "start": { "line": 32, "column": 13 }, "end": { "line": 32, "column": null } },
@@ -29589,8 +29589,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/atlas-target.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/atlas-target.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/atlas-target.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/atlas-target.ts",
 		"statementMap": {
 			"0": { "start": { "line": 26, "column": 17 }, "end": { "line": 26, "column": null } },
 			"1": { "start": { "line": 27, "column": 19 }, "end": { "line": 27, "column": null } },
@@ -30696,8 +30696,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/atlas.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/atlas.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/atlas.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/atlas.ts",
 		"statementMap": {
 			"0": { "start": { "line": 22, "column": 1 }, "end": { "line": 22, "column": null } },
 			"1": { "start": { "line": 26, "column": 16 }, "end": { "line": 26, "column": null } },
@@ -31206,8 +31206,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/baseline-compare.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/baseline-compare.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/baseline-compare.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/baseline-compare.ts",
 		"statementMap": {
 			"0": { "start": { "line": 22, "column": 15 }, "end": { "line": 22, "column": null } },
 			"1": { "start": { "line": 24, "column": 16 }, "end": { "line": 24, "column": null } },
@@ -31599,8 +31599,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/classify-alter.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/classify-alter.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/classify-alter.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/classify-alter.ts",
 		"statementMap": {
 			"0": { "start": { "line": 16, "column": 36 }, "end": { "line": 16, "column": null } },
 			"1": { "start": { "line": 18, "column": 36 }, "end": { "line": 18, "column": null } },
@@ -32038,8 +32038,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/classify-file.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/classify-file.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/classify-file.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/classify-file.ts",
 		"statementMap": {
 			"0": { "start": { "line": 13, "column": 1 }, "end": { "line": 13, "column": null } },
 			"1": { "start": { "line": 15, "column": 34 }, "end": { "line": 18, "column": null } },
@@ -32291,8 +32291,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/classify-rebuild.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/classify-rebuild.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/classify-rebuild.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/classify-rebuild.ts",
 		"statementMap": {
 			"0": { "start": { "line": 32, "column": 1 }, "end": { "line": 32, "column": null } },
 			"1": { "start": { "line": 32, "column": 21 }, "end": { "line": 32, "column": null } },
@@ -32677,8 +32677,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/classify-routine.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/classify-routine.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/classify-routine.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/classify-routine.ts",
 		"statementMap": {
 			"0": { "start": { "line": 13, "column": 39 }, "end": { "line": 13, "column": null } },
 			"1": { "start": { "line": 15, "column": 31 }, "end": { "line": 15, "column": null } },
@@ -32999,8 +32999,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/classify-runtime.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/classify-runtime.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/classify-runtime.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/classify-runtime.ts",
 		"statementMap": {
 			"0": { "start": { "line": 13, "column": 32 }, "end": { "line": 13, "column": null } },
 			"1": { "start": { "line": 15, "column": 32 }, "end": { "line": 15, "column": null } },
@@ -33556,8 +33556,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/classify-write.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/classify-write.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/classify-write.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/classify-write.ts",
 		"statementMap": {
 			"0": { "start": { "line": 27, "column": 6 }, "end": { "line": 32, "column": null } },
 			"1": { "start": { "line": 27, "column": 86 }, "end": { "line": 32, "column": null } },
@@ -34244,8 +34244,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/classify.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/classify.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/classify.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/classify.ts",
 		"statementMap": {
 			"0": { "start": { "line": 50, "column": 1 }, "end": { "line": 50, "column": null } },
 			"1": { "start": { "line": 52, "column": 34 }, "end": { "line": 55, "column": null } },
@@ -35148,8 +35148,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/d1-history.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/d1-history.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/d1-history.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/d1-history.ts",
 		"statementMap": {
 			"0": { "start": { "line": 47, "column": 22 }, "end": { "line": 47, "column": null } },
 			"1": { "start": { "line": 48, "column": 21 }, "end": { "line": 48, "column": null } },
@@ -35984,8 +35984,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/fts-migration.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/fts-migration.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/fts-migration.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/fts-migration.ts",
 		"statementMap": {
 			"0": { "start": { "line": 15, "column": 19 }, "end": { "line": 15, "column": null } },
 			"1": { "start": { "line": 16, "column": 24 }, "end": { "line": 16, "column": null } },
@@ -36675,8 +36675,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/live-guard.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/live-guard.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/live-guard.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/live-guard.ts",
 		"statementMap": {
 			"0": { "start": { "line": 16, "column": 6 }, "end": { "line": 16, "column": null } },
 			"1": { "start": { "line": 16, "column": 42 }, "end": { "line": 16, "column": null } },
@@ -37110,8 +37110,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/migrate-diff.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/migrate-diff.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/migrate-diff.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/migrate-diff.ts",
 		"statementMap": {
 			"0": { "start": { "line": 56, "column": 16 }, "end": { "line": 56, "column": null } },
 			"1": { "start": { "line": 64, "column": 12 }, "end": { "line": 68, "column": null } },
@@ -37884,8 +37884,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/parse.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/parse.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/parse.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/parse.ts",
 		"statementMap": {
 			"0": { "start": { "line": 22, "column": 1 }, "end": { "line": 22, "column": null } },
 			"1": { "start": { "line": 31, "column": 20 }, "end": { "line": 35, "column": null } },
@@ -37986,8 +37986,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/pg-dependents.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/pg-dependents.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/pg-dependents.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/pg-dependents.ts",
 		"statementMap": {
 			"0": { "start": { "line": 12, "column": 14 }, "end": { "line": 12, "column": null } },
 			"1": { "start": { "line": 13, "column": 12 }, "end": { "line": 13, "column": null } },
@@ -38328,8 +38328,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/pg-enum-split.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/pg-enum-split.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/pg-enum-split.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/pg-enum-split.ts",
 		"statementMap": {
 			"0": { "start": { "line": 14, "column": 34 }, "end": { "line": 14, "column": null } },
 			"1": { "start": { "line": 15, "column": 18 }, "end": { "line": 15, "column": null } },
@@ -38450,8 +38450,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/pg-extras.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/pg-extras.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/pg-extras.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/pg-extras.ts",
 		"statementMap": {
 			"0": { "start": { "line": 21, "column": 32 }, "end": { "line": 24, "column": null } },
 			"1": { "start": { "line": 26, "column": 39 }, "end": { "line": 26, "column": null } },
@@ -39169,8 +39169,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/pg-objects.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/pg-objects.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/pg-objects.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/pg-objects.ts",
 		"statementMap": {
 			"0": { "start": { "line": 52, "column": 6 }, "end": { "line": 52, "column": null } },
 			"1": { "start": { "line": 52, "column": 41 }, "end": { "line": 52, "column": null } },
@@ -40482,8 +40482,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/pg-tables.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/pg-tables.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/pg-tables.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/pg-tables.ts",
 		"statementMap": {
 			"0": { "start": { "line": 27, "column": 37 }, "end": { "line": 27, "column": null } },
 			"1": { "start": { "line": 29, "column": 37 }, "end": { "line": 32, "column": null } },
@@ -40904,8 +40904,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/plan-apply.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/plan-apply.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/plan-apply.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/plan-apply.ts",
 		"statementMap": {
 			"0": { "start": { "line": 42, "column": 6 }, "end": { "line": 42, "column": null } },
 			"1": { "start": { "line": 42, "column": 48 }, "end": { "line": 42, "column": null } },
@@ -41511,8 +41511,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/process.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/process.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/process.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/process.ts",
 		"statementMap": {
 			"0": { "start": { "line": 23, "column": 27 }, "end": { "line": 23, "column": null } },
 			"1": { "start": { "line": 31, "column": 32 }, "end": { "line": 31, "column": null } },
@@ -41785,8 +41785,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/proof-run.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/proof-run.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/proof-run.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/proof-run.ts",
 		"statementMap": {
 			"0": { "start": { "line": 33, "column": 16 }, "end": { "line": 33, "column": null } },
 			"1": { "start": { "line": 37, "column": 27 }, "end": { "line": 39, "column": null } },
@@ -42906,8 +42906,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/proof-seed.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/proof-seed.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/proof-seed.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/proof-seed.ts",
 		"statementMap": {
 			"0": { "start": { "line": 28, "column": 61 }, "end": { "line": 34, "column": null } },
 			"1": { "start": { "line": 36, "column": 18 }, "end": { "line": 36, "column": null } },
@@ -43843,8 +43843,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/rebuild-copy.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/rebuild-copy.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/rebuild-copy.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/rebuild-copy.ts",
 		"statementMap": {
 			"0": { "start": { "line": 12, "column": 28 }, "end": { "line": 12, "column": null } },
 			"1": { "start": { "line": 13, "column": 31 }, "end": { "line": 13, "column": null } },
@@ -44821,8 +44821,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/rebuild-guard.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/rebuild-guard.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/rebuild-guard.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/rebuild-guard.ts",
 		"statementMap": {
 			"0": { "start": { "line": 37, "column": 13 }, "end": { "line": 37, "column": null } },
 			"1": { "start": { "line": 39, "column": 6 }, "end": { "line": 39, "column": null } },
@@ -46071,8 +46071,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/rebuild-rowids.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/rebuild-rowids.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/rebuild-rowids.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/rebuild-rowids.ts",
 		"statementMap": {
 			"0": { "start": { "line": 15, "column": 26 }, "end": { "line": 15, "column": null } },
 			"1": { "start": { "line": 18, "column": 6 }, "end": { "line": 18, "column": null } },
@@ -46430,8 +46430,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/refused.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/refused.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/refused.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/refused.ts",
 		"statementMap": {
 			"0": { "start": { "line": 6, "column": 2 }, "end": { "line": 6, "column": null } },
 			"1": { "start": { "line": 7, "column": 2 }, "end": { "line": 7, "column": null } },
@@ -46457,8 +46457,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/schema-table.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/schema-table.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/schema-table.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/schema-table.ts",
 		"statementMap": {
 			"0": { "start": { "line": 10, "column": 33 }, "end": { "line": 10, "column": null } },
 			"1": { "start": { "line": 13, "column": 33 }, "end": { "line": 16, "column": null } },
@@ -47106,8 +47106,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/schema.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/schema.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/schema.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/schema.ts",
 		"statementMap": {
 			"0": { "start": { "line": 15, "column": 41 }, "end": { "line": 18, "column": null } },
 			"1": { "start": { "line": 20, "column": 35 }, "end": { "line": 20, "column": null } },
@@ -48051,8 +48051,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/sql-code.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/sql-code.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/sql-code.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/sql-code.ts",
 		"statementMap": {
 			"0": { "start": { "line": 10, "column": 22 }, "end": { "line": 10, "column": null } },
 			"1": { "start": { "line": 12, "column": 22 }, "end": { "line": 12, "column": null } },
@@ -48654,8 +48654,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/sql-scan.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/sql-scan.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/sql-scan.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/sql-scan.ts",
 		"statementMap": {
 			"0": { "start": { "line": 17, "column": 76 }, "end": { "line": 20, "column": null } },
 			"1": { "start": { "line": 23, "column": 19 }, "end": { "line": 23, "column": null } },
@@ -49592,8 +49592,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/sqlite-affinity.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/sqlite-affinity.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/sqlite-affinity.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/sqlite-affinity.ts",
 		"statementMap": {
 			"0": { "start": { "line": 11, "column": 14 }, "end": { "line": 11, "column": null } },
 			"1": { "start": { "line": 12, "column": 1 }, "end": { "line": 12, "column": null } },
@@ -49915,8 +49915,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/utils.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/utils.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/utils.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/utils.ts",
 		"statementMap": {
 			"0": { "start": { "line": 12, "column": 1 }, "end": { "line": 12, "column": null } },
 			"1": { "start": { "line": 12, "column": 33 }, "end": { "line": 12, "column": 56 } },
@@ -50624,8 +50624,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/core/.tmp/grunt/sessions/aed2b9df-e0a4-4b26-b25a-6d9fa76099cb/wrote.txt": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/core/.tmp/grunt/sessions/aed2b9df-e0a4-4b26-b25a-6d9fa76099cb/wrote.txt",
+	"/home/lovro/Development/database/packages/core/src/migrate/core/.tmp/grunt/sessions/aed2b9df-e0a4-4b26-b25a-6d9fa76099cb/wrote.txt": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/core/.tmp/grunt/sessions/aed2b9df-e0a4-4b26-b25a-6d9fa76099cb/wrote.txt",
 		"statementMap": {},
 		"fnMap": {},
 		"branchMap": {},
@@ -50634,8 +50634,8 @@
 		"b": {},
 		"meta": { "lastBranch": 0, "lastFunction": 0, "lastStatement": 0, "seen": {}, "fnNames": {} }
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/drivers/bun-sqlite.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/drivers/bun-sqlite.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/drivers/bun-sqlite.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/drivers/bun-sqlite.ts",
 		"statementMap": {
 			"0": { "start": { "line": 15, "column": 19 }, "end": { "line": 15, "column": null } },
 			"1": { "start": { "line": 35, "column": 1 }, "end": { "line": 54, "column": null } },
@@ -50934,8 +50934,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/drivers/d1.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/drivers/d1.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/drivers/d1.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/drivers/d1.ts",
 		"statementMap": {
 			"0": { "start": { "line": 14, "column": 6 }, "end": { "line": 15, "column": null } },
 			"1": { "start": { "line": 15, "column": 1 }, "end": { "line": 15, "column": null } },
@@ -51609,8 +51609,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/drivers/memory.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/drivers/memory.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/drivers/memory.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/drivers/memory.ts",
 		"statementMap": {
 			"0": { "start": { "line": 21, "column": 1 }, "end": { "line": 24, "column": null } },
 			"1": { "start": { "line": 22, "column": 28 }, "end": { "line": 22, "column": null } },
@@ -51708,8 +51708,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/migrate/drivers/sqlite.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/migrate/drivers/sqlite.ts",
+	"/home/lovro/Development/database/packages/core/src/migrate/drivers/sqlite.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/migrate/drivers/sqlite.ts",
 		"statementMap": {
 			"0": { "start": { "line": 24, "column": 6 }, "end": { "line": 24, "column": null } },
 			"1": { "start": { "line": 24, "column": 32 }, "end": { "line": 24, "column": null } },
@@ -52519,8 +52519,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/pg/columns.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/pg/columns.ts",
+	"/home/lovro/Development/database/packages/core/src/pg/columns.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/pg/columns.ts",
 		"statementMap": {
 			"0": { "start": { "line": 40, "column": 6 }, "end": { "line": 40, "column": null } },
 			"1": { "start": { "line": 40, "column": 34 }, "end": { "line": 40, "column": null } },
@@ -52725,8 +52725,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/pg/error-handler.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/pg/error-handler.ts",
+	"/home/lovro/Development/database/packages/core/src/pg/error-handler.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/pg/error-handler.ts",
 		"statementMap": {
 			"0": { "start": { "line": 25, "column": 17 }, "end": { "line": 25, "column": null } },
 			"1": { "start": { "line": 27, "column": 6 }, "end": { "line": 27, "column": null } },
@@ -53529,8 +53529,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/base64url.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/base64url.ts",
+	"/home/lovro/Development/database/packages/core/src/query/base64url.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/base64url.ts",
 		"statementMap": {
 			"0": { "start": { "line": 9, "column": 14 }, "end": { "line": 9, "column": null } },
 			"1": { "start": { "line": 10, "column": 1 }, "end": { "line": 10, "column": null } },
@@ -53610,8 +53610,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/cursor-sign.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/cursor-sign.ts",
+	"/home/lovro/Development/database/packages/core/src/query/cursor-sign.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/cursor-sign.ts",
 		"statementMap": {
 			"0": { "start": { "line": 15, "column": 32 }, "end": { "line": 15, "column": null } },
 			"1": { "start": { "line": 18, "column": 6 }, "end": { "line": 18, "column": null } },
@@ -53763,8 +53763,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/cursor.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/cursor.ts",
+	"/home/lovro/Development/database/packages/core/src/query/cursor.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/cursor.ts",
 		"statementMap": {
 			"0": { "start": { "line": 27, "column": 31 }, "end": { "line": 27, "column": null } },
 			"1": { "start": { "line": 33, "column": 26 }, "end": { "line": 33, "column": null } },
@@ -54497,8 +54497,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/descriptions.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/descriptions.ts",
+	"/home/lovro/Development/database/packages/core/src/query/descriptions.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/descriptions.ts",
 		"statementMap": {
 			"0": { "start": { "line": 14, "column": 1 }, "end": { "line": 14, "column": null } },
 			"1": { "start": { "line": 15, "column": 34 }, "end": { "line": 15, "column": null } },
@@ -54729,8 +54729,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/drizzle.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/drizzle.ts",
+	"/home/lovro/Development/database/packages/core/src/query/drizzle.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/drizzle.ts",
 		"statementMap": {
 			"0": { "start": { "line": 51, "column": 16 }, "end": { "line": 51, "column": null } },
 			"1": { "start": { "line": 52, "column": 1 }, "end": { "line": 52, "column": null } },
@@ -55592,8 +55592,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/fields.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/fields.ts",
+	"/home/lovro/Development/database/packages/core/src/query/fields.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/fields.ts",
 		"statementMap": {
 			"0": { "start": { "line": 32, "column": 33 }, "end": { "line": 32, "column": null } },
 			"1": { "start": { "line": 33, "column": 25 }, "end": { "line": 33, "column": null } },
@@ -56465,8 +56465,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/filter-parse.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/filter-parse.ts",
+	"/home/lovro/Development/database/packages/core/src/query/filter-parse.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/filter-parse.ts",
 		"statementMap": {
 			"0": { "start": { "line": 14, "column": 73 }, "end": { "line": 28, "column": null } },
 			"1": { "start": { "line": 31, "column": 25 }, "end": { "line": 31, "column": null } },
@@ -57303,8 +57303,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/filter-validate.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/filter-validate.ts",
+	"/home/lovro/Development/database/packages/core/src/query/filter-validate.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/filter-validate.ts",
 		"statementMap": {
 			"0": { "start": { "line": 9, "column": 72 }, "end": { "line": 15, "column": null } },
 			"1": { "start": { "line": 29, "column": 36 }, "end": { "line": 29, "column": null } },
@@ -58107,8 +58107,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/filter.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/filter.ts",
+	"/home/lovro/Development/database/packages/core/src/query/filter.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/filter.ts",
 		"statementMap": {
 			"0": { "start": { "line": 37, "column": 1 }, "end": { "line": 37, "column": null } },
 			"1": { "start": { "line": 37, "column": 36 }, "end": { "line": 37, "column": null } },
@@ -58328,8 +58328,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/like.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/like.ts",
+	"/home/lovro/Development/database/packages/core/src/query/like.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/like.ts",
 		"statementMap": {
 			"0": { "start": { "line": 8, "column": 1 }, "end": { "line": 8, "column": null } },
 			"1": { "start": { "line": 17, "column": 1 }, "end": { "line": 17, "column": null } },
@@ -58374,8 +58374,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/list-meta.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/list-meta.ts",
+	"/home/lovro/Development/database/packages/core/src/query/list-meta.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/list-meta.ts",
 		"statementMap": {
 			"0": { "start": { "line": 20, "column": 15 }, "end": { "line": 20, "column": null } },
 			"1": { "start": { "line": 21, "column": 1 }, "end": { "line": 21, "column": null } },
@@ -58494,8 +58494,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/list-schema.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/list-schema.ts",
+	"/home/lovro/Development/database/packages/core/src/query/list-schema.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/list-schema.ts",
 		"statementMap": {
 			"0": { "start": { "line": 48, "column": 33 }, "end": { "line": 62, "column": null } },
 			"1": { "start": { "line": 77, "column": 49 }, "end": { "line": 77, "column": null } },
@@ -58748,8 +58748,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/list-transform.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/list-transform.ts",
+	"/home/lovro/Development/database/packages/core/src/query/list-transform.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/list-transform.ts",
 		"statementMap": {
 			"0": { "start": { "line": 19, "column": 1 }, "end": { "line": 19, "column": null } },
 			"1": { "start": { "line": 19, "column": 14 }, "end": { "line": 19, "column": null } },
@@ -59032,8 +59032,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/retrieve-schema.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/retrieve-schema.ts",
+	"/home/lovro/Development/database/packages/core/src/query/retrieve-schema.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/retrieve-schema.ts",
 		"statementMap": {
 			"0": { "start": { "line": 23, "column": 33 }, "end": { "line": 23, "column": null } },
 			"1": { "start": { "line": 28, "column": 56 }, "end": { "line": 28, "column": null } },
@@ -59094,8 +59094,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/schema-limits.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/schema-limits.ts",
+	"/home/lovro/Development/database/packages/core/src/query/schema-limits.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/schema-limits.ts",
 		"statementMap": {
 			"0": { "start": { "line": 6, "column": 28 }, "end": { "line": 10, "column": null } },
 			"1": { "start": { "line": 17, "column": 43 }, "end": { "line": 22, "column": null } }
@@ -59113,8 +59113,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/schema-params.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/schema-params.ts",
+	"/home/lovro/Development/database/packages/core/src/query/schema-params.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/schema-params.ts",
 		"statementMap": {
 			"0": { "start": { "line": 22, "column": 69 }, "end": { "line": 25, "column": null } },
 			"1": { "start": { "line": 27, "column": 67 }, "end": { "line": 30, "column": null } },
@@ -59428,8 +59428,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/schema-types.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/schema-types.ts",
+	"/home/lovro/Development/database/packages/core/src/query/schema-types.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/schema-types.ts",
 		"statementMap": {},
 		"fnMap": {},
 		"branchMap": {},
@@ -59438,8 +59438,8 @@
 		"b": {},
 		"meta": { "lastBranch": 0, "lastFunction": 0, "lastStatement": 0, "seen": {}, "fnNames": {} }
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/schema.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/schema.ts",
+	"/home/lovro/Development/database/packages/core/src/query/schema.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/schema.ts",
 		"statementMap": {
 			"0": { "start": { "line": 20, "column": 1 }, "end": { "line": 29, "column": null } },
 			"1": { "start": { "line": 33, "column": 75 }, "end": { "line": 33, "column": null } }
@@ -59464,8 +59464,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/select-validate.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/select-validate.ts",
+	"/home/lovro/Development/database/packages/core/src/query/select-validate.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/select-validate.ts",
 		"statementMap": {
 			"0": { "start": { "line": 18, "column": 1 }, "end": { "line": 20, "column": null } },
 			"1": { "start": { "line": 19, "column": 2 }, "end": { "line": 19, "column": null } },
@@ -59767,8 +59767,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/translation.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/translation.ts",
+	"/home/lovro/Development/database/packages/core/src/query/translation.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/translation.ts",
 		"statementMap": {
 			"0": { "start": { "line": 15, "column": 87 }, "end": { "line": 15, "column": null } },
 			"1": { "start": { "line": 17, "column": 1 }, "end": { "line": 19, "column": null } },
@@ -59913,8 +59913,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/trusted.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/trusted.ts",
+	"/home/lovro/Development/database/packages/core/src/query/trusted.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/trusted.ts",
 		"statementMap": {
 			"0": { "start": { "line": 14, "column": 1 }, "end": { "line": 14, "column": null } },
 			"1": { "start": { "line": 18, "column": 1 }, "end": { "line": 18, "column": null } },
@@ -59994,8 +59994,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/types.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/types.ts",
+	"/home/lovro/Development/database/packages/core/src/query/types.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/types.ts",
 		"statementMap": {},
 		"fnMap": {},
 		"branchMap": {},
@@ -60004,8 +60004,8 @@
 		"b": {},
 		"meta": { "lastBranch": 0, "lastFunction": 0, "lastStatement": 0, "seen": {}, "fnNames": {} }
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/sqlite/build-list-query.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/sqlite/build-list-query.ts",
+	"/home/lovro/Development/database/packages/core/src/query/sqlite/build-list-query.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/sqlite/build-list-query.ts",
 		"statementMap": {
 			"0": { "start": { "line": 79, "column": 1 }, "end": { "line": 79, "column": null } },
 			"1": { "start": { "line": 87, "column": 1 }, "end": { "line": 87, "column": null } },
@@ -60672,8 +60672,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/sqlite/cursor-fit.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/sqlite/cursor-fit.ts",
+	"/home/lovro/Development/database/packages/core/src/query/sqlite/cursor-fit.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/sqlite/cursor-fit.ts",
 		"statementMap": {
 			"0": { "start": { "line": 14, "column": 1 }, "end": { "line": 27, "column": null } },
 			"1": { "start": { "line": 16, "column": 3 }, "end": { "line": 16, "column": null } },
@@ -60923,8 +60923,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/sqlite/executor.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/sqlite/executor.ts",
+	"/home/lovro/Development/database/packages/core/src/query/sqlite/executor.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/sqlite/executor.ts",
 		"statementMap": {
 			"0": { "start": { "line": 31, "column": 24 }, "end": { "line": 31, "column": null } },
 			"1": { "start": { "line": 35, "column": 1 }, "end": { "line": 35, "column": null } },
@@ -61744,8 +61744,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/sqlite/filter-sql.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/sqlite/filter-sql.ts",
+	"/home/lovro/Development/database/packages/core/src/query/sqlite/filter-sql.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/sqlite/filter-sql.ts",
 		"statementMap": {
 			"0": { "start": { "line": 26, "column": 15 }, "end": { "line": 29, "column": null } },
 			"1": { "start": { "line": 27, "column": 41 }, "end": { "line": 27, "column": 79 } },
@@ -62201,8 +62201,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/sqlite/identifier.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/sqlite/identifier.ts",
+	"/home/lovro/Development/database/packages/core/src/query/sqlite/identifier.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/sqlite/identifier.ts",
 		"statementMap": { "0": { "start": { "line": 8, "column": 1 }, "end": { "line": 8, "column": null } } },
 		"fnMap": {
 			"0": {
@@ -62224,8 +62224,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/sqlite/keyset.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/sqlite/keyset.ts",
+	"/home/lovro/Development/database/packages/core/src/query/sqlite/keyset.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/sqlite/keyset.ts",
 		"statementMap": {
 			"0": { "start": { "line": 26, "column": 15 }, "end": { "line": 26, "column": null } },
 			"1": { "start": { "line": 27, "column": 13 }, "end": { "line": 27, "column": null } },
@@ -62508,8 +62508,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/sqlite/pattern.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/sqlite/pattern.ts",
+	"/home/lovro/Development/database/packages/core/src/query/sqlite/pattern.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/sqlite/pattern.ts",
 		"statementMap": {
 			"0": { "start": { "line": 11, "column": 13 }, "end": { "line": 11, "column": null } },
 			"1": { "start": { "line": 12, "column": 1 }, "end": { "line": 12, "column": null } },
@@ -62553,8 +62553,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/sqlite/search.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/sqlite/search.ts",
+	"/home/lovro/Development/database/packages/core/src/query/sqlite/search.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/sqlite/search.ts",
 		"statementMap": {
 			"0": { "start": { "line": 13, "column": 16 }, "end": { "line": 13, "column": null } },
 			"1": { "start": { "line": 16, "column": 14 }, "end": { "line": 16, "column": null } },
@@ -63053,8 +63053,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/sqlite/sql.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/sqlite/sql.ts",
+	"/home/lovro/Development/database/packages/core/src/query/sqlite/sql.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/sqlite/sql.ts",
 		"statementMap": { "0": { "start": { "line": 6, "column": 69 }, "end": { "line": 9, "column": null } } },
 		"fnMap": {},
 		"branchMap": {},
@@ -63069,8 +63069,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/query/sqlite/types.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/query/sqlite/types.ts",
+	"/home/lovro/Development/database/packages/core/src/query/sqlite/types.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/query/sqlite/types.ts",
 		"statementMap": {},
 		"fnMap": {},
 		"branchMap": {},
@@ -63079,8 +63079,8 @@
 		"b": {},
 		"meta": { "lastBranch": 0, "lastFunction": 0, "lastStatement": 0, "seen": {}, "fnNames": {} }
 	},
-	"/home/lovro/Development/comb/packages/core/src/sqlite/columns.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/sqlite/columns.ts",
+	"/home/lovro/Development/database/packages/core/src/sqlite/columns.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/sqlite/columns.ts",
 		"statementMap": {
 			"0": { "start": { "line": 27, "column": 26 }, "end": { "line": 29, "column": null } },
 			"1": { "start": { "line": 28, "column": 12 }, "end": { "line": 28, "column": null } },
@@ -63282,8 +63282,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/sqlite/constraint-handler.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/sqlite/constraint-handler.ts",
+	"/home/lovro/Development/database/packages/core/src/sqlite/constraint-handler.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/sqlite/constraint-handler.ts",
 		"statementMap": {
 			"0": { "start": { "line": 16, "column": 6 }, "end": { "line": 16, "column": null } },
 			"1": { "start": { "line": 16, "column": 61 }, "end": { "line": 16, "column": null } },
@@ -63963,8 +63963,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/sqlite/constraints.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/sqlite/constraints.ts",
+	"/home/lovro/Development/database/packages/core/src/sqlite/constraints.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/sqlite/constraints.ts",
 		"statementMap": {},
 		"fnMap": {},
 		"branchMap": {},
@@ -63973,8 +63973,8 @@
 		"b": {},
 		"meta": { "lastBranch": 0, "lastFunction": 0, "lastStatement": 0, "seen": {}, "fnNames": {} }
 	},
-	"/home/lovro/Development/comb/packages/core/src/sqlite/patterns.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/sqlite/patterns.ts",
+	"/home/lovro/Development/database/packages/core/src/sqlite/patterns.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/sqlite/patterns.ts",
 		"statementMap": { "0": { "start": { "line": 8, "column": 17 }, "end": { "line": 17, "column": null } } },
 		"fnMap": {},
 		"branchMap": {},
@@ -63989,8 +63989,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/sqlite/read-error.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/sqlite/read-error.ts",
+	"/home/lovro/Development/database/packages/core/src/sqlite/read-error.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/sqlite/read-error.ts",
 		"statementMap": {
 			"0": { "start": { "line": 17, "column": 19 }, "end": { "line": 17, "column": null } },
 			"1": { "start": { "line": 20, "column": 22 }, "end": { "line": 20, "column": null } },
@@ -64462,8 +64462,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/sqlite/statement-head.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/sqlite/statement-head.ts",
+	"/home/lovro/Development/database/packages/core/src/sqlite/statement-head.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/sqlite/statement-head.ts",
 		"statementMap": {
 			"0": { "start": { "line": 10, "column": 9 }, "end": { "line": 10, "column": null } },
 			"1": { "start": { "line": 11, "column": 1 }, "end": { "line": 11, "column": null } },
@@ -64805,8 +64805,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/sqlite/d1/bookmark.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/sqlite/d1/bookmark.ts",
+	"/home/lovro/Development/database/packages/core/src/sqlite/d1/bookmark.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/sqlite/d1/bookmark.ts",
 		"statementMap": {
 			"0": { "start": { "line": 10, "column": 72 }, "end": { "line": 10, "column": null } },
 			"1": { "start": { "line": 17, "column": 2 }, "end": { "line": 17, "column": null } },
@@ -64879,8 +64879,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/sqlite/d1/error-handler.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/sqlite/d1/error-handler.ts",
+	"/home/lovro/Development/database/packages/core/src/sqlite/d1/error-handler.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/sqlite/d1/error-handler.ts",
 		"statementMap": {
 			"0": { "start": { "line": 9, "column": 30 }, "end": { "line": 24, "column": null } },
 			"1": { "start": { "line": 26, "column": 18 }, "end": { "line": 26, "column": null } },
@@ -65193,8 +65193,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/sqlite/d1/session.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/sqlite/d1/session.ts",
+	"/home/lovro/Development/database/packages/core/src/sqlite/d1/session.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/sqlite/d1/session.ts",
 		"statementMap": {
 			"0": { "start": { "line": 28, "column": 1 }, "end": { "line": 30, "column": null } },
 			"1": { "start": { "line": 29, "column": 2 }, "end": { "line": 29, "column": null } },
@@ -65262,8 +65262,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/sqlite/d1/sharding/router.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/sqlite/d1/sharding/router.ts",
+	"/home/lovro/Development/database/packages/core/src/sqlite/d1/sharding/router.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/sqlite/d1/sharding/router.ts",
 		"statementMap": {
 			"0": { "start": { "line": 30, "column": 17 }, "end": { "line": 36, "column": null } },
 			"1": { "start": { "line": 50, "column": 33 }, "end": { "line": 50, "column": null } },
@@ -66080,8 +66080,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/sqlite/d1/sharding/shard-map.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/sqlite/d1/sharding/shard-map.ts",
+	"/home/lovro/Development/database/packages/core/src/sqlite/d1/sharding/shard-map.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/sqlite/d1/sharding/shard-map.ts",
 		"statementMap": {
 			"0": { "start": { "line": 6, "column": 39 }, "end": { "line": 6, "column": null } },
 			"1": { "start": { "line": 28, "column": 1 }, "end": { "line": 45, "column": null } },
@@ -66121,8 +66121,8 @@
 			"fnNames": {}
 		}
 	},
-	"/home/lovro/Development/comb/packages/core/src/sqlite/d1/sharding/types.ts": {
-		"path": "/home/lovro/Development/comb/packages/core/src/sqlite/d1/sharding/types.ts",
+	"/home/lovro/Development/database/packages/core/src/sqlite/d1/sharding/types.ts": {
+		"path": "/home/lovro/Development/database/packages/core/src/sqlite/d1/sharding/types.ts",
 		"statementMap": {},
 		"fnMap": {},
 		"branchMap": {},

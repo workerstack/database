@@ -79,7 +79,7 @@ const storedReads = (column: SQLWrapper | undefined): StoredReads | undefined =>
 
 /**
  * Whether a list that reads `column`'s key back carries its row's stored value apart
- * (`_combTextKeys`) where the column's mode reads it as another (storedReads), which the cursor binds
+ * (`_cursorTextKeys`) where the column's mode reads it as another (storedReads), which the cursor binds
  * as itself: a SQLite column of a mode with a set
  */
 const heldApart = (column: SQLWrapper | undefined): boolean => storedReads(column) !== undefined

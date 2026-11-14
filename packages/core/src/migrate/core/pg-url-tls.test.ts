@@ -6,7 +6,7 @@ import { pgUrlProblems, type PgTarget } from "./atlas-target.ts"
 import { postgresOptionsOf } from "./pg-url.ts"
 
 const MISSING = "/nonexistent/x.pem"
-const dir = mkdtempSync(join(tmpdir(), "comb-tls-"))
+const dir = mkdtempSync(join(tmpdir(), "database-tls-"))
 const PKCS8 = join(dir, "enc.key")
 writeFileSync(PKCS8, "-----BEGIN ENCRYPTED PRIVATE KEY-----\nMIIF\n-----END ENCRYPTED PRIVATE KEY-----\n")
 const LEGACY = join(dir, "legacy.key")
@@ -51,7 +51,7 @@ function refusals(query: string): { dev: string[]; url: string[] } {
 	}
 }
 
-/* 5.3, probed on libpq 18, Atlas v1.3.0 and comb's own read (runs/f8909ff-probe-p7-tls-*): none reads a TLS file under these */
+/* 5.3, probed on libpq 18, Atlas v1.3.0 and database's own read (runs/f8909ff-probe-p7-tls-*): none reads a TLS file under these */
 describe("pgUrlProblems: TLS files under an sslmode that reads none", () => {
 	it.each(["disable", "allow", "prefer"])(
 		"passes a missing sslrootcert, sslcert or sslkey under sslmode=%s",
@@ -62,7 +62,7 @@ describe("pgUrlProblems: TLS files under an sslmode that reads none", () => {
 	)
 
 	it.each(["sslmode=require&", "sslmode=verify-ca&", "sslmode=verify-full&", ""])(
-		"still refuses a missing file under %s, which comb's own read opens",
+		"still refuses a missing file under %s, which database's own read opens",
 		(mode) => {
 			expect(refusals(`${mode}sslrootcert=${MISSING}`)).toEqual({
 				dev: [`devUrl's sslrootcert ${MISSING} cannot be read`],

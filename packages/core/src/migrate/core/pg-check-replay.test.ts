@@ -12,7 +12,7 @@ const TARGET = { devUrl: "postgres://dev/dev", lockTimeout: "5s", schema: "publi
 const file = (sql: string) => ({ files: [{ name: "1_a.sql", sql }], pending: ["1_a.sql"] })
 
 /* the replay's database, named for the backend that made it and a random suffix */
-const DATABASE = /comb_replay_\d+_\d+_[0-9a-f]{8}/g
+const DATABASE = /database_replay_\d+_\d+_[0-9a-f]{8}/g
 
 /* the target database's, ICU's */
 const LOCALE = {
@@ -32,7 +32,7 @@ const COUNTS = "SELECT current_setting('track_counts') AS on, coalesce("
 const COUNTED = expect.stringMatching(/^SELECT current_setting\('track_counts'\) AS on, coalesce\(/)
 
 /* the server's shared catalogs read as committed, around every file and bare statement (P1 and P2 of r22) */
-const SNAPSHOT = "EXECUTE comb_snapshot"
+const SNAPSHOT = "EXECUTE database_snapshot"
 
 /** What a replayed transaction of `statements` sends: its counts read at BEGIN and again, with the server's catalogs, before COMMIT */
 const inTransaction = (...statements: unknown[]) => ["BEGIN", COUNTED, ...statements, COUNTED, SNAPSHOT, "COMMIT"]
@@ -58,13 +58,13 @@ const AROUND = {
 		COUNTED,
 		expect.stringMatching(/^SELECT e\.extname/),
 		/* the read prepared on the connection that makes it, once, and read before the first file */
-		expect.stringMatching(/^PREPARE comb_snapshot AS SELECT 'membership' AS noun, /),
+		expect.stringMatching(/^PREPARE database_snapshot AS SELECT 'membership' AS noun, /),
 		SNAPSHOT,
 	],
 }
 
 /* the target's roles, read for those the pending files make, a replay's own left out */
-const ROLES = /^SELECT r\.rolname FROM pg_roles r LEFT JOIN pg_shdescription d .* NOT LIKE 'comb\\_replay %'\)$/
+const ROLES = /^SELECT r\.rolname FROM pg_roles r LEFT JOIN pg_shdescription d .* NOT LIKE 'database\\_replay %'\)$/
 const readsRoles = (sent: readonly string[]) => sent.some((query) => ROLES.test(query))
 
 /**
@@ -92,7 +92,7 @@ function fake(fail?: (query: string) => Error | undefined, roles: readonly strin
 /** A load of postgres.js where it is not installed */
 const noPeer = async (): Promise<never> => {
 	throw new Error(
-		`comb needs postgres (>=3.4.9 <4) to replay the history and the pending files on devUrl in a check; install "postgres@>=3.4.9 <4"`,
+		`database needs postgres (>=3.4.9 <4) to replay the history and the pending files on devUrl in a check; install "postgres@>=3.4.9 <4"`,
 	)
 }
 
@@ -116,7 +116,7 @@ describe("replayPending (P13 of r19)", () => {
 	it("says it replayed nothing on Atlas's own docker:// container, and connects to nothing", async () => {
 		const { out, sent } = await replayed("CREATE TABLE t (a int);", { devUrl: "docker://postgres/17/dev" })
 		expect(out).toEqual([
-			"Check did not replay the pending files on devUrl: docker://postgres/17/dev is Atlas's own container, which comb cannot reach, so a statement Postgres refuses on every database is found only when it applies; set devUrl to a postgres:// scratch database comb can connect to",
+			"Check did not replay the pending files on devUrl: docker://postgres/17/dev is Atlas's own container, which database cannot reach, so a statement Postgres refuses on every database is found only when it applies; set devUrl to a postgres:// scratch database that database can connect to",
 		])
 		expect(sent).toEqual([])
 	})
@@ -133,7 +133,7 @@ describe("replayPending (P13 of r19)", () => {
 	it("says it replayed nothing without the postgres package, naming why", async () => {
 		const { out } = await replayed("CREATE TABLE t (a int);", { load: noPeer })
 		expect(out).toEqual([
-			`Check did not replay the pending files on devUrl: comb needs postgres (>=3.4.9 <4) to replay the history and the pending files on devUrl in a check; install "postgres@>=3.4.9 <4"`,
+			`Check did not replay the pending files on devUrl: database needs postgres (>=3.4.9 <4) to replay the history and the pending files on devUrl in a check; install "postgres@>=3.4.9 <4"`,
 		])
 	})
 
@@ -185,7 +185,7 @@ async function held(sql: string, roles: readonly string[], devUrl = TARGET.devUr
 
 describe("replayPending of a pending file that makes a role", () => {
 	it("refuses a role the target's server holds, as Postgres says it, naming the file apply would stop at, and replays nothing", async () => {
-		/* a statement comb's parser cannot read is Postgres's to refuse, and hides no role after it */
+		/* a statement database's parser cannot read is Postgres's to refuse, and hides no role after it */
 		const { refused, sent } = await held("CREATE TABLE t (a int);\nSELEC 1;\nCREATE ROLE reader;", ["reader"])
 		expect(refused).toEqual(new ReplayFailed('role "reader" already exists; apply would stop at 2_b.sql'))
 		expect(refused).toBeInstanceOf(ReplayFailed)
@@ -225,7 +225,7 @@ describe("replayPending of a pending file that makes a role", () => {
 		const replay = replayPending({ print: () => undefined, target: TARGET }, twoFiles("CREATE ROLE reader;"), dev.load)
 		await expect(replay).rejects.toThrow(
 			new ReplayFailed(
-				"comb could not read the roles url's server holds: permission denied for view pg_roles; check applies nothing",
+				"database could not read the roles url's server holds: permission denied for view pg_roles; check applies nothing",
 			),
 		)
 	})
@@ -233,7 +233,7 @@ describe("replayPending of a pending file that makes a role", () => {
 
 describe("throughPending", () => {
 	it("reads the snapshot's files in order through the last pending one", () => {
-		const copy = mkdtempSync(join(tmpdir(), "comb-through-pending-"))
+		const copy = mkdtempSync(join(tmpdir(), "database-through-pending-"))
 		try {
 			for (const name of ["1_a.sql", "2_b.sql", "3_c.sql"]) writeFileSync(join(copy, name), `-- ${name}`)
 			expect(throughPending(copy, ["2_b.sql"])).toEqual([

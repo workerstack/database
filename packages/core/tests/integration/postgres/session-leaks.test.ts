@@ -1,9 +1,9 @@
 /**
- * PA1 of r22b as comb-9d reversed it: no reading of a Postgres file proves what it leaves on its
+ * PA1 of r22b as database-9d reversed it: no reading of a Postgres file proves what it leaves on its
  * session. A partition's or a parent's trigger, default or check, a LIKE copy's default, a TRUNCATE
  * CASCADE's trigger, a SELECT INTO TEMP or a pg_temp function, a DO block's EXECUTE, an overload
  * the target holds and a nextval a later default reads each carried one file's session into the
- * next while comb batched files it had read as harmless (r22 area E, AE1 to AE5 and four mutant
+ * next while database batched files it had read as harmless (r22 area E, AE1 to AE5 and four mutant
  * shapes). Each file now gets an Atlas call, and the check replay a session, of its own, so one apply
  * of every file ends as applying them one at a time does, and so does one check.
  */
@@ -24,20 +24,20 @@ beforeAll(loadPostgresParser)
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-pg-session-leaks-"))
+	dir = mkdtempSync(join(tmpdir(), "database-pg-session-leaks-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
-/** The first `count` of `files` alone in the directory, named in order, each allowed past comb's rating, and hashed */
+/** The first `count` of `files` alone in the directory, named in order, each allowed past database's rating, and hashed */
 async function write(files: readonly string[], count = files.length): Promise<void> {
 	rmSync(dir, { force: true, recursive: true })
-	dir = mkdtempSync(join(tmpdir(), "comb-pg-session-leaks-"))
+	dir = mkdtempSync(join(tmpdir(), "database-pg-session-leaks-"))
 	files
 		.slice(0, count)
 		.forEach((sql, i) =>
 			writeFileSync(
 				join(dir, `2026010${i + 1}000000_f${i}.sql`),
-				`-- comb:allow-unsafe: the test reads the session\n${sql}\n`,
+				`-- database:allow-unsafe: the test reads the session\n${sql}\n`,
 			),
 		)
 	await hashDir(run, dir)
@@ -168,7 +168,7 @@ const CASES: Readonly<Record<string, Case>> = {
 	},
 }
 
-/* how a run's end reads: what Postgres said, without comb's or Atlas's own words around it */
+/* how a run's end reads: what Postgres said, without database's or Atlas's own words around it */
 const SAID = [
 	"leaked",
 	'schema "pg_temp" does not exist',

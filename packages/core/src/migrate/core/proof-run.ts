@@ -6,7 +6,7 @@
  * on the columns it had, as a multiset of whole rows. A lost row, a lost column or a changed value
  * makes the file unsafe, and the reason names the table and column. One allowance: a NULL that
  * lands as the column's new DEFAULT, in a column the file made NOT NULL, is cautious (Atlas's "make
- * NOT NULL with a default" rebuild). A table comb cannot seed is unproven, and its rating stays the
+ * NOT NULL with a default" rebuild). A table database cannot seed is unproven, and its rating stays the
  * classifier's. The target is only read: its schema, through one SELECT.
  *
  * Seeded rows cannot meet every predicate a file holds, so what each statement writes is read from
@@ -17,7 +17,7 @@
  */
 import { isMirror, mirrorFindings, mirrorRows } from "./proof-mirror.ts"
 import { type LocalDb, openScratch, type ScratchEngine } from "../drivers/local-db.ts"
-import type { Connection } from "../types.ts"
+import type { MigrateConnection } from "../types.ts"
 import { notEngineTables } from "./engine-tables.ts"
 import { compare, type Shape } from "./proof-compare.ts"
 import { type Copy, copyOf, buildCopy, creatable, jsonColumns, type LiveObject, liveObjects } from "./proof-copy.ts"
@@ -32,7 +32,7 @@ type Proof = {
 	cautious: string[]
 	/** why the file did not apply to the copy, so nothing about it is proven */
 	failed?: string | undefined
-	/** the tables comb could not seed, which nothing here proves, each with why */
+	/** the tables database could not seed, which nothing here proves, each with why */
 	unproven: Array<{ table: string; why: string }>
 	unsafe: string[]
 }
@@ -225,7 +225,7 @@ const failedProof = (copy: Copy, why: string): Proof => ({
  * read of a schema, the target's and the copy's.
  */
 async function provePending(
-	conn: Connection,
+	conn: MigrateConnection,
 	files: ReadonlyArray<{ name: string; sql: string }>,
 	{ engine = "runtime", live }: { engine?: ScratchEngine | undefined; live?: readonly LiveObject[] | undefined } = {},
 ): Promise<Map<string, Proof>> {
@@ -254,7 +254,7 @@ async function provePending(
 			if (run.error !== undefined) {
 				proofs.set(
 					name,
-					failedProof(copy, `comb could not run this in the proof copy on ${copy.db.engine}: ${run.error}`),
+					failedProof(copy, `database could not run this in the proof copy on ${copy.db.engine}: ${run.error}`),
 				)
 				/* the later files are proven on the schema this one leaves, seeded fresh */
 				const after = await schemaAfter(objects, [...applied, sql], { engine, engineTables })

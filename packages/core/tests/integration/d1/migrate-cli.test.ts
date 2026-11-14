@@ -1,7 +1,7 @@
 /**
- * `comb migrate` on D1 through the real wrangler --local (a local D1) and the real Atlas: comb
+ * `database migrate` on D1 through the real wrangler --local (a local D1) and the real Atlas: database
  * checks the pending files, `wrangler d1 migrations apply` runs each with its `d1_migrations` row
- * in one batch, and comb reads that table back. A database comb 0.7 migrated keeps its record in
+ * in one batch, and database reads that table back. A database that database 0.7 migrated keeps its record in
  * `__drizzle_migrations` until `baseline` copies it.
  */
 import { createClient } from "@libsql/client"
@@ -16,7 +16,7 @@ import { generateMigrationHash } from "../../../src/migrate/core/parse.ts"
 import { guardRebuilds } from "../../../src/migrate/core/rebuild-guard.ts"
 import { extractSchema } from "../../../src/migrate/core/schema.ts"
 import { BREAKS_CHECK, IGNORE_CHECKS, KEEP } from "../../../src/migrate/__fixtures__/pragma-scope.ts"
-import { combProcess, d1Column, d1Io, d1Project, wrangler, writeMigrations } from "../support/d1-project.ts"
+import { databaseProcess, d1Column, d1Io, d1Project, wrangler, writeMigrations } from "../support/d1-project.ts"
 
 const dirs: string[] = []
 afterEach(() => {
@@ -34,7 +34,7 @@ const [write, io, column] = [writeMigrations, d1Io, d1Column]
 
 const INIT = { "20260101000000_init.sql": "CREATE TABLE post (id TEXT PRIMARY KEY);" }
 
-describe("comb migrate on D1 through wrangler, --local", () => {
+describe("database migrate on D1 through wrangler, --local", () => {
 	it("applies through wrangler into d1_migrations, lists it as applied, and finds nothing pending after", async () => {
 		const dir = project(INIT)
 		const apply = io(dir)
@@ -64,8 +64,8 @@ describe("comb migrate on D1 through wrangler, --local", () => {
 	}, 120_000)
 })
 
-describe("comb migrate on D1 through wrangler, --local: history and the live schema", () => {
-	it("copies comb 0.7's record into d1_migrations with baseline, so apply runs only what was never applied", async () => {
+describe("database migrate on D1 through wrangler, --local: history and the live schema", () => {
+	it("copies database 0.7's record into d1_migrations with baseline, so apply runs only what was never applied", async () => {
 		const dir = project(INIT)
 		const hash = generateMigrationHash(INIT["20260101000000_init.sql"])
 		const setup = `CREATE TABLE post (id TEXT PRIMARY KEY); CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, hash TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL); INSERT INTO __drizzle_migrations (hash, created_at) VALUES ('${hash}', 1)`
@@ -73,7 +73,7 @@ describe("comb migrate on D1 through wrangler, --local: history and the live sch
 		write(dir, { "20260102000000_tag.sql": "CREATE TABLE tag (id TEXT);" })
 		const refused = io(dir)
 		expect(await runCli(["migrate", "apply", "core", "--local"], refused)).toBe(1)
-		expect(refused.errors[0]).toContain("run comb migrate baseline once to copy the record")
+		expect(refused.errors[0]).toContain("run database migrate baseline once to copy the record")
 		expect(await runCli(["migrate", "baseline", "core", "--local"], io(dir))).toBe(0)
 		const apply = io(dir)
 		expect(await runCli(["migrate", "apply", "core", "--local"], apply), apply.errors.join("\n")).toBe(0)
@@ -109,13 +109,13 @@ describe("comb migrate on D1 through wrangler, --local: history and the live sch
 })
 
 /* M33 of the 0.13 review: check and status read a local D1 only where wrangler already keeps one */
-describe("comb migrate check and status on D1 --local, the local database missing", () => {
-	it("refuse, saying comb cannot confirm it exists, and create none", async () => {
+describe("database migrate check and status on D1 --local, the local database missing", () => {
+	it("refuse, saying database cannot confirm it exists, and create none", async () => {
 		const dir = project(INIT)
 		for (const mode of ["check", "status"]) {
 			const out = io(dir)
 			expect(await runCli(["migrate", mode, "core", "--local"], out)).toBe(1)
-			expect(out.errors[0]).toMatch(/^comb cannot confirm core's local database exists/)
+			expect(out.errors[0]).toMatch(/^database cannot confirm core's local database exists/)
 		}
 		expect(fs.existsSync(path.join(dir, ".wrangler"))).toBe(false)
 	}, 120_000)
@@ -133,7 +133,7 @@ describe("comb migrate check and status on D1 --local, the local database missin
 	])(
 		"names the file wrangler keeps a local database in, by %s",
 		async (_label, ids) => {
-			const dir = fs.mkdtempSync(path.join(os.tmpdir(), "comb-d1-local-"))
+			const dir = fs.mkdtempSync(path.join(os.tmpdir(), "database-d1-local-"))
 			dirs.push(dir)
 			const entry = { binding: "CORE", database_name: "core", ...ids }
 			fs.writeFileSync(
@@ -148,9 +148,9 @@ describe("comb migrate check and status on D1 --local, the local database missin
 	)
 })
 
-/* M40 on D1 --local: check and apply prove a pending file on comb's copy before wrangler runs, so
+/* M40 on D1 --local: check and apply prove a pending file on database's copy before wrangler runs, so
    a file that attaches another database to delete its rows is refused there, and those rows stay */
-describe("comb migrate on D1 --local never runs a file that reaches outside its database (M40)", () => {
+describe("database migrate on D1 --local never runs a file that reaches outside its database (M40)", () => {
 	it("refuses it in check and apply, and the attached database keeps its rows", async () => {
 		const dir = project(INIT)
 		expect(await runCli(["migrate", "apply", "core", "--local"], io(dir))).toBe(0)
@@ -164,7 +164,7 @@ describe("comb migrate on D1 --local never runs a file that reaches outside its 
 		for (const command of ["check", "apply"]) {
 			const ran = io(dir)
 			expect(await runCli(["migrate", command, "core", "--local"], ran)).toBe(1)
-			expect(ran.errors.join("\n")).toContain("comb never runs ATTACH in a migration")
+			expect(ran.errors.join("\n")).toContain("database never runs ATTACH in a migration")
 		}
 		const read = createClient({ url: `file:${live}` })
 		expect((await read.execute("SELECT id FROM users ORDER BY id")).rows.map((row) => row[0])).toEqual([1, 2])
@@ -175,8 +175,8 @@ describe("comb migrate on D1 --local never runs a file that reaches outside its 
 
 /* S1 of r20: apply writes each pending file's hash as an intent before wrangler runs it, and only
    wrangler's table naming the file makes it proof of what ran */
-describe("comb migrate on D1 --local: a pre-recorded hash is an intent until wrangler applies its file (S1)", () => {
-	const HISTORY = ["d1_migrations", "_comb_migration_hashes", "_comb_migration_hash_intents"]
+describe("database migrate on D1 --local: a pre-recorded hash is an intent until wrangler applies its file (S1)", () => {
+	const HISTORY = ["d1_migrations", "_database_migration_hashes", "_database_migration_hash_intents"]
 	const tables = (dir: string) =>
 		column(
 			dir,
@@ -187,9 +187,9 @@ describe("comb migrate on D1 --local: a pre-recorded hash is an intent until wra
 		const dir = project({ "20260101000000_bad.sql": READS_LIVE_JSON })
 		await column(dir, LIVE_NOT_JSON)
 		expect(await runCli(["migrate", "apply", "core", "--local"], io(dir))).toBe(1)
-		/* wrangler ran nothing, so comb holds no hash for the file, only its emptied intent table */
-		expect(await tables(dir)).toEqual(["_comb_migration_hash_intents", "d1_migrations"])
-		expect(await column(dir, "SELECT name FROM _comb_migration_hash_intents")).toEqual([])
+		/* wrangler ran nothing, so database holds no hash for the file, only its emptied intent table */
+		expect(await tables(dir)).toEqual(["_database_migration_hash_intents", "d1_migrations"])
+		expect(await column(dir, "SELECT name FROM _database_migration_hash_intents")).toEqual([])
 		write(dir, { "20260101000000_bad.sql": "CREATE TABLE got (v TEXT);" })
 		expect(
 			(await wrangler(dir)("wrangler", ["d1", "migrations", "apply", "core", "--local"], { input: "" })).code,
@@ -197,7 +197,7 @@ describe("comb migrate on D1 --local: a pre-recorded hash is an intent until wra
 		const status = io(dir)
 		expect(await runCli(["migrate", "status", "core", "--local"], status), status.errors.join("\n")).toBe(0)
 		expect([...status.outputs, ...status.errors]).toContain(
-			"No hash recorded for 20260101000000_bad.sql, applied before comb recorded them: comb cannot tell whether it was edited since",
+			"No hash recorded for 20260101000000_bad.sql, applied before database recorded them: database cannot tell whether it was edited since",
 		)
 		const adopt = io(dir)
 		expect(await runCli(["migrate", "baseline", "core", "--local", "--hashes"], adopt), adopt.errors.join("\n")).toBe(0)
@@ -205,16 +205,16 @@ describe("comb migrate on D1 --local: a pre-recorded hash is an intent until wra
 		const clean = io(dir)
 		expect(await runCli(["migrate", "status", "core", "--local"], clean)).toBe(0)
 		expect(clean.outputs).toEqual(["Applied: 20260101000000_bad.sql", "Pending: none"])
-		expect(await column(dir, "SELECT name FROM _comb_migration_hashes")).toEqual(["20260101000000_bad.sql"])
+		expect(await column(dir, "SELECT name FROM _database_migration_hashes")).toEqual(["20260101000000_bad.sql"])
 	}, 180_000)
 
-	/* miniflare's local D1 takes one writer: of two applies that overlap, comb's own commands wait out
+	/* miniflare's local D1 takes one writer: of two applies that overlap, database's own commands wait out
 	   the other's lock, and the one that loses fails in wrangler's apply, on SQLITE_BUSY or on the table
 	   the other made, as wrangler reads what is pending before it writes; two that do not overlap both
 	   apply, and both can lose, workerd failing to start on the lock */
 	it("of two applies at once, each applies or fails as a refused run, and a rerun converges with no intent left", async () => {
 		const dir = project(INIT)
-		const both = await Promise.all([0, 1].map(() => combProcess(dir, ["migrate", "apply", "core", "--local"])))
+		const both = await Promise.all([0, 1].map(() => databaseProcess(dir, ["migrate", "apply", "core", "--local"])))
 		for (const ran of both.filter((each) => each.code !== 0)) {
 			expect(ran.code).toBe(1)
 			expect(ran.stderr.trimStart()).toMatch(/^wrangler (?:d1 migrations apply )?failed/)
@@ -222,17 +222,17 @@ describe("comb migrate on D1 --local: a pre-recorded hash is an intent until wra
 		const rerun = io(dir)
 		expect(await runCli(["migrate", "apply", "core", "--local"], rerun), rerun.errors.join("\n")).toBe(0)
 		expect(await column(dir, "SELECT name FROM d1_migrations")).toEqual(["20260101000000_init.sql"])
-		expect(await column(dir, "SELECT name FROM _comb_migration_hashes")).toEqual(["20260101000000_init.sql"])
-		expect(await column(dir, "SELECT name FROM _comb_migration_hash_intents")).toEqual([])
+		expect(await column(dir, "SELECT name FROM _database_migration_hashes")).toEqual(["20260101000000_init.sql"])
+		expect(await column(dir, "SELECT name FROM _database_migration_hash_intents")).toEqual([])
 		const status = io(dir)
 		expect(await runCli(["migrate", "status", "core", "--local"], status)).toBe(0)
 		expect(status.outputs).toEqual(["Applied: 20260101000000_init.sql", "Pending: none"])
 	}, 180_000)
 })
 
-/* S1 of r21: wrangler runs each file alone, so comb's proof does too; a pragma 0001 approved never
+/* S1 of r21: wrangler runs each file alone, so database's proof does too; a pragma 0001 approved never
    reaches 0002, and check refuses the insert wrangler would fail on */
-describe("comb migrate check on D1 --local proves each file as wrangler runs it, alone (S1 of r21)", () => {
+describe("database migrate check on D1 --local proves each file as wrangler runs it, alone (S1 of r21)", () => {
 	it("refuses 0002's CHECK-breaking insert though 0001 approved ignore_check_constraints, and applies nothing", async () => {
 		const dir = project(KEEP)
 		expect(await runCli(["migrate", "apply", "core", "--local"], io(dir))).toBe(0)

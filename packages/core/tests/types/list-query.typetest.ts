@@ -131,11 +131,11 @@ declare const d1: DrizzleD1Database
 const listed = sqliteTable("listed", { id: integer("id").primaryKey(), title: text("title") })
 const listedQuery = buildListQuery({ ...SEALED, parsed: listSchema.parse({}), table: listed })
 type Listed = {
-	_combAnchorGone?: number
-	_combId?: unknown
-	_combKeyTexts?: string
-	_combKeyTypes?: string
-	_combTextKeys?: string
+	_cursorAnchorGone?: number
+	_cursorId?: unknown
+	_cursorKeyTexts?: string
+	_cursorKeyTypes?: string
+	_cursorTextKeys?: string
 	_total?: number
 	id: number
 	title: string | null
@@ -202,8 +202,8 @@ expectTypeOf(builtRetrieve).toHaveProperty("parsedFields")
 
 /* r18 Q15: the paginators strip the extras the builder selected, so the rows they return are typed without them */
 declare const wiredRows: Array<{
-	_combAnchorGone?: number
-	_combId: unknown
+	_cursorAnchorGone?: number
+	_cursorId: unknown
 	_total?: number
 	id: number
 	title: string
@@ -215,9 +215,9 @@ const paged = queryHelpers.paginate(
 expectTypeOf(paged[0][0]!).toEqualTypeOf<{ id: number; title: string }>()
 
 /* Q3 of r19: a union row type keeps each variant's own fields through both paginators, so narrowing reaches them */
-type OrgInvite = { _combId: string; created_at: number; organization_name: string; type: "org" }
+type OrgInvite = { _cursorId: string; created_at: number; organization_name: string; type: "org" }
 type ProjectInvite = {
-	_combId: string
+	_cursorId: string
 	collaborator: number
 	created_at: number
 	project_name: string
@@ -230,9 +230,9 @@ for (const invite of [...onePage, ...mergedPage]) {
 	if (invite.type === "project") expectTypeOf(invite.collaborator).toEqualTypeOf<number>()
 	else expectTypeOf(invite.organization_name).toEqualTypeOf<string>()
 	/* the extras are gone from every variant */
-	expectTypeOf(invite).not.toHaveProperty("_combId")
+	expectTypeOf(invite).not.toHaveProperty("_cursorId")
 }
-expectTypeOf<ListRow<Invite>>().toEqualTypeOf<Omit<OrgInvite, "_combId"> | Omit<ProjectInvite, "_combId">>()
+expectTypeOf<ListRow<Invite>>().toEqualTypeOf<Omit<OrgInvite, "_cursorId"> | Omit<ProjectInvite, "_cursorId">>()
 
 /* Q1 of r21: a derived list over a column needs no `dialect`; one over expressions names one of two databases */
 const derivedTable = sqliteTable("derived_items", { id: text("id").primaryKey(), created_at: integer("created_at") })

@@ -23,7 +23,7 @@ type Shape = { dimensions: number; nullable: boolean; schemaType: SchemaType }
  * its anyOf, as its array member does
  */
 export function arrayBase(element: Base, shape: Shape): Base {
-	const keys = shape.dimensions > 1 && isMutative(shape.schemaType) ? { "x-comb-rectangular": true } : {}
+	const keys = shape.dimensions > 1 && isMutative(shape.schemaType) ? { "x-database-rectangular": true } : {}
 	return { ...plain(arrayOf(element, shape), keys), besideNull: itemsKeys(element, shape) }
 }
 

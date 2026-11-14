@@ -1,4 +1,4 @@
-/** comb.config.ts: the databases codegen and migrate diff read their tables and FTS from. */
+/** database.config.ts: the databases codegen and migrate diff read their tables and FTS from. */
 import fs from "node:fs"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
@@ -15,12 +15,12 @@ export type { CodegenConfig, DatabaseCodegen }
 function parsed(file: string, exported: unknown): CodegenConfig {
 	const result = codegenConfigSchema().safeParse(exported)
 	if (result.success) return result.data
-	throw new CliError(`${file} is not a valid comb config:\n${z.prettifyError(result.error)}`)
+	throw new CliError(`${file} is not a valid database config:\n${z.prettifyError(result.error)}`)
 }
 
 /**
  * The config module `file`, a .json one parsed as its default export; a syntax error or a throw names
- * `file`, the error as its cause, for comb.config.ts and the drizzle config alike
+ * `file`, the error as its cause, for database.config.ts and the drizzle config alike
  */
 export async function loadModule(file: string): Promise<{ default?: unknown }> {
 	try {
@@ -33,9 +33,9 @@ export async function loadModule(file: string): Promise<{ default?: unknown }> {
 	}
 }
 
-/** The project's comb.config.ts (or .js), or undefined when it has none */
-export async function findCombConfig(cwd: string): Promise<CodegenConfig | undefined> {
-	for (const name of ["comb.config.ts", "comb.config.js"]) {
+/** The project's database.config.ts (or .js), or undefined when it has none */
+export async function findDatabaseConfig(cwd: string): Promise<CodegenConfig | undefined> {
+	for (const name of ["database.config.ts", "database.config.js"]) {
 		const fp = path.resolve(cwd, name)
 		if (fs.existsSync(fp)) {
 			const mod = await loadModule(fp)
@@ -45,23 +45,23 @@ export async function findCombConfig(cwd: string): Promise<CodegenConfig | undef
 	return undefined
 }
 
-export async function loadCombConfig(cwd: string): Promise<CodegenConfig> {
-	const config = await findCombConfig(cwd)
+export async function loadDatabaseConfig(cwd: string): Promise<CodegenConfig> {
+	const config = await findDatabaseConfig(cwd)
 	if (config) return config
-	throw new CliError("No comb.config.ts found. Create one or use --tables <path> for direct mode.")
+	throw new CliError("No database.config.ts found. Create one or use --tables <path> for direct mode.")
 }
 
 /** The database `name` declares, or a CliError naming the ones it does, and `hint` when the caller has one */
 export function databaseIn(config: CodegenConfig, name: string, hint?: string): DatabaseCodegen {
 	if (Object.hasOwn(config.databases, name)) return config.databases[name] as DatabaseCodegen
 	throw new CliError(
-		`comb.config.ts declares no database "${name}". Available: ${Object.keys(config.databases).join(", ")}${hint === undefined ? "" : `. ${hint}`}`,
+		`database.config.ts declares no database "${name}". Available: ${Object.keys(config.databases).join(", ")}${hint === undefined ? "" : `. ${hint}`}`,
 	)
 }
 
 /**
  * The tables file `tables` names, resolved against `cwd`, as `what` gave it (--tables, or
- * comb.config.ts `tables`); a CliError when it is missing or not a file
+ * database.config.ts `tables`); a CliError when it is missing or not a file
  */
 export function tablesFile(cwd: string, tables: string, what: "--tables" | "tables"): string {
 	const resolved = path.resolve(cwd, tables)
@@ -70,11 +70,11 @@ export function tablesFile(cwd: string, tables: string, what: "--tables" | "tabl
 	return resolved
 }
 
-/** A database comb.config.ts declares FTS on: its tables file and the FTS of each table */
+/** A database that database.config.ts declares FTS on: its tables file and the FTS of each table */
 export type DeclaredFts = { fts: Record<string, FtsTableConfig>; tables: string }
 
 /**
- * The FTS the database `name` declares in comb.config.ts, which a SQLite diff builds from its tables
+ * The FTS the database `name` declares in database.config.ts, which a SQLite diff builds from its tables
  * file. No config, no database name, or no fts on the database declares none; a name
  * the config lacks is refused with `hint`.
  */
@@ -82,7 +82,7 @@ export async function declaredFts(
 	cwd: string,
 	{ hint, name }: { hint?: string | undefined; name: string | undefined },
 ): Promise<DeclaredFts | undefined> {
-	const config = await findCombConfig(cwd)
+	const config = await findDatabaseConfig(cwd)
 	if (!config || name === undefined) return undefined
 	const { fts, tables } = databaseIn(config, name, hint)
 	return fts === undefined || Object.keys(fts).length === 0 ? undefined : { fts, tables }

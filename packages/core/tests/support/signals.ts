@@ -1,6 +1,6 @@
 /**
- * A signal delivered to the test's own process as Node delivers it, with only comb listening, and
- * process.kill stubbed so the end comb asks for is read rather than done (S2, KC5 and PA4 of r22)
+ * A signal delivered to the test's own process as Node delivers it, with only database listening, and
+ * process.kill stubbed so the end database asks for is read rather than done (S2, KC5 and PA4 of r22)
  */
 import { afterEach, beforeEach, type MockInstance, vi } from "vitest"
 import { hold, pastStop, STOP_SIGNALS, type StopSignal, stopsEnded } from "../../src/migrate/core/cleanup.ts"
@@ -8,13 +8,13 @@ import { hold, pastStop, STOP_SIGNALS, type StopSignal, stopsEnded } from "../..
 /** One turn of the event loop, after the promise callbacks queued before it */
 export const settle = (): Promise<void> => new Promise((resolve) => setImmediate(resolve))
 
-/* the worker's own listeners, read as a test file loads this, before any test arms comb's */
+/* the worker's own listeners, read as a test file loads this, before any test arms database's */
 export const worker = Object.fromEntries(STOP_SIGNALS.map((signal) => [signal, process.listeners(signal)])) as Record<
 	StopSignal,
 	NodeJS.SignalsListener[]
 >
 
-/** `signal` to this process with the worker's listeners off, so comb's is the only one, as in the CLI */
+/** `signal` to this process with the worker's listeners off, so database's is the only one, as in the CLI */
 export async function deliver(signal: StopSignal): Promise<void> {
 	const others = worker[signal]
 	for (const listener of others) process.off(signal, listener)

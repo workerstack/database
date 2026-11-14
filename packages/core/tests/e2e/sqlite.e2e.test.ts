@@ -32,16 +32,16 @@ export default defineConfig({
 let blog: App
 
 beforeAll(() => {
-	blog = app({ ...BLOG, "comb.migrate.config.ts": MIGRATE_CONFIG })
-	ok(blog.comb("codegen", "core"), "codegen")
-	ok(blog.comb("migrate", "init"), "migrate init")
-	ok(blog.comb("migrate", "diff", "core", "init"), "migrate diff")
+	blog = app({ ...BLOG, "database.migrate.config.ts": MIGRATE_CONFIG })
+	ok(blog.database("codegen", "core"), "codegen")
+	ok(blog.database("migrate", "init"), "migrate init")
+	ok(blog.database("migrate", "diff", "core", "init"), "migrate diff")
 }, 180_000)
 
-describe("comb on SQLite, from tables to a served list", () => {
+describe("database on SQLite, from tables to a served list", () => {
 	it("applies the diffed migration once, and skips it the next time", () => {
-		expect(ok(blog.comb("migrate", "apply", "core", "-e", "local"), "apply").stdout).toContain("1 applied")
-		expect(ok(blog.comb("migrate", "apply", "core", "-e", "local"), "apply again").stdout).toContain(
+		expect(ok(blog.database("migrate", "apply", "core", "-e", "local"), "apply").stdout).toContain("1 applied")
+		expect(ok(blog.database("migrate", "apply", "core", "-e", "local"), "apply again").stdout).toContain(
 			"Skip (already applied)",
 		)
 	}, 120_000)

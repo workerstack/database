@@ -1,7 +1,7 @@
 /** What the runtime reader reads of a c helper's own record: its constraints, a column schema and an enum's state machine, as JSON */
 import * as z from "zod"
-import type { CombColumnMeta } from "../../meta/column.ts"
-import type { ModuleExport, SnapshotComb } from "./snapshot-types.ts"
+import type { ColumnMeta } from "../../meta/column.ts"
+import type { ModuleExport, SnapshotDatabase } from "./snapshot-types.ts"
 
 const STRING_LIST = (value: unknown): value is string[] =>
 	Array.isArray(value) && value.every((item) => typeof item === "string")
@@ -12,7 +12,9 @@ function constraintsOf(raw: unknown, at: string): Record<string, boolean | numbe
 	for (const [key, value] of Object.entries((raw ?? {}) as Record<string, unknown>)) {
 		if (value === undefined) continue
 		if (typeof value !== "boolean" && typeof value !== "number" && typeof value !== "string")
-			throw new Error(`${at}: the constraint ${key} is a ${typeof value}; comb reads a boolean, a number or a string`)
+			throw new Error(
+				`${at}: the constraint ${key} is a ${typeof value}; database reads a boolean, a number or a string`,
+			)
 		/* JSON carries no NaN or Infinity: the snapshot would hold null, and the bound would drop without a word */
 		if (typeof value === "number" && !Number.isFinite(value))
 			throw new Error(
@@ -56,7 +58,7 @@ function inputJsonOf(schema: z.ZodType, at: string): Readonly<Record<string, unk
 		json = z.toJSONSchema(schema, { cycles: "throw", io: "input" }) as Record<string, unknown>
 	} catch (error) {
 		throw new Error(
-			`${at}: the schema its schema key is given has no JSON Schema form (zod: ${(error as Error).message}); comb publishes every DTO rule`,
+			`${at}: the schema its schema key is given has no JSON Schema form (zod: ${(error as Error).message}); database publishes every DTO rule`,
 			{ cause: error },
 		)
 	}
@@ -71,16 +73,18 @@ function inputJsonOf(schema: z.ZodType, at: string): Readonly<Record<string, unk
  * for one no module exports, naming the modules that would not load (`unloaded`)
  */
 function columnSchemaOf(
-	meta: CombColumnMeta,
+	meta: ColumnMeta,
 	at: string,
 	{ locate, unloaded }: { locate: (value: unknown) => ModuleExport | null; unloaded: readonly string[] },
-): Pick<SnapshotComb, "schema" | "schemaJson"> & { constraints: Record<string, unknown> } {
+): Pick<SnapshotDatabase, "schema" | "schemaJson"> & { constraints: Record<string, unknown> } {
 	const { schema: declared, ...constraints } = (meta.constraints ?? {}) as Record<string, unknown>
 	if (declared === undefined) return { constraints, schema: null, schemaJson: null }
 	if (!SCHEMA_KINDS.has(meta.kind))
 		return { constraints: { ...constraints, schema: true }, schema: null, schemaJson: null }
 	if (typeof declared !== "object" || declared === null || !("_zod" in declared))
-		throw new Error(`${at}: the constraint schema is no zod schema; comb's DTOs are zod 4, so the schema must be one`)
+		throw new Error(
+			`${at}: the constraint schema is no zod schema; database's DTOs are zod 4, so the schema must be one`,
+		)
 	const schema = locate(declared)
 	if (schema === null)
 		throw new Error(
@@ -97,7 +101,7 @@ type Fill = { default?: unknown; defaultFn?: unknown; onUpdateFn?: unknown }
 
 /**
  * A state column's fill is its machine's `initial`, the value a row starts at: a
- * literal default other than it, or a fill comb cannot read as a value, is an error naming the column;
+ * literal default other than it, or a fill database cannot read as a value, is an error naming the column;
  * a machine that declares no `initial` starts anywhere
  */
 function refuseOtherStart(initial: string | null, fill: Fill, at: string): void {
@@ -105,7 +109,7 @@ function refuseOtherStart(initial: string | null, fill: Fill, at: string): void 
 	const literal = fill.defaultFn === undefined && fill.onUpdateFn === undefined && typeof fill.default !== "object"
 	if (!literal)
 		throw new Error(
-			`${at}: its default is no literal value, so comb cannot hold it to its state machine's initial "${initial}"; write .default("${initial}")`,
+			`${at}: its default is no literal value, so database cannot hold it to its state machine's initial "${initial}"; write .default("${initial}")`,
 		)
 	if (fill.default !== undefined && fill.default !== initial)
 		throw new Error(
@@ -117,7 +121,7 @@ function refuseOtherStart(initial: string | null, fill: Fill, at: string): void 
  * A c.enum column's state machine as JSON; an error naming the column for one of another shape, or
  * for a fill other than its `initial`
  */
-function statesOf(raw: unknown, at: string, fill: Fill = {}): SnapshotComb["states"] {
+function statesOf(raw: unknown, at: string, fill: Fill = {}): SnapshotDatabase["states"] {
 	if (raw === undefined) return null
 	/* a misspelt key would leave its part of the machine unread */
 	const unknown = Object.keys(raw as object).find((key) => !STATE_KEYS.includes(key))

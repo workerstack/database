@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { CombError } from "../error.ts"
+import { DatabaseError } from "../error.ts"
 import { decodeBase64Url, encodeBase64Url } from "./base64url.ts"
 import {
 	mintCursor,
@@ -185,7 +185,7 @@ describe("cursorProblem / readCursor", () => {
 	it("rejects garbage with a 400", () => {
 		expect(cursorProblem("garbage")).toBe("Invalid cursor")
 		const error = thrown(() => readCursor("garbage", BY_CREATED, SEALED))
-		expect(error).toBeInstanceOf(CombError)
+		expect(error).toBeInstanceOf(DatabaseError)
 		expect(error).toMatchObject({ errorKey: "invalid_cursor", status: 400 })
 	})
 })
@@ -213,7 +213,7 @@ describe("openCursor — what a cursor may carry (Q-M3, Q-H4)", () => {
 	})
 
 	it("readCursor throws invalid_cursor for one that does not decode", () => {
-		expect(() => readCursor("%%%", [{ direction: "desc", field: "created_at" }], SEALED)).toThrow(CombError)
+		expect(() => readCursor("%%%", [{ direction: "desc", field: "created_at" }], SEALED)).toThrow(DatabaseError)
 	})
 })
 
@@ -288,8 +288,8 @@ describe("readCursor on options that cannot seal", () => {
 	})
 })
 
-/* QL5 of r22b: the codec is closed over what a mint takes, so every cursor comb mints is one it reads */
-describe("a minted cursor is one comb reads (QL5 of r22b; sibling: what openCursor refuses)", () => {
+/* QL5 of r22b: the codec is closed over what a mint takes, so every cursor database mints is one it reads */
+describe("a minted cursor is one database reads (QL5 of r22b; sibling: what openCursor refuses)", () => {
 	const BY_K: SortField[] = [{ direction: "asc", field: "k" }]
 
 	it.each([
@@ -346,8 +346,8 @@ describe("a minted cursor is one comb reads (QL5 of r22b; sibling: what openCurs
 	})
 })
 
-/* comb-9d's AB2 ruling: a per-key flag says a value is carried text; a cursor without it holds every value as read */
-describe("the carried flag a cursor holds per key (comb-9d's AB2 ruling; sibling: the 0.20.1 cursor, custom-keys.test.ts)", () => {
+/* database-9d's AB2 ruling: a per-key flag says a value is carried text; a cursor without it holds every value as read */
+describe("the carried flag a cursor holds per key (database-9d's AB2 ruling; sibling: the 0.20.1 cursor, custom-keys.test.ts)", () => {
 	const BY_TWO: SortField[] = [
 		{ direction: "asc", field: "k" },
 		{ direction: "asc", field: "n" },

@@ -20,7 +20,7 @@ import { c } from "@workerstack/database/sqlite/columns"
 let tmpDir: string
 
 beforeEach(() => {
-	tmpDir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-dtos-types-"))
+	tmpDir = fs.mkdtempSync(path.join(fixtureRoot(), "database-dtos-types-"))
 })
 
 afterEach(() => {

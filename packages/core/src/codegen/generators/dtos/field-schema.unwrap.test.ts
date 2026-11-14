@@ -1,6 +1,6 @@
 /**
  * C1 of r20: a consumer composes a generated field through zod, most often taking a nullable column
- * as a required input with `.unwrap()`. The field's `x-comb-*` keys must survive that, as they
+ * as a required input with `.unwrap()`. The field's `x-database-*` keys must survive that, as they
  * survive `.optional()` and `.pick()`, so the composed schema publishes what the field enforces.
  */
 import { ts } from "ts-morph"
@@ -34,7 +34,7 @@ function generated(raw: string, schemaType: SchemaType, dialect: "postgres" | "s
 		dialect,
 		imports: { enumImports: new Map(), identifiers: new Map(), jsonSchemaImports: new Set() },
 	}) as string
-	return new Function("z", "comb", "_m", "Doc", "jsonValueSchema", ts.transpile(`return ${code}`))(
+	return new Function("z", "database", "_m", "Doc", "jsonValueSchema", ts.transpile(`return ${code}`))(
 		z,
 		{ isStorableText, jsonValue },
 		META,
@@ -43,12 +43,12 @@ function generated(raw: string, schemaType: SchemaType, dialect: "postgres" | "s
 	)
 }
 
-/** The `x-comb-*` keys and values an object's property `t` publishes */
+/** The `x-database-*` keys and values an object's property `t` publishes */
 function keysOf(schema: z.ZodType, io: "input" | "output"): Record<string, unknown> {
 	const document = z.toJSONSchema(z.object({ t: schema }), { io, unrepresentable: "any" }) as unknown as {
 		properties: { t: Record<string, unknown> }
 	}
-	return Object.fromEntries(Object.entries(document.properties.t).filter(([key]) => key.startsWith("x-comb-")))
+	return Object.fromEntries(Object.entries(document.properties.t).filter(([key]) => key.startsWith("x-database-")))
 }
 
 /** `schema` taken as required: every optional and nullable wrapper unwrapped, as a consumer does */
@@ -93,6 +93,6 @@ describe("a nullable field keeps its keys through unwrap (C1); siblings: .option
 		const array = required(generated('text("t").array()', "create", "postgres")) as z.ZodArray
 		const element = array.element as z.ZodType
 		expect(keysOf(required(element), "input")).toEqual(keysOf(element, "input"))
-		expect(Object.keys(keysOf(element, "input"))).toEqual(["x-comb-text"])
+		expect(Object.keys(keysOf(element, "input"))).toEqual(["x-database-text"])
 	})
 })

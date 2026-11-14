@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest"
 import { verdictOf } from "../__fixtures__/copy-verdict.ts"
 import { libsqlConnection } from "../__fixtures__/libsql-connection.ts"
-import type { Connection } from "../types.ts"
+import type { MigrateConnection } from "../types.ts"
 import { notEngineTables } from "./engine-tables.ts"
 import { copyOf, copyScript, creatable, jsonColumns, liveObjects, scriptOf } from "./proof-copy.ts"
 
 /** The live schema of `conn`, as the proof reads it */
-const schemaOf = async (conn: Connection) => creatable(await liveObjects(conn, notEngineTables(conn)))
+const schemaOf = async (conn: MigrateConnection) => creatable(await liveObjects(conn, notEngineTables(conn)))
 
 vi.mock("bun:sqlite", () => import("../__fixtures__/bun-sqlite-node.ts"))
 

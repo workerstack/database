@@ -5,11 +5,11 @@ import { oxlintReports, reportsOf } from "./rule-harness.ts"
 const rule = plugin.rules["no-module-side-effects"]
 const MESSAGE = "module scope runs no code: mark a pure call /* @__PURE__ */ or move it into a function"
 
-describe("comb/no-module-side-effects", () => {
+describe("database/no-module-side-effects", () => {
 	it("rejects top-level statements that run code", () => {
 		const fixture = {
 			"packages/core/src/a.ts": "register()\n",
-			"packages/core/src/b.ts": "globalThis.comb = 1\n",
+			"packages/core/src/b.ts": "globalThis.database = 1\n",
 			"packages/core/src/c.ts": "if (globalThis.x) {\n\tthrow new Error('x')\n}\n",
 			"packages/core/src/query/d.ts": "for (const k of []) {\n}\n",
 		}
@@ -23,7 +23,7 @@ describe("comb/no-module-side-effects", () => {
 
 	it("rejects an initializer that runs code, however deep, unless it is marked pure", () => {
 		const fixture = {
-			"packages/core/src/a.ts": "export const id = Symbol.for('comb.id')\n",
+			"packages/core/src/a.ts": "export const id = Symbol.for('database.id')\n",
 			"packages/core/src/b.ts": "const table = { a: [build()] }\nexport default table\n",
 			"packages/core/src/c.ts": "export default setup()\n",
 			"packages/core/src/d.ts": "const t = tag`x`\nconst n = (globalThis.count = 1)\nexport { t, n }\n",
@@ -40,7 +40,7 @@ describe("comb/no-module-side-effects", () => {
 	})
 })
 
-describe("comb/no-module-side-effects: scope", () => {
+describe("database/no-module-side-effects: scope", () => {
 	it("allows declarations, literals, functions and types, and the bin shim that exists to run", () => {
 		const fixture = {
 			"packages/core/src/a.ts": [
@@ -65,7 +65,7 @@ describe("comb/no-module-side-effects: scope", () => {
 		expect(reportsOf(rule, fixture)).toEqual([])
 	})
 
-	it("fails oxlint through the comb plugin entry", () => {
+	it("fails oxlint through the database plugin entry", () => {
 		const fixture = {
 			"packages/core/src/a.ts": "register()\n",
 			"packages/core/src/b.ts": "export const id = /* @__PURE__ */ Symbol.for('x')\n",

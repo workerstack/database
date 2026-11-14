@@ -22,7 +22,7 @@ const atlas = fakeAtlas({ status: status({ available: pending, pending, status: 
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-atlas-reads-"))
+	dir = mkdtempSync(join(tmpdir(), "database-atlas-reads-"))
 	for (const [name, sql] of Object.entries(FILES)) writeFileSync(join(dir, name), sql)
 	writeFileSync(join(dir, "atlas.sum"), "h1:x=\n1_a.sql h1:7=\n2_b.sql h1:7=\n")
 	vi.mocked(pgRead).mockClear()

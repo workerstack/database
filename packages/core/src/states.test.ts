@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { CombError } from "./error.ts"
+import { DatabaseError } from "./error.ts"
 import {
 	assertTransition,
 	canTransition,
@@ -9,7 +9,7 @@ import {
 	nextStates,
 	type StateMachine,
 } from "./states.ts"
-import { combErrorKeys } from "./types.ts"
+import { databaseErrorKeys } from "./types.ts"
 
 const delivery = {
 	initial: "queued",
@@ -96,15 +96,15 @@ describe("nextStates", () => {
 	})
 })
 
-/** The CombError `run` throws; fails the test when it throws nothing or something else */
-function combErrorOf(run: () => void): CombError {
+/** The DatabaseError `run` throws; fails the test when it throws nothing or something else */
+function databaseErrorOf(run: () => void): DatabaseError {
 	try {
 		run()
 	} catch (error) {
-		if (error instanceof CombError) return error
+		if (error instanceof DatabaseError) return error
 		throw error
 	}
-	throw new Error("expected a CombError, nothing was thrown")
+	throw new Error("expected a DatabaseError, nothing was thrown")
 }
 
 describe("assertTransition", () => {
@@ -113,9 +113,9 @@ describe("assertTransition", () => {
 		expect(() => assertTransition(delivery, "sent", "sent")).not.toThrow()
 	})
 
-	it("raises CombError 422 with invalid_state_transition, on the status column by default", () => {
-		const err = combErrorOf(() => assertTransition(delivery, "sent", "queued"))
-		expect(err.errorKey).toBe(combErrorKeys.INVALID_STATE_TRANSITION)
+	it("raises DatabaseError 422 with invalid_state_transition, on the status column by default", () => {
+		const err = databaseErrorOf(() => assertTransition(delivery, "sent", "queued"))
+		expect(err.errorKey).toBe(databaseErrorKeys.INVALID_STATE_TRANSITION)
 		expect(err.status).toBe(422)
 		expect(err.statusKey).toBe("unprocessable_entity")
 		expect(err.column).toBe("status")
@@ -124,28 +124,28 @@ describe("assertTransition", () => {
 
 	it("names the column the machine declares", () => {
 		const phase = defineStateMachine({ column: "phase", terminal: ["done"], values: ["open", "done"] })
-		const err = combErrorOf(() => assertTransition(phase, "done", "open"))
+		const err = databaseErrorOf(() => assertTransition(phase, "done", "open"))
 		expect(err.column).toBe("phase")
 		expect(err.cause).toBe('phase: "done" is terminal')
 	})
 
 	it("names an unknown target, an unknown source, and a missing edge", () => {
-		expect(combErrorOf(() => assertTransition(delivery, "queued", "done" as never)).cause).toContain(
+		expect(databaseErrorOf(() => assertTransition(delivery, "queued", "done" as never)).cause).toContain(
 			"not a declared state",
 		)
-		expect(combErrorOf(() => assertTransition(delivery, "done" as never, "queued")).cause).toContain(
+		expect(databaseErrorOf(() => assertTransition(delivery, "done" as never, "queued")).cause).toContain(
 			"not a declared state",
 		)
-		expect(combErrorOf(() => assertTransition(delivery, "queued", "sent")).cause).toContain("does not lead")
+		expect(databaseErrorOf(() => assertTransition(delivery, "queued", "sent")).cause).toContain("does not lead")
 	})
 
 	it("passes on an error that is not its own", () => {
 		expect(() =>
-			combErrorOf(() => {
+			databaseErrorOf(() => {
 				throw new TypeError("x")
 			}),
 		).toThrow(TypeError)
-		expect(() => combErrorOf(() => undefined)).toThrow("nothing was thrown")
+		expect(() => databaseErrorOf(() => undefined)).toThrow("nothing was thrown")
 	})
 })
 
@@ -166,7 +166,7 @@ describe("state names that are also Object.prototype members (M-L1)", () => {
 	it("reject them when the machine does not declare them", () => {
 		const plain: StateMachine = { transitions: { a: ["b"] }, values: ["a", "b"] }
 		expect(canTransition(plain, "constructor" as never, "a")).toBe(false)
-		expect(() => assertTransition(plain, "constructor" as never, "a")).toThrow(CombError)
+		expect(() => assertTransition(plain, "constructor" as never, "a")).toThrow(DatabaseError)
 		expect(nextStates(plain, "valueOf" as never)).toEqual([])
 	})
 })

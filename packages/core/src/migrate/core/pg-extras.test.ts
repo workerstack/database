@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { pgDelta, separatePgObjects } from "./pg-objects.ts"
 
-/* the objects comb owns in a history: a view, a materialized view, a policy, a sequence and a role */
+/* the objects database owns in a history: a view, a materialized view, a policy, a sequence and a role */
 const OWNED = `CREATE TABLE "post" ("id" integer);
 CREATE VIEW "v" AS (select "id" from "post");
 CREATE MATERIALIZED VIEW "mv" AS (select "id" from "post");
@@ -15,7 +15,7 @@ const after = (sql: string) => {
 	return { history, next: separatePgObjects(sql, history.state, "2_more.sql") }
 }
 
-describe("statements about comb's objects", () => {
+describe("statements about database's objects", () => {
 	it("keeps each with its object, out of what Atlas sees", () => {
 		const said = [
 			`COMMENT ON VIEW "v" IS 'x'`,
@@ -65,7 +65,7 @@ describe("statements about other objects, and dropped indexes", () => {
 		expect(history.state.objects.get("materialized view mv")?.extras).toEqual([])
 	})
 
-	it("leaves to Atlas what names no object comb owns, and keeps other things said when an index goes", () => {
+	it("leaves to Atlas what names no object database owns, and keeps other things said when an index goes", () => {
 		const unowned = [
 			`COMMENT ON VIEW "other" IS 'x'`,
 			'ALTER POLICY "p" ON "other" USING (true)',
@@ -86,11 +86,11 @@ describe("statements about other objects, and dropped indexes", () => {
 		['ALTER POLICY "own" ON "post" RENAME TO "mine"', "a policy rename"],
 		['GRANT SELECT ON "v", "post" TO PUBLIC', "a grant on a view and a table at once"],
 		['ALTER ROLE "reader" WITH LOGIN', "a change of a role"],
-		['ALTER EXTENSION "x" UPDATE', "a change of an extension comb keeps"],
+		['ALTER EXTENSION "x" UPDATE', "a change of an extension database keeps"],
 	])("refuses %j (%s), naming the file", (sql) => {
 		const history = separatePgObjects(`${OWNED}\nCREATE EXTENSION "x";`, undefined, "1_owned.sql")
 		expect(() => separatePgObjects(sql, history.state, "2_more.sql")).toThrow(
-			`2_more.sql: ${sql} changes an object comb writes itself`,
+			`2_more.sql: ${sql} changes an object database writes itself`,
 		)
 	})
 })

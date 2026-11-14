@@ -1,23 +1,23 @@
 /**
- * Atlas's failures in comb's terms, where comb knows the fix: Docker missing for the default dev
+ * Atlas's failures in database's terms, where database knows the fix: Docker missing for the default dev
  * database, another apply's lock, a database with objects and no history (the target's, or the dev
  * database's, which Atlas finds as it snapshots it), a schema that is missing, an enum value Atlas
- * cannot drop, and what Atlas OSS refuses. Atlas's own text is scrubbed of secrets; comb's words
+ * cannot drop, and what Atlas OSS refuses. Atlas's own text is scrubbed of secrets; database's words
  * are never.
  */
 
 /**
  * A statement Atlas names as the one that failed, without its own `;`, which reads as part of the
- * sentence comb puts it in
+ * sentence database puts it in
  */
 const failedStatement = (stmt: string): string => stmt.replace(/;\s*$/, "")
 
-/** comb's answer to a database Atlas calls not clean: objects but no history */
+/** database's answer to a database Atlas calls not clean: objects but no history */
 const NOT_CLEAN =
-	"the database has objects but no migration history, and no shared history row matches this directory's files (a database made by hand, or another directory's history); if its schema matches the migrations, record them with comb migrate baseline"
+	"the database has objects but no migration history, and no shared history row matches this directory's files (a database made by hand, or another directory's history); if its schema matches the migrations, record them with database migrate baseline"
 
 /**
- * comb's answer to a database Atlas calls not clean, undefined for any other failure. Atlas snapshots
+ * database's answer to a database Atlas calls not clean, undefined for any other failure. Atlas snapshots
  * the dev database before it replays on it: not clean there is the dev database's, as is any on a
  * call that reached no other database; else the target's
  */
@@ -31,7 +31,7 @@ function notClean(stderr: string, scrub: (text: string) => string, devOnly: bool
 	return /connected database is not clean/.test(stderr) ? NOT_CLEAN : undefined
 }
 
-// lookup-table: what Atlas says where comb's answer names no part of it, and that answer
+// lookup-table: what Atlas says where database's answer names no part of it, and that answer
 const FIXED: ReadonlyArray<readonly [RegExp, string]> = [
 	[
 		/Error: docker:|Cannot connect to the Docker daemon/i,
@@ -41,16 +41,16 @@ const FIXED: ReadonlyArray<readonly [RegExp, string]> = [
 		/lock is held by other session/,
 		"another migrate apply is running on this database; run it again once that one finishes",
 	],
-	/* Atlas's driver requires TLS where a URL names no sslmode, as comb's own reads now do */
+	/* Atlas's driver requires TLS where a URL names no sslmode, as database's own reads now do */
 	[
 		/SSL is not enabled on the server/,
-		"the server takes no TLS, which Atlas and comb require where a URL names no sslmode; set sslmode=disable on the URL of a server without TLS",
+		"the server takes no TLS, which Atlas and database require where a URL names no sslmode; set sslmode=disable on the URL of a server without TLS",
 	],
 ]
 
 /**
- * Atlas's failure in comb's terms where comb knows the fix, else as Atlas said it; `scrub` takes only
- * the text Atlas wrote, never comb's words. `devOnly` for a call that gave Atlas the dev database
+ * Atlas's failure in database's terms where database knows the fix, else as Atlas said it; `scrub` takes only
+ * the text Atlas wrote, never database's words. `devOnly` for a call that gave Atlas the dev database
  * alone (migrate diff), whose "not clean" can only be the dev database's
  */
 function explainAtlasFailure(

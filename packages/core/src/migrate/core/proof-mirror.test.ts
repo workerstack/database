@@ -37,7 +37,10 @@ describe("the proof on a mirror FTS table's index", () => {
 			"CREATE TABLE post (id INTEGER PRIMARY KEY, title TEXT);\nCREATE VIRTUAL TABLE ext USING fts5(body, content='post', content_rowid='id');"
 		const proof = await prove(live, "SELECT count(*) FROM ext;")
 		expect(proof.unproven).toEqual([
-			{ table: "ext", why: expect.stringMatching(/^comb could not build its full-text index in the copy: /) as string },
+			{
+				table: "ext",
+				why: expect.stringMatching(/^database could not build its full-text index in the copy: /) as string,
+			},
 		])
 	})
 

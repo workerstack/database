@@ -1,0 +1,1 @@
+-- comb:allow-unsafe: the differential approves every file

@@ -1,5 +1,6 @@
-// Oxlint registers one plugin name; this entry publishes every comb rule.
+// Oxlint registers one plugin name; this entry publishes every database rule.
 import { rule as boundaries } from "./boundaries.js"
+import { rule as exportName } from "./export-name.js"
 import { rule as noConsole } from "./no-console.js"
 import { rule as noLocaleCompare } from "./no-locale-compare.js"
 import { rule as noModuleSideEffects } from "./no-module-side-effects.js"
@@ -13,9 +14,10 @@ import { rule as publicJsdoc } from "./public-jsdoc.js"
 import { rule as rawSqlAllowlist } from "./raw-sql-allowlist.js"
 
 export default {
-	meta: { name: "comb" },
+	meta: { name: "database" },
 	rules: {
 		boundaries,
+		"export-name": exportName,
 		"no-console": noConsole,
 		"no-locale-compare": noLocaleCompare,
 		"no-module-side-effects": noModuleSideEffects,

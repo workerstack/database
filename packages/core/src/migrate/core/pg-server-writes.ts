@@ -153,7 +153,7 @@ const unseen = (catalog: string): string =>
 		? "pg_authid, in a column pg_roles does not show, such as a password"
 		: `${catalog}, in a row devUrl's role cannot read`
 
-/** Rows by subject, each as JSON: what comb's own CREATE ROLE left them */
+/** Rows by subject, each as JSON: what database's own CREATE ROLE left them */
 type Rows = Map<string, string>
 
 /** One row's change: its kind, its subject, the names it is about, the fields that changed, none when added or removed, and how it reads */
@@ -197,7 +197,7 @@ function changeOf(subject: string, from: Row | undefined, to: Row | undefined): 
 /**
  * What the `counted` writes changed, by catalog in order, as the open transaction on `sql` sees the
  * server against the committed server `was` reads, through `catalogs`, one change per row; a row
- * still as comb's own CREATE ROLE left it (`ours`) is comb's, and no change. The committed server is
+ * still as database's own CREATE ROLE left it (`ours`) is database's, and no change. The committed server is
  * read before the transaction's read and after it, and a change is one only against both: what
  * another session commits meanwhile, on a server others share, is in one of them
  */
@@ -248,7 +248,7 @@ function refusedChanges(byCatalog: ReadonlyMap<string, Change[]>, own: Own): str
 async function refuseUncounted(sql: Sql, stops: string): Promise<void> {
 	if ((await counts(sql)).on) return
 	throw new ReplayFailed(
-		`devUrl's server keeps no counts for its role (track_counts is off), and comb reads from them what a history file changes past its database; set track_counts on for devUrl's role or server; ${stops}`,
+		`devUrl's server keeps no counts for its role (track_counts is off), and database reads from them what a history file changes past its database; set track_counts on for devUrl's role or server; ${stops}`,
 	)
 }
 

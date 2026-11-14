@@ -1,7 +1,7 @@
 import type { SQL } from "drizzle-orm"
 import { SQLiteDialect } from "drizzle-orm/sqlite-core"
 import { describe, expect, it } from "vitest"
-import { CombError } from "../../error.ts"
+import { DatabaseError } from "../../error.ts"
 import { parseFilter } from "../filter.ts"
 import { buildConditionSQL, buildFilterSQL, type FilterSQLConfig } from "./filter-sql.ts"
 import type { FilterCondition, FilterGroup } from "../types.ts"
@@ -159,7 +159,7 @@ describe("buildFilterSQL", () => {
 			logic: "and",
 			subgroups: [],
 		}
-		expect(() => buildFilterSQL(group, config)).toThrow(CombError)
+		expect(() => buildFilterSQL(group, config)).toThrow(DatabaseError)
 	})
 })
 
@@ -180,9 +180,9 @@ describe("buildFilterSQL — fields it cannot map (Q-L3, Q-H3)", () => {
 	})
 
 	it("throws filter_not_wired for a condition it cannot express, instead of dropping it", () => {
-		expect(() => buildFilterSQL(one("unknown"), config)).toThrow(CombError)
-		expect(() => buildFilterSQL(one("toString"), config)).toThrow(CombError)
-		expect(() => buildFilterSQL(one("status", "is", "maybe"), config)).toThrow(CombError)
+		expect(() => buildFilterSQL(one("unknown"), config)).toThrow(DatabaseError)
+		expect(() => buildFilterSQL(one("toString"), config)).toThrow(DatabaseError)
+		expect(() => buildFilterSQL(one("status", "is", "maybe"), config)).toThrow(DatabaseError)
 	})
 
 	it("skips an empty subgroup and keeps the rest", () => {
@@ -258,12 +258,12 @@ describe("buildConditionSQL — a date column's unit (R9)", () => {
 })
 
 /* the rerun of Q5 on the RC: a mapping in the shape before 0.16, which JavaScript may still pass, is refused by name */
-describe("buildConditionSQL on a mapped column of no kind comb knows", () => {
+describe("buildConditionSQL on a mapped column of no kind database knows", () => {
 	it("throws a TypeError naming the field, where it bound the value as text", () => {
 		const legacy = { columnMap: { at: { column: "at", unit: "s" } as never }, tableAlias: "e" }
 		expect(() => buildConditionSQL({ field: "at", operator: "gt", value: 1500 }, legacy)).toThrow(
 			new TypeError(
-				'buildFilterSQL: columnMap.at has no kind comb knows (text, number, numeric, date-ms, date-s, as-is); `unit: "s"` is `kind: "date-s"` since 0.16',
+				'buildFilterSQL: columnMap.at has no kind database knows (text, number, numeric, date-ms, date-s, as-is); `unit: "s"` is `kind: "date-s"` since 0.16',
 			),
 		)
 	})

@@ -1,8 +1,8 @@
 /** A migrate `Connection` over a fresh in-memory libsql database, so migration code runs as SQL. */
 import { type Client, createClient, type InArgs } from "@libsql/client"
-import type { Connection } from "../types.ts"
+import type { MigrateConnection } from "../types.ts"
 
-export type LibsqlConnection = Connection & { client: Client; close(): Promise<void> }
+export type LibsqlConnection = MigrateConnection & { client: Client; close(): Promise<void> }
 
 export function libsqlConnection(): LibsqlConnection {
 	const client = createClient({ url: ":memory:" })

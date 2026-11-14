@@ -12,7 +12,7 @@ export type ProofInput = {
 
 /**
  * What the child answers: D1's refusal of a file, in D1's words, or none, with each file D1's engine
- * could not prove, as comb's local D1 crashed compiling its probes, and why
+ * could not prove, as database's local D1 crashed compiling its probes, and why
  */
 export type ProofResult = {
 	refused?: string | undefined

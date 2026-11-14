@@ -7,7 +7,7 @@ const PLACE = "sql.raw belongs to query/sqlite/{search,keyset,filter-sql}.ts; bu
 const ARG =
 	"sql.raw takes a string literal, a ternary of string literals, quoteIdent(…), countText(…) or integerText(…)"
 
-describe("comb/raw-sql-allowlist", () => {
+describe("database/raw-sql-allowlist", () => {
 	it("rejects sql.raw outside the three query builders, called or passed around", () => {
 		const fixture = {
 			"packages/core/src/query/filter.ts": 'export const a = sql.raw("x")\n',
@@ -56,7 +56,7 @@ describe("comb/raw-sql-allowlist", () => {
 		expect(reportsOf(rule, fixture)).toEqual([])
 	})
 
-	it("fails oxlint through the comb plugin entry", () => {
+	it("fails oxlint through the database plugin entry", () => {
 		const fixture = {
 			"packages/core/src/query/sqlite/search.ts": "export const t = (name: string) => sql.raw(name)\n",
 			"packages/core/src/query/sqlite/keyset.ts": 'export const d = () => sql.raw("ASC")\n',

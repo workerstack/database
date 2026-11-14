@@ -77,7 +77,9 @@ async function step(
 	await engine.apply(file)
 	const sound = {
 		foreignKeyCheck: await engine.rows("PRAGMA foreign_key_check"),
-		keepTables: await engine.rows("SELECT name FROM sqlite_master WHERE name LIKE '\\_comb\\_keep\\_%' ESCAPE '\\'"),
+		keepTables: await engine.rows(
+			"SELECT name FROM sqlite_master WHERE name LIKE '\\_database\\_keep\\_%' ESCAPE '\\'",
+		),
 	}
 	const notes = classifyMigration(file, { before: earlier, dialect: "sqlite" }).cautiousStatements
 	return { after: await snapshot(engine), before, notes, sound }
@@ -95,7 +97,7 @@ export async function runRowidScenario(engine: Engine, h: History): Promise<{ t:
 /** The notes each rebuild must carry */
 export const ROWID_NOTES = {
 	t: [
-		"DROP TABLE `t` (rebuilds t; comb keeps the rows of k, ki, k99, k100; k100 gets new rowids (100 columns, no INTEGER PRIMARY KEY))",
+		"DROP TABLE `t` (rebuilds t; database keeps the rows of k, ki, k99, k100; k100 gets new rowids (100 columns, no INTEGER PRIMARY KEY))",
 	],
 	w100: [
 		"DROP TABLE `w100` (rebuilds w100, copying every column; w100 gets new rowids (100 columns, no INTEGER PRIMARY KEY))",

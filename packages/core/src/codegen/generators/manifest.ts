@@ -20,7 +20,7 @@ import { transformsOf } from "./dtos/text-schema.ts"
  *
  * Same discipline as the meta contract: bumped only when a field is removed or
  * changes meaning. Adding a field never bumps it, so a reader that ignores what
- * it does not recognise keeps working across comb releases.
+ * it does not recognise keeps working across database releases.
  */
 const MANIFEST_VERSION = 3
 
@@ -158,10 +158,10 @@ type ManifestEntity = {
 }
 
 /** The model as JSON, for tools that do not read TypeScript */
-type Manifest = {
+type CodegenManifest = {
 	/** the format version, `MANIFEST_VERSION`: raised only when a field is removed or changes meaning, never when one is added */
 	v: number
-	/** the database's name: its key in comb.config.ts, or under `--tables` the one in the tables file's name (`core` for `db.core.tables.ts`) */
+	/** the database's name: its key in database.config.ts, or under `--tables` the one in the tables file's name (`core` for `db.core.tables.ts`) */
 	database: string
 	/** every table, sorted by `name`, so an unchanged schema regenerates an identical file */
 	entities: ManifestEntity[]
@@ -261,7 +261,7 @@ function toEntity(table: TableMeta, dialect: GeneratorContext["dialect"], names:
  * Entities are sorted by SQL name so regenerating an unchanged schema produces
  * an identical file regardless of declaration order.
  */
-function buildManifest(tables: TableMeta[], dbName: string, dialect: GeneratorContext["dialect"]): Manifest {
+function buildManifest(tables: TableMeta[], dbName: string, dialect: GeneratorContext["dialect"]): CodegenManifest {
 	const names = entityNames(tables)
 	return {
 		database: dbName,
@@ -279,14 +279,14 @@ function generateManifest(ctx: GeneratorContext, config: ManifestConfig): void {
 	const outputPath = path.resolve(cwd, config.output)
 	const manifest = buildManifest(tables, dbName, ctx.dialect)
 
-	writeGenJsonFile(outputPath, manifest, { generator: "comb", staged: ctx.staged })
+	writeGenJsonFile(outputPath, manifest, { generator: "database", staged: ctx.staged })
 	ctx.log(`  manifest: ${outputPath} (${manifest.entities.length} entities)`)
 }
 
 export {
 	buildManifest,
 	generateManifest,
-	type Manifest,
+	type CodegenManifest,
 	type ManifestColumn,
 	type ManifestConfig,
 	type ManifestEntity,

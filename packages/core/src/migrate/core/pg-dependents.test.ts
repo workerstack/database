@@ -21,7 +21,7 @@ describe("reads", () => {
 })
 
 /* R1 of plan 17: "reads" is what the parse tree names as a relation, never a word in a literal, a column or an alias */
-/** The view `body` defines, as comb owns it */
+/** The view `body` defines, as database owns it */
 const view = (body: string) => separatePgObjects(`CREATE VIEW "v" AS (${body});`).state.objects.get("view v")
 
 describe("reads, from the parse tree", () => {

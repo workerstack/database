@@ -1,14 +1,14 @@
 /**
- * A reader of comb's published field keys that knows only what meta-contract §2.1 defines, as a
- * client, form generator or gateway in another language would implement them. Tests hold comb's own
- * parse to it: whatever comb publishes, a reader applying the keys as written must reach the same
+ * A reader of database's published field keys that knows only what meta-contract §2.1 defines, as a
+ * client, form generator or gateway in another language would implement them. Tests hold database's own
+ * parse to it: whatever database publishes, a reader applying the keys as written must reach the same
  * verdict (C1, C2 of r22).
  */
 import { isCidr } from "../cidr.ts"
 import { FORMATS, formatTakes, INTEGER_SPECS, type TextFormat } from "../formats/catalog.ts"
 import { isStorableText } from "../storable-text.ts"
 
-/** Each `x-comb-transform` value as §2.1 defines it */
+/** Each `x-database-transform` value as §2.1 defines it */
 export const CONTRACT_TRANSFORMS: Record<string, (value: string) => string> = {
 	lowercase: (value) => value.toLowerCase(),
 	nfc: (value) => value.normalize("NFC"),
@@ -18,20 +18,20 @@ export const CONTRACT_TRANSFORMS: Record<string, (value: string) => string> = {
 }
 
 /** The keys a read states without enforcing them, which a reader shows and never applies */
-const STATED = ["x-comb-maxLength", "x-comb-maximum", "x-comb-minLength", "x-comb-minimum"]
+const STATED = ["x-database-maxLength", "x-database-maximum", "x-database-minLength", "x-database-minimum"]
 
 /** Every field key the reader knows */
 export const CONTRACT_KEYS: readonly string[] = [
 	...STATED,
-	"x-comb-cidr",
-	"x-comb-format",
-	"x-comb-maxBytes",
-	"x-comb-maxUtf8Bytes",
-	"x-comb-rectangular",
-	"x-comb-schema",
-	"x-comb-text",
-	"x-comb-transform",
-	"x-comb-url",
+	"x-database-cidr",
+	"x-database-format",
+	"x-database-maxBytes",
+	"x-database-maxUtf8Bytes",
+	"x-database-rectangular",
+	"x-database-schema",
+	"x-database-text",
+	"x-database-transform",
+	"x-database-url",
 ]
 
 const utf8 = (value: string): number => new TextEncoder().encode(value).length
@@ -66,40 +66,40 @@ type Schema = Record<string, unknown>
 
 /** Whether `value` as sent, before any rewrite, keeps to the keys that bind its JSON text and its shape */
 function takesSent(schema: Schema, value: unknown): boolean {
-	const jsonBytes = schema["x-comb-maxBytes"]
+	const jsonBytes = schema["x-database-maxBytes"]
 	if (typeof jsonBytes === "number" && utf8(JSON.stringify(value)) > jsonBytes) return false
-	return schema["x-comb-rectangular"] === undefined || !Array.isArray(value) || isRectangular(value)
+	return schema["x-database-rectangular"] === undefined || !Array.isArray(value) || isRectangular(value)
 }
 
 /** Whether a string `value` keeps to the keys and bounds that bind it, its transforms applied first */
 function takesText(schema: Schema, value: string): boolean {
-	if (schema["x-comb-cidr"] !== undefined && !isCidr(value)) return false
-	const rewritten = ((schema["x-comb-transform"] ?? []) as string[]).reduce((text, name) => {
+	if (schema["x-database-cidr"] !== undefined && !isCidr(value)) return false
+	const rewritten = ((schema["x-database-transform"] ?? []) as string[]).reduce((text, name) => {
 		const transform = CONTRACT_TRANSFORMS[name]
 		if (transform === undefined) throw new Error(`the contract defines no transform ${name}`)
 		return transform(text)
 	}, value)
-	return (schema["x-comb-url"] === undefined || URL.canParse(rewritten)) && takesRewritten(schema, rewritten)
+	return (schema["x-database-url"] === undefined || URL.canParse(rewritten)) && takesRewritten(schema, rewritten)
 }
 
 /** Whether a string, its transforms applied, keeps to the keys and bounds that bind the stored value */
 function takesRewritten(schema: Schema, rewritten: string): boolean {
 	const points = [...rewritten].length
-	if (schema["x-comb-text"] !== undefined && !isStorableText(rewritten)) return false
-	const format = schema["x-comb-format"]
+	if (schema["x-database-text"] !== undefined && !isStorableText(rewritten)) return false
+	const format = schema["x-database-format"]
 	if (typeof format === "string" && !takesFormat(format, rewritten)) return false
 	if (typeof schema["minLength"] === "number" && points < schema["minLength"]) return false
 	if (typeof schema["maxLength"] === "number" && points > schema["maxLength"]) return false
-	const textBytes = schema["x-comb-maxUtf8Bytes"]
+	const textBytes = schema["x-database-maxUtf8Bytes"]
 	return typeof textBytes !== "number" || utf8(rewritten) <= textBytes
 }
 
 /**
  * Whether a reader of the published `schema` takes `value`, applying its length bounds and its
- * `x-comb-*` keys as §2.1 defines them; a key it does not know throws, as a strict reader refuses one
+ * `x-database-*` keys as §2.1 defines them; a key it does not know throws, as a strict reader refuses one
  */
 export function contractReader(schema: Schema, value: unknown): boolean {
 	for (const key of Object.keys(schema))
-		if (key.startsWith("x-comb-") && !CONTRACT_KEYS.includes(key)) throw new Error(`the contract defines no ${key}`)
+		if (key.startsWith("x-database-") && !CONTRACT_KEYS.includes(key)) throw new Error(`the contract defines no ${key}`)
 	return takesSent(schema, value) && (typeof value !== "string" || takesText(schema, value))
 }

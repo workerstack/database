@@ -1,9 +1,9 @@
 /**
- * The replay's transactions and the reads around them (pg-replay.ts): a file's or comb's own
+ * The replay's transactions and the reads around them (pg-replay.ts): a file's or database's own
  * statement's transaction, refused before its COMMIT when this backend's counts show it wrote past
  * its database, and the server's shared catalogs read as committed around it and around
  * every bare statement, a change there the file's when it is to the replay's own database, or to an
- * object the file names beside a statement that can run code comb cannot read;
+ * object the file names beside a statement that can run code database cannot read;
  * a `txmode none` file's statement in a transaction of its own first, bare only when
  * Postgres runs it outside a block alone.
  */
@@ -22,7 +22,7 @@ import {
 import { ReplayFailed } from "./replay-failed.ts"
 
 /**
- * A transaction opened on the replay's connection, its counts so far taken as comb's own: a backend
+ * A transaction opened on the replay's connection, its counts so far taken as database's own: a backend
  * keeps a committed transaction's counts in the next one's read until it flushes them, which it
  * never does inside a transaction
  */
@@ -34,7 +34,7 @@ async function begin(run: Run): Promise<void> {
 
 /**
  * Where a replayed transaction or bare statement is: its file's name and the names it spells, what
- * its statements so far can run that comb cannot read (`hidden`), the statement, if bare, and what a
+ * its statements so far can run that database cannot read (`hidden`), the statement, if bare, and what a
  * refusal stops; told each role the transaction adds that the replay adopts
  */
 type At = {
@@ -60,7 +60,7 @@ function spelled(run: Run, names: ReadonlySet<string>): Set<string> {
  * The server's shared catalogs read as committed against the last read: a change since to the
  * replay's own database, or to what it holds, is the file's, as only this replay runs in it, and the
  * cleanup drops it. A change to an object the file names is the file's when its statements so far
- * can run code comb cannot read (pg-replay-hidden.ts), the one way a change past the database gets by
+ * can run code database cannot read (pg-replay-hidden.ts), the one way a change past the database gets by
  * the counts, and is refused, but no cleanup drops it: Postgres keeps no creator for a role or a
  * database, and another session may have made it. A change to any other object, or beside statements
  * that run only what their parse says, is another session's. `read` is that read when the caller took it
@@ -70,13 +70,13 @@ async function window(run: Run, at: At, read?: Snapshot): Promise<void> {
 	strayed(run, { ...at, hid: await hides(run, at, now) }, now)
 }
 
-/* whether a change in `now` to an object the file names may be the file's, as its statements can run code comb cannot read */
+/* whether a change in `now` to an object the file names may be the file's, as its statements can run code database cannot read */
 const hides = (run: Run, { hidden, names }: At, now: Snapshot): boolean | Promise<boolean> =>
 	snapshotChanges(run.seen, now, spelled(run, names)).length > 0 && runsHidden(run.sql, hidden)
 
 /**
  * window's verdict on `now`, the server's shared catalogs as committed after the file or `sent`,
- * against the last read, the objects the file names counted when it `hid` code comb cannot read;
+ * against the last read, the objects the file names counted when it `hid` code database cannot read;
  * kept apart from window's await, as v8 miscounts a branch after an await
  */
 function strayed(run: Run, { hid, name, names, sent, stops }: At & { hid: boolean }, now: Snapshot): void {
@@ -88,15 +88,15 @@ function strayed(run: Run, { hid, name, names, sent, stops }: At & { hid: boolea
 	if (changes.length === 0) return
 	const dropped =
 		own.size > 0
-			? `; comb drops the database it replays in${within.length === 0 ? "" : `, and ${within.join(", ")} in it`}`
+			? `; database drops the database it replays in${within.length === 0 ? "" : `, and ${within.join(", ")} in it`}`
 			: ""
 	const kept = changes.filter((change) => !own.has(change))
 	const left =
 		kept.length === 0
 			? ""
-			: `; comb leaves ${kept.join(", ")} on devUrl's server, as another session may have made ${kept.length === 1 ? "that change" : "those changes"}: undo there each that is the file's`
+			: `; database leaves ${kept.join(", ")} on devUrl's server, as another session may have made ${kept.length === 1 ? "that change" : "those changes"}: undo there each that is the file's`
 	throw new ReplayFailed(
-		`${name}: devUrl's server changed past the database the replay runs in while ${sent === undefined ? "the file" : JSON.stringify(sent)} ran: ${changes.join(", ")}. A change made there, from inside a DO block, a function, EXECUTE or CALL, or over a second connection such as dblink's, apply would make on the target's server, so comb refuses the file; write the change as a statement of its own, which the replay leaves out and apply runs${dropped}${left}; ${stops}`,
+		`${name}: devUrl's server changed past the database the replay runs in while ${sent === undefined ? "the file" : JSON.stringify(sent)} ran: ${changes.join(", ")}. A change made there, from inside a DO block, a function, EXECUTE or CALL, or over a second connection such as dblink's, apply would make on the target's server, so database refuses the file; write the change as a statement of its own, which the replay leaves out and apply runs${dropped}${left}; ${stops}`,
 	)
 }
 
@@ -151,7 +151,7 @@ async function commit(run: Run, at: At): Promise<void> {
 	/* a superuser's file can turn the counts off for its transaction or its session */
 	if (!now.on)
 		throw new ReplayFailed(
-			`${name}: the file turned track_counts off, so devUrl's server counted nothing it changed past the database the replay runs in, and comb rolled it back and refuses the file; leave track_counts on; ${stops}`,
+			`${name}: the file turned track_counts off, so devUrl's server counted nothing it changed past the database the replay runs in, and database rolled it back and refuses the file; leave track_counts on; ${stops}`,
 		)
 	const counted = writesSince(now.writes, run.ours.writes)
 	const byCatalog =
@@ -164,7 +164,7 @@ async function commit(run: Run, at: At): Promise<void> {
 	if (changes.length > 0) {
 		const by = sent === undefined ? "" : `, made by ${JSON.stringify(sent)}`
 		throw new ReplayFailed(
-			`${name}: devUrl's server counted a change past the database the replay runs in${by}: ${changes.join(", ")}. It came from inside a statement the replay cannot leave out (a DO block, a function, EXECUTE or CALL), and apply would make it on the target's server, so comb rolled it back and refuses the file. A role such a statement adds, and a change to a role the replay made, are the replay's own, as it drops them after; for any other change, write it as a statement of its own: the replay leaves out one that reaches past its database, and apply runs it, while a CREATE ROLE runs in the replay, the role made bare; ${stops}`,
+			`${name}: devUrl's server counted a change past the database the replay runs in${by}: ${changes.join(", ")}. It came from inside a statement the replay cannot leave out (a DO block, a function, EXECUTE or CALL), and apply would make it on the target's server, so database rolled it back and refuses the file. A role such a statement adds, and a change to a role the replay made, are the replay's own, as it drops them after; for any other change, write it as a statement of its own: the replay leaves out one that reaches past its database, and apply runs it, while a CREATE ROLE runs in the replay, the role made bare; ${stops}`,
 		)
 	}
 	await bareAgain(run, touchedRoles(roles, byCatalog.get("pg_authid")))

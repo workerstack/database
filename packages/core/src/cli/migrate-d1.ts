@@ -1,6 +1,6 @@
 /**
- * `comb migrate apply`, `check`, `baseline` and `status` on a D1 database: comb checks, wrangler
- * applies and records (migrate/core/d1-history.ts). The database comes from comb.migrate.config.ts
+ * `database migrate apply`, `check`, `baseline` and `status` on a D1 database: database checks, wrangler
+ * applies and records (migrate/core/d1-history.ts). The database comes from database.migrate.config.ts
  * (its wrangler config and environment with it), or, in a project without one, is the binding the
  * command names in the wrangler config of the working folder.
  */
@@ -22,18 +22,20 @@ type D1Mode = "apply" | "baseline" | "check" | "status"
 /** One D1 command: what it was asked, and where it reports */
 type D1Request = { args: ParsedArgs; db: string; io: CliContext; mode: D1Mode }
 
-/** The D1 database comb.migrate.config.ts resolved, or the binding named on the command line */
+/** The D1 database that database.migrate.config.ts resolved, or the binding named on the command line */
 function d1Config(request: D1Request, resolved: MigrateTarget | undefined): { config: D1ProviderConfig; dir: string } {
 	const { args, db, io } = request
 	if (resolved?.provider.type === "d1") {
 		if (args.options["local"] !== undefined)
-			throw new CliError("--local applies without comb.migrate.config.ts; set local: true on its d1 provider")
+			throw new CliError("--local applies without database.migrate.config.ts; set local: true on its d1 provider")
 		const configured = resolved.provider.wranglerConfig
 		const fix = `point ${db}'s d1 provider at its wrangler.json, wrangler.jsonc or wrangler.toml`
 		if (configured !== undefined) refuseNotFile(configured, "wranglerConfig", fix)
 		const wranglerConfig = configured ?? findWranglerConfig(resolved.configDir)
 		if (wranglerConfig === undefined)
-			throw new CliError(`no wrangler config next to comb.migrate.config.ts; set wranglerConfig on ${db}'s d1 provider`)
+			throw new CliError(
+				`no wrangler config next to database.migrate.config.ts; set wranglerConfig on ${db}'s d1 provider`,
+			)
 		return { config: { ...resolved.provider, wranglerConfig }, dir: resolved.migrationsDir }
 	}
 	const wranglerConfig = findWranglerConfig(io.cwd)

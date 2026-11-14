@@ -291,7 +291,7 @@ describe("a customType key's cursor value (AB2 of area B; sibling: QL5's blob)",
 		expect(boundCarried(columns.blobby, "1", true)).toBe("1")
 	})
 
-	/* comb-9d's AB2 ruling: a value as read, one that looks like a number too, binds through the column's toDriver */
+	/* database-9d's AB2 ruling: a value as read, one that looks like a number too, binds through the column's toDriver */
 	it("binds a value as read, a numeric-looking text included, through the mapper on every column", () => {
 		expect(boundCarried(pgItems.a, "12", false)).toBe("12")
 		expect(boundCarried(pgItems.n, "0.1000000000000000001", false)).toBe("0.1000000000000000001")

@@ -13,7 +13,7 @@ import { applyWithAtlas, statusWithAtlas } from "./atlas-apply.ts"
 import { sqlFiles } from "./atlas-dir.ts"
 import type { AtlasRevision, AtlasStatus } from "./atlas-history.ts"
 import type { LiveRead } from "./pg-live-types.ts"
-import type { Run, RunResult } from "./process.ts"
+import type { MigrateRun, RunResult } from "./process.ts"
 import { noLive, replaying } from "../__fixtures__/live-objects.ts"
 import { UNCOMPARED } from "./baseline-compare.ts"
 
@@ -27,7 +27,7 @@ function snapshot(files: Record<string, string>): void {
 	writeFileSync(join(dir, "atlas.sum"), `h1:x=\n${lines.join("\n")}\n`)
 }
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-atlas-adopt-"))
+	dir = mkdtempSync(join(tmpdir(), "database-atlas-adopt-"))
 	snapshot({ "1_a.sql": "SELECT 1;\n", "2_b.sql": "SELECT 2;\n", "3_c.sql": "SELECT 3;\n" })
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
@@ -41,7 +41,7 @@ function hashed(args: readonly string[]): RunResult {
 }
 
 /** Atlas on a database with objects whose own history is empty: every status refused as not clean */
-const notClean: Run = async (_cmd, args) =>
+const notClean: MigrateRun = async (_cmd, args) =>
 	args[1] === "hash"
 		? hashed(args)
 		: {
@@ -90,7 +90,7 @@ describe("sharedPrefix: the files 0.12's shared history ran", () => {
 
 	it("refuses a skipped file, a file run halfway or failed, and a file that changed, naming it", () => {
 		expect(() => sharedPrefix(shared([row("2_b.sql")]), dir)).toThrow(
-			"0.12's shared history records 2_b.sql but not 1_a.sql, which comes before it, so comb cannot tell what ran; record it by hand",
+			"0.12's shared history records 2_b.sql but not 1_a.sql, which comes before it, so database cannot tell what ran; record it by hand",
 		)
 		for (const halfway of [{ applied: 1, total: 2 }, { error: "pq: boom" }])
 			expect(() => sharedPrefix(shared([row("1_a.sql", halfway)]), dir)).toThrow(
@@ -121,7 +121,7 @@ describe("sharedPrefix: the files 0.12's shared history ran", () => {
 describe("adoption: read once, while the schema's own history is empty", () => {
 	it("never reads the shared history once the schema's own records a file", async () => {
 		const histories: string[] = []
-		const exec: Run = async (_cmd, args) => {
+		const exec: MigrateRun = async (_cmd, args) => {
 			if (args[1] === "hash") return hashed(args)
 			const config = readFileSync((args[args.indexOf("--config") + 1] as string).replace("file://", ""), "utf8")
 			histories.push(/revisions_schema = "([^"]+)"/.exec(config)?.[1] ?? "")
@@ -155,7 +155,7 @@ describe("adoption: read once, while the schema's own history is empty", () => {
 
 	it("says nothing is pending when 0.12 ran every file in a schema holding something, and writes nothing", async () => {
 		const calls: string[][] = []
-		const allRan: Run = async (_cmd, args) => {
+		const allRan: MigrateRun = async (_cmd, args) => {
 			calls.push([...args])
 			if (args[1] === "hash") return hashed(args)
 			const config = readFileSync((args[args.indexOf("--config") + 1] as string).replace("file://", ""), "utf8")
@@ -187,7 +187,7 @@ const inspected = (tables: unknown[]): RunResult => ({
 })
 
 /** Atlas on an app schema 0.12's shared history ran 1_a and 2_b for, its own history empty and the schema holding nothing */
-const sharingPublic: Run = async (_cmd, args) => {
+const sharingPublic: MigrateRun = async (_cmd, args) => {
 	if (args[1] === "hash") return hashed(args)
 	if (args[1] === "inspect") return inspected([])
 	const config = readFileSync((args[args.indexOf("--config") + 1] as string).replace("file://", ""), "utf8")
@@ -245,12 +245,12 @@ const noObjects: LiveRead = async () => ({
 
 /** atlas, its schema diff answering `stdout` and `stderr` */
 const diffing =
-	(stdout: string, stderr = ""): Run =>
+	(stdout: string, stderr = ""): MigrateRun =>
 	async (_cmd, args) =>
 		args[0] === "schema" ? { code: 0, stderr, stdout } : { code: 0, stderr: "", stdout: "" }
 
 /** atlas, its schema diff failing to reach the dev database */
-const unreachable: Run = async (_cmd, args) =>
+const unreachable: MigrateRun = async (_cmd, args) =>
 	args[0] === "schema"
 		? { code: 1, stderr: "Error: dial tcp: lookup dev: no such host", stdout: "" }
 		: { code: 0, stderr: "", stdout: "" }
@@ -261,7 +261,7 @@ const fakes = { readLive: noObjects, readReplay: replaying(noObjects), readyDev:
 
 describe("proveAdoption", () => {
 	it("passes a schema that holds what the files leave, passing Atlas's notices on", async () => {
-		const copy = mkdtempSync(join(tmpdir(), "comb-prove-"))
+		const copy = mkdtempSync(join(tmpdir(), "database-prove-"))
 		writeFileSync(join(copy, "1_a.sql"), 'CREATE TABLE "a" ("id" integer);\n')
 		const out: string[] = []
 		const exec = diffing("Schemas are synced, no changes to be made.", "views are not inspected")
@@ -289,7 +289,7 @@ describe("proveAdoption", () => {
 
 describe("proveAdoption: what it refuses", () => {
 	it("refuses, naming devUrl, when Atlas cannot replay the files on the dev database", async () => {
-		const copy = mkdtempSync(join(tmpdir(), "comb-prove-"))
+		const copy = mkdtempSync(join(tmpdir(), "database-prove-"))
 		writeFileSync(join(copy, "1_a.sql"), 'CREATE TABLE "a" ("id" integer);\n')
 		await expect(
 			proveAdoption(
@@ -309,7 +309,7 @@ describe("proveAdoption: what it refuses", () => {
 	})
 
 	it("refuses one that does not, naming the schema and the files, with the difference", async () => {
-		const copy = mkdtempSync(join(tmpdir(), "comb-prove-"))
+		const copy = mkdtempSync(join(tmpdir(), "database-prove-"))
 		writeFileSync(join(copy, "1_a.sql"), 'CREATE TABLE "a" ("id" integer);\n')
 		const exec = diffing('-- Create "a" table\nCREATE TABLE "a" ("id" integer);')
 		await expect(
@@ -324,7 +324,7 @@ describe("proveAdoption: what it refuses", () => {
 				["1_a.sql"],
 			),
 		).rejects.toThrow(
-			"app does not hold what 0.12's shared history ran (1_a.sql), so comb adopts none of it; the difference:\n-- Create",
+			"app does not hold what 0.12's shared history ran (1_a.sql), so database adopts none of it; the difference:\n-- Create",
 		)
 		rmSync(copy, { force: true, recursive: true })
 	})

@@ -384,7 +384,7 @@ describe("a key read exactly carries no text (AB1; sibling: QL3's carriage)", ()
 			const rows = await (built.where === undefined ? query : query.where(built.where))
 				.orderBy(...built.orderBy)
 				.limit(built.limit)
-			texts.push(...rows.map((row) => (row as Record<string, unknown>)["_combKeyTexts"]))
+			texts.push(...rows.map((row) => (row as Record<string, unknown>)["_cursorKeyTexts"]))
 			const [items, meta] = queryHelpers.paginate(rows, built)
 			ids.push(...items.map((row) => row.id))
 			if (meta.nextCursor === null) break

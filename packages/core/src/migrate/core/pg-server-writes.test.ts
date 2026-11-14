@@ -75,7 +75,7 @@ const none = (): boolean => false
 const own = ({ fields, subject }: Change): boolean => subject === "role kept" && fields.includes("rolconnlimit")
 
 describe("namedChanges", () => {
-	it("names each row added, removed or changed, leaves out comb's own, and names a write it cannot see", async () => {
+	it("names each row added, removed or changed, leaves out database's own, and names a write it cannot see", async () => {
 		const was = server({
 			pg_database: [["app", { datname: "app" }]],
 			pg_roles: [
@@ -91,7 +91,7 @@ describe("namedChanges", () => {
 				["new", { rolconnlimit: -1 }],
 			],
 		})
-		/* a shared catalog a later Postgres adds, which comb has no read of */
+		/* a shared catalog a later Postgres adds, which database has no read of */
 		const counted = new Map([
 			["pg_future", 1],
 			["pg_database", 1],
@@ -137,7 +137,7 @@ describe("refusedChanges of the replay's own", () => {
 })
 
 describe("subjectRows", () => {
-	it("keeps the rows the subjects name, of the catalogs written, skipping one comb has no read of", async () => {
+	it("keeps the rows the subjects name, of the catalogs written, skipping one database has no read of", async () => {
 		const sql = server({
 			pg_roles: [
 				["mine", { rolconnlimit: -1 }],

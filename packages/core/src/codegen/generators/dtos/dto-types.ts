@@ -1,5 +1,5 @@
 /** Types the DTO generator's modules share. */
-import type { CombEntityMetaInput } from "../../../meta.ts"
+import type { EntityMetaInput } from "../../../meta.ts"
 
 export type SchemaType = "read" | "readPartial" | "create" | "update"
 
@@ -16,7 +16,7 @@ export type FieldInfo = {
 
 export type TableInfo = {
 	/** Entity facts stamped on the read schema; null when there is no single identity */
-	combMeta: CombEntityMetaInput | null
+	databaseMeta: EntityMetaInput | null
 	fields: FieldInfo[]
 	hasTimestamps: {
 		createdAt: boolean

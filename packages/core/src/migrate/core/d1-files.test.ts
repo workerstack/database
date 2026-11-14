@@ -6,7 +6,7 @@ import { d1Files, refuseSwallowing } from "./d1-files.ts"
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-d1-files-"))
+	dir = mkdtempSync(join(tmpdir(), "database-d1-files-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 

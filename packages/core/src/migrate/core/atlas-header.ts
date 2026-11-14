@@ -1,5 +1,5 @@
 /**
- * A migration file's header as Atlas reads it, the one reader of it in comb: the run
+ * A migration file's header as Atlas reads it, the one reader of it in database: the run
  * of comment lines, `--` or `#`, that opens the file, closed by a line empty once spaces and tabs are
  * trimmed, CRLF read as LF; comment lines that run into a statement are that statement's, and no
  * header. A directive is a header line, trimmed, that matches Atlas's own pattern, `atlas:<name>`

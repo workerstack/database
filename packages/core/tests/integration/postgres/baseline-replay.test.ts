@@ -22,7 +22,7 @@ beforeAll(loadPostgresParser)
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-pg-baseline-replay-"))
+	dir = mkdtempSync(join(tmpdir(), "database-pg-baseline-replay-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
@@ -128,18 +128,21 @@ describe("a Postgres baseline of row level security commands combined in one ALT
 })
 
 describe("a Postgres baseline of policy roles as Postgres stores them (P17)", () => {
-	it.each(["TO PUBLIC, comb_r19_p17", "TO comb_r19_p17, comb_r19_p17"])("baselines a policy %s", async (to) => {
-		await withScratchDb((url) =>
-			exec(url, "DO $$ BEGIN CREATE ROLE comb_r19_p17; EXCEPTION WHEN duplicate_object THEN NULL; END $$"),
-		)
-		const sql = `CREATE TABLE t (id int PRIMARY KEY);\nCREATE POLICY p ON t ${to} USING (true);\n`
-		expect(await built([sql])).toBeUndefined()
-	})
+	it.each(["TO PUBLIC, database_r19_p17", "TO database_r19_p17, database_r19_p17"])(
+		"baselines a policy %s",
+		async (to) => {
+			await withScratchDb((url) =>
+				exec(url, "DO $$ BEGIN CREATE ROLE database_r19_p17; EXCEPTION WHEN duplicate_object THEN NULL; END $$"),
+			)
+			const sql = `CREATE TABLE t (id int PRIMARY KEY);\nCREATE POLICY p ON t ${to} USING (true);\n`
+			expect(await built([sql])).toBeUndefined()
+		},
+	)
 })
 
 describe("a Postgres baseline whose dev database is reached as another role (reviewer's addition A)", () => {
 	it("maps dev's role onto the target's, so a policy TO CURRENT_USER baselines", async () => {
-		const role = "comb_r19_dev"
+		const role = "database_r19_dev"
 		await withScratchDb((dev) =>
 			withScratchDb(async (url) => {
 				/* the role logs in with the URL's own password: CI's server checks passwords, a trust server ignores it;
@@ -198,7 +201,7 @@ describe("a Postgres baseline whose replay fails on the dev database", () => {
 /** Atlas's answer for tables alike, so its own container stays unreached */
 const synced = async () => ({ code: 0, stderr: "", stdout: "Schemas are synced, no changes to be made.\n" })
 
-/* R1 of stack 2: the gate that skips comb's replay for a docker:// dev must miss nothing the catalog read compares */
+/* R1 of stack 2: the gate that skips database's replay for a docker:// dev must miss nothing the catalog read compares */
 describe("a Postgres baseline's gate on a docker:// dev database", () => {
 	const DO_FUNCTION = "DO $$ BEGIN EXECUTE 'CREATE FUNCTION f() RETURNS int LANGUAGE sql AS ''select 1'''; END $$;\n"
 
@@ -207,7 +210,7 @@ describe("a Postgres baseline's gate on a docker:// dev database", () => {
 			await exec(url, DO_FUNCTION)
 			return baseline(url, "docker://postgres/17/dev", [DO_FUNCTION])
 		})
-		expect(refused).toMatch(/docker:\/\/postgres\/17\/dev is Atlas's own container, which comb cannot reach/)
+		expect(refused).toMatch(/docker:\/\/postgres\/17\/dev is Atlas's own container, which database cannot reach/)
 		expect(await built([DO_FUNCTION])).toBeUndefined()
 	})
 
@@ -243,7 +246,7 @@ describe("a Postgres baseline of a history that changes the server from inside a
 				const held = await heldRole(pre)
 				await withScratchDb((devUrl) =>
 					withScratchDb(async (url) => {
-						const refused = await baseline(url, as(devUrl), [`-- comb:allow-unsafe: the test's change\n${sql}`])
+						const refused = await baseline(url, as(devUrl), [`-- database:allow-unsafe: the test's change\n${sql}`])
 						expect(refused).toContain(`20260101000000_f.sql: devUrl's server counted a change past the database`)
 						expect(refused).toContain(change)
 						expect(
@@ -279,13 +282,13 @@ describe("a Postgres baseline of a txmode none file that commits per batch (P1 o
 })
 
 /*
- * Leaf 16.3 (b) of plan 21, migrate-pg_h-x-do-where of the G1 after-run: comb's replay adopts a role
+ * Leaf 16.3 (b) of plan 21, migrate-pg_h-x-do-where of the G1 after-run: database's replay adopts a role
  * a DO block makes and drops it after, and Atlas then replayed the files itself on devUrl, where the
  * DO made its role again, named for the dev database, and nothing dropped it
  */
 describe("a Postgres baseline of a file whose DO block makes a role named for its database (16.3 (b) of plan 21)", () => {
 	it("baselines the target the file built by hand and leaves no role on devUrl's server", async () => {
-		const prefix = unique("comb_t_dow")
+		const prefix = unique("database_t_dow")
 		const like = `SELECT rolname FROM pg_roles WHERE rolname LIKE '${prefix}%'`
 		onTestFinished(async () => dropRoles(...(await query(pgUrl(), like)).map((row) => String(row["rolname"]))))
 		const file = `CREATE TABLE t (id int);\nDO $$ BEGIN EXECUTE format('CREATE ROLE %I', '${prefix}_' || current_database()); END $$;\n`

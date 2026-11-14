@@ -11,12 +11,12 @@ afterEach(temp.clean)
 
 function config(dir: string, core: Record<string, unknown>): void {
 	writeFileSync(
-		join(dir, "comb.config.ts"),
+		join(dir, "database.config.ts"),
 		`export default { databases: { core: ${JSON.stringify({ tables: "./db.core.tables.ts", ...core })} } }\n`,
 	)
 }
 
-describe("comb codegen: config mode", () => {
+describe("database codegen: config mode", () => {
 	it("runs every generator, in order, beside the tables file under the file prefix", async () => {
 		const dir = project()
 		writeTables(dir)
@@ -55,7 +55,7 @@ describe("comb codegen: config mode", () => {
 		})
 		expect(await runCliWithFakes(["codegen"], makeIo(dir))).toBe(0)
 		/* only the run record sits beside the config: every generated file is under output.default */
-		expect(readdirSync(dir).filter((file) => file.includes(".gen."))).toEqual([".comb.codegen.gen.json"])
+		expect(readdirSync(dir).filter((file) => file.includes(".gen."))).toEqual([".database.codegen.gen.json"])
 		const gen = readdirSync(join(dir, "gen"))
 		for (const file of [
 			"db.core.constraints.gen.ts",
@@ -71,8 +71,8 @@ describe("comb codegen: config mode", () => {
 	})
 })
 
-/* Q7 of r18: comb.config.ts's partitions reach the constraint map, on the parent's entry */
-describe("comb codegen: a Postgres database's partitions", () => {
+/* Q7 of r18: database.config.ts's partitions reach the constraint map, on the parent's entry */
+describe("database codegen: a Postgres database's partitions", () => {
 	it("writes each on its parent's entry in the constraint map", async () => {
 		const dir = project()
 		writeFileSync(
@@ -87,7 +87,7 @@ describe("comb codegen: a Postgres database's partitions", () => {
 	})
 })
 
-describe("comb codegen: config mode names", () => {
+describe("database codegen: config mode names", () => {
 	it("names the database as the config does, whatever its tables file is called", async () => {
 		const dir = project()
 		writeTables(dir, "schema.tables.ts")
@@ -99,7 +99,7 @@ describe("comb codegen: config mode names", () => {
 	})
 })
 
-describe("comb codegen: config mode generator selection", () => {
+describe("database codegen: config mode generator selection", () => {
 	it("honors the config's generators, output overrides, and -g for one generator", async () => {
 		const dir = project()
 		writeTables(dir)
@@ -107,8 +107,8 @@ describe("comb codegen: config mode generator selection", () => {
 		expect(await runCliWithFakes(["codegen", "core"], makeIo(dir))).toBe(0)
 		/* orm without a driver, and fts without a config, write nothing */
 		expect(readdirSync(dir).sort()).toEqual([
-			".comb.codegen.gen.json",
-			"comb.config.ts",
+			".database.codegen.gen.json",
+			"database.config.ts",
 			"db.core.manifest.gen.json",
 			"db.core.tables.ts",
 			"out",
@@ -119,8 +119,8 @@ describe("comb codegen: config mode generator selection", () => {
 		config(one, {})
 		expect(await runCliWithFakes(["codegen", "-g", "manifest"], makeIo(one))).toBe(0)
 		expect(readdirSync(one).sort()).toEqual([
-			".comb.codegen.gen.json",
-			"comb.config.ts",
+			".database.codegen.gen.json",
+			"database.config.ts",
 			"db.core.manifest.gen.json",
 			"db.core.tables.ts",
 		])
@@ -135,11 +135,11 @@ describe("comb codegen: config mode generator selection", () => {
 	})
 })
 
-describe("comb codegen: config mode errors", () => {
-	it("reports a missing comb.config.ts in config mode", async () => {
+describe("database codegen: config mode errors", () => {
+	it("reports a missing database.config.ts in config mode", async () => {
 		const io = makeIo(project())
 		expect(await runCliWithFakes(["codegen"], io)).toBe(1)
-		expect(io.errors).toEqual(["No comb.config.ts found. Create one or use --tables <path> for direct mode."])
+		expect(io.errors).toEqual(["No database.config.ts found. Create one or use --tables <path> for direct mode."])
 	})
 
 	it("refuses a database the config does not declare", async () => {
@@ -147,11 +147,11 @@ describe("comb codegen: config mode errors", () => {
 		config(dir, {})
 		const io = makeIo(dir)
 		expect(await runCliWithFakes(["codegen", "blog"], io)).toBe(1)
-		expect(io.errors).toEqual(['comb.config.ts declares no database "blog". Available: core'])
+		expect(io.errors).toEqual(['database.config.ts declares no database "blog". Available: core'])
 	})
 })
 
-describe("comb codegen: direct mode", () => {
+describe("database codegen: direct mode", () => {
 	it("runs the direct generators beside the tables file, named after the analyzed database", async () => {
 		const dir = project()
 		writeTables(dir)
@@ -173,7 +173,7 @@ describe("comb codegen: direct mode", () => {
 		const before = readdirSync(dir)
 		const io = makeIo(dir)
 		expect(await runCliWithFakes(argv, io)).toBe(1)
-		expect(io.errors).toEqual(["Usage: comb codegen --tables <path> [-g <name>]"])
+		expect(io.errors).toEqual(["Usage: database codegen --tables <path> [-g <name>]"])
 		expect(readdirSync(dir)).toEqual(before)
 	})
 
@@ -208,7 +208,7 @@ describe("comb codegen: direct mode", () => {
 	})
 })
 
-describe("comb codegen: arguments", () => {
+describe("database codegen: arguments", () => {
 	it("refuses -g without a generator, an unknown generator and an unknown option (S-13)", async () => {
 		const dir = project()
 		writeTables(dir, "t.ts")
@@ -240,7 +240,7 @@ function filesUnder(dir: string, base = dir): string[] {
 		.sort()
 }
 
-describe("comb codegen: what a run leaves on disk (F12, F19)", () => {
+describe("database codegen: what a run leaves on disk (F12, F19)", () => {
 	it("writes nothing when a table fails, so the output is the last good run's or none (F19)", async () => {
 		const dir = project()
 		config(dir, { output: { default: "./gen" } })
@@ -264,7 +264,7 @@ describe("comb codegen: what a run leaves on disk (F12, F19)", () => {
 		)
 		const both =
 			'{ a: { tables: "./a.tables.ts", output: { default: "./gen/a" } }, b: { tables: "./b.tables.ts", output: { default: "./gen/b" } } }'
-		writeFileSync(join(dir, "comb.config.ts"), `export default { databases: ${both} }\n`)
+		writeFileSync(join(dir, "database.config.ts"), `export default { databases: ${both} }\n`)
 		const io = makeIo(dir)
 		expect(await runCliWithFakes(["codegen"], io)).toBe(1)
 		/* each database's header, which stays true (AD3 of the area D review), and nothing it generated */
@@ -300,8 +300,8 @@ describe("comb codegen: what a run leaves on disk (F12, F19)", () => {
 	})
 })
 
-describe("comb codegen: the dialect of a tables file", () => {
-	it("reads Postgres from comb's pg columns when the config names no dialect", async () => {
+describe("database codegen: the dialect of a tables file", () => {
+	it("reads Postgres from database's pg columns when the config names no dialect", async () => {
 		const dir = project()
 		config(dir, { generators: ["enum-checks"] })
 		writeFileSync(
@@ -313,7 +313,7 @@ describe("comb codegen: the dialect of a tables file", () => {
 	})
 })
 
-describe("comb codegen: a config dialect the tables contradict (F18)", () => {
+describe("database codegen: a config dialect the tables contradict (F18)", () => {
 	it("fails naming both, rather than generate SQLite code for Postgres tables", async () => {
 		const dir = project()
 		config(dir, { dialect: "sqlite", generators: ["enum-checks"] })
@@ -324,22 +324,25 @@ describe("comb codegen: a config dialect the tables contradict (F18)", () => {
 		const io = makeIo(dir)
 		expect(await runCliWithFakes(["codegen"], io)).toBe(1)
 		expect(io.errors.join("\n")).toMatch(
-			/core: comb\.config\.ts says dialect sqlite, but db\.core\.tables\.ts declares postgres tables/,
+			/core: database\.config\.ts says dialect sqlite, but db\.core\.tables\.ts declares postgres tables/,
 		)
 		expect(existsSync(join(dir, "db.core.enum-checks.gen.ts"))).toBe(false)
 	})
 })
 
 /* the 0.12 review's F26: a database named twice ran twice into one staged map, and its record emptied */
-describe("comb codegen: a database named twice (F26)", () => {
+describe("database codegen: a database named twice (F26)", () => {
 	it("runs it once, so its record still lists every file it writes", async () => {
 		const dir = project()
 		writeTables(dir)
 		config(dir, {})
 		expect(await runCliWithFakes(["codegen"], makeIo(dir))).toBe(0)
 		const entries = () =>
-			(JSON.parse(readFileSync(join(dir, ".comb.codegen.gen.json"), "utf8")) as { databases: Record<string, string[]> })
-				.databases["core"]?.length
+			(
+				JSON.parse(readFileSync(join(dir, ".database.codegen.gen.json"), "utf8")) as {
+					databases: Record<string, string[]>
+				}
+			).databases["core"]?.length
 		const before = entries()
 		const io = makeIo(dir)
 		expect(await runCliWithFakes(["codegen", "core", "core"], io)).toBe(0)
@@ -349,7 +352,7 @@ describe("comb codegen: a database named twice (F26)", () => {
 })
 
 /* the 0.12 review's F32: -g named a generator the run does not run, and it exited 0, writing nothing */
-describe("comb codegen: -g for a generator no database runs (F32)", () => {
+describe("database codegen: -g for a generator no database runs (F32)", () => {
 	it("refuses it, naming the generators the run does run", async () => {
 		const dir = project()
 		const tables = writeTables(dir)
@@ -384,7 +387,7 @@ function warnedPair(dir: string, shared = false): void {
 	const own = (name: string) =>
 		shared ? { filePrefix: "app", output: { default: "./gen" } } : { output: { default: `./gen/${name}` } }
 	const databases = { a: { ...own("a"), tables: "./a.tables.ts" }, b: { ...own("b"), tables: "./b.tables.ts" } }
-	writeFileSync(join(dir, "comb.config.ts"), `export default { databases: ${JSON.stringify(databases)} }\n`)
+	writeFileSync(join(dir, "database.config.ts"), `export default { databases: ${JSON.stringify(databases)} }\n`)
 }
 
 /** A "Codegen: <db>" header or a warning, as `said` tags it */

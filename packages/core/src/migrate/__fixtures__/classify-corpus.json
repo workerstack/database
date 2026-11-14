@@ -614,7 +614,7 @@
 			"options": {
 				"dialect": "sqlite"
 			},
-			"sql": "-- comb:allow-unsafe: needed\nCREATE TABLE z (id INTEGER PRIMARY KEY);\nPRAGMA journal_mode = WAL;"
+			"sql": "-- database:allow-unsafe: needed\nCREATE TABLE z (id INTEGER PRIMARY KEY);\nPRAGMA journal_mode = WAL;"
 		},
 		{
 			"options": {
@@ -662,7 +662,7 @@
 			"options": {
 				"dialect": "sqlite"
 			},
-			"sql": "-- comb:allow-unsafe: bulk load\nPRAGMA locking_mode = EXCLUSIVE;\nCREATE TABLE big (x INTEGER);"
+			"sql": "-- database:allow-unsafe: bulk load\nPRAGMA locking_mode = EXCLUSIVE;\nCREATE TABLE big (x INTEGER);"
 		},
 		{
 			"options": {
@@ -760,14 +760,14 @@
 				"dialect": "sqlite",
 				"kind": "d1"
 			},
-			"sql": "-- comb:allow-unsafe: bulk load\nPRAGMA locking_mode = EXCLUSIVE;\nCREATE TABLE big (x INTEGER);"
+			"sql": "-- database:allow-unsafe: bulk load\nPRAGMA locking_mode = EXCLUSIVE;\nCREATE TABLE big (x INTEGER);"
 		},
 		{
 			"options": {
 				"dialect": "sqlite",
 				"kind": "sqld"
 			},
-			"sql": "-- comb:allow-unsafe: bulk load\nPRAGMA locking_mode = EXCLUSIVE;\nCREATE TABLE big (x INTEGER);"
+			"sql": "-- database:allow-unsafe: bulk load\nPRAGMA locking_mode = EXCLUSIVE;\nCREATE TABLE big (x INTEGER);"
 		},
 		{
 			"options": {
@@ -1039,14 +1039,14 @@
 			"options": {
 				"dialect": "sqlite"
 			},
-			"sql": "-- comb:allow-unsafe: needed\nCREATE TABLE z (id INTEGER PRIMARY KEY);\nPRAGMA synchronous = OFF;"
+			"sql": "-- database:allow-unsafe: needed\nCREATE TABLE z (id INTEGER PRIMARY KEY);\nPRAGMA synchronous = OFF;"
 		},
 		{
 			"options": {
 				"dialect": "sqlite",
 				"kind": "d1"
 			},
-			"sql": "-- comb:allow-unsafe: needed\nCREATE TABLE z (id INTEGER PRIMARY KEY);\nPRAGMA synchronous = OFF;"
+			"sql": "-- database:allow-unsafe: needed\nCREATE TABLE z (id INTEGER PRIMARY KEY);\nPRAGMA synchronous = OFF;"
 		},
 		{
 			"options": {
@@ -1122,14 +1122,14 @@
 			"options": {
 				"dialect": "sqlite"
 			},
-			"sql": "-- comb:allow-unsafe: needed\nCREATE TABLE z (id INTEGER PRIMARY KEY);\nPRAGMA main.hard_heap_limit = 0;"
+			"sql": "-- database:allow-unsafe: needed\nCREATE TABLE z (id INTEGER PRIMARY KEY);\nPRAGMA main.hard_heap_limit = 0;"
 		},
 		{
 			"options": {
 				"dialect": "sqlite",
 				"kind": "d1"
 			},
-			"sql": "-- comb:allow-unsafe: needed\nCREATE TABLE z (id INTEGER PRIMARY KEY);\nPRAGMA main.hard_heap_limit = 0;"
+			"sql": "-- database:allow-unsafe: needed\nCREATE TABLE z (id INTEGER PRIMARY KEY);\nPRAGMA main.hard_heap_limit = 0;"
 		},
 		{
 			"options": {
@@ -1501,7 +1501,7 @@
 			"options": {
 				"dialect": "sqlite"
 			},
-			"sql": "-- comb:allow-unsafe: wrapped by hand\nBEGIN TRANSACTION;\nCREATE TABLE z (id INTEGER PRIMARY KEY);\nCOMMIT;"
+			"sql": "-- database:allow-unsafe: wrapped by hand\nBEGIN TRANSACTION;\nCREATE TABLE z (id INTEGER PRIMARY KEY);\nCOMMIT;"
 		},
 		{
 			"before": 3,
@@ -1936,7 +1936,7 @@
 				"dialect": "sqlite",
 				"kind": "sqld"
 			},
-			"sql": "-- comb:allow-unsafe: approved\nCREATE TABLE z (id INTEGER PRIMARY KEY);\nANALYZE;"
+			"sql": "-- database:allow-unsafe: approved\nCREATE TABLE z (id INTEGER PRIMARY KEY);\nANALYZE;"
 		},
 		{
 			"options": {

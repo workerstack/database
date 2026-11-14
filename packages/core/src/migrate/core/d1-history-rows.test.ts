@@ -10,7 +10,7 @@ import { foldedMigrationHash, generateMigrationHash, legacyMigrationHash } from 
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-d1-rows-"))
+	dir = mkdtempSync(join(tmpdir(), "database-d1-rows-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
@@ -47,7 +47,7 @@ describe("readHistory", () => {
 		})
 	})
 
-	it("reads wrangler's names, comb's hashes and intents and the pre-0.8 record, a quote in a name kept", async () => {
+	it("reads wrangler's names, database's hashes and intents and the pre-0.8 record, a quote in a name kept", async () => {
 		const d1 = await target()
 		d1.db.exec(historyTable('my "history"'))
 		d1.db.exec(`INSERT INTO "my ""history""" (name) VALUES ('1_it''s.sql')`)
@@ -66,25 +66,25 @@ describe("readHistory", () => {
 		})
 	})
 
-	/* SL5 of r22: a table comb 0.20 made has no hash_v, so every row of it is unmarked and the first write adds it */
-	it("reads a hash table comb 0.20 made, without hash_v, as unmarked", async () => {
+	/* SL5 of r22: a table database 0.20 made has no hash_v, so every row of it is unmarked and the first write adds it */
+	it("reads a hash table database 0.20 made, without hash_v, as unmarked", async () => {
 		const d1 = await target()
 		d1.db.exec(historyTable("d1_migrations"))
-		d1.db.exec("CREATE TABLE _comb_migration_hashes (name TEXT PRIMARY KEY, hash TEXT NOT NULL)")
-		d1.db.exec("INSERT INTO _comb_migration_hashes (name, hash) VALUES ('1.sql', 'h1')")
+		d1.db.exec("CREATE TABLE _database_migration_hashes (name TEXT PRIMARY KEY, hash TEXT NOT NULL)")
+		d1.db.exec("INSERT INTO _database_migration_hashes (name, hash) VALUES ('1.sql', 'h1')")
 		const history = await readHistory(read, d1, "d1_migrations")
 		expect(history.marks).toBe(false)
 		expect(history.recorded).toEqual(new Map([["1.sql", { hash: "h1", marked: false }]]))
 	})
 
 	/* D1 documents the PRAGMA statement it allows, not a pragma's table-valued function, on a remote database too */
-	it("asks for comb's hash table's columns with PRAGMA table_info", async () => {
+	it("asks for database's hash table's columns with PRAGMA table_info", async () => {
 		const d1 = await target()
-		d1.db.exec("CREATE TABLE _comb_migration_hashes (name TEXT PRIMARY KEY, hash TEXT NOT NULL, hash_v INTEGER)")
+		d1.db.exec("CREATE TABLE _database_migration_hashes (name TEXT PRIMARY KEY, hash TEXT NOT NULL, hash_v INTEGER)")
 		expect((await readHistory(read, d1, "d1_migrations")).marks).toBe(true)
 		const sent = d1.calls.flatMap((call) => call.filter((arg) => arg.startsWith("--command=")))
 		expect(sent.join("\n")).not.toMatch(/pragma_\w+\(/i)
-		expect(sent.join("\n")).toContain("PRAGMA table_info('_comb_migration_hashes')")
+		expect(sent.join("\n")).toContain("PRAGMA table_info('_database_migration_hashes')")
 	})
 })
 
@@ -95,7 +95,7 @@ const marked = (hash: string) => ({ hash, marked: true })
 describe("vouched", () => {
 	const sql = "CREATE TABLE t (a\u00a0b);"
 
-	/* no date tells which comb wrote a row: a 0.20.1 apply on any day records the folded hash, unmarked */
+	/* no date tells which database wrote a row: a 0.20.1 apply on any day records the folded hash, unmarked */
 	it("takes the current hash on any record, and the folded one only on a record hash_v does not mark", () => {
 		expect(vouched(sql, marked(generateMigrationHash(sql)), undefined)).toBe(true)
 		expect(vouched(sql, unmarked(generateMigrationHash(sql)), undefined)).toBe(true)
@@ -103,7 +103,7 @@ describe("vouched", () => {
 		expect(vouched(sql, marked(foldedMigrationHash(sql)), undefined)).toBe(false)
 	})
 
-	it("takes the pre-0.5.0 hash only on an unmarked record where comb's pre-0.8 history holds it", () => {
+	it("takes the pre-0.5.0 hash only on an unmarked record where database's pre-0.8 history holds it", () => {
 		const legacy = legacyMigrationHash("SELECT '/* kept */';")
 		expect(vouched("SELECT '/* kept */';", unmarked(legacy), undefined)).toBe(false)
 		expect(vouched("SELECT '/* kept */';", unmarked(legacy), new Set([legacy]))).toBe(true)
@@ -113,22 +113,22 @@ describe("vouched", () => {
 })
 
 describe("hashStatements", () => {
-	it("makes comb's table before any row, so the hashes can go first in any batch", () => {
+	it("makes database's table before any row, so the hashes can go first in any batch", () => {
 		const rows = [
 			{ hash: "h", marked: true, name: "a.sql" },
 			{ hash: "f", marked: false, name: "b.sql" },
 		]
 		expect(hashStatements(rows, true).map((statement) => statement.sql)).toEqual([
-			"CREATE TABLE IF NOT EXISTS _comb_migration_hashes (name TEXT PRIMARY KEY, hash TEXT NOT NULL, hash_v INTEGER)",
-			"INSERT OR REPLACE INTO _comb_migration_hashes (name, hash, hash_v) VALUES ('a.sql', 'h', 2)",
-			"INSERT OR REPLACE INTO _comb_migration_hashes (name, hash, hash_v) VALUES ('b.sql', 'f', NULL)",
+			"CREATE TABLE IF NOT EXISTS _database_migration_hashes (name TEXT PRIMARY KEY, hash TEXT NOT NULL, hash_v INTEGER)",
+			"INSERT OR REPLACE INTO _database_migration_hashes (name, hash, hash_v) VALUES ('a.sql', 'h', 2)",
+			"INSERT OR REPLACE INTO _database_migration_hashes (name, hash, hash_v) VALUES ('b.sql', 'f', NULL)",
 		])
 	})
 
-	it("gives a table comb 0.20 made hash_v before any row", () => {
+	it("gives a table database 0.20 made hash_v before any row", () => {
 		expect(hashStatements([], false).map((statement) => statement.sql)).toEqual([
-			"CREATE TABLE IF NOT EXISTS _comb_migration_hashes (name TEXT PRIMARY KEY, hash TEXT NOT NULL, hash_v INTEGER)",
-			"ALTER TABLE _comb_migration_hashes ADD COLUMN hash_v INTEGER",
+			"CREATE TABLE IF NOT EXISTS _database_migration_hashes (name TEXT PRIMARY KEY, hash TEXT NOT NULL, hash_v INTEGER)",
+			"ALTER TABLE _database_migration_hashes ADD COLUMN hash_v INTEGER",
 		])
 	})
 })

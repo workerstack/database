@@ -11,7 +11,7 @@ const FILES = {
 	"0001_ev.sql":
 		"CREATE TABLE ev (id INTEGER PRIMARY KEY, begin INTEGER, finish INTEGER);\nCREATE TABLE audit (at INTEGER);\nINSERT INTO ev (begin) VALUES (1);\n",
 	"0002_audit.sql":
-		"-- comb:allow-unsafe: audit every new event\nCREATE TRIGGER ev_audit AFTER INSERT ON ev BEGIN\n  INSERT INTO audit (at) VALUES (new.begin);\nEND;\nALTER TABLE ev ADD COLUMN label TEXT;\nCREATE INDEX ev_label ON ev (label);\nUPDATE ev SET finish = begin + 1 WHERE finish IS NULL;\n",
+		"-- database:allow-unsafe: audit every new event\nCREATE TRIGGER ev_audit AFTER INSERT ON ev BEGIN\n  INSERT INTO audit (at) VALUES (new.begin);\nEND;\nALTER TABLE ev ADD COLUMN label TEXT;\nCREATE INDEX ev_label ON ev (label);\nUPDATE ev SET finish = begin + 1 WHERE finish IS NULL;\n",
 }
 
 describe("a SQLite file splits where SQLite ends a statement (SL2; sibling: libsql's skipped tail)", () => {

@@ -19,15 +19,15 @@ const NUMBER_KINDS: ReadonlySet<string> = /* @__PURE__ */ new Set([
 	"updatedAt",
 ])
 
-/** Whether a column holds numbers: a comb number helper, or a drizzle column whose data type is one */
+/** Whether a column holds numbers: a database number helper, or a drizzle column whose data type is one */
 export const isNumeric = (field: FieldMeta): boolean =>
-	field.combKind === null ? field.dataType.startsWith("number") : NUMBER_KINDS.has(field.combKind)
+	field.databaseKind === null ? field.dataType.startsWith("number") : NUMBER_KINDS.has(field.databaseKind)
 
 /** Whether a number column holds integers: c.integer, c.serialId, or a drizzle integer type */
 export const isInteger = (field: FieldMeta): boolean =>
-	field.combKind === null
+	field.databaseKind === null
 		? field.dataType.startsWith("number int")
-		: field.combKind === "integer" || field.combKind === "serialId"
+		: field.databaseKind === "integer" || field.databaseKind === "serialId"
 
 /* the integer range each column holds: Postgres's int2 and int4, else a JS number's exact range */
 const INT2 = { max: 32767, min: -32768 }
@@ -46,7 +46,8 @@ export const boundCode = (bound: number): string =>
 /** The range an integer column holds, by what the dialect stores it in */
 export function integerRange(field: FieldMeta, dialect: Build["dialect"]): Range {
 	if (dialect === "sqlite") return SAFE
-	if (field.combKind === "integer" || field.combKind === "serialId" || field.dataType === "number int32") return INT4
+	if (field.databaseKind === "integer" || field.databaseKind === "serialId" || field.dataType === "number int32")
+		return INT4
 	return field.dataType === "number int16" ? INT2 : SAFE
 }
 
@@ -83,11 +84,11 @@ export function refuseNoInteger(name: string, annotations: FieldConstraints, ran
 /**
  * The bounds a written number of `field` takes, as numberBase checks them: an integer's
  * and a timestamp's declared bounds clamped to what the column holds, a float's as declared, and
- * none on a boolean or a timestamp comb fills
+ * none on a boolean or a timestamp database fills
  */
 export function numberRules(field: FieldMeta, dialect: Build["dialect"]): { max: number | null; min: number | null } {
 	const { max, min } = declaredBounds(field.constraints)
-	const kind = field.combKind
+	const kind = field.databaseKind
 	if (kind === "boolean" || kind === "createdAt" || kind === "updatedAt" || kind === "deletedAt")
 		return { max: null, min: null }
 	const range = kind === "timestamp" ? SAFE : isInteger(field) ? integerRange(field, dialect) : undefined

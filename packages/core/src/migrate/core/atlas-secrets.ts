@@ -1,5 +1,5 @@
 /**
- * The secrets a Postgres URL holds, masked wherever comb shows text: a URL comb names, a line comb
+ * The secrets a Postgres URL holds, masked wherever database shows text: a URL database names, a line database
  * prints (maskSecrets, only the literal secrets of the URLs it was given), and Atlas's own
  * output (scrubAtlasOutput, which also masks any other URL's password or secret query value).
  */
@@ -59,7 +59,7 @@ function secretsOf(raw: string): string[] {
 const asToken = (secret: string): RegExp =>
 	new RegExp(`(?<![\\p{L}\\p{N}_])${secret.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}_])`, "gu")
 
-/** `text` with every secret of `urls` masked where it stands as a token, the literal strings only: for a line comb prints */
+/** `text` with every secret of `urls` masked where it stands as a token, the literal strings only: for a line database prints */
 function maskSecrets(text: string, urls: readonly string[]): string {
 	const secrets = [...new Set(urls.flatMap(secretsOf))].sort((a, b) => b.length - a.length)
 	let out = text

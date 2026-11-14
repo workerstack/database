@@ -1,6 +1,6 @@
 /**
  * N-S5 of plan 15's rerun: a SQLite baseline on real Atlas. Atlas OSS refuses a trigger or view
- * ("triggers are available to logged-in users only"), so comb hands it the tables and indexes of
+ * ("triggers are available to logged-in users only"), so database hands it the tables and indexes of
  * both sides alone and compares the triggers, views and FTS tables itself (S5): a database whose
  * trigger and view are the history's is in sync, and one whose view differs is named.
  */
@@ -14,7 +14,7 @@ import { run } from "../../../src/migrate/core/process.ts"
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-baseline-objects-"))
+	dir = mkdtempSync(join(tmpdir(), "database-baseline-objects-"))
 	mkdirSync(join(dir, "m"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))

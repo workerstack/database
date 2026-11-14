@@ -115,7 +115,7 @@ CREATE VIEW "published" AS (select "id", "title", "status", "owner" from "post" 
 		const { after, before } = delta("", next)
 		expect(before).toEqual([
 			"CREATE EXTENSION IF NOT EXISTS citext",
-			"DO $comb$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'writer') THEN CREATE ROLE \"writer\"; END IF; END $comb$",
+			"DO $database$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'writer') THEN CREATE ROLE \"writer\"; END IF; END $database$",
 			'ALTER SEQUENCE "public"."counter" INCREMENT BY 3 START WITH 10',
 			'CREATE SEQUENCE "fresh" START WITH 1',
 			'DROP POLICY IF EXISTS "post_owner" ON "post"',
@@ -133,14 +133,14 @@ CREATE VIEW "published" AS (select "id", "title", "status", "owner" from "post" 
 })
 
 describe("wrapAtlasFile", () => {
-	it("puts comb's statements around Atlas's, under Atlas's directives", () => {
+	it("puts database's statements around Atlas's, under Atlas's directives", () => {
 		const file = '-- atlas:txmode none\n\n-- Modify "post" table\nALTER TABLE "post" ADD COLUMN "x" text;\n'
 		expect(wrapAtlasFile(file, { after: ['CREATE VIEW "v" AS (select 1)'], before: ['DROP VIEW IF EXISTS "v"'] })).toBe(
 			'-- atlas:txmode none\n\nDROP VIEW IF EXISTS "v";\n\n-- Modify "post" table\nALTER TABLE "post" ADD COLUMN "x" text;\n\nCREATE VIEW "v" AS (select 1);\n',
 		)
 	})
 
-	it("leaves a file alone when comb adds nothing, and writes comb's part alone when Atlas wrote nothing", () => {
+	it("leaves a file alone when database adds nothing, and writes database's part alone when Atlas wrote nothing", () => {
 		expect(wrapAtlasFile("SELECT 1;\n", { after: [], before: [] })).toBe("SELECT 1;\n")
 		expect(wrapAtlasFile("", { after: ["SELECT 2"], before: ["SELECT 1"] })).toBe("SELECT 1;\n\nSELECT 2;\n")
 	})
@@ -184,14 +184,14 @@ describe("devPrelude", () => {
 		const history = separatePgObjects('CREATE EXTENSION citext;\nCREATE SEQUENCE "public"."n" START WITH 5;').state
 		const next = separatePgObjects('CREATE SEQUENCE "public"."n" START WITH 9;\nCREATE SEQUENCE "m";').state
 		expect(devPrelude(history, next)).toBe(
-			'DO $comb$ BEGIN CREATE EXTENSION IF NOT EXISTS citext; CREATE SEQUENCE IF NOT EXISTS "public"."n"; CREATE SEQUENCE IF NOT EXISTS "m"; END $comb$;\n',
+			'DO $database$ BEGIN CREATE EXTENSION IF NOT EXISTS citext; CREATE SEQUENCE IF NOT EXISTS "public"."n"; CREATE SEQUENCE IF NOT EXISTS "m"; END $database$;\n',
 		)
 		expect(devPrelude(separatePgObjects('CREATE VIEW "v" AS (select 1)').state)).toBe("")
 	})
 })
 
 describe("roles and policies over other tables", () => {
-	it("reads comb's guarded CREATE ROLE back as the role it creates", () => {
+	it("reads database's guarded CREATE ROLE back as the role it creates", () => {
 		const guarded = pgDelta({ atlasSql: "", from: target().state, to: separatePgObjects('CREATE ROLE "w" WITH LOGIN') })
 			.before[0] as string
 		const { objects, state } = separatePgObjects(`${guarded};`)
@@ -230,12 +230,12 @@ describe("separatePgObjects on a statement about a view by another keyword", () 
 		).toHaveLength(1)
 	})
 
-	it("reads ALTER TABLE on a view as ALTER VIEW: a SET kept with it, a RENAME refused as comb's own", () => {
+	it("reads ALTER TABLE on a view as ALTER VIEW: a SET kept with it, a RENAME refused as database's own", () => {
 		const { state } = separatePgObjects(VIEW)
 		expect(separatePgObjects("ALTER TABLE v SET (security_barrier = true);", state).plain).toEqual([])
 		expect(state.objects.get("view v")?.extras).toEqual(["ALTER TABLE v SET (security_barrier = true)"])
 		expect(() => separatePgObjects("ALTER TABLE v RENAME TO w;", state, "1_v.sql")).toThrow(
-			"1_v.sql: ALTER TABLE v RENAME TO w changes an object comb writes itself",
+			"1_v.sql: ALTER TABLE v RENAME TO w changes an object database writes itself",
 		)
 		expect(separatePgObjects("ALTER TABLE t RENAME TO t2;", state).plain).toHaveLength(1)
 	})

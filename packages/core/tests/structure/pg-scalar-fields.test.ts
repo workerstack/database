@@ -24,7 +24,7 @@ function declared(): Map<string, Set<string>> {
 	return kinds
 }
 
-/* location is the parser's byte offset, which comb never reads */
+/* location is the parser's byte offset, which database never reads */
 const SCALARS: ReadonlySet<string> = new Set(
 	[...declared()].filter(([name, kinds]) => name !== "location" && !kinds.has("other")).map(([name]) => name),
 )

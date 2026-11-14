@@ -14,7 +14,7 @@ import { c } from "@workerstack/database/sqlite/columns"
 let tmpDir: string
 
 beforeEach(() => {
-	tmpDir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-gen-constraints-"))
+	tmpDir = fs.mkdtempSync(path.join(fixtureRoot(), "database-gen-constraints-"))
 })
 
 afterEach(() => {

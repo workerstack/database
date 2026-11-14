@@ -25,11 +25,11 @@ describe("roundedKey", () => {
 			expect(roundedKey({ a, b: 1 }, SORT, "derived"), String(a)).toBeUndefined()
 	})
 
-	/* Q1 of r20: SQLite's storage class, which the builder selects as _combKeyTypes, says which number is rounded */
+	/* Q1 of r20: SQLite's storage class, which the builder selects as _cursorKeyTypes, says which number is rounded */
 	it("a REAL past 2^53 is exact, an INTEGER read as a double is rounded", () => {
 		for (const a of [1e20, -(2 ** 60), 2 ** 53, 2 ** 53 + 2])
-			expect(roundedKey({ _combKeyTypes: "real,integer,text", a, b: 1 }, SORT, "derived"), String(a)).toBeUndefined()
-		expect(roundedKey({ _combKeyTypes: "real,integer,text", a: 1e20, b: 2 ** 60 }, SORT, "merged")?.cause).toBe(
+			expect(roundedKey({ _cursorKeyTypes: "real,integer,text", a, b: 1 }, SORT, "derived"), String(a)).toBeUndefined()
+		expect(roundedKey({ _cursorKeyTypes: "real,integer,text", a: 1e20, b: 2 ** 60 }, SORT, "merged")?.cause).toBe(
 			"b 1152921504606846976 is past ±(2^53 − 1), where the driver rounded it: a merged list's integer sort keys must be within ±(2^53 − 1), or be read as bigint",
 		)
 	})
@@ -45,7 +45,7 @@ describe("roundedKey", () => {
 		["sqlite text", "text", REFUSED],
 		["sqlite null", "null", REFUSED],
 	])("under %s (class %s), a number past 2^53 is refused: %s", (_, cls, refusal) => {
-		const cause = roundedKey({ _combKeyTypes: `${cls},real,text`, a: 2 ** 60, b: 1 }, SORT, "derived")?.cause
+		const cause = roundedKey({ _cursorKeyTypes: `${cls},real,text`, a: 2 ** 60, b: 1 }, SORT, "derived")?.cause
 		expect(cause === undefined ? undefined : String(cause).slice(0, REFUSED.length)).toBe(refusal)
 	})
 })
@@ -71,16 +71,16 @@ describe("roundedKey on a fraction under a class no double names (QL3 of r22b; s
 		["sqlite real", "real", false],
 		["postgres float", "float", false],
 	])("under %s (class %s), the fraction 0.1 is refused: %s", (_, cls, refused) => {
-		const error = roundedKey({ _combKeyTypes: `${cls},real,text`, a: 0.1, b: 1 }, SORT, "derived")
+		const error = roundedKey({ _cursorKeyTypes: `${cls},real,text`, a: 0.1, b: 1 }, SORT, "derived")
 		expect(error === undefined ? false : error.cause).toBe(
 			refused
-				? "a 0.1 is a fraction under a type no driver reads exactly as a JS number, so the driver may have rounded it: a derived list has no row to read the exact key back from: sort by a Postgres numeric, whose text comb carries, read the key as a string, or sort by a double precision or real"
+				? "a 0.1 is a fraction under a type no driver reads exactly as a JS number, so the driver may have rounded it: a derived list has no row to read the exact key back from: sort by a Postgres numeric, whose text database carries, read the key as a string, or sort by a double precision or real"
 				: false,
 		)
 	})
 
 	it("passes ±Infinity and NaN under any class, which a double holds exactly", () => {
 		for (const a of [Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NaN])
-			expect(roundedKey({ _combKeyTypes: "fixed,real,text", a, b: 1 }, SORT, "derived"), String(a)).toBeUndefined()
+			expect(roundedKey({ _cursorKeyTypes: "fixed,real,text", a, b: 1 }, SORT, "derived"), String(a)).toBeUndefined()
 	})
 })

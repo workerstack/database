@@ -5,7 +5,7 @@
 import path from "node:path"
 import * as z from "zod"
 import { describe, expect, it } from "vitest"
-import { readCombEntityMeta } from "../../../src/meta.ts"
+import { readEntityMeta } from "../../../src/meta.ts"
 import { codegen, project, read, runCodegen, useProjects } from "../support/codegen-project.ts"
 import { libsqlMemory } from "../support/libsql.ts"
 
@@ -20,7 +20,7 @@ const config = (extra = "") =>
 describe("tables whose generated paths differ only in case (F2)", () => {
 	it("fails, naming both tables, rather than let one's DTOs replace the other's", async () => {
 		const dir = project({
-			"comb.config.ts": config(),
+			"database.config.ts": config(),
 			"src/db/db.core.tables.ts": `${HEAD}export const apiKey = sqliteTable("api_key", { id: c.id("apk") })
 export const apiKEY = sqliteTable("api_key_upper", { id: c.id("apu") })
 `,
@@ -35,7 +35,7 @@ export const apiKEY = sqliteTable("api_key_upper", { id: c.id("apu") })
 describe("a many relation named like a column of its table (F7)", () => {
 	it("fails codegen naming both, rather than rename the relation (0.12's F22)", async () => {
 		const dir = project({
-			"comb.config.ts": config(),
+			"database.config.ts": config(),
 			"src/db/db.core.tables.ts": `${HEAD}export const user = sqliteTable("user", { id: c.id("usr"), posts: c.integer("posts") })
 export const post = sqliteTable("post", { id: c.id("pst"), userId: c.ref("user_id").references(() => user.id) })
 `,
@@ -49,7 +49,7 @@ export const post = sqliteTable("post", { id: c.id("pst"), userId: c.ref("user_i
 describe("drizzle's unique() and a named .unique() (F8)", () => {
 	it("map to their own constraint entries and are published as unique indexes", async () => {
 		const dir = project({
-			"comb.config.ts": config(),
+			"database.config.ts": config(),
 			"src/db/db.core.tables.ts": `${HEAD}export const member = sqliteTable("member", {
 	id: c.id("mem"),
 	orgId: c.text("org_id").notNull(),
@@ -67,7 +67,7 @@ describe("drizzle's unique() and a named .unique() (F8)", () => {
 			string,
 			z.ZodObject
 		>
-		const stamp = readCombEntityMeta(z.toJSONSchema(dtos["memberDtoReadSchema"] as z.ZodObject))
+		const stamp = readEntityMeta(z.toJSONSchema(dtos["memberDtoReadSchema"] as z.ZodObject))
 		expect(stamp?.uniqueIndexes).toEqual(
 			expect.arrayContaining([
 				{ columns: ["handle"], name: "member_handle_uq" },
@@ -80,7 +80,7 @@ describe("drizzle's unique() and a named .unique() (F8)", () => {
 describe("the diagram DDL and relations JSON (F10)", () => {
 	it("quote every identifier and name a key's target by its SQL names, so the DDL runs", async () => {
 		const dir = project({
-			"comb.config.ts": config(),
+			"database.config.ts": config(),
 			"src/db/db.core.tables.ts": `${HEAD}export const customer = sqliteTable("customers", { id: c.id("cus") })
 export const order = sqliteTable("order", { id: c.id("ord"), group: c.text("group").notNull(), buyerId: c.ref("buyer_id").notNull().references(() => customer.id, { onDelete: "cascade" }) })
 `,
@@ -104,7 +104,7 @@ export const order = sqliteTable("order", { id: c.id("ord"), group: c.text("grou
 describe("the FTS metadata map (F11)", () => {
 	it("lists the FTS table's SQL columns, as its SQL does", async () => {
 		const dir = project({
-			"comb.config.ts": config(', fts: { post: { columns: ["title", "bodyText", "body_text"] } }'),
+			"database.config.ts": config(', fts: { post: { columns: ["title", "bodyText", "body_text"] } }'),
 			"src/db/db.core.tables.ts": `${HEAD}export const post = sqliteTable("post", { id: c.id("pst"), title: c.text("title"), bodyText: c.text("body_text") })
 `,
 		})

@@ -7,7 +7,7 @@ import type { D1Database } from "@cloudflare/workers-types"
 import { drizzle } from "drizzle-orm/d1"
 import { Miniflare } from "miniflare"
 import { afterEach, describe, expect, it } from "vitest"
-import { CombError } from "../../../src/error.ts"
+import { DatabaseError } from "../../../src/error.ts"
 import {
 	bigRelations,
 	CREATE,
@@ -73,9 +73,9 @@ describe("keyset pagination over an integer key past 2^53, on D1 (U22)", () => {
 	it("mints no cursor from a tiebreak id past 2^53, naming what reads it exactly", async () => {
 		const database = await d1(IDS)
 		const refused = await viaBuilder(drizzle(database) as never)("n.asc", undefined).catch((error: unknown) => error)
-		expect(refused).toBeInstanceOf(CombError)
-		expect((refused as CombError).errorKey).toBe("sort_not_wired")
-		expect(String((refused as CombError).cause)).toMatch(EXACTLY)
+		expect(refused).toBeInstanceOf(DatabaseError)
+		expect((refused as DatabaseError).errorKey).toBe("sort_not_wired")
+		expect(String((refused as DatabaseError).cause)).toMatch(EXACTLY)
 	})
 })
 

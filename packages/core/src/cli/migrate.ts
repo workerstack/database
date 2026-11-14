@@ -1,9 +1,9 @@
-/** `comb migrate`: init, diff, check, apply, baseline and status. */
+/** `database migrate`: init, diff, check, apply, baseline and status. */
 import fs from "node:fs"
 import path from "node:path"
 import { parseArgs, refuseFurther, usageOf } from "./args.ts"
 import { binOf } from "../migrate/core/optional-peer.ts"
-import { declaredFts, ftsSql } from "./comb-config.ts"
+import { declaredFts, ftsSql } from "./database-config.ts"
 import {
 	checkDialect,
 	DIALECT_NAMES,
@@ -56,14 +56,14 @@ export default defineConfig({
 `
 
 /**
- * The starter files of each dialect, in the order they are written. No atlas.hcl: comb runs Atlas
- * with a config of its own, so a project's would hold a guard no comb command reads
+ * The starter files of each dialect, in the order they are written. No atlas.hcl: database runs Atlas
+ * with a config of its own, so a project's would hold a guard no database command reads
  */
 function starterFiles(dialect: Dialect): ReadonlyArray<readonly [string, string]> {
 	if (dialect === "sqlite") return [["drizzle.config.ts", DRIZZLE_CONFIG]]
 	return [
 		["drizzle.config.ts", PG_DRIZZLE_CONFIG],
-		["comb.migrate.config.ts", PG_MIGRATE_CONFIG],
+		["database.migrate.config.ts", PG_MIGRATE_CONFIG],
 	]
 }
 
@@ -96,8 +96,8 @@ function migrateInit(argv: readonly string[], io: CliContext): void {
 }
 
 /**
- * The next migration for `db`: Atlas's diff of the exported schema, plus what comb writes itself
- * (FTS5 on SQLite, the objects Atlas OSS refuses on Postgres). With comb.migrate.config.ts the
+ * The next migration for `db`: Atlas's diff of the exported schema, plus what database writes itself
+ * (FTS5 on SQLite, the objects Atlas OSS refuses on Postgres). With database.migrate.config.ts the
  * database's dialect, directory and drizzle config come from it; without, it is SQLite in
  * ./atlas-migrations.
  */
@@ -150,7 +150,7 @@ async function runDiff(argv: readonly string[], io: CliContext): Promise<void> {
  */
 async function diffIn(migrationsDir: string, dryRun: boolean, diff: (dir: string) => Promise<void>): Promise<void> {
 	if (!dryRun) return diff(migrationsDir)
-	const { dir: copy, remove: removeCopy } = scratchDir("comb-migrate-dry-run-")
+	const { dir: copy, remove: removeCopy } = scratchDir("database-migrate-dry-run-")
 	try {
 		if (fs.existsSync(migrationsDir)) fs.cpSync(migrationsDir, copy, { recursive: true })
 		await diff(copy)
@@ -177,11 +177,11 @@ function drizzleConfig(configured: string | undefined, cwd: string): string {
 	const found = DRIZZLE_CONFIGS.map((name) => path.join(cwd, name)).find((file) => fs.existsSync(file))
 	if (found !== undefined) return found
 	throw new CliError(
-		`no drizzle config in ${cwd} (drizzle.config.ts, .js, .mjs or .json): run comb migrate init, or set drizzleConfigPath on the database in comb.migrate.config.ts`,
+		`no drizzle config in ${cwd} (drizzle.config.ts, .js, .mjs or .json): run database migrate init, or set drizzleConfigPath on the database in database.migrate.config.ts`,
 	)
 }
 
-/* without comb.migrate.config.ts the migrations are SQLite's, whose diff needs what a D1 one does */
+/* without database.migrate.config.ts the migrations are SQLite's, whose diff needs what a D1 one does */
 const providerOf = (target: MigrateTarget | undefined) => target?.provider.type ?? "d1"
 
 /** What a diff of `db` reads: its Postgres provider if it has one, its drizzle export, the FTS it declares, and its migrations */
@@ -200,24 +200,24 @@ async function diffTarget(db: string, env: string | undefined, io: CliContext) {
 		hint:
 			target === undefined || target.codegen !== target.database
 				? undefined
-				: `Set codegen: "<its comb.config.ts name>" on ${target.database} in comb.migrate.config.ts`,
+				: `Set codegen: "<its database.config.ts name>" on ${target.database} in database.migrate.config.ts`,
 		name: target?.codegen ?? db,
 	}
 	const name = DIALECT_NAMES[exported.dialect]
 	/* the dialect its drizzle config must state */
 	const expected: Expected =
 		target === undefined
-			? { but: "a diff with no comb.migrate.config.ts is SQLite", dialect: "sqlite" }
+			? { but: "a diff with no database.migrate.config.ts is SQLite", dialect: "sqlite" }
 			: {
 					but: `database ${db} is ${name}`,
 					dialect: exported.dialect,
-					otherwise: `, or set drizzleConfigPath on ${db} in comb.migrate.config.ts to a ${name} drizzle config`,
+					otherwise: `, or set drizzleConfigPath on ${db} in database.migrate.config.ts to a ${name} drizzle config`,
 				}
 	return {
 		d1: target?.provider.type === "d1",
 		expected,
 		exported,
-		/* Postgres has no FTS of comb's: its diff never reads comb.config.ts */
+		/* Postgres has no FTS of database's: its diff never reads database.config.ts */
 		fts: pg === undefined ? await declaredFts(io.cwd, codegen) : undefined,
 		migrationsDir: target?.migrationsDir ?? path.resolve(io.cwd, "atlas-migrations"),
 		pg,
@@ -232,7 +232,7 @@ function reportDrift(db: string, files: readonly string[], io: CliContext): neve
 		io.out(`-- ${path.basename(file)}`)
 		io.out(fs.readFileSync(file, "utf8"))
 	}
-	throw new Drifted(`${db} has drifted from its migrations: comb migrate diff ${db} would write the SQL above`)
+	throw new Drifted(`${db} has drifted from its migrations: database migrate diff ${db} would write the SQL above`)
 }
 
 /** A dry run's refusal for drift, which exits 1 */
@@ -249,7 +249,7 @@ async function migrateDiff(argv: readonly string[], io: CliContext): Promise<voi
 		await runDiff(argv, io)
 	} catch (error) {
 		if (error instanceof Drifted || error instanceof ShowHelp) throw error
-		/* an Error: comb throws only Errors, and a config's load wraps whatever the config throws (migrate/config.ts) */
+		/* an Error: database throws only Errors, and a config's load wraps whatever the config throws (migrate/config.ts) */
 		throw new CliError((error as Error).message, 2, { cause: error })
 	}
 }

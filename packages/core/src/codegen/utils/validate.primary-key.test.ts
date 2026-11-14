@@ -12,7 +12,7 @@ describe("validateTables: primary keys the helpers declare", () => {
 	let dir: string
 
 	beforeEach(() => {
-		dir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-validate-pk-"))
+		dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-validate-pk-"))
 	})
 
 	afterEach(() => {
@@ -49,7 +49,7 @@ describe("validateTables: keys, tenants and tables it cannot read", () => {
 	let dir: string
 
 	beforeEach(() => {
-		dir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-validate-keys-"))
+		dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-validate-keys-"))
 	})
 
 	afterEach(() => fs.rmSync(dir, { force: true, recursive: true }))
@@ -100,13 +100,13 @@ export const t = sqliteTable("t", { id: c.id("ttt"), prefs: c.json("prefs", hidd
 			validate(
 				`export const t = sqliteTable("a", { id: c.id("aaa") })\nexport const t = sqliteTable("b", { id: c.id("bbb") })`,
 			),
-		).rejects.toThrow("comb could not load")
+		).rejects.toThrow("database could not load")
 	})
 })
 
 describe("validateTables: composite keys (D2)", () => {
 	it("warns that a table with a composite primary key publishes no entity stamp", async () => {
-		const dir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-validate-composite-"))
+		const dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-validate-composite-"))
 		try {
 			const file = path.join(dir, "db.test.tables.ts")
 			fs.writeFileSync(

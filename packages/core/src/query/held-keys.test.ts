@@ -8,7 +8,7 @@ const SORT: SortField[] = [
 ]
 
 /* AB4-2 of area B: a SQLite key's stored value of a class its mode reads as another, held apart */
-describe("_combTextKeys (AB4-2 of area B; sibling: _combKeyTexts)", () => {
+describe("_cursorTextKeys (AB4-2 of area B; sibling: _cursorKeyTexts)", () => {
 	it("takes a held key per sort key, a class and its text, null or a REAL's unprinted mark, or none", () => {
 		expect(isTextKeys('[["real","0.1"],null]', SORT)).toBe(true)
 		expect(isTextKeys('["!n7.0631582885980606e+300",null]', SORT)).toBe(true)
@@ -18,8 +18,8 @@ describe("_combTextKeys (AB4-2 of area B; sibling: _combKeyTexts)", () => {
 	})
 
 	it("reads each key's held value from the row, and none from a row that holds none", () => {
-		expect(textKeysOf({ _combTextKeys: '[["text","a"],null]' })).toEqual([["text", "a"], null])
-		expect(textKeysOf({ _combTextKeys: "" })).toBeUndefined()
+		expect(textKeysOf({ _cursorTextKeys: '[["text","a"],null]' })).toEqual([["text", "a"], null])
+		expect(textKeysOf({ _cursorTextKeys: "" })).toBeUndefined()
 		expect(textKeysOf({})).toBeUndefined()
 	})
 

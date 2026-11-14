@@ -1,6 +1,6 @@
 /**
- * A schema other than public that comb 0.12 migrated kept its history in the shared
- * atlas_schema_revisions, which comb no longer reads for it. While the schema's own history is
+ * A schema other than public that database 0.12 migrated kept its history in the shared
+ * atlas_schema_revisions, which database no longer reads for it. While the schema's own history is
  * missing or empty, the shared rows that match the directory's files as a prefix (in order,
  * version and hash equal, none skipped) are the files that ran: apply and baseline record them in
  * the schema's own history, and check and status say so. A shared row that names no file here is
@@ -22,7 +22,7 @@ import { loadPostgresParser } from "./pg-parser.ts"
 import { type ObjectsCompare, refuseHistoryDrift } from "./baseline-compare.ts"
 import { holdsAnything, type ReadHeld } from "./pg-schema-members.ts"
 import { ReplayFailed } from "./replay-failed.ts"
-import type { Run } from "./process.ts"
+import type { MigrateRun } from "./process.ts"
 import { scratchDir } from "./cleanup.ts"
 
 /** The files of the snapshot `copy` that 0.12's `shared` history ran; refused when it ran them otherwise */
@@ -39,7 +39,7 @@ function sharedPrefix(shared: AtlasStatus, copy: string): string[] {
 		const due = files[i] as string
 		if (name !== due) {
 			throw new Error(
-				`0.12's shared history records ${name} but not ${due}, which comes before it, so comb cannot tell what ran; record it by hand`,
+				`0.12's shared history records ${name} but not ${due}, which comes before it, so database cannot tell what ran; record it by hand`,
 			)
 		}
 		if (row.applied < row.total || row.error !== "")
@@ -81,7 +81,7 @@ function settable(copy: string, ran: string[]): string[] {
 
 /** Refuse to adopt `ran`, the files of the snapshot `copy` 0.12's shared history ran, unless the schema holds what replaying them leaves */
 async function proveAdoption(
-	options: ObjectsCompare & { exec: Run; target: PgTarget },
+	options: ObjectsCompare & { exec: MigrateRun; target: PgTarget },
 	copy: string,
 	ran: readonly string[],
 ): Promise<void> {
@@ -89,11 +89,11 @@ async function proveAdoption(
 	await loadPostgresParser()
 	const { schema } = options.target
 	await replayed(() => (options.readyDev ?? readyDevSchema)(options.target), schema, ran)
-	const { dir: prefix, remove: removePrefix } = scratchDir("comb-adopt-")
+	const { dir: prefix, remove: removePrefix } = scratchDir("database-adopt-")
 	try {
 		for (const name of ran) copyFileSync(join(copy, name), join(prefix, name))
-		const refusal = `${schema} does not hold what 0.12's shared history ran (${ran.join(", ")}), so comb adopts none of it`
-		/* comb's replay, in a database of its own, dropped after it, and Atlas reading what it left */
+		const refusal = `${schema} does not hold what 0.12's shared history ran (${ran.join(", ")}), so database adopts none of it`
+		/* database's replay, in a database of its own, dropped after it, and Atlas reading what it left */
 		await replayed(() => refuseHistoryDrift(options, prefix, refusal), schema, ran)
 	} finally {
 		removePrefix()

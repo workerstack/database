@@ -1,5 +1,5 @@
 /**
- * C2 of r19 (K4, C9): every rewrite a written text takes is comb's own, and published. For every text
+ * C2 of r19 (K4, C9): every rewrite a written text takes is database's own, and published. For every text
  * kind and transform a padded, mixed-case input parses to the input with the published list applied,
  * so a rewrite a later zod adds fails here, never a client.
  */
@@ -24,7 +24,7 @@ function written(options: string): z.ZodType {
 	const code = generateFieldSchema(parseField("t", `c.text("t", ${options}).notNull()`), "create", {
 		imports: { enumImports: new Map(), identifiers: new Map(), jsonSchemaImports: new Set() },
 	}) as string
-	return new Function("z", "comb", "_m", `return ${code}`)(z, { isStorableText }, META) as z.ZodType
+	return new Function("z", "database", "_m", `return ${code}`)(z, { isStorableText }, META) as z.ZodType
 }
 
 /** The transforms `schema` publishes */
@@ -32,7 +32,7 @@ const published = (schema: z.ZodType): string[] => {
 	const document = z.toJSONSchema(z.object({ t: schema }), { io: "input" }) as unknown as {
 		properties: { t: Record<string, unknown> }
 	}
-	return (document.properties.t["x-comb-transform"] ?? []) as string[]
+	return (document.properties.t["x-database-transform"] ?? []) as string[]
 }
 
 /* each kind with a value it takes once rewritten, padded and in mixed case */
@@ -56,7 +56,7 @@ describe("a written text's published transforms and what it parses to", () => {
 		expect(schema.parse(input)).toBe(applied)
 	})
 
-	it("publishes a url's trim and tab and newline strip, comb's own, with its https rule beside it and no format (A2-8 of r22, A3-3 of r23)", () => {
+	it("publishes a url's trim and tab and newline strip, database's own, with its https rule beside it and no format (A2-8 of r22, A3-3 of r23)", () => {
 		const schema = written("{ url: true }")
 		expect(published(schema)).toEqual(["trim", "strip-tab-newline"])
 		expect(schema.safeParse("https://a\tb.io/x\ry").data).toBe("https://ab.io/xy")

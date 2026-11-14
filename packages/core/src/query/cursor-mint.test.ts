@@ -183,11 +183,11 @@ describe("fittedCursor given the builder's column check", () => {
 			}),
 		)
 		const carried = new Set(["title"])
-		const row = { _combId: "b", title: "y" }
-		expect(() => fittedCursor(row, BY_TITLE, { ...SEALED, carried, holds: holds(0), idField: "_combId" })).toThrow(
+		const row = { _cursorId: "b", title: "y" }
+		expect(() => fittedCursor(row, BY_TITLE, { ...SEALED, carried, holds: holds(0), idField: "_cursorId" })).toThrow(
 			expect.objectContaining({ cause: expect.stringMatching(/^the sort by title reads a value/) }),
 		)
-		expect(typeof fittedCursor(row, BY_TITLE, { ...SEALED, holds: holds(-1), idField: "_combId" })()).toBe("string")
+		expect(typeof fittedCursor(row, BY_TITLE, { ...SEALED, holds: holds(-1), idField: "_cursorId" })()).toBe("string")
 		expect(seen).toEqual([
 			[["x", "a"], false, false],
 			[["y", "b"], true, false],

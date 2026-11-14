@@ -8,7 +8,7 @@ import type { SQL } from "drizzle-orm"
 import { integer, numeric, SQLiteDialect, sqliteTable, text } from "drizzle-orm/sqlite-core"
 import { describe, expect, it } from "vitest"
 import { parseFilter } from "../filter.ts"
-import { CombError } from "../../error.ts"
+import { DatabaseError } from "../../error.ts"
 import { conditionToSQL, filterToSQL } from "./executor.ts"
 import type { FilterAST, FilterCondition } from "../types.ts"
 
@@ -127,7 +127,7 @@ describe("filterToSQL", () => {
 	})
 
 	it("throws for a field it cannot resolve rather than dropping it (Q-H3)", () => {
-		expect(() => filterToSQL(ast([cond("nope", "eq", 1)]), config)).toThrow(CombError)
+		expect(() => filterToSQL(ast([cond("nope", "eq", 1)]), config)).toThrow(DatabaseError)
 	})
 
 	it("reads a group with no conditions as the identity of its logic", () => {
@@ -156,7 +156,7 @@ describe("filterToSQL", () => {
 
 	it("throws when one condition of several cannot be resolved, instead of keeping the rest", () => {
 		expect(() => filterToSQL(ast([cond("status", "eq", "draft"), cond("secret", "eq", "x")]), config)).toThrow(
-			CombError,
+			DatabaseError,
 		)
 	})
 })
@@ -165,9 +165,9 @@ describe("filterToSQL — prototype names, subgroups and computed fields", () =>
 	const config = { mainTable: post }
 
 	it("does not resolve a field through the prototype chain (Q-L3)", () => {
-		expect(() => filterToSQL(ast([cond("toString", "is", null)]), config)).toThrow(CombError)
+		expect(() => filterToSQL(ast([cond("toString", "is", null)]), config)).toThrow(DatabaseError)
 		expect(() => filterToSQL(ast([cond("@constructor", "eq", 1)]), { computedFilters: {}, mainTable: post })).toThrow(
-			CombError,
+			DatabaseError,
 		)
 	})
 
@@ -196,13 +196,13 @@ describe("filterToSQL — prototype names, subgroups and computed fields", () =>
 	})
 
 	it("throws for a computed field with no resolver, or one that declines the operator", () => {
-		expect(() => filterToSQL(ast([cond("@popular", "eq", true)]), config)).toThrow(CombError)
+		expect(() => filterToSQL(ast([cond("@popular", "eq", true)]), config)).toThrow(DatabaseError)
 		expect(() =>
 			filterToSQL(ast([cond("@popular", "eq", true)]), {
 				computedFilters: { "@popular": () => null },
 				mainTable: post,
 			}),
-		).toThrow(CombError)
+		).toThrow(DatabaseError)
 	})
 })
 
@@ -233,7 +233,7 @@ describe("filterToSQL — relation filters", () => {
 		const built = filterToSQL(ast([cond("tags.slug", "eq", "release")]), config)
 		const { params, sql } = compile(built)
 		expect(sql.replace(/\s+/g, " ")).toBe(
-			'EXISTS ( SELECT 1 FROM "post_tag" AS "comb_rel_through" INNER JOIN "tag" AS "comb_rel_target" ON "comb_rel_target"."id" = "comb_rel_through"."tag_id" WHERE "comb_rel_through"."post_id" = "post"."id" AND "comb_rel_target"."slug" = ? )',
+			'EXISTS ( SELECT 1 FROM "post_tag" AS "database_rel_through" INNER JOIN "tag" AS "database_rel_target" ON "database_rel_target"."id" = "database_rel_through"."tag_id" WHERE "database_rel_through"."post_id" = "post"."id" AND "database_rel_target"."slug" = ? )',
 		)
 		expect(params).toEqual(["release"])
 	})
@@ -250,9 +250,11 @@ describe("filterToSQL — relation filters: keys and refusals", () => {
 	it("joins on the main table's named key, and refuses a main table without one", () => {
 		const bySlug = { tags: { ...relations.tags, sourceKey: "status" } }
 		const { sql } = compile(filterToSQL(ast([cond("tags.slug", "eq", "x")]), { mainTable: post, relations: bySlug }))
-		expect(sql).toContain('"comb_rel_through"."post_id" = "post"."status"')
+		expect(sql).toContain('"database_rel_through"."post_id" = "post"."status"')
 		const keyless = sqliteTable("keyless", { a: text("a"), b: text("b") })
-		expect(() => filterToSQL(ast([cond("tags.slug", "eq", "x")]), { mainTable: keyless, relations })).toThrow(CombError)
+		expect(() => filterToSQL(ast([cond("tags.slug", "eq", "x")]), { mainTable: keyless, relations })).toThrow(
+			DatabaseError,
+		)
 	})
 
 	it("binds the relation filter value rather than inlining it", () => {
@@ -270,19 +272,19 @@ describe("filterToSQL — relation filters: keys and refusals", () => {
 	})
 
 	it("throws for a relation the config does not declare", () => {
-		expect(() => filterToSQL(ast([cond("authors.name", "eq", "x")]), config)).toThrow(CombError)
+		expect(() => filterToSQL(ast([cond("authors.name", "eq", "x")]), config)).toThrow(DatabaseError)
 	})
 
 	it("throws for a field the related table does not have", () => {
-		expect(() => filterToSQL(ast([cond("tags.nonexistent", "eq", "x")]), config)).toThrow(CombError)
+		expect(() => filterToSQL(ast([cond("tags.nonexistent", "eq", "x")]), config)).toThrow(DatabaseError)
 	})
 
 	it("throws for a relation filter whose operator does not lower", () => {
-		expect(() => filterToSQL(ast([cond("tags.slug", "regex", ".*")]), config)).toThrow(CombError)
+		expect(() => filterToSQL(ast([cond("tags.slug", "regex", ".*")]), config)).toThrow(DatabaseError)
 	})
 
 	it("throws for a bare relation name with no field", () => {
-		expect(() => filterToSQL(ast([cond("tags.", "eq", "x")]), config)).toThrow(CombError)
+		expect(() => filterToSQL(ast([cond("tags.", "eq", "x")]), config)).toThrow(DatabaseError)
 	})
 
 	it("supports list operators across the relation", () => {

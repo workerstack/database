@@ -3,8 +3,8 @@
  * id a JS number rounds, and a row without a sort value or its id, or with one no cursor carries.
  * UnmintableRow tells a refusal of a row's own value from one of the list's wiring.
  */
-import { CombError } from "../error.ts"
-import { combErrorKeys } from "../types.ts"
+import { DatabaseError } from "../error.ts"
+import { databaseErrorKeys } from "../types.ts"
 import { carried, decodeId, decodeValue } from "./cursor-codec.ts"
 import type { SortField } from "./types.ts"
 
@@ -15,9 +15,9 @@ import type { SortField } from "./types.ts"
  * and, when its next cursor would be minted from it, answers `nextCursor: null` with `hasMore` still
  * true. Any other mint refusal is the list's wiring or config, and every page answers it
  */
-class UnmintableRow extends CombError {
+class UnmintableRow extends DatabaseError {
 	constructor(cause: string) {
-		super({ cause, errorKey: combErrorKeys.SORT_NOT_WIRED, status: "internal_server_error" })
+		super({ cause, errorKey: databaseErrorKeys.SORT_NOT_WIRED, status: "internal_server_error" })
 	}
 }
 
@@ -32,9 +32,9 @@ const lossy = (value: unknown): value is number =>
 function refuseRoundedId(record: Record<string, unknown>, idField: string): void {
 	if (!lossy(record[idField])) return
 	/* the tiebreak column's read mode, which every row of the list shares, and the row's own identity: no page serves it */
-	throw new CombError({
+	throw new DatabaseError({
 		cause: `the tiebreak id ${idField} reads ${String(record[idField])}, past 2^53, where a JS number rounds it, so no cursor can find its row; read it exactly (bun:sqlite safeIntegers, libsql intMode: "bigint", drizzle's mode: "bigint" on Postgres), or on D1 key the table by a text id`,
-		errorKey: combErrorKeys.SORT_NOT_WIRED,
+		errorKey: databaseErrorKeys.SORT_NOT_WIRED,
 		status: "internal_server_error",
 	})
 }
@@ -49,9 +49,9 @@ const NO_KEYSET_CAUSE = "Cursor pagination needs every sort key to be a column; 
  */
 function refuseComputedSort(parsedSort: readonly SortField[]): void {
 	if (!parsedSort.some(({ field }) => field.startsWith("@"))) return
-	throw new CombError({
+	throw new DatabaseError({
 		cause: NO_KEYSET_CAUSE,
-		errorKey: combErrorKeys.CURSOR_PAGINATION_UNSUPPORTED,
+		errorKey: databaseErrorKeys.CURSOR_PAGINATION_UNSUPPORTED,
 		status: "bad_request",
 	})
 }
@@ -78,9 +78,9 @@ function refuseUncarried(record: Record<string, unknown>, parsedSort: readonly S
 	const fields = [...parsedSort.map(({ field }) => field), idField]
 	const missing = fields.filter((field) => record[field] === undefined)
 	if (missing.length > 0) {
-		throw new CombError({
+		throw new DatabaseError({
 			cause: `the next cursor is minted from each row's ${missing.join(", ")}; select them, and the built query's extras`,
-			errorKey: combErrorKeys.SORT_NOT_WIRED,
+			errorKey: databaseErrorKeys.SORT_NOT_WIRED,
 			status: "internal_server_error",
 		})
 	}

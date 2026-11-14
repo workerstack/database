@@ -7,7 +7,7 @@
 import { Database } from "bun:sqlite"
 import { describe, expect, it } from "bun:test"
 import { drizzle } from "drizzle-orm/bun-sqlite"
-import { CombError } from "../../src/error.ts"
+import { DatabaseError } from "../../src/error.ts"
 import {
 	bigRelations,
 	CREATE,
@@ -60,9 +60,9 @@ describe("keyset pagination over an integer key past 2^53, on bun:sqlite (U22)",
 	it("mints no cursor from a tiebreak id past 2^53, naming what reads it exactly", async () => {
 		const client = seeded(IDS)
 		const refused = await viaBuilder(drizzle({ client }) as never)("n.asc", undefined).catch((error: unknown) => error)
-		expect(refused).toBeInstanceOf(CombError)
-		expect((refused as CombError).errorKey).toBe("sort_not_wired")
-		expect(String((refused as CombError).cause)).toMatch(EXACTLY)
+		expect(refused).toBeInstanceOf(DatabaseError)
+		expect((refused as DatabaseError).errorKey).toBe("sort_not_wired")
+		expect(String((refused as DatabaseError).cause)).toMatch(EXACTLY)
 		client.close()
 	})
 })

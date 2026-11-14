@@ -1,15 +1,15 @@
 /**
- * `comb migrate` on D1 --local while another process holds the local D1 file's write lock, as
- * `wrangler dev` or a second comb does: wrangler sends each --command as one request, which
+ * `database migrate` on D1 --local while another process holds the local D1 file's write lock, as
+ * `wrangler dev` or a second database does: wrangler sends each --command as one request, which
  * miniflare runs in one transaction that even a read opens for writing, so a held lock fails it at
- * once with SQLITE_BUSY. comb runs such a command again until the lock goes, 5 s at most.
+ * once with SQLITE_BUSY. database runs such a command again until the lock goes, 5 s at most.
  */
 import fs from "node:fs"
 import { DatabaseSync } from "node:sqlite"
 import { afterEach, describe, expect, it } from "vitest"
 import { runCli } from "../../../src/cli/index.ts"
 import { localD1Path } from "../../../src/migrate/core/d1-binding.ts"
-import type { Run } from "../../../src/migrate/core/process.ts"
+import type { MigrateRun } from "../../../src/migrate/core/process.ts"
 import { LOCAL_BUSY } from "../../../src/migrate/drivers/d1-lock.ts"
 import { d1Column, d1Io, d1Project, writeMigrations } from "../support/d1-project.ts"
 
@@ -23,9 +23,9 @@ afterEach(() => {
 const INIT = { "20260101000000_init.sql": "CREATE TABLE post (id TEXT PRIMARY KEY);" }
 const ENTRY = { binding: "CORE", database_id: "00000000-0000-0000-0000-000000000000", database_name: "core" }
 const APPLY_LOCKED =
-	"wrangler d1 migrations apply failed: the local D1 database was locked by another process (wrangler dev, a wrangler command or a second comb migrate) while wrangler applied: let it finish and rerun"
+	"wrangler d1 migrations apply failed: the local D1 database was locked by another process (wrangler dev, a wrangler command or a second database migrate) while wrangler applied: let it finish and rerun"
 const LOCKED =
-	"wrangler failed (exit 1): the local D1 database stayed locked by another process (wrangler dev, a wrangler command or a second comb migrate) for 5 s: let it finish and rerun"
+	"wrangler failed (exit 1): the local D1 database stayed locked by another process (wrangler dev, a wrangler command or a second database migrate) for 5 s: let it finish and rerun"
 
 /** A worker project on a local D1 with INIT applied, removed after the test */
 async function applied(): Promise<string> {
@@ -47,13 +47,13 @@ function lock(dir: string): () => void {
 /**
  * `run` with the project's file locked from the first wrangler run `takes` matches until a run comes back busy,
  * however late that run starts: a lock let go after a fixed time missed a first attempt a loaded machine
- * started after it (comb-5d, 2026-11-05). `busy` counts the runs the lock failed.
+ * started after it (database-5d, 2026-11-05). `busy` counts the runs the lock failed.
  */
-function lockedUntilBusy(dir: string, run: Run, takes: (args: readonly string[]) => boolean) {
+function lockedUntilBusy(dir: string, run: MigrateRun, takes: (args: readonly string[]) => boolean) {
 	const seen = { busy: 0 }
 	let release: (() => void) | undefined
 	let taken = false
-	const locked: Run = async (cmd, args, options) => {
+	const locked: MigrateRun = async (cmd, args, options) => {
 		if (!taken && takes(args)) {
 			taken = true
 			release = lock(dir)
@@ -74,7 +74,7 @@ function lockedUntilBusy(dir: string, run: Run, takes: (args: readonly string[])
  * answer, which is only an internal error, and a run can end before that line is forwarded (CI on 84332342)
  */
 const lostBusyLine =
-	(run: Run): Run =>
+	(run: MigrateRun): MigrateRun =>
 	async (cmd, args, options) => {
 		const ran = await run(cmd, args, options)
 		return LOCAL_BUSY.test(ran.stderr) ? { ...ran, stderr: "" } : ran
@@ -83,10 +83,10 @@ const lostBusyLine =
 /** The --command of a wrangler run sending apply's hash intents, the batch before wrangler applies the file */
 const intent = (args: readonly string[]) =>
 	args.find(
-		(arg) => arg.startsWith("--command=") && arg.includes("INSERT OR REPLACE INTO _comb_migration_hash_intents"),
+		(arg) => arg.startsWith("--command=") && arg.includes("INSERT OR REPLACE INTO _database_migration_hash_intents"),
 	)
 
-describe("comb migrate on D1 --local while another process holds the file's lock", () => {
+describe("database migrate on D1 --local while another process holds the file's lock", () => {
 	it("reads the history once the lock is let go within 5 s", async () => {
 		const dir = await applied()
 		const status = d1Io(dir)
@@ -106,7 +106,7 @@ describe("comb migrate on D1 --local while another process holds the file's lock
 })
 
 /* CI on 84332342: workerd's SQLITE_BUSY line reaches wrangler's output apart from its answer, and can come too late */
-describe("comb migrate on D1 --local when workerd's busy line misses wrangler's output", () => {
+describe("database migrate on D1 --local when workerd's busy line misses wrangler's output", () => {
 	it("refuses, naming the lock, when wrangler's output lost workerd's busy line", async () => {
 		const dir = await applied()
 		lock(dir)
@@ -120,7 +120,7 @@ describe("comb migrate on D1 --local when workerd's busy line misses wrangler's 
 		const status = d1Io(dir)
 		const failure = "✘ [ERROR] Couldn't find a D1 DB with the name or binding 'core'"
 		let calls = 0
-		const run: Run = async (cmd, args, options) =>
+		const run: MigrateRun = async (cmd, args, options) =>
 			args.includes("execute") && calls++ === 0
 				? { code: 1, stderr: "", stdout: failure }
 				: status.run(cmd, args, options)
@@ -132,7 +132,7 @@ describe("comb migrate on D1 --local when workerd's busy line misses wrangler's 
 		const dir = await applied()
 		writeMigrations(dir, { "20260102000000_tag.sql": "CREATE TABLE tag (id TEXT PRIMARY KEY);" })
 		const apply = d1Io(dir)
-		/* the lock is taken as wrangler applies, and let go once comb reads back what it recorded */
+		/* the lock is taken as wrangler applies, and let go once database reads back what it recorded */
 		let release: (() => void) | undefined
 		const run = lostBusyLine(async (cmd, args, options) => {
 			if (release !== undefined) {
@@ -147,12 +147,12 @@ describe("comb migrate on D1 --local when workerd's busy line misses wrangler's 
 	}, 180_000)
 })
 
-describe("comb migrate on D1 --local while another process holds the intents' lock", () => {
+describe("database migrate on D1 --local while another process holds the intents' lock", () => {
 	it("runs the intent batch the lock failed again, and records the file once", async () => {
 		const dir = await applied()
 		writeMigrations(dir, { "20260102000000_tag.sql": "CREATE TABLE tag (id TEXT PRIMARY KEY);" })
 		const apply = d1Io(dir)
-		/* the lock is taken just as comb sends the intents, the batch before wrangler applies the file */
+		/* the lock is taken just as database sends the intents, the batch before wrangler applies the file */
 		const intents: string[] = []
 		const { run, seen } = lockedUntilBusy(
 			dir,
@@ -168,7 +168,7 @@ describe("comb migrate on D1 --local while another process holds the intents' lo
 		expect([seen.busy, intents.length, new Set(intents).size]).toEqual([1, 2, 1])
 		const names = ["20260101000000_init.sql", "20260102000000_tag.sql"]
 		expect(await d1Column(dir, "SELECT name FROM d1_migrations ORDER BY id")).toEqual(names)
-		expect(await d1Column(dir, "SELECT name FROM _comb_migration_hashes ORDER BY name")).toEqual(names)
-		expect(await d1Column(dir, "SELECT count(*) FROM _comb_migration_hash_intents")).toEqual([0])
+		expect(await d1Column(dir, "SELECT name FROM _database_migration_hashes ORDER BY name")).toEqual(names)
+		expect(await d1Column(dir, "SELECT count(*) FROM _database_migration_hash_intents")).toEqual([0])
 	}, 180_000)
 })

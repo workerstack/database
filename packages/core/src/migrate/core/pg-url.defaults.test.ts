@@ -1,10 +1,10 @@
 /**
  * P6 and P7 of the 0.15.0 review: a Postgres URL read as libpq reads what it leaves out, and the
- * libpq keys Atlas takes that comb's own reads refused or ignored.
+ * libpq keys Atlas takes that database's own reads refused or ignored.
  * - P6: a URL with no user is libpq's OS user, and its database that user's, never PGUSER's or
  *   PGDATABASE's, which Atlas's environment never holds; a password comes from the URL alone.
  * - P7: fallback_application_name sets application_name when the URL has none, and is no server
- *   setting; hostaddr is the address comb connects to, host the TLS server name, as libpq has them.
+ *   setting; hostaddr is the address database connects to, host the TLS server name, as libpq has them.
  */
 import { userInfo } from "node:os"
 import { describe, expect, it } from "vitest"

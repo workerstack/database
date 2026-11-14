@@ -1,9 +1,9 @@
 /**
- * The Postgres path end to end with the comb binary: init --dialect postgres, diff through
- * drizzle-kit's export and the real Atlas, apply and status, rows written through comb's pg
+ * The Postgres path end to end with the database binary: init --dialect postgres, diff through
+ * drizzle-kit's export and the real Atlas, apply and status, rows written through database's pg
  * column builders, then a column, a view and a policy added, a column dropped (refused until the
  * file approves it), and a re-diff that finds the history synced. Two scratch databases on
- * COMB_TEST_PG_URL, the target and Atlas's dev database, are made and dropped here; unset locally,
+ * DATABASE_TEST_PG_URL, the target and Atlas's dev database, are made and dropped here; unset locally,
  * the suite skips and says why, and CI requires it.
  */
 import { randomUUID } from "node:crypto"
@@ -20,7 +20,7 @@ import { app, ok, type App } from "./support/project.ts"
 
 const server = pgUrl()
 
-/** The tables file: comb's pg column builders, with whatever else a step adds */
+/** The tables file: database's pg column builders, with whatever else a step adds */
 const tables = (more = "", columns = "") => `import { sql } from "drizzle-orm"
 import { pgPolicy, pgTable, pgView, text } from "drizzle-orm/pg-core"
 import { c } from "@workerstack/database/pg/columns"
@@ -53,9 +53,9 @@ const database = (name: string) => {
 	return url.href
 }
 
-describe("comb on Postgres", () => {
+describe("database on Postgres", () => {
 	const id = randomUUID().replaceAll("-", "")
-	const [target, dev] = [`comb_e2e_${id}`, `comb_e2e_${id}_dev`]
+	const [target, dev] = [`database_e2e_${id}`, `database_e2e_${id}_dev`]
 	let project: App
 	let migrations = ""
 	/* the run's lock, held from the first database made to the last dropped (tests/support/pg-lock.ts) */
@@ -68,8 +68,8 @@ describe("comb on Postgres", () => {
 	beforeAll(async () => {
 		for (const name of [target, dev]) await admin(`CREATE DATABASE ${name}`)
 		project = app({ "src/db/core.tables.ts": tables() }, { DATABASE_URL: database(target), DEV_URL: database(dev) })
-		ok(project.comb("migrate", "init", "--dialect", "postgres"), "migrate init")
-		const config = join(project.dir, "comb.migrate.config.ts")
+		ok(project.database("migrate", "init", "--dialect", "postgres"), "migrate init")
+		const config = join(project.dir, "database.migrate.config.ts")
 		writeFileSync(
 			config,
 			readFileSync(config, "utf8").replace(
@@ -89,9 +89,9 @@ describe("comb on Postgres", () => {
 	})
 
 	it("diffs the first migration, applies it, and reports it applied", () => {
-		expect(ok(project.comb("migrate", "diff", "core", "init"), "diff").stdout).toContain("Generated:")
-		expect(ok(project.comb("migrate", "apply", "core"), "apply").stdout).toContain("Done: 1 applied")
-		expect(ok(project.comb("migrate", "status", "core"), "status").stdout).toContain("Pending: none")
+		expect(ok(project.database("migrate", "diff", "core", "init"), "diff").stdout).toContain("Generated:")
+		expect(ok(project.database("migrate", "apply", "core"), "apply").stdout).toContain("Done: 1 applied")
+		expect(ok(project.database("migrate", "status", "core"), "status").stdout).toContain("Pending: none")
 	}, 180_000)
 
 	it("writes rows through the pg column builders, created_at an epoch-millisecond number", async () => {
@@ -111,9 +111,9 @@ describe("comb on Postgres", () => {
 
 	it("adds a column, a view and a policy, and applies them", async () => {
 		project.write({ "src/db/core.tables.ts": tables(VIEW_AND_POLICY, '\n\tbody: text("body"),') })
-		ok(project.comb("migrate", "diff", "core", "view"), "diff")
+		ok(project.database("migrate", "diff", "core", "view"), "diff")
 		/* a policy changes which rows a role sees and destroys none: cautious, so --yes applies it (M16) */
-		ok(project.comb("migrate", "apply", "core", "--yes"), "apply")
+		ok(project.database("migrate", "apply", "core", "--yes"), "apply")
 		const client = new pg.Client({ connectionString: database(target) })
 		await client.connect()
 		try {
@@ -128,18 +128,18 @@ describe("comb on Postgres", () => {
 
 	it("refuses to drop a column until the migration approves it, then drops it", async () => {
 		project.write({ "src/db/core.tables.ts": tables(VIEW_AND_POLICY) })
-		ok(project.comb("migrate", "diff", "core", "drop_body"), "diff")
-		const refused = project.comb("migrate", "apply", "core", "--yes")
+		ok(project.database("migrate", "diff", "core", "drop_body"), "diff")
+		const refused = project.database("migrate", "apply", "core", "--yes")
 		expect(refused.status).toBe(1)
 		expect(refused.stderr).toContain("is unsafe")
 		const file = readdirSync(migrations).filter((name) => name.endsWith("_drop_body.sql"))[0] as string
 		const path = join(migrations, file)
-		writeFileSync(path, `-- comb:allow-unsafe: body moved to a separate table\n${readFileSync(path, "utf8")}`)
+		writeFileSync(path, `-- database:allow-unsafe: body moved to a separate table\n${readFileSync(path, "utf8")}`)
 		await hashDir(run, migrations)
-		expect(ok(project.comb("migrate", "apply", "core"), "apply").stdout).toContain("Approved in")
+		expect(ok(project.database("migrate", "apply", "core"), "apply").stdout).toContain("Approved in")
 	}, 180_000)
 
 	it("finds the history and the schema in sync", () => {
-		expect(ok(project.comb("migrate", "diff", "core", "again"), "diff").stdout).toContain("already in sync")
+		expect(ok(project.database("migrate", "diff", "core", "again"), "diff").stdout).toContain("already in sync")
 	}, 180_000)
 })

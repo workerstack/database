@@ -14,7 +14,7 @@ import { openFileDatabase } from "./file-open.ts"
 import { segments } from "../../sql-lexer.ts"
 import { LIBSQL_CLIENT } from "./libsql-client.ts"
 
-/** The surface of libsql's Database comb calls: `prepare` only on a scratch (libsql-local.ts), never on a target */
+/** The surface of libsql's Database that database calls: `prepare` only on a scratch (libsql-local.ts), never on a target */
 type Database = {
 	close(): void
 	exec(sql: string): void
@@ -27,7 +27,7 @@ type Database = {
 }
 type DatabaseClass = new (path: string) => Database
 
-/** libsql's Database, from the copy the @libsql/client comb resolves loads, so the two never differ */
+/** libsql's Database, from the copy the @libsql/client database resolves loads, so the two never differ */
 const libsqlDatabase = (): Promise<DatabaseClass> =>
 	optionalPeer(LIBSQL, () =>
 		Promise.resolve(createRequire(import.meta.resolve(LIBSQL_CLIENT))("libsql") as DatabaseClass),
@@ -53,7 +53,7 @@ function literal(value: unknown): string {
 	if (typeof value === "bigint") return String(value)
 	if (typeof value === "number" && Number.isFinite(value)) return numberLiteral(value)
 	if (value instanceof Uint8Array) return `X'${Buffer.from(value).toString("hex")}'`
-	throw new TypeError(`comb binds no ${typeof value} as a SQL literal`)
+	throw new TypeError(`database binds no ${typeof value} as a SQL literal`)
 }
 
 /** `sql` with each `?` in its code, not in a string, a name or a comment, its parameter as a literal; a statement with none is sent as written */

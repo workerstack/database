@@ -11,7 +11,7 @@ const validateTables = async (file: string) => validateAnalysis(await analyze(fi
 let dir: string
 
 beforeEach(() => {
-	dir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-validate-machines-"))
+	dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-validate-machines-"))
 })
 
 afterEach(() => fs.rmSync(dir, { force: true, recursive: true }))

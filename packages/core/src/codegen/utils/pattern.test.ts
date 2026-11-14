@@ -2,14 +2,14 @@ import { RE2JS } from "re2js"
 import { describe, expect, it } from "vitest"
 import { patternLiteral as emitted, regexExpression } from "./pattern.ts"
 
-/* A3-2 of r23: every pattern comb takes here compiles under RE2's syntax, as Go's validators read it */
+/* A3-2 of r23: every pattern database takes here compiles under RE2's syntax, as Go's validators read it */
 function patternLiteral(pattern: string, place: string): string {
 	const literal = emitted(pattern, place)
 	expect(() => RE2JS.compile(literal.slice(1, -2)), literal).not.toThrow()
 	return literal
 }
 
-describe("patternLiteral: a pattern comb can emit and publish (F5, F6)", () => {
+describe("patternLiteral: a pattern database can emit and publish (F5, F6)", () => {
 	it("writes a pattern back as a literal that compiles under u, a slash and a line terminator escaped", () => {
 		expect(patternLiteral("/^a+$/", "x")).toBe("/^a+$/u")
 		expect(patternLiteral("/^a/b$/", "x")).toBe(String.raw`/^a\/b$/u`)
@@ -133,7 +133,7 @@ describe("patternLiteral: a pattern each engine reads as one rule (A2-7 of r22)"
 	})
 })
 
-/* A3-2 of r23: each construct an engine comb names reads otherwise, and what the refusal names */
+/* A3-2 of r23: each construct an engine database names reads otherwise, and what the refusal names */
 const PROPERTY =
 	"which Go's RE2 or Rust's regex does not compile, or reads as another set: write a General_Category value as Go's RE2 names it, such as \\p{L}, \\p{Lu} or \\p{Nd}, or the ranges meant"
 
@@ -148,7 +148,7 @@ const REFUSED: ReadonlyArray<readonly [string, string]> = [
 		String.raw`/^\uD83D\uDE00$/u`,
 		String.raw`\uD83D\uDE00, which Go's RE2 does not compile: write the character itself, U+1F600`,
 	],
-	/* the engine's own source, which comb publishes, writes a line terminator as its \u escape */
+	/* the engine's own source, which database publishes, writes a line terminator as its \u escape */
 	[
 		"/^a\u2028$/u",
 		String.raw`\u2028, a line terminator a regex literal holds only as an escape, which Go's RE2 does not compile: write \p{Zl}`,

@@ -4,13 +4,13 @@
  */
 import { and, Column, is, type SQL, type SQLWrapper, sql } from "drizzle-orm"
 import { SQLiteColumn, type SQLiteTable } from "drizzle-orm/sqlite-core"
-import { CombError } from "../../error.ts"
-import { combErrorKeys } from "../../types.ts"
+import { DatabaseError } from "../../error.ts"
+import { databaseErrorKeys } from "../../types.ts"
 import type { CursorOptions } from "../cursor.ts"
 import type { ColumnCheck } from "../cursor-mint.ts"
 import { NO_KEYSET_CAUSE } from "../cursor-refusals.ts"
 import { assertCursorWired } from "../cursor-seal.ts"
-import { COMB_ID, type ListExtra, type ListPagination, type PaginationFacts, paginationOf } from "../pagination.ts"
+import { DATABASE_ID, type ListExtra, type ListPagination, type PaginationFacts, paginationOf } from "../pagination.ts"
 import type { ListDialect } from "../list-dialect.ts"
 import { assertLimitWithin, assertPageWithin } from "../trusted.ts"
 import type { ListQueryInput, SortField } from "../types.ts"
@@ -58,9 +58,9 @@ function combineWhere(...clauses: (SQL | null | undefined)[]): SQL | undefined {
 }
 
 /** The tiebreak, selected as the id the next cursor is minted from, decoded as its column decodes */
-function combId(tiebreak: SQLWrapper): SQL.Aliased<unknown> {
+function cursorId(tiebreak: SQLWrapper): SQL.Aliased<unknown> {
 	const value = sql`${tiebreak}`
-	return (is(tiebreak, Column) ? value.mapWith(tiebreak) : value).as(COMB_ID)
+	return (is(tiebreak, Column) ? value.mapWith(tiebreak) : value).as(DATABASE_ID)
 }
 
 /** Refuses a maxRowsPerShard that is no whole number from 1: the app's configuration, so a TypeError, never a 400 */
@@ -78,9 +78,9 @@ function shardWindow(parsed: ListQueryInput, merged: { maxRowsPerShard?: number 
 	const rows = (parsed.page ?? 1) * parsed.limit + 1
 	const max = merged.maxRowsPerShard ?? MAX_ROWS_PER_SHARD
 	if (rows <= max) return rows
-	throw new CombError({
+	throw new DatabaseError({
 		cause: `A merged list reads every row up to the page's end from each shard, ${rows} here, past ${max}; page by cursor instead`,
-		errorKey: combErrorKeys.PAGE_TOO_DEEP,
+		errorKey: databaseErrorKeys.PAGE_TOO_DEEP,
 		status: "bad_request",
 	})
 }
@@ -134,7 +134,8 @@ function withExtras<E extends object>(list: Finish, extras: E, window = list.par
 }
 
 /* the id a cursor resumes from is the tiebreak itself, so no row's own id can stand in for it */
-const idOf = (tiebreak: SortKey | null): ListExtras => (tiebreak === null ? {} : { _combId: combId(tiebreak.column) })
+const idOf = (tiebreak: SortKey | null): ListExtras =>
+	tiebreak === null ? {} : { _cursorId: cursorId(tiebreak.column) }
 
 /**
  * The extra that carries each sort key's stored time, comma-joined, empty for a key the list reads
@@ -144,7 +145,7 @@ const idOf = (tiebreak: SortKey | null): ListExtras => (tiebreak === null ? {} :
 function keyTextsOf(list: Finish, keys: readonly SortKey[]): ListExtras {
 	const asRead = (column: SQLWrapper) => boundAsRead(list, column)
 	if (keys.every(({ column }) => storedTextOf(list.dialect, column, asRead(column)) === null)) return {}
-	return { _combKeyTexts: keyTextsSQL(keys, list.dialect, asRead).as("_combKeyTexts") }
+	return { _cursorKeyTexts: keyTextsSQL(keys, list.dialect, asRead).as("_cursorKeyTexts") }
 }
 
 /**
@@ -155,12 +156,12 @@ function keyTextsOf(list: Finish, keys: readonly SortKey[]): ListExtras {
 function textKeysOf(list: Finish, keys: readonly SortKey[]): ListExtras {
 	const held = (column: SQLWrapper) => heldApart(column) && !boundAsRead(list, column)
 	if (list.dialect !== "sqlite" || !keys.some(({ column }) => held(column))) return {}
-	return { _combTextKeys: textKeysSQL(keys, held).as("_combTextKeys") }
+	return { _cursorTextKeys: textKeysSQL(keys, held).as("_cursorTextKeys") }
 }
 
 /** The extra that carries `classes`, one a sort key and the tiebreak's last, comma-joined */
 const keyTypes = (classes: SQL[]): ListExtras => ({
-	_combKeyTypes: sql<string>`${sql.join(classes, sql` || ',' || `)}`.as("_combKeyTypes"),
+	_cursorKeyTypes: sql<string>`${sql.join(classes, sql` || ',' || `)}`.as("_cursorKeyTypes"),
 })
 
 /**
@@ -199,16 +200,16 @@ function keyTypesOf(list: Finish): ListExtras {
 function finishCursor(list: Finish, cursor: string): Finished {
 	const { keyset, parsed, sort, table, tiebreak } = list
 	if (!keyset.keys || !tiebreak) {
-		throw new CombError({
+		throw new DatabaseError({
 			cause: NO_KEYSET_CAUSE,
-			errorKey: combErrorKeys.CURSOR_PAGINATION_UNSUPPORTED,
+			errorKey: databaseErrorKeys.CURSOR_PAGINATION_UNSUPPORTED,
 			status: "bad_request",
 		})
 	}
 	const merged = list.merged !== undefined
 	const { dialect } = list
 	const after = cursorWhere({ cursor, dialect, keys: keyset.keys, merged, options: list.cursor, sort, table, tiebreak })
-	const gone = after.gone === undefined ? {} : { _combAnchorGone: sql<number>`${after.gone}`.as("_combAnchorGone") }
+	const gone = after.gone === undefined ? {} : { _cursorAnchorGone: sql<number>`${after.gone}`.as("_cursorAnchorGone") }
 	return {
 		...withExtras(list, { ...idOf(tiebreak), ...keyTypesOf(list), ...gone }),
 		limit: parsed.limit + 1,

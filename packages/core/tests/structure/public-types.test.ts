@@ -1,6 +1,6 @@
 /**
- * KT6 of r22b: every comb-local type a public declaration names is one a consumer can import, so
- * a helper typed around a documented API names what it takes and returns. A type comb keeps
+ * KT6 of r22b: every database-local type a public declaration names is one a consumer can import, so
+ * a helper typed around a documented API names what it takes and returns. A type database keeps
  * internal on purpose is listed in ALLOWED with its reason; a new public signature that names a
  * local type fails here until the type is exported or the signature stops naming it.
  */
@@ -12,7 +12,7 @@ import { unexportedBySubpath, unexportedIn, unexportedTypes } from "./support/pu
 
 const ROOT = join(import.meta.dirname, "../..")
 
-// lookup-table: each type comb's public declarations name and keep unexported, and why
+// lookup-table: each type database's public declarations name and keep unexported, and why
 const ALLOWED: Record<string, string> = {
 	"BaseConstraints (sqlite/constraints.d.ts)":
 		"a fragment TextConstraints composes; a consumer names TextConstraints, as the column factories take it",
@@ -61,8 +61,8 @@ const ELSEWHERE: Record<string, readonly Elsewhere[]> = {
 	".": [
 		{
 			from: "./meta",
-			names: ["CombStatesMeta", "MetaCarrier", "ReadOptions", "UniqueIndexMeta"],
-			why: "parts of the meta record carryCombMeta and readCombEntityMeta carry; ./meta is the record's subpath",
+			names: ["StatesMeta", "MetaCarrier", "ReadOptions", "UniqueIndexMeta"],
+			why: "parts of the meta record carryDatabaseMeta and readEntityMeta carry; ./meta is the record's subpath",
 		},
 		{
 			from: "./codegen",
@@ -78,7 +78,7 @@ const ELSEWHERE: Record<string, readonly Elsewhere[]> = {
 		},
 		{
 			from: "./meta",
-			names: ["CombEntityMeta", "CombEntityMetaInput", "CombStatesMeta"],
+			names: ["EntityMeta", "EntityMetaInput", "StatesMeta"],
 			why: "the meta record deriveEntityMeta derives; ./meta is the record's subpath",
 		},
 		{
@@ -106,7 +106,7 @@ const ELSEWHERE: Record<string, readonly Elsewhere[]> = {
 			names: [
 				"AnalysisResult",
 				"CheckConstraintMeta",
-				"CombColumnKind",
+				"ColumnMetaKind",
 				"ExpressionIndexMeta",
 				"FieldConstraintsMeta",
 				"FieldMeta",
@@ -154,7 +154,7 @@ const ELSEWHERE: Record<string, readonly Elsewhere[]> = {
 	"./pg/error-handler": [
 		{
 			from: ".",
-			names: ["CombError", "ConstraintMap", "ConstraintMapEntry", "StatusKey"],
+			names: ["DatabaseError", "ConstraintMap", "ConstraintMapEntry", "StatusKey"],
 			why: "the error every handler throws and the constraint map every classifier reads; the root exports them once for all",
 		},
 	],
@@ -208,7 +208,14 @@ const ELSEWHERE: Record<string, readonly Elsewhere[]> = {
 	"./sqlite/constraint-handler": [
 		{
 			from: ".",
-			names: ["CombDatabaseErrorKey", "CombError", "ConstraintMap", "ConstraintMapEntry", "StatusKey", "combErrorKeys"],
+			names: [
+				"DatabaseDriverErrorKey",
+				"DatabaseError",
+				"ConstraintMap",
+				"ConstraintMapEntry",
+				"StatusKey",
+				"databaseErrorKeys",
+			],
 			why: "the error every handler throws, the keys it answers with and the constraint map every classifier reads; the root exports them once for all",
 		},
 	],
@@ -229,7 +236,7 @@ const ELSEWHERE: Record<string, readonly Elsewhere[]> = {
 	"./sqlite/d1/error-handler": [
 		{
 			from: ".",
-			names: ["CombError", "ConstraintMap", "ConstraintMapEntry", "StatusKey"],
+			names: ["DatabaseError", "ConstraintMap", "ConstraintMapEntry", "StatusKey"],
 			why: "the error every handler throws and the constraint map every classifier reads; the root exports them once for all",
 		},
 	],
@@ -290,7 +297,7 @@ const ELSEWHERE: Record<string, readonly Elsewhere[]> = {
 
 describe("the walk", () => {
 	it("finds a local type a public declaration names through a chain, and none it exports", () => {
-		const dir = mkdtempSync(join(tmpdir(), "comb-public-types-walk-"))
+		const dir = mkdtempSync(join(tmpdir(), "database-public-types-walk-"))
 		try {
 			writeFileSync(join(dir, "inner.d.ts"), "export type Deep = { n: number }\nexport type Inner = { deep: Deep }\n")
 			writeFileSync(
@@ -307,7 +314,7 @@ describe("the walk", () => {
 	})
 })
 
-describe("comb's public declarations (KT6)", () => {
+describe("database's public declarations (KT6)", () => {
 	const found = unexportedTypes(ROOT)
 
 	it("name no local type a consumer cannot import, but the ones ALLOWED gives a reason for", () => {

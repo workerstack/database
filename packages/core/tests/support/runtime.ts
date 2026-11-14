@@ -1,6 +1,6 @@
 /**
  * Runs `body` with `process.versions.bun` as `version`, none for undefined, whatever runtime runs
- * the test, so a branch on comb's runtime is tested both ways; restored when `body`, or the promise
+ * the test, so a branch on database's runtime is tested both ways; restored when `body`, or the promise
  * it returns, ends
  */
 export function onBun<T>(version: string | undefined, body: () => T): T {

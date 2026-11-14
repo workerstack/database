@@ -2,7 +2,7 @@
  * The shared test server's catalogs, read and written under one reader-writer lock (AE6 of r22). A
  * check's replay reads devUrl's server's shared catalogs around every file and bare statement, and
  * takes a change there for the file's when it is to a name the file spells and the file can run code
- * comb cannot read, a DO block, a CALL, an EXECUTE or a function outside pg_catalog (pg-replay.ts).
+ * database cannot read, a DO block, a CALL, an EXECUTE or a function outside pg_catalog (pg-replay.ts).
  * So a write of another test, in another file, worker or run, that lands inside such a replay's
  * reads, to a name its file spells, is refused as the file's: an every-role setting is about `all`,
  * which any file holding `DISCARD ALL`, `GRANT ALL` or `UNION ALL` spells, and probe-settings.test.ts's
@@ -25,13 +25,13 @@ import pg from "pg"
 import { pgUrl } from "../integration/support/pg.ts"
 
 /** The lock's key pair, apart from the run's (pg-lock.ts) and stale-replay.ts's */
-export const SERVER_KEY = "hashtext('comb test'), hashtext('a server-wide write')"
+export const SERVER_KEY = "hashtext('database test'), hashtext('a server-wide write')"
 
 /** The longest a test waits for the lock: every test running beside it, and a writer queued ahead of it */
 export const SERVER_LOCK_WAIT_MS = 10 * 60_000
 
 /**
- * `url` on the run's own database, COMB_TEST_PG_URL's: Postgres keys an advisory lock by the database
+ * `url` on the run's own database, DATABASE_TEST_PG_URL's: Postgres keys an advisory lock by the database
  * of the session that takes it, so a hold on a scratch or replay database's session would meet no
  * hold on another's, and the lock is the server's only when every holder takes it on that one
  */
@@ -42,7 +42,7 @@ const lockUrl = (url: string): string => {
 }
 
 /** One holder of the lock on its own session to `url`'s server, on the run's database, named `name` in pg_stat_activity */
-export function serverLock(name = "comb test server lock", url = pgUrl()) {
+export function serverLock(name = "database test server lock", url = pgUrl()) {
 	let session: pg.Client | undefined
 	const sessionOf = async (): Promise<pg.Client> => {
 		if (session === undefined) {

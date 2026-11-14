@@ -2,7 +2,7 @@
  * PA16 of r22b: once the ATTACH recipe is followed, a CHECK matching the bound added NOT VALID and
  * validated in an earlier file, Postgres 17 skips the partition's scan (2M rows attached in 8 ms
  * against 99 ms without the CHECK, .tmp/grunt/r22b/migrate-pg-atlas/lock/attach-after-recipe.log),
- * and comb warns of nothing. comb proves the bound as pg-bounds.ts says, and every case it cannot
+ * and database warns of nothing. database proves the bound as pg-bounds.ts says, and every case it cannot
  * prove keeps the scan's warning: the siblings below, each one way the proof fails.
  * tests/integration/postgres/attach-implied-oracle.test.ts holds both sides to Postgres.
  */
@@ -30,7 +30,7 @@ describe("an ATTACH whose bound the history's validated CHECKs imply (PA16 of r2
 	})
 })
 
-describe("an ATTACH whose bound comb cannot prove keeps the scan's warning (siblings of PA16 of r22b)", () => {
+describe("an ATTACH whose bound database cannot prove keeps the scan's warning (siblings of PA16 of r22b)", () => {
 	it.each(SCANNED)("warns of the scan for %s", (_case, history, attach) => {
 		expect(warned(history, attach)).toEqual([expect.stringContaining("under an exclusive lock to check its bound")])
 	})

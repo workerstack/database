@@ -27,7 +27,7 @@ function fixture(
 	base: string,
 	{ index = "", inner = false, shared = "export type Shared = { s: string }\n" } = {},
 ): string {
-	const root = mkdtempSync(join(tmpdir(), "comb-exports-of-"))
+	const root = mkdtempSync(join(tmpdir(), "database-exports-of-"))
 	made.push(root)
 	mkdirSync(join(root, "src"))
 	const compilerOptions = {
@@ -159,7 +159,7 @@ describe("two types an export reaches under one name, with different members", (
 
 	/* 0.20.1 reached the exported ListQueryInput of query/types.ts and a z.ZodObject list-schema.ts called by that name */
 	it("are the exported one in a release, which is past renaming", () => {
-		const dir = mkdtempSync(join(tmpdir(), "comb-exports-of-released-"))
+		const dir = mkdtempSync(join(tmpdir(), "database-exports-of-released-"))
 		made.push(dir)
 		mkdirSync(join(dir, "types"))
 		const files = {

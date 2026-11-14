@@ -3,13 +3,13 @@
  */
 import { existsSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import type { Dialect } from "../types.ts"
+import type { MigrateDialect } from "../types.ts"
 import { normalizeSqliteExport, sqliteDevUrl } from "./atlas-env.ts"
 import { explainAtlasFailure } from "./atlas-failure.ts"
 import { atlasNotices, type PgTarget, withAtlasEnv } from "./atlas-target.ts"
 import { projectBin } from "./optional-peer.ts"
 import { DIFF } from "./peer-needs.ts"
-import { type ProjectBin, type Run, run, runPeer } from "./process.ts"
+import { type ProjectBin, type MigrateRun, run, runPeer } from "./process.ts"
 import { codeOf } from "../../sql-lexer.ts"
 import { IDENT, QNAME, unquote } from "./sql-code.ts"
 import { readyDevSchema } from "./pg-dev-schema.ts"
@@ -24,12 +24,12 @@ export { generateIncrementalMigration, type MigrateDiffOptions, type MigrateDiff
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /** Whether `atlas version` runs and exits 0: the Atlas CLI is on PATH */
-export async function checkAtlasInstalled(exec: Run = run): Promise<boolean> {
+export async function checkAtlasInstalled(exec: MigrateRun = run): Promise<boolean> {
 	return (await exec("atlas", ["version"])).code === 0
 }
 
 /** The version `atlas version` prints, as `v1.3.0`; null when Atlas does not run or prints none */
-export async function getAtlasVersion(exec: Run = run): Promise<string | null> {
+export async function getAtlasVersion(exec: MigrateRun = run): Promise<string | null> {
 	const result = await exec("atlas", ["version"])
 	if (result.code !== 0) return null
 	return result.stdout.match(/v[\d.]+/)?.[0] ?? null
@@ -42,13 +42,13 @@ export async function getAtlasVersion(exec: Run = run): Promise<string | null> {
 /** What `generateSchemaDiff` diffs, and where */
 export type SchemaDiffOptions = {
 	/** the dialect both schemas are written in */
-	dialect: Dialect
+	dialect: MigrateDialect
 	/** the SQL DDL of the schema the diff starts from */
 	fromSchema: string
 	/** the SQL DDL of the schema the diff ends at */
 	toSchema: string
 	/** The process runner; tests pass a fake. */
-	run?: Run | undefined
+	run?: MigrateRun | undefined
 	/** Postgres: the dev database and schema Atlas diffs in */
 	target?: PgTarget | undefined
 	/** Postgres: makes the target's dev schema exist before Atlas diffs in it; tests pass a fake */
@@ -69,7 +69,7 @@ export type SchemaDiffResult = {
  * Atlas's diff of two schemas, on the dialect's dev database: an in-memory one for SQLite, and on
  * Postgres `target.devUrl`, whose schema is made to exist first. Throws when a Postgres diff has no
  * `target`, or when Atlas fails, with what it said. `devUrl` must be a scratch database: with no
- * `target.url`, comb cannot tell it from your real one
+ * `target.url`, database cannot tell it from your real one
  */
 export async function generateSchemaDiff(options: SchemaDiffOptions): Promise<SchemaDiffResult> {
 	const { dialect, fromSchema, toSchema, run: exec = run, target } = options
@@ -77,7 +77,7 @@ export async function generateSchemaDiff(options: SchemaDiffOptions): Promise<Sc
 		throw new Error("a Postgres diff needs a target (devUrl and schema)")
 	if (dialect === "postgres") await (options.readyDev ?? readyDevSchema)(target as PgTarget)
 
-	const { dir: tmpDir, remove: removeTmpDir } = scratchDir("comb-schema-diff-")
+	const { dir: tmpDir, remove: removeTmpDir } = scratchDir("database-schema-diff-")
 
 	const fromFile = join(tmpDir, "from.sql")
 	const toFile = join(tmpDir, "to.sql")
@@ -118,9 +118,9 @@ export type DrizzleExportOptions = {
 	/** the folder drizzle-kit runs in, which a relative `configPath` resolves against */
 	cwd: string
 	/** the drizzle config's dialect, which the export is normalized for: SQLite's without PRAGMA lines and with 0/1 boolean defaults, Postgres's scoped to `schema` */
-	dialect: Dialect
+	dialect: MigrateDialect
 	/** The process runner; tests pass a fake. */
-	run?: Run | undefined
+	run?: MigrateRun | undefined
 	/** Postgres: the one schema the database's migrations own; default `public` */
 	schema?: string | undefined
 }
@@ -157,7 +157,7 @@ function scopeExport(sql: string, schema: string): string {
 			created === undefined ? schemasNamed(code).some((name) => name !== schema) : unquote(created) !== schema
 		if (outside) {
 			throw new Error(
-				`the drizzle schema creates objects outside schema "${schema}" (${statement.trim()}); comb migrates one schema per database`,
+				`the drizzle schema creates objects outside schema "${schema}" (${statement.trim()}); database migrates one schema per database`,
 			)
 		}
 		if (created === undefined) kept.push(statement)
@@ -186,11 +186,11 @@ function drizzleConfigOf(configPath: string | undefined, cwd: string): string | 
 export async function exportWith(drizzleKit: ProjectBin, options: DrizzleExportOptions): Promise<string> {
 	const { configPath, cwd, dialect, run: exec = run } = options
 
-	/* drizzle-kit runs on comb's runtime, and on Node it cannot load a JSON config */
+	/* drizzle-kit runs on database's runtime, and on Node it cannot load a JSON config */
 	const loads = drizzleConfigOf(configPath, cwd)
 	if (loads?.endsWith(".json") === true && process.versions["bun"] === undefined)
 		throw new Error(
-			`${loads} is JSON, which drizzle-kit cannot load when comb runs on Node: write it as drizzle.config.ts, export default the same object, or run comb on Bun`,
+			`${loads} is JSON, which drizzle-kit cannot load when database runs on Node: write it as drizzle.config.ts, export default the same object, or run database on Bun`,
 		)
 	const config = configPath === undefined ? [] : ["--config", configPath]
 	const result = await runPeer(exec, drizzleKit)(["export", ...config], { cwd })

@@ -1,7 +1,7 @@
 import { and, eq, isNotNull, isNull, sql } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/d1"
-import { CombError } from "../../../error.ts"
-import { combErrorKeys } from "../../../types.ts"
+import { DatabaseError } from "../../../error.ts"
+import { databaseErrorKeys } from "../../../types.ts"
 import type { D1DatabaseLike, D1SessionLike, D1StatementLike } from "../d1-types.ts"
 import { openD1Session, type SessionConstraint } from "../session.ts"
 import { shardMap } from "./shard-map.ts"
@@ -10,7 +10,7 @@ import type { ShardMapping, ShardMove, ShardPick, ShardPickInput } from "./types
 type ShardDb = ReturnType<typeof drizzle>
 
 /**
- * drizzle over a D1 client comb types by the methods it calls: drizzle types its client
+ * drizzle over a D1 client database types by the methods it calls: drizzle types its client
  * by @cloudflare/workers-types where that resolves, and either typing is the one runtime binding
  */
 const d1Drizzle = (client: D1DatabaseLike | D1SessionLike): ShardDb => drizzle(client as Parameters<typeof drizzle>[0])
@@ -47,9 +47,9 @@ async function pickShard(
 	const shardId = await pick({ counts: new Map(rows.map((row) => [row.shardId, row.count])), orgId, totalShards })
 	if (shardId === undefined) {
 		/* an operator capacity problem, not the client's: provision another D1 database */
-		throw new CombError({
+		throw new DatabaseError({
 			cause: "No shard has capacity for a new organization.",
-			errorKey: combErrorKeys.SHARDS_FULL,
+			errorKey: databaseErrorKeys.SHARDS_FULL,
 			status: "service_unavailable",
 		})
 	}

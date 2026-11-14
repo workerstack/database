@@ -5,7 +5,7 @@
  * devUrl where apply runs it. Where a relation lives changes nothing a later statement reads, so the
  * replay runs such a statement in its database's default tablespace, pg_default, and says so.
  *
- * The statement is rewritten as text, as the parser comb loads writes no SQL back: the name after
+ * The statement is rewritten as text, as the parser database loads writes no SQL back: the name after
  * each TABLESPACE keyword, outside comments, strings, dollar quotes and quoted names, becomes
  * pg_default where it names a tablespace the replay left out. The rewrite runs only when its parse
  * tree is the statement's own with those tablespaces, and nothing else, turned into pg_default; any

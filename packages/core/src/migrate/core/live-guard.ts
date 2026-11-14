@@ -2,10 +2,10 @@
  * The database's own foreign keys and triggers, read before a guarded rebuild applies. The guard
  * (rebuild-guard.ts) keeps the rows of the tables the migration history says reach the rebuilt
  * table; a table or trigger made outside the migrations (at runtime, or adopted by a baseline
- * that replayed nothing) is invisible to it, and the rebuild's drop would cascade into it. So comb
+ * that replayed nothing) is invisible to it, and the rebuild's drop would cascade into it. So database
  * reads the live graph in one query and refuses when it reaches further than the history does.
  */
-import type { Connection } from "../types.ts"
+import type { MigrateConnection } from "../types.ts"
 import type { Pending } from "./plan-apply.ts"
 import type { ExtractedSchema } from "../migration-types.ts"
 import { notEngineTables } from "./engine-tables.ts"
@@ -22,14 +22,14 @@ const pairs = (rows: unknown[][]): Array<[string, string]> => rows.map((row) => 
  * The live foreign keys as child → parent pairs, in one query (one wrangler call on D1). D1 refuses
  * pragma_foreign_key_list on its own _cf_ tables, so they are left out before the join reaches them.
  */
-async function liveKeys(conn: Connection): Promise<Array<[string, string]>> {
+async function liveKeys(conn: MigrateConnection): Promise<Array<[string, string]>> {
 	const joined = `SELECT m.name, f."table" FROM sqlite_master m, pragma_foreign_key_list(m.name) f WHERE m.type = 'table'${notEngineTables(conn)}`
 	return pairs((await conn.execute(joined)).rows)
 }
 
 /** The live foreign keys as child → parent pairs, and the live triggers by table */
 async function liveSchema(
-	conn: Connection,
+	conn: MigrateConnection,
 ): Promise<{ keys: Array<[string, string]>; triggers: Array<[string, string]> }> {
 	const triggers = await conn.execute("SELECT name, tbl_name FROM sqlite_master WHERE type = 'trigger'")
 	return { keys: await liveKeys(conn), triggers: pairs(triggers.rows) }
@@ -71,7 +71,7 @@ function rebuildClosures(
  * the rebuilt one outside the guard's closure (empty when the history shows none, and no guard is
  * written), or a trigger the history does not know on a table the guard empties
  */
-async function refuseUnseenReach(conn: Connection, pending: readonly Pending[]): Promise<void> {
+async function refuseUnseenReach(conn: MigrateConnection, pending: readonly Pending[]): Promise<void> {
 	const rebuilds = pending.flatMap(({ before, name, sql }) =>
 		rebuildClosures(sql, before).map((rebuild) => ({ ...rebuild, before, name })),
 	)
@@ -91,7 +91,7 @@ async function refuseUnseenReach(conn: Connection, pending: readonly Pending[]):
 			closure.length === 0 ? undefined : live.triggers.find(([trig, on]) => kept.has(on) && !known.has(trig))
 		if (trigger !== undefined) {
 			throw new Error(
-				`${name} rebuilds ${table}, and the database's trigger ${trigger[0]} on ${trigger[1]}, which no migration made, would fire as comb keeps its rows; drop it first`,
+				`${name} rebuilds ${table}, and the database's trigger ${trigger[0]} on ${trigger[1]}, which no migration made, would fire as database keeps its rows; drop it first`,
 			)
 		}
 	}

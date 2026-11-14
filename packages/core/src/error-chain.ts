@@ -5,7 +5,7 @@
  * driver builds is never deeper.
  */
 
-/* how deep a chain is read: past every wrapper comb meets, and short of any cycle */
+/* how deep a chain is read: past every wrapper database meets, and short of any cycle */
 const MAX_DEPTH = 8
 
 /** `error` and each object under it on `.cause`, outermost first */

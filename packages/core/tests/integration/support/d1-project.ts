@@ -4,9 +4,9 @@ import fs from "node:fs"
 import { createRequire } from "node:module"
 import os from "node:os"
 import path from "node:path"
-import { run, type Run } from "../../../src/migrate/core/process.ts"
+import { run, type MigrateRun } from "../../../src/migrate/core/process.ts"
 
-/* the wrangler package comb tests against, which each project installs as a link */
+/* the wrangler package database tests against, which each project installs as a link */
 const WRANGLER_PACKAGE = path.dirname(createRequire(import.meta.url).resolve("wrangler/package.json"))
 const WRANGLER = path.join(WRANGLER_PACKAGE, "bin/wrangler.js")
 
@@ -14,10 +14,10 @@ const BIN = path.resolve(import.meta.dirname, "../../../src/bin.ts")
 
 /**
  * A worker project whose wrangler.toml applies ./atlas-migrations, holding `migrations` and their
- * atlas.sum, with wrangler installed in it, where comb finds the wrangler it runs (K1 of r22)
+ * atlas.sum, with wrangler installed in it, where database finds the wrangler it runs (K1 of r22)
  */
 export function d1Project(migrations: Record<string, string>): string {
-	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "comb-d1-cli-"))
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "database-d1-cli-"))
 	fs.mkdirSync(path.join(dir, "node_modules"))
 	fs.symlinkSync(WRANGLER_PACKAGE, path.join(dir, "node_modules", "wrangler"))
 	fs.writeFileSync(
@@ -36,7 +36,10 @@ export function writeMigrations(dir: string, migrations: Record<string, string>)
 }
 
 /** The CLI as a process of its own in the project, as a user runs it: the project's wrangler, nothing on PATH for it */
-export function combProcess(dir: string, args: readonly string[]): Promise<{ code: number | null; stderr: string }> {
+export function databaseProcess(
+	dir: string,
+	args: readonly string[],
+): Promise<{ code: number | null; stderr: string }> {
 	return new Promise((done) => {
 		const child = spawn("bun", [BIN, ...args], { cwd: dir, stdio: ["ignore", "ignore", "pipe"] })
 		let stderr = ""
@@ -49,7 +52,7 @@ export function combProcess(dir: string, args: readonly string[]): Promise<{ cod
 
 /** wrangler run in the project: the one the CLI resolved, or, called as `wrangler`, the one the tests pin */
 export const wrangler =
-	(dir: string): Run =>
+	(dir: string): MigrateRun =>
 	(cmd, args, options) => {
 		if (options?.peer === "wrangler") return run(cmd, args, { ...options, cwd: dir })
 		return cmd === "wrangler" ? run("node", [WRANGLER, ...args], { ...options, cwd: dir }) : run(cmd, args, options)

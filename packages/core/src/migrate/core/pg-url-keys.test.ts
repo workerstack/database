@@ -11,7 +11,7 @@ const target = (over: Partial<PgTarget> = {}): PgTarget => ({
 })
 /** What pgUrlProblems says of a libpq service in `field` */
 const SERVICE = (field: string) =>
-	`${field} names a libpq service, which Atlas reads from ~/.pg_service.conf and comb does not; write its host, port, dbname and user into the URL`
+	`${field} names a libpq service, which Atlas reads from ~/.pg_service.conf and database does not; write its host, port, dbname and user into the URL`
 const DRIVER = "Atlas's driver does not do: it sends the key to the server, which refuses it; drop it"
 
 /*
@@ -34,7 +34,7 @@ describe("pgUrlProblems: libpq keys Atlas's driver sends to the server", () => {
 		expect(dev).toEqual([`${said.replace(/^url/, "devUrl")} ${DRIVER}`])
 	})
 
-	/* P6 of r19: Atlas reads the service file's host, dbname and user over the URL's, comb reads the URL */
+	/* P6 of r19: Atlas reads the service file's host, dbname and user over the URL's, database reads the URL */
 	it("refuses a libpq service on url and devUrl", () => {
 		expect(pgUrlProblems(target({ url: `${BASE}&service=prod` })).errors).toEqual([SERVICE("url")])
 		expect(pgUrlProblems(target({ devUrl: "postgres://dev@localhost/dev?service=dev" })).errors).toEqual([
@@ -62,7 +62,7 @@ describe("atlasUrls: libpq keys that only tune the connection", () => {
 		const { devUrl, url } = atlasUrls(t)
 		expect(new URL(url).searchParams.has(key), url).toBe(false)
 		expect(new URL(devUrl).searchParams.has(key), devUrl).toBe(false)
-		const unscoped = withAtlasEnv(t, { allSchemas: true, url: true }, (env) => env.env["COMB_ATLAS_URL"] as string)
+		const unscoped = withAtlasEnv(t, { allSchemas: true, url: true }, (env) => env.env["DATABASE_ATLAS_URL"] as string)
 		expect(new URL(unscoped).searchParams.has(key), unscoped).toBe(false)
 	})
 

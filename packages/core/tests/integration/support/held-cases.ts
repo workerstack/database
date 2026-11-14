@@ -1,5 +1,5 @@
 /**
- * The history and the statements before a VALIDATE that lock-oracle-held.test.ts holds comb's
+ * The history and the statements before a VALIDATE that lock-oracle-held.test.ts holds database's
  * held warnings to Postgres 17's pg_locks with, and check-held.test.ts holds check's replay to:
  * each statement with what Postgres holds blocked at its file's end.
  */
@@ -40,7 +40,7 @@ const [READS, WRITES] = ["reads and writes", "writes"]
 
 // lookup-table: each statement before the VALIDATE, with what Postgres 17 holds blocked at the file's end
 export const CASES: ReadonlyArray<readonly [string, Readonly<Record<string, string>>]> = [
-	/* comb-5d's red: an ADD COLUMN, then a CREATE INDEX */
+	/* database-5d's red: an ADD COLUMN, then a CREATE INDEX */
 	["ALTER TABLE users ADD COLUMN x int;", { users: READS }],
 	["CREATE INDEX orders_id ON orders (id);", { orders: WRITES }],
 	/* ALTER TABLE, command by command */

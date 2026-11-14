@@ -8,16 +8,16 @@ import { STORABLE_TEXT_RULE } from "../../../storable-text.ts"
 import { isMutative } from "./schema-type.ts"
 import { regexExpression } from "../../utils/pattern.ts"
 
-/* the text guard every written text takes: comb's own isStorableText, which the shared file imports, as a
+/* the text guard every written text takes: database's own isStorableText, which the shared file imports, as a
    refine sits in the structural core the shared schemas share there */
-const TEXT_GUARD = `.refine(comb.isStorableText, { message: "Must not contain U+0000 or an unpaired surrogate" })`
+const TEXT_GUARD = `.refine(database.isStorableText, { message: "Must not contain U+0000 or an unpaired surrogate" })`
 
 /* the key that says what TEXT_GUARD refuses */
-const GUARD_KEY = { "x-comb-text": STORABLE_TEXT_RULE }
+const GUARD_KEY = { "x-database-text": STORABLE_TEXT_RULE }
 /* z.url()'s check, the WHATWG parse, which no standard keyword states (meta-contract §2.1) */
-const URL_KEY = { "x-comb-url": "whatwg" }
+const URL_KEY = { "x-database-url": "whatwg" }
 
-/** A written text's length bounds as comb holds them, declared and its own together; null where none */
+/** A written text's length bounds as database holds them, declared and its own together; null where none */
 type TextRange = { max: number | null; min: number | null }
 
 /*
@@ -36,7 +36,7 @@ const HTTPS = "/^https:\\/\\//u"
 const NAME = "/^[\\p{L}\\p{M}\\p{N}\\p{Zs}\\p{P}]+$/u"
 const IMAGE = "/^(?:https:\\/\\/|data:image\\/)/u"
 
-/* the length comb's ids keep to, which a read states: an imported or older id may not */
+/* the length database's ids keep to, which a read states: an imported or older id may not */
 const ID_LENGTH = { maxLength: 48, minLength: 1 }
 
 /**
@@ -45,14 +45,14 @@ const ID_LENGTH = { maxLength: 48, minLength: 1 }
  * bounds of its own; a reference to a natural key, a c.ref included, takes its own text rules
  */
 function isIdText(annotations: FieldConstraints, field: FieldMeta): boolean {
-	const untargetedRef = field.combKind === "ref" && field.foreignKey === null
+	const untargetedRef = field.databaseKind === "ref" && field.foreignKey === null
 	const declares =
 		field.length !== null ||
 		annotations.min !== null ||
 		annotations.max !== null ||
 		annotations.format !== null ||
 		field.schemaJson !== null
-	return (field.combKind === "id" || field.foreignKey?.toId === true || untargetedRef) && !declares
+	return (field.databaseKind === "id" || field.foreignKey?.toId === true || untargetedRef) && !declares
 }
 
 /** The lesser of two upper bounds, either of which may be none */
@@ -107,7 +107,7 @@ const CHAIN: Record<Transform, string> = {
 
 /**
  * A written text's transforms, in the order the chain applies them: an email's and a url's are
- * comb's own normalization, the url's the trim and the tab, LF and CR strip z.url() would do
+ * database's own normalization, the url's the trim and the tab, LF and CR strip z.url() would do
  * unpublished. The
  * manifest projects this list too, so the channels cannot disagree
  */
@@ -128,10 +128,10 @@ const transforms = (annotations: FieldConstraints, mutative: boolean): string =>
 		.map((transform) => CHAIN[transform])
 		.join("")
 
-/** zod publishes no overwrite, so the list is published as `x-comb-transform`, from the one list the chain is written from */
+/** zod publishes no overwrite, so the list is published as `x-database-transform`, from the one list the chain is written from */
 function transformKey(annotations: FieldConstraints, mutative: boolean): Record<string, unknown> {
 	const list = transformsOf(annotations, mutative)
-	return list.length === 0 ? {} : { "x-comb-transform": list }
+	return list.length === 0 ? {} : { "x-database-transform": list }
 }
 
 /** A range's bounds as zod checks */
@@ -147,14 +147,14 @@ function emailBounds(annotations: FieldConstraints, range: TextRange): string {
 }
 
 /**
- * Bounds a read states and never enforces, as `x-comb-*` meta: a read never refuses a stored row,
+ * Bounds a read states and never enforces, as `x-database-*` meta: a read never refuses a stored row,
  * which an older rule, a migration or an import may have stored past them
  */
 export const stated = (bounds: Record<string, number | null>): Record<string, unknown> =>
 	Object.fromEntries(
 		Object.entries(bounds)
 			.filter(([, bound]) => bound !== null)
-			.map(([rule, bound]) => [`x-comb-${rule}`, bound]),
+			.map(([rule, bound]) => [`x-database-${rule}`, bound]),
 	)
 
 /* the length a Postgres column holds a read text to */
@@ -167,7 +167,7 @@ function readKeys(build: Build): Record<string, unknown> {
 	return stated({ maxLength: max, minLength: annotations.min })
 }
 
-/** The `x-comb-*` keys a text publishes, which finish writes on the property itself */
+/** The `x-database-*` keys a text publishes, which finish writes on the property itself */
 function textKeys(build: Build): Record<string, unknown> {
 	const { annotations, field, schemaType } = build
 	const mutative = isMutative(schemaType)
@@ -175,7 +175,7 @@ function textKeys(build: Build): Record<string, unknown> {
 	if (isIdText(annotations, field)) return mutative ? { ...transform, ...GUARD_KEY } : stated(ID_LENGTH)
 	if (!mutative) return readKeys(build)
 	/* a format's source admits no U+0000 or surrogate, so it takes no text guard */
-	if (annotations.format !== null) return { ...transform, "x-comb-format": annotations.format }
+	if (annotations.format !== null) return { ...transform, "x-database-format": annotations.format }
 	if (annotations.email) return transform
 	return annotations.url ? { ...transform, ...URL_KEY, ...GUARD_KEY } : { ...transform, ...GUARD_KEY }
 }

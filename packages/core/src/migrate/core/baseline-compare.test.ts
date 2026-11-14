@@ -8,12 +8,12 @@ import { libsqlConnection } from "../__fixtures__/libsql-connection.ts"
 import { createLibsqlProvider } from "../drivers/sqlite.ts"
 import { refuseHistoryDrift, sqliteDrift, UNCOMPARED } from "./baseline-compare.ts"
 import { loadPostgresParser } from "./pg-parser.ts"
-import type { Run } from "./process.ts"
+import type { MigrateRun } from "./process.ts"
 import { FAKE_REPLAY, noLive, replaying } from "../__fixtures__/live-objects.ts"
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-baseline-compare-"))
+	dir = mkdtempSync(join(tmpdir(), "database-baseline-compare-"))
 	mkdirSync(join(dir, "m"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
@@ -22,9 +22,9 @@ afterEach(() => rmSync(dir, { force: true, recursive: true }))
 const SYNCED_SAID = "Schemas are synced, no changes to be made.\n"
 
 /** atlas: hash writes nothing; schema diff keeps the database's DDL it was handed and answers `stdout` */
-function atlas(stdout: string, code = 0, notice = ""): Run & { live: string[] } {
+function atlas(stdout: string, code = 0, notice = ""): MigrateRun & { live: string[] } {
 	const live: string[] = []
-	const run: Run = async (_cmd, args) => {
+	const run: MigrateRun = async (_cmd, args) => {
 		const from = args[args.indexOf("--from") + 1] as string
 		if (args[0] === "schema" && from.startsWith("file://")) live.push(readFileSync(from.replace("file://", ""), "utf8"))
 		if (args[0] !== "schema") return { code: 0, stderr: "", stdout: "" }
@@ -52,7 +52,7 @@ describe("sqliteDrift", () => {
 	})
 })
 
-/* M79: Atlas's answer is compared as Atlas wrote it, and scrubbed only where comb prints it */
+/* M79: Atlas's answer is compared as Atlas wrote it, and scrubbed only where database prints it */
 /** A Postgres target whose password is `password` */
 const target = (password: string) => ({
 	devUrl: "postgres://localhost/dev",
@@ -62,13 +62,13 @@ const target = (password: string) => ({
 })
 
 /** A run of the Postgres comparison: no database read, a replay faked by `replaying`, and what it printed */
-function compared(exec: Run, password = "synced", read = async () => noLive()) {
+function compared(exec: MigrateRun, password = "synced", read = async () => noLive()) {
 	const printed: string[] = []
 	const options = { exec, print: (line: string) => printed.push(line), readLive: read, readReplay: replaying(read) }
 	return { printed, run: () => refuseHistoryDrift({ ...options, target: target(password) }, join(dir, "m")) }
 }
 
-describe("refuseHistoryDrift: the Postgres database against what comb's replay left", () => {
+describe("refuseHistoryDrift: the Postgres database against what database's replay left", () => {
 	beforeAll(loadPostgresParser)
 
 	it("finds a synced database synced whatever its password spells, and prints a difference scrubbed", async () => {
@@ -87,12 +87,12 @@ describe("refuseHistoryDrift: the Postgres database against what comb's replay l
 		await expect(compared(atlas("", 1)).run()).rejects.toThrow("atlas schema diff: boom")
 	})
 
-	/* 16.3 (b) of plan 21: Atlas replaying the files itself ran a DO block's role past comb's guard and left it */
+	/* 16.3 (b) of plan 21: Atlas replaying the files itself ran a DO block's role past database's guard and left it */
 	it("has Atlas read the replay's own database, scoped to the schema, and run no file", async () => {
 		writeFileSync(join(dir, "m", "1_a.sql"), 'CREATE TABLE "a" ("id" int);\n')
 		const calls: Array<{ args: readonly string[]; src: string | undefined }> = []
-		const exec: Run = async (_cmd, args, options) => {
-			calls.push({ args, src: options?.env?.["COMB_ATLAS_SRC_URL"] })
+		const exec: MigrateRun = async (_cmd, args, options) => {
+			calls.push({ args, src: options?.env?.["DATABASE_ATLAS_SRC_URL"] })
 			return { code: 0, stderr: "", stdout: SYNCED_SAID }
 		}
 		await compared(exec).run()
@@ -107,7 +107,7 @@ describe("refuseHistoryDrift: the Postgres database against what comb's replay l
 
 /* KC5 of r22b: the replayable history is a scratch of its own, gone when writing it fails as when the diff ends */
 /** atlas refusing to hash a directory, and answering anything else with nothing */
-const hashRefused: Run = async (_cmd, args) =>
+const hashRefused: MigrateRun = async (_cmd, args) =>
 	args[1] === "hash" ? { code: 1, stderr: "hash refused", stdout: "" } : { code: 0, stderr: "", stdout: "" }
 
 describe("refuseHistoryDrift's replayable history on a docker:// dev", () => {
@@ -161,7 +161,7 @@ CREATE TRIGGER post_audit AFTER UPDATE ON post BEGIN SELECT 1; END;`
 		)
 		writeFileSync(join(dir, "m", "2_bad.sql"), "CREATE TABLE ;")
 		await expect(sqliteDrift(conn, join(dir, "m"), { exec: synced() })).rejects.toThrow(
-			"comb could not replay 2_bad.sql to compare its triggers and views:",
+			"database could not replay 2_bad.sql to compare its triggers and views:",
 		)
 		await conn.close()
 	})
@@ -247,7 +247,7 @@ describe("refuseHistoryDrift: the warning over the bodies it did not compare", (
 		const options = { exec: synced(), print: (line: string) => printed.push(line), readLive }
 		await refuseHistoryDrift({ ...options, readReplay: replaying(readLive), target: target("x") }, join(dir, "m"))
 		expect(printed).toEqual([
-			`Warning: the bodies of ${counted} were not compared: Atlas OSS cannot load them, and comb does not read them`,
+			`Warning: the bodies of ${counted} were not compared: Atlas OSS cannot load them, and database does not read them`,
 			UNCOMPARED,
 		])
 	})
@@ -260,7 +260,7 @@ const unreachable = replaying(async () => {
 /** A database holding view v */
 const holding = async (): Promise<LiveObjects> => ({ ...noLive(), relations: new Map([["v", "view" as const]]) })
 
-/* P5 of r19: Atlas's docker:// dev is out of comb's reach, so a history with something the catalog read compares is refused */
+/* P5 of r19: Atlas's docker:// dev is out of database's reach, so a history with something the catalog read compares is refused */
 describe("refuseHistoryDrift on a docker:// dev database", () => {
 	beforeAll(loadPostgresParser)
 	const docker = { ...target("x"), devUrl: "docker://postgres/17/dev" }
@@ -292,7 +292,7 @@ describe("refuseHistoryDrift on a docker:// dev database", () => {
 				join(dir, "m"),
 			),
 		).rejects.toThrow(
-			/docker:\/\/postgres\/17\/dev is Atlas's own container, which comb cannot reach: set devUrl to a postgres:\/\/ scratch database/,
+			/docker:\/\/postgres\/17\/dev is Atlas's own container, which database cannot reach: set devUrl to a postgres:\/\/ scratch database/,
 		)
 	})
 
@@ -314,9 +314,9 @@ describe("refuseHistoryDrift on a docker:// dev database", () => {
 })
 
 /** atlas finding the tables in sync, recording each 1_init.sql it is handed to replay */
-function replaying1(): Run & { replayed: string[] } {
+function replaying1(): MigrateRun & { replayed: string[] } {
 	const replayed: string[] = []
-	const exec: Run = async (_cmd, args) => {
+	const exec: MigrateRun = async (_cmd, args) => {
 		const to = args[args.indexOf("--to") + 1] as string
 		if (args[0] === "schema") replayed.push(readFileSync(join(to.replace("file://", ""), "1_init.sql"), "utf8"))
 		return { code: 0, stderr: "", stdout: SYNCED_SAID }
@@ -328,7 +328,7 @@ function replaying1(): Run & { replayed: string[] } {
 describe("refuseHistoryDrift's replay files on a docker:// dev database", () => {
 	beforeAll(loadPostgresParser)
 
-	it("hands Atlas the history's tables without a drop of a policy, which comb owns and Atlas compares nothing of", async () => {
+	it("hands Atlas the history's tables without a drop of a policy, which database owns and Atlas compares nothing of", async () => {
 		writeFileSync(join(dir, "m", "1_init.sql"), "CREATE TABLE t (id int);\nDROP POLICY IF EXISTS p ON t;\n")
 		const exec = replaying1()
 		const docker = { ...target("x"), devUrl: "docker://postgres/17/dev" }
@@ -367,7 +367,7 @@ describe("sqliteDrift on a libsql target", () => {
 		}
 		const conn = libsqlConnection()
 		const history: string[] = []
-		const run: Run = async (_cmd, args) => {
+		const run: MigrateRun = async (_cmd, args) => {
 			const to = args[args.indexOf("--to") + 1] as string
 			if (args[0] === "schema")
 				for (const name of Object.keys(files)) history.push(readFileSync(join(to.replace("file://", ""), name), "utf8"))

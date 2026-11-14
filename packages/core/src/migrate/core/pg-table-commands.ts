@@ -1,6 +1,6 @@
 /**
  * The ALTER TABLE commands on a whole table, rated by what they do to its rows and to who sees them:
- * cautious, a rewrite, nothing, or unsafe for one comb does not list, named in the SQL's own words.
+ * cautious, a rewrite, nothing, or unsafe for one database does not list, named in the SQL's own words.
  * A trigger re-enabled is cautious, as its DISABLE is: its function runs on later writes again.
  */
 import type { Finding } from "./classify-alter.ts"
@@ -92,7 +92,7 @@ const wordsOf = (subtype: string): string =>
 		.replace(/([a-z])([A-Z])/g, "$1 $2")
 		.toUpperCase()
 
-/** A command on the whole table: its findings; one comb does not list is unsafe, named in words */
+/** A command on the whole table: its findings; one database does not list is unsafe, named in words */
 function tableFindings(cmd: Node, table: string): Finding[] {
 	const subtype = String(cmd["subtype"])
 	if (CAUTIOUS_COMMANDS.has(subtype)) return [{ level: "cautious" }]
@@ -109,9 +109,9 @@ function tableFindings(cmd: Node, table: string): Finding[] {
 		return [{ level: "cautious", note: `changes which rows each role sees on ${table}` }]
 	if (QUIET_COMMANDS.has(subtype)) return []
 	if (RULE_COMMANDS.has(subtype))
-		return [{ level: "unsafe", note: "comb rates every rule change unsafe; approve it in the file" }]
+		return [{ level: "unsafe", note: "database rates every rule change unsafe; approve it in the file" }]
 	return [
-		{ level: "unsafe", note: `comb does not recognize ALTER TABLE … ${wordsOf(subtype)}; approve it in the file` },
+		{ level: "unsafe", note: `database does not recognize ALTER TABLE … ${wordsOf(subtype)}; approve it in the file` },
 	]
 }
 

@@ -17,7 +17,7 @@ beforeAll(loadPostgresParser)
 
 let copy = ""
 beforeEach(() => {
-	copy = mkdtempSync(join(tmpdir(), "comb-atlas-pending-"))
+	copy = mkdtempSync(join(tmpdir(), "database-atlas-pending-"))
 })
 afterEach(() => rmSync(copy, { force: true, recursive: true }))
 
@@ -61,7 +61,7 @@ describe("readPending", () => {
 	})
 
 	it("refuses a pending file that cannot run from the file alone, whatever it approves (PA2)", () => {
-		write(["-- comb:allow-unsafe: commits as it goes\nCREATE TABLE a (id int);\nCOMMIT;\n"])
+		write(["-- database:allow-unsafe: commits as it goes\nCREATE TABLE a (id int);\nCOMMIT;\n"])
 		expect(() => classify(["1_a.sql"])).toThrow(
 			"COMMIT: Atlas runs this file in one transaction and records it there, so its own COMMIT ends that transaction",
 		)
@@ -70,14 +70,14 @@ describe("readPending", () => {
 	it("refuses a pending file after an earlier file Postgres's parser cannot read, naming that file (M75)", () => {
 		write(["CREATE TABL a (id int);\n", "CREATE TABLE b (id int);\n"])
 		expect(() => classify(["2_b.sql"])).toThrow(
-			'comb could not read 1_a.sql: "CREATE TABL a (id int)" (syntax error at or near "TABL")',
+			'database could not read 1_a.sql: "CREATE TABL a (id int)" (syntax error at or near "TABL")',
 		)
 	})
 
 	it("refuses a file Atlas cannot split, by name, with Atlas's reason", () => {
 		write(["SELECT (1;\n"])
 		expect(() => classify(["1_a.sql"])).toThrow(
-			"comb could not read 1_a.sql: Atlas cannot split this file: 1:8: unclosed '('",
+			"database could not read 1_a.sql: Atlas cannot split this file: 1:8: unclosed '('",
 		)
 	})
 })

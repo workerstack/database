@@ -3,7 +3,7 @@ import { getTableColumns } from "drizzle-orm"
 import { pgTable } from "drizzle-orm/pg-core"
 import { describe, expect, it } from "vitest"
 import * as z from "zod"
-import { combColumnMeta } from "../meta/column.ts"
+import { columnMeta } from "../meta/column.ts"
 import { c } from "./columns.ts"
 
 const RULES = { max: 5, pattern: "/^[a-z]+$/" } as const
@@ -29,16 +29,16 @@ const columns = getTableColumns(
 
 describe("c column metadata", () => {
 	it("records each helper's kind and what it was given, the very objects passed", () => {
-		expect(combColumnMeta(columns.id)).toEqual({ kind: "id", prefix: "itm" })
-		expect(combColumnMeta(columns.name)).toEqual({ constraints: RULES, kind: "text" })
-		expect(combColumnMeta(columns.name)?.constraints).toBe(RULES)
-		expect(combColumnMeta(columns.owner)).toEqual({ constraints: { max: 48 }, kind: "ref" })
-		expect(combColumnMeta(columns.state)).toEqual({ kind: "enum", states: machine, values: STATES })
-		expect(combColumnMeta(columns.state)?.values).toBe(STATES)
-		expect(combColumnMeta(columns.data)?.schema).toBe(schema)
-		expect(combColumnMeta(columns.data)).toMatchObject({ constraints: { maxBytes: 100 }, kind: "json" })
-		expect(combColumnMeta(columns.count)).toEqual({ constraints: { min: 0 }, kind: "integer" })
-		expect(combColumnMeta(columns.createdAt)).toEqual({ constraints: { private: true }, kind: "createdAt" })
+		expect(columnMeta(columns.id)).toEqual({ kind: "id", prefix: "itm" })
+		expect(columnMeta(columns.name)).toEqual({ constraints: RULES, kind: "text" })
+		expect(columnMeta(columns.name)?.constraints).toBe(RULES)
+		expect(columnMeta(columns.owner)).toEqual({ constraints: { max: 48 }, kind: "ref" })
+		expect(columnMeta(columns.state)).toEqual({ kind: "enum", states: machine, values: STATES })
+		expect(columnMeta(columns.state)?.values).toBe(STATES)
+		expect(columnMeta(columns.data)?.schema).toBe(schema)
+		expect(columnMeta(columns.data)).toMatchObject({ constraints: { maxBytes: 100 }, kind: "json" })
+		expect(columnMeta(columns.count)).toEqual({ constraints: { min: 0 }, kind: "integer" })
+		expect(columnMeta(columns.createdAt)).toEqual({ constraints: { private: true }, kind: "createdAt" })
 		for (const [key, kind] of [
 			["ratio", "real"],
 			["flag", "boolean"],
@@ -46,15 +46,15 @@ describe("c column metadata", () => {
 			["updatedAt", "updatedAt"],
 			["deletedAt", "deletedAt"],
 		] as const)
-			expect(combColumnMeta(columns[key])).toEqual({ kind })
+			expect(columnMeta(columns[key])).toEqual({ kind })
 	})
 
 	it("records serialId, and nothing on a column no c helper built", () => {
 		const table = getTableColumns(pgTable("seq", { id: c.serialId() }))
-		expect(combColumnMeta(table.id)).toEqual({ kind: "serialId" })
-		expect(combColumnMeta({})).toBeUndefined()
-		expect(combColumnMeta(null)).toBeUndefined()
-		expect(combColumnMeta({ config: {} })).toBeUndefined()
+		expect(columnMeta(table.id)).toEqual({ kind: "serialId" })
+		expect(columnMeta({})).toBeUndefined()
+		expect(columnMeta(null)).toBeUndefined()
+		expect(columnMeta({ config: {} })).toBeUndefined()
 	})
 })
 
@@ -71,21 +71,21 @@ describe("c.enum format and schema", () => {
 				unset: c.enum("unset", CYCLES, { format: undefined }),
 			}),
 		)
-		expect(combColumnMeta(table.cycle)).toEqual({ constraints: { format: "uts35-hc" }, kind: "enum", values: CYCLES })
-		expect(combColumnMeta(table.staged)).toEqual({
+		expect(columnMeta(table.cycle)).toEqual({ constraints: { format: "uts35-hc" }, kind: "enum", values: CYCLES })
+		expect(columnMeta(table.staged)).toEqual({
 			constraints: { format: "uts35-hc", nomutate: true },
 			kind: "enum",
 			states: start,
 			values: CYCLES,
 		})
-		expect(combColumnMeta(table.unset)).toEqual({ kind: "enum", values: CYCLES })
+		expect(columnMeta(table.unset)).toEqual({ kind: "enum", values: CYCLES })
 	})
 
 	it("keeps a schema a JavaScript caller passes among the constraints, for codegen to refuse by name", () => {
 		const given = z.enum(CYCLES)
 		// @ts-expect-error c.enum takes no schema: its values are its rule
 		const cycle = c.enum("cycle", CYCLES, { schema: given })
-		const meta = combColumnMeta(getTableColumns(pgTable("t", { cycle })).cycle)
+		const meta = columnMeta(getTableColumns(pgTable("t", { cycle })).cycle)
 		expect(meta).toEqual({ constraints: { schema: given }, kind: "enum", values: CYCLES })
 		expect(meta?.constraints?.["schema"]).toBe(given)
 	})

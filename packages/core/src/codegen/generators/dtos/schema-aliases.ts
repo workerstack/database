@@ -13,9 +13,9 @@ import { byCodeUnit } from "../../utils/order.ts"
 import { snakeToCamel, snakeToPascal } from "../../utils/case.ts"
 import { SUFFIX } from "./entity-file.ts"
 
-/* the names a generated entity or shared file declares or imports itself, whatever the tables: comb's
-   predicates live under `comb`, and the globals it calls are named through `globalThis` */
-const GENERATED = /^(?:z|comb|combMeta|globalThis|timestampSchema|cidrSchema|jsonValueSchema|_.*|timestamps.*)$/
+/* the names a generated entity or shared file declares or imports itself, whatever the tables: database's
+   predicates live under `database`, and the globals it calls are named through `globalThis` */
+const GENERATED = /^(?:z|database|databaseMeta|globalThis|timestampSchema|cidrSchema|jsonValueSchema|_.*|timestamps.*)$/
 
 /** A module as the project names it: a package by its specifier, a project file by its path from `root` */
 const moduleOf = (ref: ImportRef, root: string): string =>

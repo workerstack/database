@@ -1,7 +1,7 @@
 /**
  * PA2 of r22b: Atlas runs a file without `-- atlas:txmode none` in one transaction and records it
  * there, so the file's own BEGIN, COMMIT or ROLLBACK ends that transaction: what ran before it stays
- * or is undone apart from the record, and a later failure is reported rolled back. comb refuses
+ * or is undone apart from the record, and a later failure is reported rolled back. database refuses
  * them there, with no override, and leaves the savepoints, which nest, and a txmode none file's own.
  */
 import { beforeAll, describe, expect, it } from "vitest"
@@ -11,7 +11,7 @@ import { extractSchema } from "./schema.ts"
 
 beforeAll(loadPostgresParser)
 
-const UNSAFE = "-- comb:allow-unsafe: the file commits as it goes\n"
+const UNSAFE = "-- database:allow-unsafe: the file commits as it goes\n"
 
 /** `sql` rated as a Postgres file after a history that makes t */
 const rate = (sql: string) =>

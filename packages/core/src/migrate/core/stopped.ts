@@ -42,7 +42,7 @@ async function reportOf(
 	} catch (error) {
 		return new Stopped(
 			signal,
-			`Stopped by ${signal}: comb could not read what was applied: ${(error as Error).message}`,
+			`Stopped by ${signal}: database could not read what was applied: ${(error as Error).message}`,
 			{ pending: [], unknown: names },
 		)
 	}

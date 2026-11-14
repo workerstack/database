@@ -22,7 +22,7 @@ function project(): string {
 	for (const [name, sql] of Object.entries(FILES)) writeFileSync(join(dir, "m", name), sql)
 	writeSum(join(dir, "m"))
 	writeFileSync(
-		join(dir, "comb.migrate.config.ts"),
+		join(dir, "database.migrate.config.ts"),
 		`export default { databases: { core: { migrationsDir: "./m", name: "core", provider: { type: "libsql", url: ${JSON.stringify(`file:${join(dir, "core.db")}`)} } } } }\n`,
 	)
 	return dir

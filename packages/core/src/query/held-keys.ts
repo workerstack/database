@@ -1,5 +1,5 @@
 /**
- * The stored values a SQLite list selects apart from its keys' reads (`_combTextKeys`), where a key's
+ * The stored values a SQLite list selects apart from its keys' reads (`_cursorTextKeys`), where a key's
  * mode reads a class it holds as another, and the mark of a REAL SQLite prints no
  * text of that reads back as it
  */
@@ -15,13 +15,13 @@ const isUnprinted = (key: unknown): key is Unprinted => typeof key === "string" 
 /** An unprinted key's number, as its printf text reads, which the merge orders it by */
 const unprintedNumber = (key: Unprinted): number => Number(key.slice(UNPRINTED_MARK.length))
 
-/** A key's stored value `_combTextKeys` carries where its mode reads another: its storage class and text, or a REAL's Unprinted */
+/** A key's stored value `_cursorTextKeys` carries where its mode reads another: its storage class and text, or a REAL's Unprinted */
 type HeldKey = readonly [StoredClass, string] | Unprinted | null
 type StoredClass = "blob" | "integer" | "real" | "text"
-// lookup-table: the storage classes a SQLite key's stored value carries, in _combTextKeys and as `!` and the class in _combKeyTexts
+// lookup-table: the storage classes a SQLite key's stored value carries, in _cursorTextKeys and as `!` and the class in _cursorKeyTexts
 const STORED_CLASSES: ReadonlySet<unknown> = /* @__PURE__ */ new Set(["blob", "integer", "real", "text"])
 
-/** Whether `key` is one key's value in `_combTextKeys`: null, or a storage class and its text */
+/** Whether `key` is one key's value in `_cursorTextKeys`: null, or a storage class and its text */
 const isHeldKey = (key: unknown): key is HeldKey =>
 	key === null ||
 	isUnprinted(key) ||
@@ -31,7 +31,7 @@ const isHeldKey = (key: unknown): key is HeldKey =>
 const isStoredKey = (key: HeldKey | undefined): key is readonly [StoredClass, string] => Array.isArray(key)
 
 /**
- * Whether `value` is `_combTextKeys` as a builder selects it for `sort`: a JSON array of a held key
+ * Whether `value` is `_cursorTextKeys` as a builder selects it for `sort`: a JSON array of a held key
  * each (isHeldKey), or empty where listOptions' table has no key that holds one
  */
 function isTextKeys(value: unknown, sort: readonly SortField[]): boolean {
@@ -41,15 +41,15 @@ function isTextKeys(value: unknown, sort: readonly SortField[]): boolean {
 		const keys: unknown = JSON.parse(value)
 		return Array.isArray(keys) && keys.length === sort.length && keys.every(isHeldKey)
 	} catch {
-		// reason: a value that is no JSON, such as the alias rendered by hand, is no _combTextKeys, which malformed names
+		// reason: a value that is no JSON, such as the alias rendered by hand, is no _cursorTextKeys, which malformed names
 		return false
 	}
 }
 
-/** Each sort key's held value from the row's `_combTextKeys`, null for a key holding none; none where no key holds any */
+/** Each sort key's held value from the row's `_cursorTextKeys`, null for a key holding none; none where no key holds any */
 const textKeysOf = (row: Record<string, unknown>): readonly HeldKey[] | undefined =>
-	typeof row["_combTextKeys"] === "string" && row["_combTextKeys"] !== ""
-		? (JSON.parse(row["_combTextKeys"]) as HeldKey[])
+	typeof row["_cursorTextKeys"] === "string" && row["_cursorTextKeys"] !== ""
+		? (JSON.parse(row["_cursorTextKeys"]) as HeldKey[])
 		: undefined
 
 /**

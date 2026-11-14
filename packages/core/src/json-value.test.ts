@@ -11,9 +11,9 @@ describe("jsonValue", () => {
 		expect(jsonValue.safeParse(value).success).toBe(false)
 	})
 
-	it("publishes one definition under CombJsonValue that its recursion refers to", () => {
+	it("publishes one definition under DatabaseJsonValue that its recursion refers to", () => {
 		const published = z.toJSONSchema(z.object({ a: jsonValue, b: z.array(jsonValue) }))
-		expect(Object.keys(published.$defs ?? {})).toEqual(["CombJsonValue"])
-		expect(JSON.stringify(published.$defs?.["CombJsonValue"])).toContain('"$ref":"#/$defs/CombJsonValue"')
+		expect(Object.keys(published.$defs ?? {})).toEqual(["DatabaseJsonValue"])
+		expect(JSON.stringify(published.$defs?.["DatabaseJsonValue"])).toContain('"$ref":"#/$defs/DatabaseJsonValue"')
 	})
 })

@@ -7,7 +7,7 @@ import { analyze } from "./analyzer.ts"
 let tmpDir: string
 
 beforeEach(() => {
-	tmpDir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-analyzer-"))
+	tmpDir = fs.mkdtempSync(path.join(fixtureRoot(), "database-analyzer-"))
 })
 
 afterEach(() => {

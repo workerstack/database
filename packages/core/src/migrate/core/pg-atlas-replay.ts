@@ -1,5 +1,5 @@
 /**
- * The comb-owned statements Atlas's replay of a Postgres history still needs to run, in place: Atlas
+ * The database-owned statements Atlas's replay of a Postgres history still needs to run, in place: Atlas
  * OSS will not take a view or an extension in what it loads, but what comes after one may depend on
  * it (a LANGUAGE sql body reading a view, a SETOF it, a column of its row type, a view over an
  * extension's function). Each is handed to the dev database in a DO block, which Atlas runs and its
@@ -8,9 +8,9 @@
 
 /** `sql` inside a DO block, under a dollar tag `sql` does not hold */
 function inDoBlock(sql: string): string {
-	let tag = "comb_view"
-	for (let i = 1; sql.includes(`$${tag}$`); i++) tag = `comb_view${i}`
-	return `DO $comb$ BEGIN EXECUTE $${tag}$${sql}$${tag}$; END $comb$`
+	let tag = "database_view"
+	for (let i = 1; sql.includes(`$${tag}$`); i++) tag = `database_view${i}`
+	return `DO $database$ BEGIN EXECUTE $${tag}$${sql}$${tag}$; END $database$`
 }
 
 /** `code` (codeOf), a view's or materialized view's create or drop, as Atlas replays it; undefined for any other */

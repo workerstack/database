@@ -20,7 +20,7 @@ const code = (options: string, notNull = true) =>
 
 /** The evaluated create schema of a text column declared with `options` */
 const written = (options: string, notNull = true): z.ZodType =>
-	new Function("z", "comb", "_m", `return ${code(options, notNull)}`)(z, { isStorableText }, META) as z.ZodType
+	new Function("z", "database", "_m", `return ${code(options, notNull)}`)(z, { isStorableText }, META) as z.ZodType
 
 /** Every string of `length` over `alphabet` */
 function stringsOf(length: number, alphabet: string): string[] {

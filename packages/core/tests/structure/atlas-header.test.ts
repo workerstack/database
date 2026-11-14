@@ -1,10 +1,10 @@
 /**
- * PA3 of r22b: comb reads a migration file's header by Atlas's rule, held here to the pinned Atlas
+ * PA3 of r22b: database reads a migration file's header by Atlas's rule, held here to the pinned Atlas
  * itself. Each shape heads a file whose one statement is VACUUM, which SQLite refuses inside a
  * transaction: Atlas runs it when it reads `txmode none`, fails it in the file's transaction when it
  * reads no directive or `file`, and refuses the file, naming the txmode, for any other value. Atlas
  * reads the header the same on every dialect (sql/migrate/dir.go), so SQLite, which needs no server,
- * is the oracle for Postgres too. comb runs on every Atlas in ATLAS_RANGE, so each shape is read by
+ * is the oracle for Postgres too. database runs on every Atlas in ATLAS_RANGE, so each shape is read by
  * the pinned v1.2.0 floor and by the Atlas on PATH alike, and one they read apart fails naming both.
  * Atlas locks a SQLite apply with a file in TMPDIR (atlas_migrate_execute.lock), one per machine
  * whatever the database, so each run takes its own TMPDIR: under another process's apply, the
@@ -31,8 +31,8 @@ const SHAPES: Readonly<Record<string, string>> = {
 	"value none-ish": "-- atlas:txmode none-ish\n\n",
 	"upper NONE": "-- atlas:txmode NONE\n\n",
 	"no blank line": "-- atlas:txmode none\n",
-	"comb:allow-unsafe line first": "-- comb:allow-unsafe: vacuum online\n-- atlas:txmode none\n\n",
-	"comb:allow-unsafe line after": "-- atlas:txmode none\n-- comb:allow-unsafe: vacuum online\n\n",
+	"database:allow-unsafe line first": "-- database:allow-unsafe: vacuum online\n-- atlas:txmode none\n\n",
+	"database:allow-unsafe line after": "-- atlas:txmode none\n-- database:allow-unsafe: vacuum online\n\n",
 	"txmode file": "-- atlas:txmode file\n\n",
 	"txmode all": "-- atlas:txmode all\n\n",
 	/* a # line, which SQLite cannot run, read for a value Atlas refuses before it runs anything */
@@ -66,7 +66,7 @@ function ran(binary: string, args: readonly string[], env: NodeJS.ProcessEnv) {
 
 /** How the Atlas `binary` ran `head` before a VACUUM, as a txmode; any other failure throws Atlas's words */
 function atlasRead(head: string, binary: string): Txmode {
-	const dir = mkdtempSync(path.join(os.tmpdir(), "comb-atlas-header-"))
+	const dir = mkdtempSync(path.join(os.tmpdir(), "database-atlas-header-"))
 	try {
 		const migrations = path.join(dir, "m")
 		mkdirSync(migrations)
@@ -80,7 +80,7 @@ function atlasRead(head: string, binary: string): Txmode {
 		const said = `${apply.stdout}${apply.stderr}`
 		if (!said.includes("Error")) return "none"
 		if (said.includes("cannot VACUUM from within a transaction")) return "file"
-		/* Atlas names the file, which comb's refusal leaves to the line that reports it */
+		/* Atlas names the file, which database's refusal leaves to the line that reports it */
 		const refused = /^Error: (.*txmode.*)$/m.exec(said)?.[1]?.replace(' "20260102000000_v.sql"', "")
 		if (refused === undefined) throw new Error(`${binary} failed the file outside its header: ${said}`)
 		return { refused }
@@ -89,12 +89,12 @@ function atlasRead(head: string, binary: string): Txmode {
 	}
 }
 
-describe("comb reads a txmode header as Atlas does (PA3; sibling: comb's own -- comb:allow-unsafe: line)", () => {
+describe("database reads a txmode header as Atlas does (PA3; sibling: database's own -- database:allow-unsafe: line)", () => {
 	it.each(Object.entries(SHAPES))("%s", (_, head) => {
 		const reads = Object.fromEntries(
 			Object.entries(ATLASES).map(([version, binary]) => [version, atlasRead(head, binary)]),
 		)
-		const comb = atlasHeader(`${head}VACUUM;\n`).txmode
-		expect(Object.fromEntries(Object.keys(ATLASES).map((version) => [version, comb]))).toEqual(reads)
+		const database = atlasHeader(`${head}VACUUM;\n`).txmode
+		expect(Object.fromEntries(Object.keys(ATLASES).map((version) => [version, database]))).toEqual(reads)
 	})
 })

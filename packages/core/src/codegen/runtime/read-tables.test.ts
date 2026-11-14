@@ -24,7 +24,7 @@ const failingOn = (url: string) =>
 	url.endsWith("other.ts") || url.includes("/zod/") ? Promise.reject(new Error("no")) : import(url)
 
 beforeEach(() => {
-	dir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-read-tables-"))
+	dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-read-tables-"))
 })
 
 afterEach(() => fs.rmSync(dir, { force: true, recursive: true }))
@@ -71,25 +71,25 @@ describe("readTables", () => {
 		const tables = write({
 			"db.core.tables.ts": `${HEAD}import * as z from "zod"
 import { prefs } from "./schemas.ts"
-import { ipList } from "comb-fixture-schemas"
-import type { Unused } from "comb-fixture-types-only"
+import { ipList } from "database-fixture-schemas"
+import type { Unused } from "database-fixture-types-only"
 export const note = sqliteTable("note", { id: c.id("not"), prefs: c.json("prefs", prefs), ips: c.json("ips", ipList) })
 export { note as alias }
 export const plain = z.string()
 `,
-			"node_modules/comb-fixture-schemas/index.js": `import * as z from "zod"\nexport const ipList = z.array(z.string())\n`,
-			"node_modules/comb-fixture-schemas/package.json": JSON.stringify({
+			"node_modules/database-fixture-schemas/index.js": `import * as z from "zod"\nexport const ipList = z.array(z.string())\n`,
+			"node_modules/database-fixture-schemas/package.json": JSON.stringify({
 				exports: "./index.js",
-				name: "comb-fixture-schemas",
+				name: "database-fixture-schemas",
 				type: "module",
 			}),
 			"schemas.ts": `import * as z from "zod"\nexport const prefs = z.object({ a: z.string() })\n`,
 		})
 		const { tables: read } = await readTables(tables)
 		expect(read.map((table) => table.exportName)).toEqual(["alias"])
-		const columns = Object.fromEntries((read[0]?.columns ?? []).map((column) => [column.key, column.comb?.schema]))
+		const columns = Object.fromEntries((read[0]?.columns ?? []).map((column) => [column.key, column.database?.schema]))
 		expect(columns["prefs"]).toEqual({ external: false, module: path.join(dir, "schemas.ts"), name: "prefs" })
-		expect(columns["ips"]).toEqual({ external: true, module: "comb-fixture-schemas", name: "ipList" })
+		expect(columns["ips"]).toEqual({ external: true, module: "database-fixture-schemas", name: "ipList" })
 	})
 
 	it("skips a module that does not load on its own, and names it when a schema is then found nowhere", async () => {
@@ -110,7 +110,7 @@ export const note = sqliteTable("note", { id: c.id("not"), prefs: c.json("prefs"
 const SCHEMA_TABLES = `${HEAD}import * as z from "zod"
 import { dateOrder, positive } from "./schemas.ts"
 export const evenMinutes = z.int().refine((value) => value % 2 === 0, { error: "Must be even" })
-export const code = z.string().min(2).meta({ id: "comb/Code~1" })
+export const code = z.string().min(2).meta({ id: "database/Code~1" })
 export const codeOrNone = z.union([code, z.literal("none")])
 export const note = sqliteTable("note", {
 	id: c.id("not"),
@@ -137,32 +137,32 @@ describe("readTables: a text or number column's schema, located", () => {
 			"schemas.ts": `import * as z from "zod"\nexport const dateOrder = z.enum(["iso", "dmy", "mdy"])\nexport const positive = z.number().positive()\n`,
 		})
 		const { tables: read } = await readTables(tables)
-		const comb = Object.fromEntries((read[0]?.columns ?? []).map((column) => [column.key, column.comb]))
-		expect(comb["dateOrder"]).toMatchObject({
+		const database = Object.fromEntries((read[0]?.columns ?? []).map((column) => [column.key, column.database]))
+		expect(database["dateOrder"]).toMatchObject({
 			constraints: { trim: true },
 			schema: exportAt("schemas.ts", "dateOrder"),
 			schemaJson: { enum: ["iso", "dmy", "mdy"], type: "string" },
 		})
-		expect(comb["slot"]).toMatchObject({
+		expect(database["slot"]).toMatchObject({
 			constraints: { min: 0 },
 			schema: exportAt("db.core.tables.ts", "evenMinutes"),
 			schemaJson: { maximum: Number.MAX_SAFE_INTEGER, minimum: Number.MIN_SAFE_INTEGER, type: "integer" },
 		})
-		expect(comb["ratio"]).toMatchObject({
+		expect(database["ratio"]).toMatchObject({
 			schema: exportAt("schemas.ts", "positive"),
 			schemaJson: { exclusiveMinimum: 0, type: "number" },
 		})
 		/* a schema zod files under $defs by its id is inlined: a $ref into the literal's own root would dangle in an allOf */
-		expect(comb["code"]?.schemaJson).toEqual({ minLength: 2, type: "string" })
-		expect(comb["codeOrNone"]?.schemaJson).toEqual({
+		expect(database["code"]?.schemaJson).toEqual({ minLength: 2, type: "string" })
+		expect(database["codeOrNone"]?.schemaJson).toEqual({
 			anyOf: [
 				{ minLength: 2, type: "string" },
 				{ const: "none", type: "string" },
 			],
 		})
 		/* a helper that takes no schema keeps the key, so the constraint check names it; nothing is located */
-		expect(comb["ownerId"]).toMatchObject({ constraints: { schema: true }, schema: null, schemaJson: null })
-		expect(comb["id"]).toMatchObject({ schema: null, schemaJson: null })
+		expect(database["ownerId"]).toMatchObject({ constraints: { schema: true }, schema: null, schemaJson: null })
+		expect(database["id"]).toMatchObject({ schema: null, schemaJson: null })
 	})
 })
 
@@ -188,7 +188,7 @@ export const users = sqliteTable("users", { dateOrder: c.text("date_order", { sc
 `,
 		})
 		await expect(readTables(plain)).rejects.toThrow(
-			"users.dateOrder: the constraint schema is no zod schema; comb's DTOs are zod 4, so the schema must be one",
+			"users.dateOrder: the constraint schema is no zod schema; database's DTOs are zod 4, so the schema must be one",
 		)
 	})
 
@@ -200,7 +200,7 @@ export const users = sqliteTable("users", { dateOrder: c.text("date_order", { sc
 `,
 		})
 		await expect(readTables(custom)).rejects.toThrow(
-			"users.dateOrder: the schema its schema key is given has no JSON Schema form (zod: Custom types cannot be represented in JSON Schema); comb publishes every DTO rule",
+			"users.dateOrder: the schema its schema key is given has no JSON Schema form (zod: Custom types cannot be represented in JSON Schema); database publishes every DTO rule",
 		)
 	})
 
@@ -221,7 +221,7 @@ const oneTable = (columns: Record<string, unknown>) => ({ t: sqliteTable("t", co
 describe("snapshotOf: what a column or table cannot be", () => {
 	it("refuses a constraint that is no boolean, number or string, a machine of another shape, and enum values not strings", () => {
 		expect(() => analyzeNamespace(oneTable({ n: c.text("n", { max: [5] } as never) }))).toThrow(
-			"t.n: the constraint max is a object; comb reads a boolean, a number or a string",
+			"t.n: the constraint max is a object; database reads a boolean, a number or a string",
 		)
 		expect(() => analyzeNamespace(oneTable({ s: c.enum("s", ["a"], { initial: 1 } as never) }))).toThrow(
 			"t.s: its state machine is not { initial?, terminal?, transitions? } of state names",
@@ -363,7 +363,7 @@ describe("snapshotOf: a Postgres array column's dimensions (F49)", () => {
 	})
 })
 
-/* F64: a crash in comb's own reader says it is the reader's, naming the table, never the module's */
+/* F64: a crash in database's own reader says it is the reader's, naming the table, never the module's */
 describe("snapshotOf: an error the reader did not mean", () => {
 	it("names the table it was reading", () => {
 		const t = sqliteTable("t", { id: sqliteText("id").primaryKey() })
@@ -373,7 +373,7 @@ describe("snapshotOf: an error the reader did not mean", () => {
 			},
 		})
 		expect(() => snapshotOf([{ external: false, module: "/p/db.core.tables.ts", namespace: { t } }], noArrays)).toThrow(
-			"comb could not read table t: chunk.inlineParams is not a function",
+			"database could not read table t: chunk.inlineParams is not a function",
 		)
 	})
 })

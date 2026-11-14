@@ -69,7 +69,7 @@ describe("the proof's engine pass on bun:sqlite", () => {
    another database to delete its rows leaves them, and a VACUUM INTO writes no file */
 describe("the proof's copy on bun:sqlite never reaches outside itself", () => {
 	it("refuses an ATTACH before it runs, and the attached database keeps its rows", async () => {
-		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "comb-outside-bun-"))
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "database-outside-bun-"))
 		const victim = new Database(path.join(dir, "live.db"))
 		victim.exec(
 			"CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT); INSERT INTO users VALUES (1, 'a@x.io'), (2, 'b@x.io');",
@@ -78,7 +78,9 @@ describe("the proof's copy on bun:sqlite never reaches outside itself", () => {
 		const conn = await createBunSqliteProvider({ path: ":memory:", type: "bun-sqlite" }).connect(DB)
 		await conn.batch([{ sql: "CREATE TABLE t (id INTEGER PRIMARY KEY)" }])
 		const file = `ATTACH '${path.join(dir, "live.db")}' AS live;\nDELETE FROM live.users;`
-		await expect(provePending(conn, [{ name: "1_attach.sql", sql: file }])).rejects.toThrow("comb never runs ATTACH")
+		await expect(provePending(conn, [{ name: "1_attach.sql", sql: file }])).rejects.toThrow(
+			"database never runs ATTACH",
+		)
 		const after = new Database(path.join(dir, "live.db"), { readonly: true })
 		expect(after.query("SELECT id FROM users ORDER BY id").values()).toEqual([[1], [2]])
 		after.close()
@@ -87,10 +89,12 @@ describe("the proof's copy on bun:sqlite never reaches outside itself", () => {
 	})
 
 	it("refuses a VACUUM INTO before it runs, and writes no file", async () => {
-		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "comb-outside-bun-"))
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "database-outside-bun-"))
 		const copy = await openScratch()
 		copy.exec("CREATE TABLE t (id INTEGER PRIMARY KEY)")
-		expect(() => applyToCopy(copy, `VACUUM INTO '${path.join(dir, "copy.db")}'`)).toThrow("comb never runs VACUUM INTO")
+		expect(() => applyToCopy(copy, `VACUUM INTO '${path.join(dir, "copy.db")}'`)).toThrow(
+			"database never runs VACUUM INTO",
+		)
 		copy.close()
 		expect(fs.readdirSync(dir)).toEqual([])
 		fs.rmSync(dir, { force: true, recursive: true })

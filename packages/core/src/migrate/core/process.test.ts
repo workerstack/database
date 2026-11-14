@@ -20,7 +20,7 @@ describe("run", () => {
 	})
 
 	it("runs in cwd and feeds input to stdin", async () => {
-		const dir = mkdtempSync(join(tmpdir(), "comb-run-"))
+		const dir = mkdtempSync(join(tmpdir(), "database-run-"))
 		try {
 			const script = "process.stdin.on('data', (d) => process.stdout.write(process.cwd() + ':' + d))"
 			const result = await run("node", ["-e", script], { cwd: dir, input: "hi" })
@@ -31,16 +31,16 @@ describe("run", () => {
 	})
 
 	it("reports a missing binary as exit 127 with the reason on stderr", async () => {
-		const result = await run("comb-no-such-binary", ["x"])
+		const result = await run("database-no-such-binary", ["x"])
 		expect(result.code).toBe(127)
 		expect(result.stdout).toBe("")
-		expect(result.stderr).toBe("comb-no-such-binary: command not found")
+		expect(result.stderr).toBe("database-no-such-binary: command not found")
 	})
 })
 
 describe("run: a process that cannot start", () => {
 	it("reports a file the OS refuses to execute as exit 126 with the reason", async () => {
-		const dir = mkdtempSync(join(tmpdir(), "comb-process-"))
+		const dir = mkdtempSync(join(tmpdir(), "database-process-"))
 		try {
 			const script = join(dir, "not-executable")
 			writeFileSync(script, "#!/bin/sh\necho hi\n", { mode: 0o644 })
@@ -69,9 +69,9 @@ describe("run: a process that cannot start", () => {
 	})
 })
 
-/** What a child sees of its environment: COMB_A, whether PATH is there, and its PG* names */
+/** What a child sees of its environment: DATABASE_A, whether PATH is there, and its PG* names */
 const ENV_OF =
-	"process.stdout.write(JSON.stringify({ a: process.env.COMB_A, passfile: process.env.PGPASSFILE, path: typeof process.env.PATH, pg: Object.keys(process.env).filter((k) => k.startsWith('PG') && k !== 'PGPASSFILE' && k !== 'PGSERVICEFILE'), servicefile: process.env.PGSERVICEFILE }))"
+	"process.stdout.write(JSON.stringify({ a: process.env.DATABASE_A, passfile: process.env.PGPASSFILE, path: typeof process.env.PATH, pg: Object.keys(process.env).filter((k) => k.startsWith('PG') && k !== 'PGPASSFILE' && k !== 'PGSERVICEFILE'), servicefile: process.env.PGSERVICEFILE }))"
 type Seen = { a?: string; passfile?: string; path: string; pg: string[]; servicefile?: string }
 const envOf = async (env?: Record<string, string | undefined>) =>
 	JSON.parse((await run("node", ["-e", ENV_OF], { env })).stdout) as Seen
@@ -80,7 +80,7 @@ describe("run: the child's environment", () => {
 	afterEach(() => vi.unstubAllEnvs())
 
 	/* the reviewer's reading of P6: libpq's driver reads ~/.pgpass for a URL without a password, a file the config does not name */
-	/* PA5 of r22: lib/pq before Atlas v1.2.0 panics on any PGSERVICEFILE, so comb sets none; it drops the parent's, as
+	/* PA5 of r22: lib/pq before Atlas v1.2.0 panics on any PGSERVICEFILE, so database sets none; it drops the parent's, as
 	   every PG* variable, and refuses a URL naming a service (atlas-target.ts), so no service file is ever read */
 	it("drops every PG* variable, points the passfile at nothing and sets no service file, so a config's connection is the only one a child uses", async () => {
 		vi.stubEnv("PGSSLMODE", "disable")
@@ -91,9 +91,9 @@ describe("run: the child's environment", () => {
 	})
 
 	it("adds env over the rest, and an undefined value removes one", async () => {
-		vi.stubEnv("COMB_A", "parent")
-		expect((await envOf({ COMB_A: "child" })).a).toBe("child")
-		expect((await envOf({ COMB_A: undefined })).a).toBeUndefined()
+		vi.stubEnv("DATABASE_A", "parent")
+		expect((await envOf({ DATABASE_A: "child" })).a).toBe("child")
+		expect((await envOf({ DATABASE_A: undefined })).a).toBeUndefined()
 		expect((await envOf({ PGHOST: "set-on-purpose" })).pg).toEqual(["PGHOST"])
 	})
 })
@@ -116,7 +116,7 @@ describe("run: an exact environment and a timeout", () => {
 	afterEach(() => vi.unstubAllEnvs())
 
 	it("gives the child exactEnv alone, none of the parent's variables", async () => {
-		vi.stubEnv("COMB_SECRET", "parent")
+		vi.stubEnv("DATABASE_SECRET", "parent")
 		const script =
 			"process.stdout.write(JSON.stringify(Object.keys(process.env).filter((k) => k !== '__CF_USER_TEXT_ENCODING').sort()))"
 		const { stdout } = await run(process.execPath, ["-e", script], {
@@ -134,7 +134,7 @@ describe("run: an exact environment and a timeout", () => {
 describe("runPeer (K1 of r22)", () => {
 	/* a bin peer runs on its runtime and the bin the project's package names, never from PATH */
 	it("runs a bin peer on its runtime, and names the runtime when it cannot start", async () => {
-		const dir = mkdtempSync(join(tmpdir(), "comb-process-"))
+		const dir = mkdtempSync(join(tmpdir(), "database-process-"))
 		try {
 			const bin = join(dir, "w.js")
 			writeFileSync(bin, "process.stdout.write(process.argv.slice(2).join(' '))")
@@ -143,10 +143,10 @@ describe("runPeer (K1 of r22)", () => {
 			expect(await runPeer(run, wrangler)(["d1"], { env: { PATH: "/nonexistent" } })).toEqual({
 				code: 127,
 				stderr:
-					"node: command not found; comb runs wrangler on node, and finds no node on PATH: install Node.js (https://nodejs.org)",
+					"node: command not found; database runs wrangler on node, and finds no node on PATH: install Node.js (https://nodejs.org)",
 				stdout: "",
 			})
-			/* drizzle-kit runs on comb's own runtime, by its path: one that is gone has no install to name */
+			/* drizzle-kit runs on database's own runtime, by its path: one that is gone has no install to name */
 			const kit = { ...wrangler, peer: "drizzle-kit", runtime: join(dir, "gone", "bun") } as const
 			expect((await runPeer(run, kit)(["export"])).stderr).toBe(`${join(dir, "gone", "bun")}: command not found`)
 		} finally {
@@ -171,12 +171,12 @@ describe("runPeer (K1 of r22)", () => {
 	})
 })
 
-describe("runPeer on comb's own Bun", () => {
+describe("runPeer on database's own Bun", () => {
 	/*
 	 * D2-4 of the area D round-two review: in a Bun single-file executable, process.execPath is the
 	 * app, which runs its own entry unless BUN_BE_BUN is set, so drizzle-kit would respawn the app
 	 */
-	it("runs a peer on comb's own Bun as bun, and leaves node and a peer on another runtime as they are", async () => {
+	it("runs a peer on database's own Bun as bun, and leaves node and a peer on another runtime as they are", async () => {
 		const calls: unknown[] = []
 		const fake = async (cmd: string, args: readonly string[], options?: unknown) => {
 			calls.push(options)
@@ -214,14 +214,14 @@ describe("run: Atlas missing (KC6 + PA22 of r22; sibling: a bin peer's runtime)"
 			stderr: `atlas: command not found; install atlas (${ATLAS_RANGE}) from https://atlasgo.io/getting-started`,
 			stdout: "",
 		})
-		expect((await run("comb-no-such-command", [], {})).stderr).toBe("comb-no-such-command: command not found")
+		expect((await run("database-no-such-command", [], {})).stderr).toBe("database-no-such-command: command not found")
 	})
 })
 
-/* PA4 of r22: one asynchronous run, so a signal reaches comb while a child runs, and each RunOptions behavior as before */
+/* PA4 of r22: one asynchronous run, so a signal reaches database while a child runs, and each RunOptions behavior as before */
 describe("run, asynchronous (PA4 of r22)", () => {
 	it("returns a promise, so two children run at once: one waits for a file the other writes", async () => {
-		const dir = mkdtempSync(join(tmpdir(), "comb-run-"))
+		const dir = mkdtempSync(join(tmpdir(), "database-run-"))
 		try {
 			const flag = join(dir, "flag")
 			const waits = `const t = Date.now(); const f = () => require('fs').existsSync(${JSON.stringify(flag)}) ? process.exit(0) : Date.now() - t > 10000 ? process.exit(1) : setTimeout(f, 10); f()`
@@ -242,7 +242,7 @@ describe("run, asynchronous (PA4 of r22)", () => {
 		expect(result).toEqual({ code: 4, stderr: "", stdout: "" })
 	})
 
-	it("leaves a lifeline's stdin open and unwritten while comb runs, where any other run's ends at once (KC5 of r22b)", async () => {
+	it("leaves a lifeline's stdin open and unwritten while database runs, where any other run's ends at once (KC5 of r22b)", async () => {
 		const script =
 			"process.stdin.on('end', () => process.exit(3)); process.stdin.resume(); setTimeout(() => process.exit(0), 300)"
 		const [held, ended] = await Promise.all([
@@ -272,12 +272,12 @@ describe("run under a signal (PA4 of r22)", () => {
 	const kill = stubKill()
 	let dir = ""
 	beforeEach(() => {
-		dir = mkdtempSync(join(tmpdir(), "comb-run-signal-"))
+		dir = mkdtempSync(join(tmpdir(), "database-run-signal-"))
 	})
 	afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
 	it.each(STOP_SIGNALS.map((signal) => [signal]))(
-		"on %s passes the signal to the child, waits for its end, and only then ends comb, its caller never resumed",
+		"on %s passes the signal to the child, waits for its end, and only then ends database, its caller never resumed",
 		async (signal) => {
 			const [ready, got] = [join(dir, "ready"), join(dir, "got")]
 			let resumed = false
@@ -287,7 +287,7 @@ describe("run under a signal (PA4 of r22)", () => {
 			await until(() => existsSync(ready), "the child listening")
 			const child = running(Number(readFileSync(ready, "utf8")), process.pid)
 			await deliver(signal)
-			await until(() => kill.calls().length > 0, "comb's end")
+			await until(() => kill.calls().length > 0, "database's end")
 			expect([readFileSync(got, "utf8"), runs(child), kill.calls(), resumed]).toEqual([
 				signal,
 				false,
@@ -304,7 +304,7 @@ describe("run under a signal (PA4 of r22)", () => {
 		await deliver("SIGTERM")
 		const late = join(dir, "late")
 		void run("node", ["-e", `require('fs').writeFileSync(${JSON.stringify(late)}, '')`])
-		await until(() => kill.calls().length > 0, "comb's end")
+		await until(() => kill.calls().length > 0, "database's end")
 		await new Promise((resolve) => setTimeout(resolve, 200))
 		expect(existsSync(late)).toBe(false)
 	})
@@ -312,13 +312,13 @@ describe("run under a signal (PA4 of r22)", () => {
 
 /* D5-4 of the area D round-five review: a stop named the runtime's path, not the peer the user ran */
 describe("run, stopping a peer, names the peer", () => {
-	it("names it when comb kills it past killAfterMs, after its output passed maxBuffer", async () => {
+	it("names it when database kills it past killAfterMs, after its output passed maxBuffer", async () => {
 		const traps = "process.on('SIGTERM', () => {}); process.stdout.write('x'.repeat(2048)); setInterval(() => {}, 1000)"
 		const result = await run("node", ["-e", traps], { killAfterMs: 50, maxBuffer: 1024, peer: "drizzle-kit" })
 		expect(result).toEqual({
 			code: 1,
 			stderr:
-				"drizzle-kit: output exceeded 1024 bytes; drizzle-kit did not end 50 ms after SIGTERM: comb killed it with SIGKILL",
+				"drizzle-kit: output exceeded 1024 bytes; drizzle-kit did not end 50 ms after SIGTERM: database killed it with SIGKILL",
 			stdout: "",
 		})
 	})

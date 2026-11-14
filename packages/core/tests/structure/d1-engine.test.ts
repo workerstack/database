@@ -35,7 +35,7 @@ describe("a D1 file is proven on D1's own engine (SD1 of r22b; sibling: S1's pin
 	it.each([
 		[
 			"a trigger whose body calls a function D1 does not authorize",
-			"-- comb:allow-unsafe: keep a squared copy\nCREATE TABLE sq (id INTEGER PRIMARY KEY, v REAL);\nCREATE TRIGGER t_sq AFTER INSERT ON t BEGIN INSERT INTO sq (id, v) VALUES (new.id, power(new.v, 2)); END;\n",
+			"-- database:allow-unsafe: keep a squared copy\nCREATE TABLE sq (id INTEGER PRIMARY KEY, v REAL);\nCREATE TRIGGER t_sq AFTER INSERT ON t BEGIN INSERT INTO sq (id, v) VALUES (new.id, power(new.v, 2)); END;\n",
 			/not authorized to use function: power/,
 		],
 		[
@@ -68,7 +68,7 @@ describe("a D1 file is proven on D1's own engine (SD1 of r22b; sibling: S1's pin
 		["an rtree table", "CREATE VIRTUAL TABLE box USING rtree (id, x0, x1);\n"],
 		[
 			"PRAGMA optimize with a mask",
-			"-- comb:allow-unsafe: refresh the planner's statistics\nCREATE INDEX t_v ON t (v);\nPRAGMA optimize(65538);\n",
+			"-- database:allow-unsafe: refresh the planner's statistics\nCREATE INDEX t_v ON t (v);\nPRAGMA optimize(65538);\n",
 		],
 	])(
 		"passes %s, which D1 runs",

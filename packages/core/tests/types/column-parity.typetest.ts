@@ -26,7 +26,7 @@ const payload = z.object({ n: z.number() })
 const STATUS = ["draft", "sent"] as const
 const now = sql`0`
 
-const viaComb = sqliteTable("t", {
+const viaDatabase = sqliteTable("t", {
 	active: c.boolean("active"),
 	created_at: c.createdAt("created_at"),
 	deleted_at: c.deletedAt("deleted_at"),
@@ -57,15 +57,15 @@ const viaDrizzle = sqliteTable("t", {
 		.default(now)
 		.$onUpdate(() => 0),
 })
-expectTypeOf<typeof viaComb.$inferSelect>().toEqualTypeOf<typeof viaDrizzle.$inferSelect>()
-expectTypeOf<typeof viaComb.$inferInsert>().toEqualTypeOf<typeof viaDrizzle.$inferInsert>()
+expectTypeOf<typeof viaDatabase.$inferSelect>().toEqualTypeOf<typeof viaDrizzle.$inferSelect>()
+expectTypeOf<typeof viaDatabase.$inferInsert>().toEqualTypeOf<typeof viaDrizzle.$inferInsert>()
 
-const serialViaComb = sqliteTable("s", { id: c.serialId() })
+const serialViaDatabase = sqliteTable("s", { id: c.serialId() })
 const serialViaDrizzle = sqliteTable("s", { id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }) })
-expectTypeOf<typeof serialViaComb.$inferSelect>().toEqualTypeOf<typeof serialViaDrizzle.$inferSelect>()
-expectTypeOf<typeof serialViaComb.$inferInsert>().toEqualTypeOf<typeof serialViaDrizzle.$inferInsert>()
+expectTypeOf<typeof serialViaDatabase.$inferSelect>().toEqualTypeOf<typeof serialViaDrizzle.$inferSelect>()
+expectTypeOf<typeof serialViaDatabase.$inferInsert>().toEqualTypeOf<typeof serialViaDrizzle.$inferInsert>()
 
-const pgViaComb = pgTable("t", {
+const pgViaDatabase = pgTable("t", {
 	active: pg.boolean("active"),
 	created_at: pg.createdAt("created_at"),
 	deleted_at: pg.deletedAt("deleted_at"),
@@ -96,13 +96,13 @@ const pgViaDrizzle = pgTable("t", {
 		.default(now)
 		.$onUpdate(() => 0),
 })
-expectTypeOf<typeof pgViaComb.$inferSelect>().toEqualTypeOf<typeof pgViaDrizzle.$inferSelect>()
-expectTypeOf<typeof pgViaComb.$inferInsert>().toEqualTypeOf<typeof pgViaDrizzle.$inferInsert>()
+expectTypeOf<typeof pgViaDatabase.$inferSelect>().toEqualTypeOf<typeof pgViaDrizzle.$inferSelect>()
+expectTypeOf<typeof pgViaDatabase.$inferInsert>().toEqualTypeOf<typeof pgViaDrizzle.$inferInsert>()
 
-const pgSerialViaComb = pgTable("s", { id: pg.serialId() })
+const pgSerialViaDatabase = pgTable("s", { id: pg.serialId() })
 const pgSerialViaDrizzle = pgTable("s", { id: serial("id").primaryKey() })
-expectTypeOf<typeof pgSerialViaComb.$inferSelect>().toEqualTypeOf<typeof pgSerialViaDrizzle.$inferSelect>()
-expectTypeOf<typeof pgSerialViaComb.$inferInsert>().toEqualTypeOf<typeof pgSerialViaDrizzle.$inferInsert>()
+expectTypeOf<typeof pgSerialViaDatabase.$inferSelect>().toEqualTypeOf<typeof pgSerialViaDrizzle.$inferSelect>()
+expectTypeOf<typeof pgSerialViaDatabase.$inferInsert>().toEqualTypeOf<typeof pgSerialViaDrizzle.$inferInsert>()
 
 /* One tables file compiles under either dialect by swapping the import (D8, E-S4): every factory
    takes the same arguments, constraints included. */

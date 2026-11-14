@@ -1,5 +1,5 @@
 /**
- * M78 of the 0.13.0 round, with the real Atlas: comb 0.12 recorded every schema's files in the
+ * M78 of the 0.13.0 round, with the real Atlas: database 0.12 recorded every schema's files in the
  * shared atlas_schema_revisions, which public keeps as its own. A revision there with no file of
  * public's is another schema's when the same version and hash sit in that schema's own history
  * (1.6 adopts them): public ignores it, says so, and keeps its own order, so a file of its own
@@ -22,8 +22,8 @@ import { withScratchDb } from "../support/pg.ts"
 let pub = ""
 let app = ""
 beforeEach(() => {
-	pub = mkdtempSync(join(tmpdir(), "comb-pg-shared-public-"))
-	app = mkdtempSync(join(tmpdir(), "comb-pg-shared-app-"))
+	pub = mkdtempSync(join(tmpdir(), "database-pg-shared-public-"))
+	app = mkdtempSync(join(tmpdir(), "database-pg-shared-app-"))
 })
 afterEach(() => {
 	for (const dir of [pub, app]) rmSync(dir, { force: true, recursive: true })
@@ -35,7 +35,7 @@ async function migrations(dir: string, files: Record<string, string>): Promise<v
 	await hashDir(run, dir)
 }
 
-/** What comb 0.12 did: Atlas applies `dir` to `schema`, its history in the shared atlas_schema_revisions */
+/** What database 0.12 did: Atlas applies `dir` to `schema`, its history in the shared atlas_schema_revisions */
 function applyAs012(url: string, schema: string, dir: string): void {
 	const target = `${url}${url.includes("?") ? "&" : "?"}search_path=${schema}`
 	const args = [
@@ -52,13 +52,13 @@ function applyAs012(url: string, schema: string, dir: string): void {
 	if (ran.status !== 0) throw new Error(`atlas migrate apply: ${ran.stderr}${ran.stdout}`)
 }
 
-/** comb's approval, never asking: the files here are safe */
+/** database's approval, never asking: the files here are safe */
 const approve = (m: ParsedMigration) => approveMigration(m, { target: "core", yes: false })
 
 /** The options applyWithAtlas takes for `schema` of the database at `url`, from `dir`, collecting what it prints */
 function command(url: string, schema: string, dir: string) {
 	const out: string[] = []
-	const target = { devUrl: "postgres://comb-no-dev.invalid/dev", lockTimeout: "5s", schema, url }
+	const target = { devUrl: "postgres://database-no-dev.invalid/dev", lockTimeout: "5s", schema, url }
 	return { approve, dir, out, print: (line: string) => out.push(line), target }
 }
 
@@ -82,7 +82,7 @@ const shared = async (url: string) =>
 
 const IGNORED = "20260105000000 is schema app's, recorded in atlas_schema_revisions_app; public ignores it"
 
-/** app's own history recording `dir`'s files as Atlas would, without comb's adoption checks */
+/** app's own history recording `dir`'s files as Atlas would, without database's adoption checks */
 function recordOwn(url: string, dir: string, version: string): void {
 	const args = [
 		"migrate",
@@ -103,7 +103,7 @@ const withDevAndTarget = (body: (dev: string, url: string) => Promise<void>) =>
 
 /**
  * The report's database: 0.12 applied public's a and app's b, app's own history records b (adopted
- * by comb, or set by hand from `otherHash`, an edited b), and public added c
+ * by database, or set by hand from `otherHash`, an edited b), and public added c
  */
 async function reportCase(url: string, dev: string, otherHash = false): Promise<void> {
 	await query(url, "CREATE SCHEMA app")

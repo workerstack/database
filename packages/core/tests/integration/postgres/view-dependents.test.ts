@@ -1,5 +1,5 @@
 /**
- * P4 of r19: Atlas replays the history without the views comb owns, so a statement that depends on a
+ * P4 of r19: Atlas replays the history without the views database owns, so a statement that depends on a
  * view (a LANGUAGE sql function whose body reads it, a function returning SETOF it, a column of its row
  * type) failed that replay with Atlas's raw "relation does not exist", and `migrate diff` and baseline
  * both stopped on a history apply runs. Each view now replays where it stands, handed to the dev
@@ -21,7 +21,7 @@ beforeAll(loadPostgresParser)
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-pg-view-dependents-"))
+	dir = mkdtempSync(join(tmpdir(), "database-pg-view-dependents-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 

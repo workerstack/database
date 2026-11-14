@@ -50,7 +50,7 @@ export async function d1Driver(): Promise<Driver & { dispose(): Promise<void> }>
 				run: async (...statements) => void (await database.batch(statements.map((sql) => database.prepare(sql)))),
 			}
 		},
-		/* D1 reads an INTEGER past 2^53 as the double nearest it, which comb's own refusals answer; drizzle's buffer mode hands a REAL to Buffer.from */
+		/* D1 reads an INTEGER past 2^53 as the double nearest it, which database's own refusals answer; drizzle's buffer mode hands a REAL to Buffer.from */
 		reads: { bigints: true, blobNumbers: false },
 	}
 }

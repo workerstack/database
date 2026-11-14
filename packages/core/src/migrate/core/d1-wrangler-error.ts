@@ -1,6 +1,6 @@
 /**
- * What a failed `wrangler d1 migrations apply` says, read for the refusal comb gives, and the refusal
- * of a run whose table records other than the files comb checked.
+ * What a failed `wrangler d1 migrations apply` says, read for the refusal database gives, and the refusal
+ * of a run whose table records other than the files database checked.
  */
 import { LOCKER } from "../drivers/d1-lock.ts"
 import { Refused } from "./refused.ts"
@@ -18,7 +18,7 @@ export function wranglerError({ stderr, stdout }: Ran): string {
 /**
  * Why a failed apply failed. When it `locked` out on a --local target (d1-lock.ts lockedOut), another process held
  * the file's write lock: wrangler runs its batch once and names only an internal error, so the lock is named here and
- * never waited out, since comb cannot know the batch did nothing, and what the table holds says what is still pending.
+ * never waited out, since database cannot know the batch did nothing, and what the table holds says what is still pending.
  */
 export function applyFailure(ran: Ran, locked: boolean): string {
 	return locked
@@ -36,12 +36,12 @@ export function refuseUnlike(
 	const also =
 		unchecked.length === 0
 			? ""
-			: `; wrangler also applied ${unchecked.join(", ")}, which comb never checked and holds no hash for: check each against git, then run comb migrate baseline <db> --hashes`
+			: `; wrangler also applied ${unchecked.join(", ")}, which database never checked and holds no hash for: check each against git, then run database migrate baseline <db> --hashes`
 	const now = { applied: added, pending: rest }
 	if (ran.code !== 0) throw new Refused(`wrangler d1 migrations apply failed: ${applyFailure(ran, locked)}${also}`, now)
 	if (unchecked.length > 0 || rest.length > 0) {
 		throw new Refused(
-			`wrangler recorded ${added.join(", ") || "nothing"} in ${table}, where comb checked ${names.join(", ")}; wrangler said: ${wranglerError(ran)}${also}`,
+			`wrangler recorded ${added.join(", ") || "nothing"} in ${table}, where database checked ${names.join(", ")}; wrangler said: ${wranglerError(ran)}${also}`,
 			now,
 		)
 	}

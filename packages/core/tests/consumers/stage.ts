@@ -1,7 +1,7 @@
 /**
- * The consumer cells' stage: comb packed as it publishes (bun pm pack resolves catalog: ranges),
+ * The consumer cells' stage: database packed as it publishes (bun pm pack resolves catalog: ranges),
  * installed with npm into a fresh project under the OS temp dir, outside the repo and never a
- * link to the workspace, with each peer at the newest version comb's range admits (the repo's own
+ * link to the workspace, with each peer at the newest version database's range admits (the repo's own
  * suites run the catalog's exact floor).
  */
 import { spawnSync } from "node:child_process"
@@ -37,7 +37,7 @@ const catalog = (
 
 /** The tools a consumer builds with, pinned */
 export const TOOLS = {
-	/* a Worker's own types, which comb no longer peers on (K3 of r21) */
+	/* a Worker's own types, which database no longer peers on (K3 of r21) */
 	"@cloudflare/workers-types": catalog["@cloudflare/workers-types"] as string,
 	"@types/node": catalog["@types/node"] as string,
 	tsx: "4.23.15",
@@ -90,7 +90,7 @@ export function packFiles(root: string): string[] {
 	const repository = top.status === 0 ? realpathSync(top.stdout.trim()) : "none"
 	if (repository !== realpathSync(root)) {
 		throw new Error(
-			`${root} is not the top of its git repository (${repository}); pack from a checkout or a worktree of comb`,
+			`${root} is not the top of its git repository (${repository}); pack from a checkout or a worktree of database`,
 		)
 	}
 	const listed = spawnSync(
@@ -112,7 +112,7 @@ export function packFiles(root: string): string[] {
 }
 
 /**
- * comb packed by the release's own script (K1 of r20: the tarball it publishes), and the directory it
+ * database packed by the release's own script (K1 of r20: the tarball it publishes), and the directory it
  * printed, under the OS temp dir. It packs a copy: bun pm pack walks every directory of the package, so
  * packing the live tree fails when a test removes its scratch directory mid-walk, and prepack would write
  * types/, README.md and LICENSE where other tests read. The copy is a workspace of the files git would
@@ -162,7 +162,7 @@ const REGISTRY = JSON.parse(
 	readFileSync(join(CORE, "tests/structure/__snapshots__/peer-registry.json"), "utf8"),
 ) as Record<string, { admitted: string[]; floorPeers: Record<string, string>; newestPeers: Record<string, string> }>
 
-/** Every version comb's range for `name` admits, oldest first, as the registry was recorded */
+/** Every version database's range for `name` admits, oldest first, as the registry was recorded */
 export const admittedOf = (name: string): string[] => REGISTRY[name]?.admitted ?? []
 
 /**
@@ -192,7 +192,7 @@ const TYPES = "@cloudflare/workers-types"
 
 /**
  * The tools a stage installs beside `dependencies`, each at the version `pins` names or TOOLS pins:
- * a tool comb also peers on, typescript, installs at the version picked for the peer instead. The
+ * a tool database also peers on, typescript, installs at the version picked for the peer instead. The
  * workers-types is one the installed wrangler's peer range admits, the catalog's where it does and
  * the range's floor where not, as npm refuses the pair otherwise (ERESOLVE) and the stage tracks
  * the newest wrangler, which moves its range with each release
@@ -213,7 +213,7 @@ export function toolsFor(
 }
 
 /**
- * A fresh consumer with comb from `tarball`, its required peers, the optional ones when `all`, and
+ * A fresh consumer with database from `tarball`, its required peers, the optional ones when `all`, and
  * the tools, each peer at the exact version `versions` picks
  */
 export function stage(
@@ -223,7 +223,7 @@ export function stage(
 	versions: Versions = "newest",
 ): Stage {
 	const label = typeof versions === "string" ? versions : "pinned"
-	const dir = mkdtempSync(join(tmpdir(), `comb-consumer-${peers}-${label}-`))
+	const dir = mkdtempSync(join(tmpdir(), `database-consumer-${peers}-${label}-`))
 	const wanted = Object.keys(manifest.peerDependencies).filter(
 		(name) => peers === "all" || !OPTIONAL_PEERS.includes(name),
 	)
@@ -233,17 +233,17 @@ export function stage(
 	])
 	const devDependencies = toolsFor(dependencies, typeof versions === "string" ? {} : versions.pin)
 	console.log(
-		`[comb] the ${label} ${peers} stage installs ${TYPES}@${devDependencies[TYPES]} beside wrangler@${dependencies["wrangler"] ?? devDependencies["wrangler"]}`,
+		`[database] the ${label} ${peers} stage installs ${TYPES}@${devDependencies[TYPES]} beside wrangler@${dependencies["wrangler"] ?? devDependencies["wrangler"]}`,
 	)
 	writeFileSync(
 		join(dir, "package.json"),
-		JSON.stringify({ dependencies, devDependencies, name: "comb-consumer", private: true, type: "module" }),
+		JSON.stringify({ dependencies, devDependencies, name: "database-consumer", private: true, type: "module" }),
 	)
 	for (const [path, text] of Object.entries(files)) {
 		mkdirSync(dirname(join(dir, path)), { recursive: true })
 		writeFileSync(join(dir, path), text)
 	}
-	/* npm refuses a peer outside comb's range (ERESOLVE); a project that overrides it installs this way */
+	/* npm refuses a peer outside database's range (ERESOLVE); a project that overrides it installs this way */
 	const outside = wanted.some(
 		(name) => !semver.satisfies(dependencies[name], manifest.peerDependencies[name] as string),
 	)
@@ -256,12 +256,12 @@ export function stage(
 }
 
 /**
- * A fresh project that runs `line`, a README install line, verbatim but for comb itself, which is
- * `tarball` (K3 of r20): the README's line, not comb's ranges, decides each peer's version
+ * A fresh project that runs `line`, a README install line, verbatim but for database itself, which is
+ * `tarball` (K3 of r20): the README's line, not database's ranges, decides each peer's version
  */
 export function stageLine(tarball: string, line: string): Stage {
-	const dir = mkdtempSync(join(tmpdir(), "comb-consumer-readme-"))
-	writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "comb-consumer", private: true, type: "module" }))
+	const dir = mkdtempSync(join(tmpdir(), "database-consumer-readme-"))
+	writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "database-consumer", private: true, type: "module" }))
 	const [cmd, ...args] = line.split(" ").map((word) => (word === "@workerstack/database" ? tarball : word))
 	ok(run(dir, cmd as string, args), line)
 	return { dir, dispose: () => rmSync(dir, { force: true, recursive: true }) }
@@ -271,7 +271,7 @@ export function stageLine(tarball: string, line: string): Stage {
 export const installedVersion = (dir: string, name: string): string =>
 	(JSON.parse(readFileSync(join(dir, "node_modules", name, "package.json"), "utf8")) as { version: string }).version
 
-/** comb's range for the peer `name` */
+/** database's range for the peer `name` */
 export const peerRange = (name: string): string => manifest.peerDependencies[name] as string
 
 /** `name` taken out of the consumer in `dir`, its bin with it, as a project that never installed it */
@@ -280,7 +280,7 @@ export function removePackage(dir: string, name: string): void {
 	rmSync(join(dir, "node_modules", ".bin", name), { force: true })
 }
 
-/** comb's range for each of its required peers */
+/** database's range for each of its required peers */
 export const REQUIRED_PEERS: Record<string, string> = Object.fromEntries(
 	Object.entries(manifest.peerDependencies).filter(([name]) => !OPTIONAL_PEERS.includes(name)),
 )

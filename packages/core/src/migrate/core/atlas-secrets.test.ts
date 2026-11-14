@@ -67,9 +67,9 @@ describe("the secrets of a URL WHATWG's URL cannot decode or read", () => {
 	})
 
 	it("masks a password where it stands as a token, and leaves it inside a longer name", () => {
-		const url = "postgres://comb:comb@db.example.com/comb?sslmode=require"
-		expect(scrubAtlasOutput('relation "comb_jobs" does not exist (database comb)', [url])).toBe(
-			'relation "comb_jobs" does not exist (database ***)',
+		const url = "postgres://app:hunter2@db.example.com/app?sslmode=require"
+		expect(scrubAtlasOutput('relation "hunter2_jobs" does not exist (database hunter2)', [url])).toBe(
+			'relation "hunter2_jobs" does not exist (database ***)',
 		)
 	})
 })

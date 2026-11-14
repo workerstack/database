@@ -1,6 +1,6 @@
 /**
- * M72 of the 0.13.0 round: comb scopes every Postgres URL to `search_path=<schema>`, so Postgres
- * resolves an unqualified name in the configured schema. comb keys a name the same way: under a
+ * M72 of the 0.13.0 round: database scopes every Postgres URL to `search_path=<schema>`, so Postgres
+ * resolves an unqualified name in the configured schema. database keys a name the same way: under a
  * schema other than public, unqualified and `<schema>.` are one name, and `public.` another.
  */
 import { describe, expect, it } from "vitest"

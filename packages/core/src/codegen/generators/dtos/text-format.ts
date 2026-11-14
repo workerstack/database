@@ -21,7 +21,7 @@ export function textFormatOf({ format }: FieldConstraints): DeclaredFormat | nul
 	return isTextFormat(format) ? { id: format, spec: FORMATS[format] } : null
 }
 
-/** A format's source as the regex literal comb builds from it under u, as the manifest states a pattern */
+/** A format's source as the regex literal database builds from it under u, as the manifest states a pattern */
 export const sourceLiteral = (source: string): string => `/${new RegExp(source, "u").source}/u`
 
 /** The test a value meets to be of `spec`'s format, as written after its transforms: its length, its source, its registry */
@@ -33,7 +33,7 @@ function formatTest(spec: FormatSpec): string {
 					...(spec.min > 0 ? [`ctx.value.length >= ${spec.min}`] : []),
 					...(spec.max === null ? [] : [`ctx.value.length <= ${spec.max}`]),
 				]
-	const member = spec.member === null ? [] : [`comb.${spec.member}(ctx.value)`]
+	const member = spec.member === null ? [] : [`database.${spec.member}(ctx.value)`]
 	return [...length, `${regexExpression(sourceLiteral(spec.source))}.test(ctx.value)`, ...member].join(" && ")
 }
 

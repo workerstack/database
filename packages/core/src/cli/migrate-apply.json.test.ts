@@ -1,6 +1,6 @@
 /**
  * K20 of the 0.15.0 review: `--json` promises one JSON object on stdout, which a pipeline parses,
- * but an argv comb refused printed nothing there. Wherever `--json` is in argv, a refusal of the
+ * but an argv database refused printed nothing there. Wherever `--json` is in argv, a refusal of the
  * argv itself is reported as that object too, its database null as none was read.
  */
 import { mkdirSync, writeFileSync } from "node:fs"
@@ -11,12 +11,12 @@ import { makeIo, projects, runCliWithFakes } from "./__fixtures__/io.ts"
 const temp = projects()
 afterEach(temp.clean)
 
-describe("migrate apply, check and status --json on an argv comb refuses", () => {
+describe("migrate apply, check and status --json on an argv database refuses", () => {
 	it.each([
 		[["migrate", "status", "core", "-e", "local", "--json", "--bogus"], "Unknown option: --bogus"],
 		[
 			["migrate", "status", "--json"],
-			"Usage: comb migrate status <database> [-e <name>] [--dir <path>] [--local] [--json]",
+			"Usage: database migrate status <database> [-e <name>] [--dir <path>] [--local] [--json]",
 		],
 		[
 			["migrate", "check", "core", "-e", "local", "--json", "--yes=1"],
@@ -38,7 +38,7 @@ describe("migrate apply, check and status --json on an argv comb refuses", () =>
 	it("prints the help, not JSON, for --help beside --json", async () => {
 		const io = makeIo(temp.make())
 		expect(await runCliWithFakes(["migrate", "status", "--json", "--help"], io)).toBe(0)
-		expect(io.outputs.join("\n")).toMatch(/^Usage: comb migrate status/)
+		expect(io.outputs.join("\n")).toMatch(/^Usage: database migrate status/)
 	})
 })
 
@@ -47,7 +47,7 @@ describe("migrate apply --json when the run throws a value that is not an Error"
 	it("reports the value in refused, as the one JSON object on stdout, exiting 1", async () => {
 		const dir = temp.make()
 		writeFileSync(
-			join(dir, "comb.migrate.config.ts"),
+			join(dir, "database.migrate.config.ts"),
 			'export default { databases: { core: { migrationsDir: "m", name: "core", provider: { type: "libsql", url: "file:core.db" } } } }\n',
 		)
 		mkdirSync(join(dir, "m"))

@@ -2,7 +2,7 @@
 	"$schema": "./node_modules/oxlint/configuration_schema.json",
 	"extends": ["./oxlint.base.json"],
 	"plugins": ["typescript", "unicorn", "oxc"],
-	"jsPlugins": [{ "name": "comb", "specifier": "./packages/core/lint/index.js" }],
+	"jsPlugins": [{ "name": "database", "specifier": "./packages/core/lint/index.js" }],
 	"env": {
 		"node": true
 	},
@@ -10,7 +10,7 @@
 		"dist/**",
 		"coverage/**",
 		"**/.wrangler/**",
-		"**/.comb/**",
+		"**/.database/**",
 		"**/.cache/**",
 		"**/_gen/**",
 		"**/*.gen.ts",
@@ -68,17 +68,18 @@
 				"vitest/no-conditional-expect": "error",
 				"vitest/no-disabled-tests": "error",
 				"vitest/no-focused-tests": "error",
-				"comb/boundaries": "error",
-				"comb/no-console": "error",
-				"comb/no-locale-compare": "error",
-				"comb/no-module-side-effects": "error",
-				"comb/no-module-state": "error",
-				"comb/no-review-label": "error",
-				"comb/no-silent-catch": "error",
-				"comb/no-v8-ignore": "error",
-				"comb/optional-undefined": "error",
-				"comb/public-jsdoc": "error",
-				"comb/raw-sql-allowlist": "error"
+				"database/boundaries": "error",
+				"database/export-name": "error",
+				"database/no-console": "error",
+				"database/no-locale-compare": "error",
+				"database/no-module-side-effects": "error",
+				"database/no-module-state": "error",
+				"database/no-review-label": "error",
+				"database/no-silent-catch": "error",
+				"database/no-v8-ignore": "error",
+				"database/optional-undefined": "error",
+				"database/public-jsdoc": "error",
+				"database/raw-sql-allowlist": "error"
 			}
 		},
 		{
@@ -110,7 +111,7 @@
 						]
 					}
 				],
-				"comb/no-spawned-kill": "error"
+				"database/no-spawned-kill": "error"
 			}
 		},
 		{

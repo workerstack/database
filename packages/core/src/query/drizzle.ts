@@ -6,8 +6,8 @@ import type { Column, SQL, SQLWrapper } from "drizzle-orm"
 import { is, sql } from "drizzle-orm"
 import { SQLiteColumn } from "drizzle-orm/sqlite-core"
 
-import { CombError } from "../error.ts"
-import { combErrorKeys } from "../types.ts"
+import { DatabaseError } from "../error.ts"
+import { databaseErrorKeys } from "../types.ts"
 
 import { type CursorId, CursorRef, CURSOR_TIEBREAK_COLUMN, readKeyset } from "./cursor.ts"
 import type { ColumnCheck } from "./cursor-mint.ts"
@@ -41,14 +41,14 @@ type DrizzleListOptions = {
 	 */
 	extras: {
 		/** the row's `id`, which the next cursor resumes from */
-		_combId: (table: RelationalTable) => SQL
+		_cursorId: (table: RelationalTable) => SQL
 	} & Partial<{
 		/** on a cursor whose row may be gone: 1 when it is, which `paginate` answers with a 400 asking to start again */
-		_combAnchorGone: (table: RelationalTable) => SQL<number>
+		_cursorAnchorGone: (table: RelationalTable) => SQL<number>
 		/** each sort key's stored text where reading it back rounds it; on every list with a sort */
-		_combKeyTexts: (table: RelationalTable) => SQL<string>
+		_cursorKeyTexts: (table: RelationalTable) => SQL<string>
 		/** each SQLite timestamp sort key's stored TEXT, which the next cursor binds as stored; on every list with a sort */
-		_combTextKeys: (table: RelationalTable) => SQL<string>
+		_cursorTextKeys: (table: RelationalTable) => SQL<string>
 		/** on a page read by number: every row the filter matches, which `paginate` reports as the count */
 		_total: (table: RelationalTable) => SQL<number>
 	}>
@@ -74,17 +74,17 @@ type DrizzleListOptions = {
 function keysOn(table: RelationalTable, sort: readonly SortField[]): { keys: SortKey[]; tiebreak: SortKey } {
 	const column = (field: string): SQLWrapper => {
 		if (Object.hasOwn(table, field)) return (table as Record<string, SQLWrapper>)[field] as SQLWrapper
-		throw new CombError({
+		throw new DatabaseError({
 			cause: `Sort on '${field}' has no column to run it`,
-			errorKey: combErrorKeys.SORT_NOT_WIRED,
+			errorKey: databaseErrorKeys.SORT_NOT_WIRED,
 			status: "internal_server_error",
 		})
 	}
 	const keys = sort.map(({ direction, field, nulls }) => ({ column: column(field), direction, nulls }))
 	if (!Object.hasOwn(table, CURSOR_TIEBREAK_COLUMN))
-		throw new CombError({
+		throw new DatabaseError({
 			cause: "listOptions breaks ties on the table's `id` column, which this table lacks",
-			errorKey: combErrorKeys.CURSOR_PAGINATION_UNSUPPORTED,
+			errorKey: databaseErrorKeys.CURSOR_PAGINATION_UNSUPPORTED,
 			status: "internal_server_error",
 		})
 	return { keys, tiebreak: { column: column(CURSOR_TIEBREAK_COLUMN), direction: sort[0]?.direction ?? "desc" } }
@@ -97,9 +97,9 @@ function keysOn(table: RelationalTable, sort: readonly SortField[]): { keys: Sor
 function refuseComputed(sort: readonly SortField[]): void {
 	const computed = sort.find(({ field }) => field.startsWith("@"))
 	if (computed === undefined) return
-	throw new CombError({
+	throw new DatabaseError({
 		cause: `Sort on '${computed.field}' is computed, which the relational listOptions cannot order by: use buildListQuery`,
-		errorKey: combErrorKeys.SORT_NOT_WIRED,
+		errorKey: databaseErrorKeys.SORT_NOT_WIRED,
 		status: "internal_server_error",
 	})
 }
@@ -112,7 +112,7 @@ function tiebreakOf(table: RelationalTable): SQL {
 }
 
 /**
- * The `_combId` extra, which notes the table drizzle reads the rows from, as it hands it to every query's
+ * The `_cursorId` extra, which notes the table drizzle reads the rows from, as it hands it to every query's
  * callbacks, and the check positionOn opens the next cursor by, run on that table's columns, so the next
  * page never refuses a cursor minted here; rows no query of these options read hold no column to check
  */
@@ -146,8 +146,8 @@ function textsOf(sort: readonly SortField[]) {
 		return keyTextsSQL(keys, is(tiebreak.column, SQLiteColumn) ? "sqlite" : "postgres")
 	}
 	return {
-		_combKeyTexts: keyTexts,
-		_combTextKeys: (table: RelationalTable) => textKeysSQL(keysOn(table, sort).keys),
+		_cursorKeyTexts: keyTexts,
+		_cursorTextKeys: (table: RelationalTable) => textKeysSQL(keysOn(table, sort).keys),
 	}
 }
 
@@ -188,7 +188,7 @@ function drizzleListOptions(query: ListQueryInput, options: CursorOptions): Driz
 	if (!query.cursor) {
 		/* a page no schema bounded is bounded here, as buildListQuery bounds it */
 		assertPageWithin(query)
-		return { ...base({ _combId: idOf, _total: countOver }), offset: ((query.page ?? 1) - 1) * query.limit }
+		return { ...base({ _cursorId: idOf, _total: countOver }), offset: ((query.page ?? 1) - 1) * query.limit }
 	}
 	const cursor = readKeyset(query.cursor, sort, options)
 	const positionOn = (table: RelationalTable) => {
@@ -210,10 +210,10 @@ function drizzleListOptions(query: ListQueryInput, options: CursorOptions): Driz
 	}
 	const where = (table: RelationalTable) => keysetSQL(positionOn(table))
 	if (!cursor.values.some((value) => value instanceof CursorRef))
-		return { ...base({ _combId: idOf }), offset: 0, where: { RAW: where } }
+		return { ...base({ _cursorId: idOf }), offset: 0, where: { RAW: where } }
 	/* a reference may have no safe bound once its row is gone: the flag tells paginate, which has no database */
 	const gone = (table: RelationalTable) => sql<number>`${anchorGone(positionOn(table).values) ?? sql`0`}`
-	return { ...base({ _combAnchorGone: gone, _combId: idOf }), offset: 0, where: { RAW: where } }
+	return { ...base({ _cursorAnchorGone: gone, _cursorId: idOf }), offset: 0, where: { RAW: where } }
 }
 
 /** `row` with only the fields `select` asked for, and none of the list's own extras; every field when `parsedFields` is null */

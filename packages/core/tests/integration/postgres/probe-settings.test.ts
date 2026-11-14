@@ -1,5 +1,5 @@
 /**
- * AE6 of r22's condition: an every-role `comb_t.probe` setting a killed bare-replay run left is reset
+ * AE6 of r22's condition: an every-role `database_t.probe` setting a killed bare-replay run left is reset
  * by the Postgres projects' global setup (probe-settings.ts), logged, and a setting of any other name
  * stays. The test plants the one setting bare-replay.test.ts makes and resets it whatever happens,
  * holding the server's lock alone (tests/support/server-lock.ts).
@@ -27,27 +27,29 @@ async function everyRole(): Promise<string[]> {
 }
 
 describe("resetProbeSettings", () => {
-	it("resets the comb_t.probe setting a killed run left for every role, saying so", async () => {
+	it("resets the database_t.probe setting a killed run left for every role, saying so", async () => {
 		/* every role's setting is about `all`, which another test's checked file may spell (server-lock.ts) */
 		await writingServer(async () => {
 			try {
-				process.stderr.write("[comb] AE6 catalog: ALTER ROLE ALL SET comb_t.probe = 'leaked'\n")
-				await admin.query("ALTER ROLE ALL SET comb_t.probe = 'leaked'")
-				expect(await everyRole()).toContain("comb_t.probe=leaked")
+				process.stderr.write("[database] AE6 catalog: ALTER ROLE ALL SET database_t.probe = 'leaked'\n")
+				await admin.query("ALTER ROLE ALL SET database_t.probe = 'leaked'")
+				expect(await everyRole()).toContain("database_t.probe=leaked")
 				const lines: string[] = []
 				expect(await resetProbeSettings(admin, { log: (line) => lines.push(line) })).toEqual({
-					reset: ["comb_t.probe"],
+					reset: ["database_t.probe"],
 				})
-				expect(await everyRole()).not.toContain("comb_t.probe=leaked")
-				expect(lines).toEqual([`[comb] probe settings: ALTER ROLE ALL RESET "comb_t"."probe", which a killed run left`])
+				expect(await everyRole()).not.toContain("database_t.probe=leaked")
+				expect(lines).toEqual([
+					`[database] probe settings: ALTER ROLE ALL RESET "database_t"."probe", which a killed run left`,
+				])
 			} finally {
-				process.stderr.write("[comb] AE6 catalog: ALTER ROLE ALL RESET comb_t.probe\n")
-				await admin.query("ALTER ROLE ALL RESET comb_t.probe")
+				process.stderr.write("[database] AE6 catalog: ALTER ROLE ALL RESET database_t.probe\n")
+				await admin.query("ALTER ROLE ALL RESET database_t.probe")
 			}
 		})
 	})
 
-	it("resets nothing on a server with no comb_t setting left", async () => {
+	it("resets nothing on a server with no database_t setting left", async () => {
 		expect(await resetProbeSettings(admin, { log: () => undefined })).toEqual({ reset: [] })
 	})
 })

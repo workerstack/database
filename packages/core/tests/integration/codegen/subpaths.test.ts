@@ -17,10 +17,10 @@ export const blogPost = sqliteTable("blog_post", { id: c.id("pst"), title: c.tex
 export const table_template = sqliteTable("table_template", { id: c.id("tpl"), name: c.text("name") })
 `
 
-describe("comb codegen: generated subpaths", () => {
+describe("database codegen: generated subpaths", () => {
 	it("exports and writes each table's DTOs, rqb-cols and sql-cols under one kebab-case name", async () => {
 		const dir = project({
-			"comb.config.ts": 'export default { databases: { core: { tables: "./src/db/db.core.tables.ts" } } }\n',
+			"database.config.ts": 'export default { databases: { core: { tables: "./src/db/db.core.tables.ts" } } }\n',
 			"src/db/db.core.tables.ts": TABLES,
 		})
 		await codegen(dir)

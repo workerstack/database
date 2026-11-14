@@ -24,8 +24,8 @@ const derived = built(query, { ...SEALED, keyset: "derived" })
 const next = (row: Record<string, unknown>, texts: string, list = derived): string =>
 	queryHelpers.paginate(
 		[
-			{ _combId: "a", _combKeyTexts: texts, id: "a", ...row },
-			{ _combId: "b", _combKeyTexts: ",,", at: new Date(9), id: "b", n: 9, title: "x" },
+			{ _cursorId: "a", _cursorKeyTexts: texts, id: "a", ...row },
+			{ _cursorId: "b", _cursorKeyTexts: ",,", at: new Date(9), id: "b", n: 9, title: "x" },
 		],
 		list,
 	)[1].nextCursor as string

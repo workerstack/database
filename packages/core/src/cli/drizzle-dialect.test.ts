@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
-import type { Run } from "../migrate/core/process.ts"
+import type { MigrateRun } from "../migrate/core/process.ts"
 import { fakeAtlas as syncedAtlas } from "./__fixtures__/d1.ts"
 import { makeIo, projects, runCliWithFakes } from "./__fixtures__/io.ts"
 import { checkDialect, literalDialect, statedDialect } from "./drizzle-dialect.ts"
@@ -11,17 +11,17 @@ const project = temp.make
 afterEach(temp.clean)
 
 /** Atlas and drizzle-kit, faked with a synced schema, and each call they took */
-function fakeAtlas(): Run & { calls: string[][] } {
+function fakeAtlas(): MigrateRun & { calls: string[][] } {
 	const calls: string[][] = []
 	const inner = syncedAtlas()
-	const run: Run = (cmd, args) => {
+	const run: MigrateRun = (cmd, args) => {
 		calls.push([cmd, ...args])
 		return inner(cmd, args)
 	}
 	return Object.assign(run, { calls })
 }
 
-/** comb.migrate.config.ts declaring core on `provider`, its migrations in m/ */
+/** database.migrate.config.ts declaring core on `provider`, its migrations in m/ */
 const coreOn = (provider: string) =>
 	`export default { databases: { core: { migrationsDir: "m", name: "core", provider: ${provider} } } }\n`
 const PG_CORE = coreOn('{ devUrl: "postgres://localhost/dev", type: "postgres", url: "postgres://localhost/app" }')
@@ -32,7 +32,7 @@ async function diffWith(config: string, dialect: string | undefined) {
 	const dir = project()
 	const stated = dialect === undefined ? "{}" : `{ dialect: ${JSON.stringify(dialect)} }`
 	writeFileSync(join(dir, "drizzle.config.ts"), `export default ${stated}\n`)
-	writeFileSync(join(dir, "comb.migrate.config.ts"), config)
+	writeFileSync(join(dir, "database.migrate.config.ts"), config)
 	const atlas = fakeAtlas()
 	const io = makeIo(dir, atlas)
 	const code = await runCliWithFakes(["migrate", "diff", "core", "next"], io)
@@ -51,7 +51,7 @@ describe("diff refuses a drizzle config of the other dialect (KC1; sibling: init
 		const { code, dir, drizzleKit, errors, wrote } = await diffWith(PG_CORE, "sqlite")
 		expect(code).toBe(1)
 		expect(errors).toEqual([
-			`${join(dir, "drizzle.config.ts")} states dialect "sqlite", but database core is Postgres: set dialect: "postgresql" in it, or set drizzleConfigPath on core in comb.migrate.config.ts to a Postgres drizzle config`,
+			`${join(dir, "drizzle.config.ts")} states dialect "sqlite", but database core is Postgres: set dialect: "postgresql" in it, or set drizzleConfigPath on core in database.migrate.config.ts to a Postgres drizzle config`,
 		])
 		expect({ drizzleKit, wrote }).toEqual({ drizzleKit: [], wrote: false })
 	})
@@ -59,16 +59,16 @@ describe("diff refuses a drizzle config of the other dialect (KC1; sibling: init
 	it("refuses a postgresql drizzle config for a SQLite database, and one that states no dialect", async () => {
 		const pg = await diffWith(LIBSQL_CORE, "postgresql")
 		expect(pg.errors).toEqual([
-			`${join(pg.dir, "drizzle.config.ts")} states dialect "postgresql", but database core is SQLite: set dialect: "sqlite" in it, or set drizzleConfigPath on core in comb.migrate.config.ts to a SQLite drizzle config`,
+			`${join(pg.dir, "drizzle.config.ts")} states dialect "postgresql", but database core is SQLite: set dialect: "sqlite" in it, or set drizzleConfigPath on core in database.migrate.config.ts to a SQLite drizzle config`,
 		])
 		expect({ drizzleKit: pg.drizzleKit, wrote: pg.wrote }).toEqual({ drizzleKit: [], wrote: false })
 		const none = await diffWith(LIBSQL_CORE, undefined)
 		expect(none.errors).toEqual([
-			`${join(none.dir, "drizzle.config.ts")} states no dialect, but database core is SQLite: set dialect: "sqlite" in it, or set drizzleConfigPath on core in comb.migrate.config.ts to a SQLite drizzle config`,
+			`${join(none.dir, "drizzle.config.ts")} states no dialect, but database core is SQLite: set dialect: "sqlite" in it, or set drizzleConfigPath on core in database.migrate.config.ts to a SQLite drizzle config`,
 		])
 	})
 
-	it("takes turso as a SQLite dialect, and sqlite for a diff with no comb.migrate.config.ts", async () => {
+	it("takes turso as a SQLite dialect, and sqlite for a diff with no database.migrate.config.ts", async () => {
 		const turso = await diffWith(LIBSQL_CORE, "turso")
 		expect({ code: turso.code, errors: turso.errors }).toEqual({ code: 0, errors: [] })
 		const dir = project()
@@ -76,7 +76,7 @@ describe("diff refuses a drizzle config of the other dialect (KC1; sibling: init
 		const bare = makeIo(dir, fakeAtlas())
 		expect(await runCliWithFakes(["migrate", "diff", "core"], bare)).toBe(1)
 		expect(bare.errors).toEqual([
-			`${join(dir, "drizzle.config.ts")} states dialect "postgresql", but a diff with no comb.migrate.config.ts is SQLite: set dialect: "sqlite" in it`,
+			`${join(dir, "drizzle.config.ts")} states dialect "postgresql", but a diff with no database.migrate.config.ts is SQLite: set dialect: "sqlite" in it`,
 		])
 	})
 
@@ -108,7 +108,7 @@ describe("the dialect a drizzle config states", () => {
 		expect(await statedDialect(join(dir, "drizzle.config.mjs"))).toBeUndefined()
 	})
 
-	/* AD8 of the area D review: comb loads the drizzle config itself since KC1, so it names the file, as KC7 does for comb's own configs */
+	/* AD8 of the area D review: database loads the drizzle config itself since KC1, so it names the file, as KC7 does for database's own configs */
 	it.each([
 		{ name: "drizzle.config.ts", says: "NOPE_URL is not set", source: 'throw new Error("NOPE_URL is not set")\n' },
 		{ name: "drizzle.config.json", says: "JSON", source: '{ "dialect": ' },

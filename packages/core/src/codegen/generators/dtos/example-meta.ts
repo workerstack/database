@@ -59,7 +59,7 @@ const inline = (example: string): ExampleResult => ({
 	needsSharedMeta: false,
 })
 
-// lookup-table: the helpers whose values get no example: a reference, a JSON document, a timestamp comb fills
+// lookup-table: the helpers whose values get no example: a reference, a JSON document, a timestamp database fills
 const NO_EXAMPLE_KINDS: ReadonlySet<string> = /* @__PURE__ */ new Set([
 	"createdAt",
 	"deletedAt",
@@ -69,15 +69,15 @@ const NO_EXAMPLE_KINDS: ReadonlySet<string> = /* @__PURE__ */ new Set([
 ])
 
 /* sensitive or structured values get no example: the schema says enough, the value would leak */
-function hasNoExample({ combKind, constraints, dataType, dimensions, foreignKey, schemaJson }: FieldMeta): boolean {
+function hasNoExample({ databaseKind, constraints, dataType, dimensions, foreignKey, schemaJson }: FieldMeta): boolean {
 	/* a pattern decides what the value looks like, which no generic example can know; an array's
 	 * example would be its element's, of the wrong shape */
 	if (constraints.private || constraints.password || constraints.pattern !== null || foreignKey !== null) return true
-	/* a schema's rule may be a refine its published JSON Schema does not state, so comb knows no value it takes */
+	/* a schema's rule may be a refine its published JSON Schema does not state, so database knows no value it takes */
 	if (schemaJson !== null) return true
 	if ((dimensions ?? 0) > 0) return true
-	if (combKind === null) return dataType === "object json"
-	return NO_EXAMPLE_KINDS.has(combKind)
+	if (databaseKind === null) return dataType === "object json"
+	return NO_EXAMPLE_KINDS.has(databaseKind)
 }
 
 /* the shared examples' own values, which a bound may refuse */
@@ -159,19 +159,21 @@ function kindExample(field: FieldMeta): ExampleResult | null | undefined {
 const RULES: Rule[] = [
 	kindExample,
 	/* an id with a prefix is unique per table */
-	({ combKind, prefix }) => (combKind === "id" ? inline(`"${prefix ?? "id"}_${EXAMPLE_ULID}"`) : undefined),
-	({ combKind }) =>
-		combKind === "serialId" ? shared("serialId") : combKind === "boolean" ? shared("boolean") : undefined,
+	({ databaseKind, prefix }) => (databaseKind === "id" ? inline(`"${prefix ?? "id"}_${EXAMPLE_ULID}"`) : undefined),
+	({ databaseKind }) =>
+		databaseKind === "serialId" ? shared("serialId") : databaseKind === "boolean" ? shared("boolean") : undefined,
 	/* a state column's example is the value a row starts at, which its create alone takes */
 	({ enumValues, states }) =>
 		enumValues !== null && enumValues.length > 0 ? inline(JSON.stringify(states?.initial ?? enumValues[0])) : undefined,
 	formatExample,
 	(field) =>
-		field.combKind === "integer" || field.combKind === "real" || field.combKind === "timestamp"
-			? midpoint(field, field.combKind)
+		field.databaseKind === "integer" || field.databaseKind === "real" || field.databaseKind === "timestamp"
+			? midpoint(field, field.databaseKind)
 			: undefined,
 	(field) =>
-		field.combKind === "text" || field.combKind === "id" || field.combKind === "enum" ? textExample(field) : undefined,
+		field.databaseKind === "text" || field.databaseKind === "id" || field.databaseKind === "enum"
+			? textExample(field)
+			: undefined,
 ]
 
 /**

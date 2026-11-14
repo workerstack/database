@@ -27,10 +27,10 @@ const BLOCKS: Block[] = [...MIGRATIONS.matchAll(/^```(\w+)\n([\s\S]*?)^```$/gm)]
 	body: match[2] as string,
 	lang: match[1] as string,
 }))
-const CONFIGS = BLOCKS.filter((block) => block.body.startsWith("/* comb.migrate.config.ts */\n"))
-const COMMANDS = BLOCKS.filter((block) => block.lang === "bash" && block.body.includes("comb migrate"))
+const CONFIGS = BLOCKS.filter((block) => block.body.startsWith("/* database.migrate.config.ts */\n"))
+const COMMANDS = BLOCKS.filter((block) => block.lang === "bash" && block.body.includes("database migrate"))
 
-/* inside the package, so a config's import of @workerstack/database/migrate resolves to this comb */
+/* inside the package, so a config's import of @workerstack/database/migrate resolves to this database */
 const temp = projects(path.resolve(import.meta.dirname, "../.."))
 afterEach(temp.clean)
 
@@ -85,8 +85,8 @@ async function run(config: Block, commands: Block): Promise<Array<[string, strin
 	const cwd = temp.make()
 	for (const [name, body] of filesOf(config, commands)) fs.writeFileSync(path.join(cwd, name), body)
 	const results: Array<[string, string | number]> = []
-	for (const line of commands.body.split("\n").filter((text) => text.startsWith("bunx comb migrate "))) {
-		const [command, ...rest] = line.slice("bunx comb ".length).split(" ")
+	for (const line of commands.body.split("\n").filter((text) => text.startsWith("bunx database migrate "))) {
+		const [command, ...rest] = line.slice("bunx database ".length).split(" ")
 		const verb = `${command} ${rest.shift()}` as "migrate apply"
 		if (verb === ("migrate init" as string)) {
 			const io = makeIo(cwd)
@@ -103,7 +103,9 @@ async function run(config: Block, commands: Block): Promise<Array<[string, strin
 			mode: verb === ("migrate diff" as string) ? ("diff" as const) : ("apply" as const),
 		}
 		const resolved = await resolveMigrateTarget(request)
-			.then(async (target) => (target === undefined ? "no comb.migrate.config.ts" : reach(target, cwd).then(() => 0)))
+			.then(async (target) =>
+				target === undefined ? "no database.migrate.config.ts" : reach(target, cwd).then(() => 0),
+			)
 			.catch((error: Error) => error.message)
 		results.push([line, resolved])
 	}
@@ -126,7 +128,7 @@ describe("README's migrate commands run on the config they follow (D6-8 of the a
 		const environments = CONFIGS.find((config) => config.body.includes("environments:"))
 		expect(environments?.body).toContain('type: "d1"')
 		const commands = after(environments as Block)
-		const lines = commands?.body.split("\n").filter((line) => line.startsWith("bunx comb migrate ")) ?? []
+		const lines = commands?.body.split("\n").filter((line) => line.startsWith("bunx database migrate ")) ?? []
 		expect(lines.length).toBeGreaterThanOrEqual(2)
 		expect(lines.filter((line) => !/ -e \w+/.test(line))).toEqual([])
 		const results = await run(environments as Block, commands as Block)

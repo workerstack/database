@@ -1,6 +1,6 @@
 import type { ts } from "ts-morph"
 
-/** The compiler options of the tsconfig nearest `from`, over the bundler resolution comb reads TypeScript files with */
+/** The compiler options of the tsconfig nearest `from`, over the bundler resolution database reads TypeScript files with */
 export declare function compilerOptionsFor(from: string): ts.CompilerOptions
 export declare function tsconfigOptions(from: string): ts.CompilerOptions
 

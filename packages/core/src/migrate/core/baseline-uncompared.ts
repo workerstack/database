@@ -1,5 +1,5 @@
 /**
- * What neither Atlas's table diff nor comb's catalog read compares, the one list the
+ * What neither Atlas's table diff nor database's catalog read compares, the one list the
  * every-run warning is written from: a kind either has its arm in pg-live-catalog.ts, is Atlas's (a
  * table, its columns, indexes, constraints, enum values, storage parameters), or is named here
  */
@@ -19,7 +19,7 @@ const NOT_COMPARED = [
 const sentence = (kinds: readonly string[]): string =>
 	`Warning: ${kinds.slice(0, -1).join(", ")} and ${kinds.at(-1) as string} are not compared`
 
-/** What neither Atlas nor comb compares, which a baseline says every time */
+/** What neither Atlas nor database compares, which a baseline says every time */
 const UNCOMPARED: string = /* @__PURE__ */ sentence(NOT_COMPARED)
 
 export { NOT_COMPARED, UNCOMPARED }

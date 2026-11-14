@@ -1,6 +1,6 @@
 /**
  * Through the real wrangler --local: `ALTER TABLE "users"DROP COLUMN email` drops the column as the
- * spelling with a space does. comb's reading rated it safe, and only the proof run's loss stood between
+ * spelling with a space does. database's reading rated it safe, and only the proof run's loss stood between
  * it and a table the proof cannot seed; check and apply now refuse the statement itself, and the column stays.
  */
 import fs from "node:fs"
@@ -13,7 +13,7 @@ afterEach(() => {
 	for (const dir of dirs.splice(0)) fs.rmSync(dir, { force: true, recursive: true })
 })
 
-describe("comb migrate check and apply on D1 --local, a DROP COLUMN written against its quoted table", () => {
+describe("database migrate check and apply on D1 --local, a DROP COLUMN written against its quoted table", () => {
 	it("refuses the statement as unsafe, so the column keeps its values", async () => {
 		const dir = d1Project({ "0000_init.sql": "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT);" })
 		dirs.push(dir)

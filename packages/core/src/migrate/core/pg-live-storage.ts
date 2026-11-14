@@ -12,10 +12,10 @@ import { keyOf, type Node, nodesOf } from "./pg-nodes.ts"
 import type { Placed, Storage } from "./pg-storage-types.ts"
 import { postgresOptionsOf } from "./pg-url.ts"
 
-/** How comb reads where the target keeps its relations: readPlaced, unless a test says otherwise */
+/** How database reads where the target keeps its relations: readPlaced, unless a test says otherwise */
 type ReadPlaced = (target: LiveTarget) => Promise<Placed | undefined>
 
-/* why comb loads postgres.js here */
+/* why database loads postgres.js here */
 const READS = "read where the target keeps a relation a pending file moves"
 
 /* every table, materialized view and index outside the system's schemas, with where it is */
@@ -62,7 +62,7 @@ async function readPlaced(
 		return placedOf(await sql.unsafe(PLACED, []), target.schema)
 	} catch (error) {
 		throw new Error(
-			`comb could not read where url keeps its relations: ${failureOf(error, { field: "url", url: target.url, urls: [target.url] })}`,
+			`database could not read where url keeps its relations: ${failureOf(error, { field: "url", url: target.url, urls: [target.url] })}`,
 			{ cause: error },
 		)
 	} finally {

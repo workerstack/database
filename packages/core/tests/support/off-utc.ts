@@ -1,6 +1,6 @@
 /**
  * Every run is in UTC, as CI's runners are (vitest.config.ts), which hides a bug that shows only off
- * UTC. comb has code that reads time in the process's zone: node-postgres's local-midnight Date for
+ * UTC. database has code that reads time in the process's zone: node-postgres's local-midnight Date for
  * an infinite `timestamp`, and Date reads of both timestamp modes. So the suites that page or read
  * Date keys run once more in a zone far from UTC with a fractional offset, as vitest projects of
  * their own: a pass or a failure, the same files (tests/structure/workflows.test.ts holds the list).

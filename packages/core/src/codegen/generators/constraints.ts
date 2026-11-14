@@ -25,13 +25,13 @@ type Dialect = "postgres" | "sqlite"
 export type ConstraintsConfig = {
 	/** the file written, relative to the codegen working directory */
 	output: string
-	/** comb.config.ts's `partitions`: each partitioned table's partitions, keyed as the map keys it */
+	/** database.config.ts's `partitions`: each partitioned table's partitions, keyed as the map keys it */
 	partitions?: Readonly<Record<string, readonly string[]>> | undefined
 }
 
 const conflict = (cause: string, errorKey: string): Constraint => ({ cause, errorKey, statusKey: "conflict" })
 
-/* what a violated CHECK reports when its name follows none of comb's own conventions: what the handler reports unmapped */
+/* what a violated CHECK reports when its name follows none of database's own conventions: what the handler reports unmapped */
 const CHECK_FAILED = { cause: "Check constraint violated", statusKey: "bad_request" } as const
 
 /**
@@ -51,7 +51,7 @@ const hiddenOf = (table: TableMeta): Hidden => {
 	}
 }
 
-/** Whether SQL comb rendered names a private column of the table, as it quotes each by its SQL name */
+/** Whether SQL database rendered names a private column of the table, as it quotes each by its SQL name */
 const touchesPrivate = (table: TableMeta, expression: string) =>
 	table.fields.some((field) => field.constraints.private && namesColumn(expression, field.sqlName))
 
@@ -94,7 +94,7 @@ function uniqueOf(table: TableMeta, hidden: Hidden): Record<string, Constraint> 
 }
 
 /**
- * The cause and status a CHECK reports. Only the two conventions comb itself writes are read from
+ * The cause and status a CHECK reports. Only the two conventions database itself writes are read from
  * a name, `_enum` and `_size`; any other word in a name says nothing reliable (a seats check named
  * `…_within_valid_range` is no date), so every other CHECK is a 400 as the handler's fallback
  */
@@ -113,15 +113,15 @@ const keyed = (table: TableMeta, name: string) =>
 	name.startsWith(`${errorKeyPrefix(table)}_`) ? name : `${errorKeyPrefix(table)}_${name}`
 
 /**
- * The SQL the reader renders comb's enum CHECK of a column to, once a table applies it: the column
+ * The SQL the reader renders database's enum CHECK of a column to, once a table applies it: the column
  * by its SQL name, and each value a literal
  */
 const enumCheckExpression = (sqlName: string, values: readonly string[]): string =>
 	`"${sqlName}" IN (${values.map((value) => `'${value.replaceAll("'", "''")}'`).join(", ")})`
 
 /**
- * The declared CHECKs of a table that are not comb's own enum CHECK, applied: one under comb's
- * name for an enum column is comb's when it checks what comb writes, and refused otherwise
+ * The declared CHECKs of a table that are not database's own enum CHECK, applied: one under database's
+ * name for an enum column is database's when it checks what database writes, and refused otherwise
  */
 function declaredChecks(table: TableMeta, enums: readonly FieldMeta[]): TableMeta["checkConstraints"] {
 	return table.checkConstraints.filter((chk) => {
@@ -129,13 +129,13 @@ function declaredChecks(table: TableMeta, enums: readonly FieldMeta[]): TableMet
 		if (field === undefined) return true
 		if (chk.expression === enumCheckExpression(field.sqlName, field.enumValues as string[])) return false
 		throw new Error(
-			`${qualifiedName(table)}: the CHECK ${chk.name} takes the name comb gives the enum CHECK of ${qualifiedName(table)}.${field.name}, but checks something else; rename it`,
+			`${qualifiedName(table)}: the CHECK ${chk.name} takes the name database gives the enum CHECK of ${qualifiedName(table)}.${field.name}, but checks something else; rename it`,
 		)
 	})
 }
 
 /**
- * Each CHECK of a table by the name the engine reports: the declared ones and comb's own enum
+ * Each CHECK of a table by the name the engine reports: the declared ones and database's own enum
  * CHECKs, cut to what Postgres keeps of a name. Two of one name, or that cut to one,
  * fail codegen.
  */
@@ -290,8 +290,10 @@ export function generateConstraints(ctx: GeneratorContext, config: ConstraintsCo
 	const { dbName, tables } = ctx.analysis
 	const outputPath = path.resolve(ctx.cwd, config.output)
 	const constraintMap = buildConstraintMap(tables, ctx.dialect, config.partitions)
-
-	writeGenFile(outputPath, generateConstraintMapCode(constraintMap, dbName), { generator: "comb", staged: ctx.staged })
+	writeGenFile(outputPath, generateConstraintMapCode(constraintMap, dbName), {
+		generator: "database",
+		staged: ctx.staged,
+	})
 
 	ctx.log(`Generated constraint map for ${dbName} database at: ${outputPath}`)
 	ctx.log(`Tables: ${Object.keys(constraintMap).length}, Total constraints: ${countConstraints(constraintMap)}`)

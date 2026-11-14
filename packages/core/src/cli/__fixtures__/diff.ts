@@ -1,7 +1,7 @@
 /** A migrate diff's project and the Atlas and drizzle-kit it drives, shared by the diff tests */
 import { readdirSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import type { Run, RunResult } from "../../migrate/core/process.ts"
+import type { MigrateRun, RunResult } from "../../migrate/core/process.ts"
 import { ok } from "./io.ts"
 
 /** A project a diff runs in, made by `project`: its drizzle config written, as migrate init writes one */
@@ -17,9 +17,9 @@ export const dirArg = (args: readonly string[]) => (args[args.indexOf("--dir") +
  * Atlas as the migrate commands drive it: `migrate hash` writes atlas.sum from the directory's
  * files, `migrate diff` hands the directory it replays to `diff`; drizzle-kit exports SCHEMA.
  */
-export function fakeAtlas(diff: (dir: string) => RunResult | undefined | void): Run & { calls: string[][] } {
+export function fakeAtlas(diff: (dir: string) => RunResult | undefined | void): MigrateRun & { calls: string[][] } {
 	const calls: string[][] = []
-	const run: Run = async (cmd, args) => {
+	const run: MigrateRun = async (cmd, args) => {
 		calls.push([cmd, ...args])
 		if (cmd === process.execPath) return ok("CREATE TABLE post (id TEXT PRIMARY KEY);")
 		if (args[0] === "version") return ok("atlas version v1.3.0")

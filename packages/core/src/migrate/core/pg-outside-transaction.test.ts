@@ -184,7 +184,7 @@ describe("insideOnly and blockAfter", () => {
 	})
 
 	/*
-	 * the gate's pin (comb-9d): libpg-query sets a DECLARE's options on every form a history can hold,
+	 * the gate's pin (database-9d): libpg-query sets a DECLARE's options on every form a history can hold,
 	 * which insideOnly reads with no fallback; a parser that drops them fails here, before a NaN
 	 * reads every cursor as one without WITH HOLD
 	 */

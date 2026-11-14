@@ -16,7 +16,7 @@ export const author = sqliteTable("author", { id: c.id("aut"), name: c.text("nam
 export const shelf = sqliteTable("shelf", { id: c.id("shf"), label: c.text("label", { max: 30 }) })
 `
 
-describe("comb codegen: a column added to one table (F59)", () => {
+describe("database codegen: a column added to one table (F59)", () => {
 	it("rewrites no other table's DTO file", async () => {
 		const dir = project({ "src/db/db.core.tables.ts": tables(false) })
 		await codegen(dir, ["--tables", "src/db/db.core.tables.ts"])

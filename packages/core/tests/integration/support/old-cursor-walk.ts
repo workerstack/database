@@ -1,5 +1,5 @@
 /**
- * AB4-7 of area B: a cursor an older comb minted (old-cursors.ts), holding a SQLite REAL key as a
+ * AB4-7 of area B: a cursor an older database minted (old-cursors.ts), holding a SQLite REAL key as a
  * number, opens and pages the rows after it as that version paged them, now a cursor carries the
  * key's text. Each engine's suite opens the rows on its own driver.
  */

@@ -22,7 +22,7 @@ beforeAll(loadPostgresParser)
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-pg-replay-session-"))
+	dir = mkdtempSync(join(tmpdir(), "database-pg-replay-session-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
@@ -69,8 +69,8 @@ const outcomes = (schema: string, devUrl?: string): Promise<{ apply: string; che
 
 const BOTH_OK = { apply: "ok", check: "ok" }
 
-/* the settings a session runs a file on that its client or a SET gave it, those comb's replay adds for itself left out */
-const PROBE = `-- comb:allow-unsafe: the test reads the session\nDO $$ BEGIN RAISE EXCEPTION 'session<%>', (SELECT string_agg(name || '=' || setting, '; ' ORDER BY name) FROM pg_settings WHERE source IN ('client', 'session') AND name NOT IN ('application_name', 'client_connection_check_interval', 'client_encoding', 'idle_in_transaction_session_timeout', 'lock_timeout', 'statement_timeout', 'transaction_isolation', 'transaction_read_only')); END $$;\n`
+/* the settings a session runs a file on that its client or a SET gave it, those database's replay adds for itself left out */
+const PROBE = `-- database:allow-unsafe: the test reads the session\nDO $$ BEGIN RAISE EXCEPTION 'session<%>', (SELECT string_agg(name || '=' || setting, '; ' ORDER BY name) FROM pg_settings WHERE source IN ('client', 'session') AND name NOT IN ('application_name', 'client_connection_check_interval', 'client_encoding', 'idle_in_transaction_session_timeout', 'lock_timeout', 'statement_timeout', 'transaction_isolation', 'transaction_read_only')); END $$;\n`
 
 /** The session a probe's refusal names, past the statement it echoes */
 const sessionOf = (message: string): string => /session<([^%>]*)>/.exec(message)?.[1] ?? message
@@ -90,11 +90,11 @@ describe("the replay's session is the one Atlas applies a file on (PR3 of r22b; 
 	it.each([
 		[
 			"RESET search_path",
-			"-- comb:allow-unsafe: the test resets the path\nSET search_path TO public;\nCREATE TABLE helper (id int);\nRESET search_path;\n",
+			"-- database:allow-unsafe: the test resets the path\nSET search_path TO public;\nCREATE TABLE helper (id int);\nRESET search_path;\n",
 		],
 		[
 			"DISCARD ALL in a txmode none file",
-			"-- atlas:txmode none\n\n-- comb:allow-unsafe: the test discards the session\nDISCARD ALL;\n",
+			"-- atlas:txmode none\n\n-- database:allow-unsafe: the test discards the session\nDISCARD ALL;\n",
 		],
 	])(
 		"checks a file that runs %s and then alters a table in the target's schema as apply runs it",
@@ -108,7 +108,7 @@ describe("the replay's session is the one Atlas applies a file on (PR3 of r22b; 
 	it("baselines the database Atlas built from a file that makes a view after RESET search_path", async () => {
 		await write([
 			"CREATE TABLE a (id int);\n",
-			"-- comb:allow-unsafe: the test resets the path\nSET search_path TO public;\nCREATE TABLE helper (id int);\nRESET search_path;\nCREATE VIEW v AS SELECT id FROM a;\n",
+			"-- database:allow-unsafe: the test resets the path\nSET search_path TO public;\nCREATE TABLE helper (id int);\nRESET search_path;\nCREATE VIEW v AS SELECT id FROM a;\n",
 		])
 		const outcome = await withScratchDb((dev) =>
 			withScratchDb(async (url) => {
@@ -155,7 +155,7 @@ describe("the replay reads a date as Atlas's session does, whatever devUrl's ser
 	])(
 		"checks a seeded date of %s month first, as apply reads it, on a devUrl whose DateStyle is DMY",
 		async (value, applies) => {
-			const [dmy] = testRoles("comb_t_dmy")
+			const [dmy] = testRoles("database_t_dmy")
 			await write([`CREATE TABLE d (at date);\nINSERT INTO d VALUES ('${value}');\n`])
 			const { apply, check } = await withScratchDb(async (dev) => {
 				const devUrl = await asRole(dev, dmy, "CREATEDB")

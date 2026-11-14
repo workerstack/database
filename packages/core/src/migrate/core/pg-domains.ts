@@ -23,7 +23,7 @@ import {
 
 /**
  * The first function an expression calls whose finding is unsafe, by name: code a write runs that
- * comb cannot read. A cautious call such as a default's nextval, which is what a serial does, is
+ * database cannot read. A cautious call such as a default's nextval, which is what a serial does, is
  * no such code.
  */
 function callIn(expression: unknown, { defined, schema }: Pick<Facts, "defined" | "schema">): string | undefined {

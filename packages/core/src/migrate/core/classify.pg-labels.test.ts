@@ -1,5 +1,5 @@
 /**
- * P21 of r19: a Postgres statement comb does not recognize is named by its parse tree's node, as
+ * P21 of r19: a Postgres statement database does not recognize is named by its parse tree's node, as
  * Postgres's command tag names it, never by its first two words ("ALTER DEFAULT", "CREATE TEXT",
  * "CREATE USER" for a user mapping); and a PREPARE is rated as itself, a statement an EXECUTE runs
  * later, never as the statement it holds.
@@ -15,7 +15,7 @@ const rate = (sql: string, history = "") =>
 		dialect: "postgres",
 	})
 
-describe("a Postgres statement comb does not recognize (P21 of r19)", () => {
+describe("a Postgres statement database does not recognize (P21 of r19)", () => {
 	it.each([
 		["ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO PUBLIC", "ALTER DEFAULT PRIVILEGES"],
 		["CREATE ACCESS METHOD am TYPE TABLE HANDLER heap_tableam_handler", "CREATE ACCESS METHOD"],
@@ -32,7 +32,7 @@ describe("a Postgres statement comb does not recognize (P21 of r19)", () => {
 		const rating = rate(sql)
 		expect([rating.safety, rating.unsafeStatements]).toEqual([
 			"unsafe",
-			[`${sql} (comb does not recognize ${tag}; approve it in the file)`],
+			[`${sql} (database does not recognize ${tag}; approve it in the file)`],
 		])
 	})
 })
@@ -43,7 +43,9 @@ describe("a PREPARE (P21 of r19)", () => {
 		expect([rating.safety, rating.unsafeStatements, rating.cautiousStatements]).toEqual([
 			"cautious",
 			[],
-			["PREPARE q AS DELETE FROM t (prepares a statement for an EXECUTE, which comb rates by the statement it runs)"],
+			[
+				"PREPARE q AS DELETE FROM t (prepares a statement for an EXECUTE, which database rates by the statement it runs)",
+			],
 		])
 	})
 

@@ -23,7 +23,7 @@ describe("readExports", () => {
 describe("findNearestPackageJson and setPackageExport", () => {
 	let dir: string
 	beforeEach(() => {
-		dir = fs.mkdtempSync(path.join(os.tmpdir(), "comb-package-json-"))
+		dir = fs.mkdtempSync(path.join(os.tmpdir(), "database-package-json-"))
 	})
 	afterEach(() => {
 		vi.restoreAllMocks()
@@ -90,7 +90,7 @@ describe("exportKey and ownsKey", () => {
 
 describe("setPackageExport: the same bytes whatever the order it runs in (F32)", () => {
 	it("writes . first, then every subpath by key", () => {
-		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "comb-pkg-order-"))
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "database-pkg-order-"))
 		try {
 			const file = path.join(dir, "package.json")
 			const run = (order: string[]) => {

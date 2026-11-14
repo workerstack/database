@@ -6,7 +6,7 @@ import { pgRead } from "./pg-split.ts"
 
 beforeAll(loadPostgresParser)
 
-/** What the statements of `sql`, read in turn, can run that comb cannot read */
+/** What the statements of `sql`, read in turn, can run that database cannot read */
 function read(sql: string): Hidden {
 	const hidden = nothingHidden()
 	for (const { tree } of pgRead(sql).statements) readStatement(tree, hidden)
@@ -25,7 +25,7 @@ function replayOf(outside: boolean): { asked: unknown[][]; sql: Sql } {
 	return { asked, sql: sql as unknown as Sql }
 }
 
-/* PR1 of r23: only a statement that can run code comb cannot read can make a change past its database that no count sees */
+/* PR1 of r23: only a statement that can run code database cannot read can make a change past its database that no count sees */
 describe("readStatement", () => {
 	it.each([
 		["a DO block", "DO $$ BEGIN NULL; END $$;"],
@@ -35,7 +35,7 @@ describe("readStatement", () => {
 		["a call qualified by a schema other than pg_catalog", "SELECT app.make_side();"],
 		["a call qualified by a database", "SELECT db.app.make_side();"],
 		["a statement the parser cannot read", "SELECT FROM WHERE;"],
-	])("holds %s as code comb cannot read", (_, sql) => {
+	])("holds %s as code database cannot read", (_, sql) => {
 		expect(read(sql).code).toBe(true)
 	})
 
@@ -57,7 +57,7 @@ describe("readStatement", () => {
 })
 
 describe("runsHidden", () => {
-	it("is true for code comb cannot read, asking nothing", async () => {
+	it("is true for code database cannot read, asking nothing", async () => {
 		const { asked, sql } = replayOf(false)
 		expect(await runsHidden(sql, { ...nothingHidden(), code: true })).toBe(true)
 		expect(asked).toEqual([])

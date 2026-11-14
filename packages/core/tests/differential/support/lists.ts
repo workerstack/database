@@ -1,5 +1,5 @@
 /**
- * The list oracle: a case (list-cases.ts) built by one version of comb with that version's drizzle, walked page by
+ * The list oracle: a case (list-cases.ts) built by one version of database with that version's drizzle, walked page by
  * page on a driver, and judged against the engine's own ORDER BY over the same rows on the same driver. The rule:
  * the walk serves every row the filter selects exactly once, in the engine's order, each row projected to `select`,
  * or it stops at a refusal the walk's mode allows. Versions are loaded as their entry module (entry.ts), so
@@ -90,7 +90,7 @@ const idOf = (row: readonly string[]): string => (row[0] as string).slice(1, -1)
 
 /**
  * The engine's answer for the case: each id its filter selects, with its dense rank in the engine's own order of
- * the case's keys (a walk may serve ties in any order), and its position once comb's tiebreak, the id in the first
+ * the case's keys (a walk may serve ties in any order), and its position once database's tiebreak, the id in the first
  * key's direction, makes the order total (where a page by number starts and ends)
  */
 export type Truth = Map<string, { position: number; rank: number }>

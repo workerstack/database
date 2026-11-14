@@ -1,6 +1,6 @@
 /**
  * P7 of r18: a URL that names its password file through `passfile` is the connection, as libpq and
- * Atlas read it, so comb's own reads take the password from it too.
+ * Atlas read it, so database's own reads take the password from it too.
  */
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -15,7 +15,7 @@ afterEach(() => {
 
 /** A password file holding `text`, readable by its owner alone unless `mode` says otherwise */
 function passfile(text: string, mode = 0o600): string {
-	const dir = mkdtempSync(join(tmpdir(), "comb-passfile-"))
+	const dir = mkdtempSync(join(tmpdir(), "database-passfile-"))
 	dirs.push(dir)
 	const file = join(dir, "pgpass")
 	writeFileSync(file, text)
@@ -48,7 +48,7 @@ describe("postgresOptionsOf with a passfile", () => {
 	})
 
 	/*
-	 * P11 of r19, ruled: the host rule of Atlas's driver, lib/pq, where it and libpq differ, so comb and
+	 * P11 of r19, ruled: the host rule of Atlas's driver, lib/pq, where it and libpq differ, so database and
 	 * Atlas take one password from one file (runs/2840532-probe-p11-passfile-*): no host is localhost
 	 * whatever the hostaddr, and a socket matches its directory or localhost, the first line either way
 	 */

@@ -11,7 +11,7 @@ import os from "node:os"
 import path from "node:path"
 import { writeLocked } from "../../src/migrate/drivers/local-db.ts"
 
-const dir = fs.mkdtempSync(path.join(os.tmpdir(), "comb-write-locked-bun-"))
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), "database-write-locked-bun-"))
 
 describe("writeLocked under Bun", () => {
 	it("says true while another connection holds the write lock, and false once it lets go, leaving the file as it was", async () => {

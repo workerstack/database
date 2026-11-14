@@ -37,7 +37,7 @@ const mayBeNull = (columns: readonly Column[], key: Key): boolean =>
 	key.from.every((name) => columns.find((column) => column.name === name)?.nullable === true)
 
 /* why a row cannot go in when a key it may not leave NULL has no parent row to take */
-const NO_PARENT = "a key it may not leave NULL references a table comb could not seed"
+const NO_PARENT = "a key it may not leave NULL references a table database could not seed"
 
 /** What closing a table's keys reads: the table, its columns and keys, its cycle's later tables, and their rows */
 type Closing = {

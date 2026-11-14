@@ -28,8 +28,8 @@
 import { getTableName, is, type SQL, type SQLWrapper, sql, type Table } from "drizzle-orm"
 import { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core"
 
-import { CombError } from "../error.ts"
-import { combErrorKeys } from "../types.ts"
+import { DatabaseError } from "../error.ts"
+import { databaseErrorKeys } from "../types.ts"
 import { CursorRef, effectiveNulls } from "./cursor.ts"
 import { lossy } from "./cursor-refusals.ts"
 import { cursorPrecision } from "./cursor-precision.ts"
@@ -76,10 +76,10 @@ function textBound(key: SortKey, ref: CursorRef, at: Anchor): SQL {
 	const prefix = ref.prefix === "" ? sql`''` : sql`${ref.prefix}`
 	const above =
 		direction === "asc"
-			? sql`comb_anchor.v`
-			: sql`(comb_anchor.v || ${sqlite ? sql`char(1114111)` : sql`chr(1114111)`})`
+			? sql`database_anchor.v`
+			: sql`(database_anchor.v || ${sqlite ? sql`char(1114111)` : sql`chr(1114111)`})`
 	const fallback = sqlite ? above : sql`CASE WHEN ${byCodePoint(column)} THEN ${above} END`
-	return sql`(SELECT CASE WHEN ${head} = comb_anchor.v AND ${size} = ${countLiteral(ref.length)} THEN ${column} ELSE ${fallback} END FROM (SELECT ${prefix} AS v) AS comb_anchor LEFT JOIN ${fromOf(at.table)} ON ${at.tiebreak} = ${at.id})`
+	return sql`(SELECT CASE WHEN ${head} = database_anchor.v AND ${size} = ${countLiteral(ref.length)} THEN ${column} ELSE ${fallback} END FROM (SELECT ${prefix} AS v) AS database_anchor LEFT JOIN ${fromOf(at.table)} ON ${at.tiebreak} = ${at.id})`
 }
 
 /** An integer as an SQL literal, its sign kept */
@@ -235,10 +235,10 @@ const exactBound = ({ column, direction }: SortKey, value: number, at: Anchor): 
 /** A 500 when a list with no table to read from got a reference: paginate was not told the list is derived */
 function assertNoReference(values: readonly unknown[]): void {
 	if (!values.some((value) => value instanceof CursorRef)) return
-	throw new CombError({
+	throw new DatabaseError({
 		cause:
 			"this cursor carries a sort value by reference, which a derived list with no anchor cannot read back; give buildDerivedListQuery the table its rows are as anchor",
-		errorKey: combErrorKeys.SORT_NOT_WIRED,
+		errorKey: databaseErrorKeys.SORT_NOT_WIRED,
 		status: "internal_server_error",
 	})
 }

@@ -1,5 +1,5 @@
 /**
- * Every unit test file runs with comb's Postgres parser loaded, as every comb path that classifies
+ * Every unit test file runs with database's Postgres parser loaded, as every database path that classifies
  * a Postgres migration loads it first (pg-tree.ts). pg-tree.test.ts checks the refusal without it
  * on a fresh module.
  */

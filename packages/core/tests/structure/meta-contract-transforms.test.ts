@@ -1,5 +1,5 @@
 /**
- * C9 and K4 of r19: meta-contract §2.1 defines each `x-comb-transform` value exactly, as a reader in
+ * C9 and K4 of r19: meta-contract §2.1 defines each `x-database-transform` value exactly, as a reader in
  * any language needs, and these hold the definitions to what codegen emits and zod does: the names
  * to the list codegen can emit, the trim set to ECMAScript's over all of Unicode, and the fixtures
  * consumers test against to the operations themselves.
@@ -20,7 +20,7 @@ const CONTRACT = readFileSync(join(import.meta.dirname, "../../docs/meta-contrac
 const FIELD_KEYS = CONTRACT.slice(CONTRACT.indexOf("### 2.1 Field keys"), CONTRACT.indexOf("## 3. Producer API"))
 
 /* codegen's transforms, and the one passwordText publishes (C2 of r22) */
-const EMITTED: string[] = [...TRANSFORMS, ...(z.toJSONSchema(passwordText())["x-comb-transform"] as string[])]
+const EMITTED: string[] = [...TRANSFORMS, ...(z.toJSONSchema(passwordText())["x-database-transform"] as string[])]
 
 /** The code points §2.1's trim definition lists, ranges unfolded */
 function listedTrim(): number[] {
@@ -41,7 +41,7 @@ function trimmedByEcmaScript(): number[] {
 }
 
 describe("meta-contract §2.1's transforms", () => {
-	it("defines every transform comb can emit, codegen's and passwordText's nfc, and no other", () => {
+	it("defines every transform database can emit, codegen's and passwordText's nfc, and no other", () => {
 		const defined = [...FIELD_KEYS.matchAll(/^ {2}- `"([\w-]+)"`:/gm)].map(([, name]) => name)
 		expect(defined.toSorted()).toEqual(EMITTED.toSorted())
 	})
@@ -79,7 +79,7 @@ function publishedProperty(raw: string): unknown {
 	const code = generateFieldSchema(parseField("t", raw), "create", {
 		imports: { enumImports: new Map(), identifiers: new Map(), jsonSchemaImports: new Set() },
 	}) as string
-	const field = new Function("z", "comb", "_m", ts.transpile(`return ${code}`))(
+	const field = new Function("z", "database", "_m", ts.transpile(`return ${code}`))(
 		z,
 		{ isStorableText },
 		META,
@@ -90,7 +90,8 @@ function publishedProperty(raw: string): unknown {
 	return document.properties.t
 }
 
-const xComb = (schema: Record<string, unknown>) => Object.keys(schema).filter((key) => key.startsWith("x-comb-"))
+const xDatabase = (schema: Record<string, unknown>) =>
+	Object.keys(schema).filter((key) => key.startsWith("x-database-"))
 
 /* C1 of r20: a nullable field's keys sit on the property and on its non-null member alike */
 describe("meta-contract §2.1's placement", () => {
@@ -99,6 +100,6 @@ describe("meta-contract §2.1's placement", () => {
 		const shown = blocks.find((block) => !Array.isArray(block)) as { anyOf: Array<Record<string, unknown>> }
 		expect(shown, "§2.1 shows a nullable property").toBeDefined()
 		expect(shown).toEqual(publishedProperty('c.text("t", { max: 9, trim: true })'))
-		expect(xComb(shown.anyOf[0] as Record<string, unknown>)).toEqual(xComb(shown as never))
+		expect(xDatabase(shown.anyOf[0] as Record<string, unknown>)).toEqual(xDatabase(shown as never))
 	})
 })

@@ -7,13 +7,13 @@ import { oxlintReports, reportsOf, reportsOnDisk } from "./rule-harness.ts"
 
 const rule = plugin.rules["optional-undefined"]
 const MESSAGE =
-	"an optional property takes undefined, which comb reads as the key left out: declare it `name?: T | undefined`, a method as `name?: ((…) => R) | undefined`"
+	"an optional property takes undefined, which database reads as the key left out: declare it `name?: T | undefined`, a method as `name?: ((…) => R) | undefined`"
 const MAPPED =
-	"an optional mapped key takes undefined, which comb reads as the key left out: declare it `{ [K in …]?: T | undefined }`"
+	"an optional mapped key takes undefined, which database reads as the key left out: declare it `{ [K in …]?: T | undefined }`"
 const PARTIAL =
-	"a Partial<…> that comb reads refuses undefined, which comb reads as the key left out: declare the input `{ [K in …]?: T | undefined }`; Partial<…> is for what comb hands back, in a return type or an alias only return types reach"
+	"a Partial<…> that database reads refuses undefined, which database reads as the key left out: declare the input `{ [K in …]?: T | undefined }`; Partial<…> is for what database hands back, in a return type or an alias only return types reach"
 
-describe("comb/optional-undefined", () => {
+describe("database/optional-undefined", () => {
 	it("rejects an optional property, method or class field in core source whose type refuses undefined", () => {
 		const fixture = {
 			"packages/core/src/lru.ts": "export type LruOptions = { ttlMs?: number; max: number }\n",
@@ -42,7 +42,7 @@ describe("comb/optional-undefined", () => {
 		expect(reportsOf(rule, fixture)).toEqual([])
 	})
 
-	it("fails oxlint through the comb plugin entry", () => {
+	it("fails oxlint through the database plugin entry", () => {
 		const fixture = { "packages/core/src/lru.ts": "export type LruOptions = { ttlMs?: number }\n" }
 		expect(oxlintReports("optional-undefined", fixture)).toEqual([
 			{ file: "packages/core/src/lru.ts", message: MESSAGE },
@@ -50,7 +50,7 @@ describe("comb/optional-undefined", () => {
 	})
 })
 
-describe("comb/optional-undefined on Partial<…>", () => {
+describe("database/optional-undefined on Partial<…>", () => {
 	it("rejects a Partial<…> a parameter or a config property reaches, an input bag that refuses undefined", () => {
 		const fixture = {
 			"packages/core/src/cli/output.ts":
@@ -68,7 +68,7 @@ describe("comb/optional-undefined on Partial<…>", () => {
 		])
 	})
 
-	it("allows a Partial<…> comb hands back: a return type, its own value, a callback's parameter, an alias only those reach", () => {
+	it("allows a Partial<…> database hands back: a return type, its own value, a callback's parameter, an alias only those reach", () => {
 		const fixture = {
 			"packages/core/src/query/list.ts": [
 				"type Extras = Partial<{ total: number }>",
@@ -112,7 +112,7 @@ describe("comb/optional-undefined on Partial<…>", () => {
 const at = "packages/core/src/query/probe.ts"
 const lint = (source: string) => reportsOf(rule, { [at]: source })
 
-describe("comb/optional-undefined through a generic alias", () => {
+describe("database/optional-undefined through a generic alias", () => {
 	it("reads a Partial<…> in a generic alias's type argument the way that alias's parameter flows (L1, L2)", () => {
 		const setter = "type Setter<T> = (value: T) => void\n"
 		expect(
@@ -124,7 +124,7 @@ describe("comb/optional-undefined through a generic alias", () => {
 		expect(lint(`${wrap}export function make(): Wrap<Partial<{ a: number }>> { return { set: () => {} } }\n`)).toEqual([
 			{ file: at, message: PARTIAL },
 		])
-		/* one that comb both reads and hands out is an input */
+		/* one that database both reads and hands out is an input */
 		const box = "type Box<T> = { get: () => T; set: (value: T) => void }\n"
 		expect(lint(`${box}export function on(box: Box<Partial<{ a: number }>>) { return box.get() }\n`)).toEqual([
 			{ file: at, message: PARTIAL },
@@ -150,7 +150,7 @@ describe("comb/optional-undefined through a generic alias", () => {
 	})
 })
 
-describe("comb/optional-undefined through heritage, mapped types and private fields", () => {
+describe("database/optional-undefined through heritage, mapped types and private fields", () => {
 	it("rejects an optional mapped type that refuses undefined, and allows one that takes it or is required (L3)", () => {
 		expect(lint("export function f(o: { [K in 'a' | 'b']?: string }) { return o }\n")).toEqual([
 			{ file: at, message: MAPPED },
@@ -163,7 +163,7 @@ describe("comb/optional-undefined through heritage, mapped types and private fie
 		).toEqual([])
 	})
 
-	it("reads a private or #-named class field as comb's own state, and a protected one as a subclass's input (L4)", () => {
+	it("reads a private or #-named class field as database's own state, and a protected one as a subclass's input (L4)", () => {
 		expect(
 			lint(
 				"export class C { private seen: Partial<Record<string, number>> = {}; #own: Partial<{ a: number }> = {}; private log?: number; #at?: number }\n",
@@ -192,7 +192,7 @@ describe("comb/optional-undefined through heritage, mapped types and private fie
 	})
 })
 
-describe("comb/optional-undefined on what comb takes back", () => {
+describe("database/optional-undefined on what database takes back", () => {
 	it("takes back only the outputs TAKEN_BACK names, each one a Partial<…> alias src still declares", () => {
 		const fixture = {
 			"packages/core/src/query/sqlite/build-list-query-types.ts":
@@ -211,9 +211,9 @@ describe("comb/optional-undefined on what comb takes back", () => {
 
 /* D3-3 of the area D round-three review: K1, K2, K3, K4 and K11 of its probe, each with its control */
 const TUPLE =
-	"an optional tuple element takes undefined, which comb reads as the element left out: declare it `[name?: T | undefined]`, an unnamed one `[(T | undefined)?]`"
+	"an optional tuple element takes undefined, which database reads as the element left out: declare it `[name?: T | undefined]`, an unnamed one `[(T | undefined)?]`"
 
-describe("comb/optional-undefined across files, in tuples and on abstract members", () => {
+describe("database/optional-undefined across files, in tuples and on abstract members", () => {
 	it("reads a generic alias another src file declares the way its parameter flows there (K1, K2)", () => {
 		const fixture = {
 			"packages/core/src/query/alias.ts": "export type Setter<T> = (value: T) => void\n",
@@ -272,7 +272,7 @@ function reported(fixture: Record<string, string>): string[] {
 	return files
 }
 
-describe("comb/optional-undefined on a generic alias however it is exported and imported", () => {
+describe("database/optional-undefined on a generic alias however it is exported and imported", () => {
 	it("follows an export list, an export type list and a re-export of an import (N1, N2, N3)", () => {
 		const listed = { [ALIAS]: `${SETTER}export { Setter }\n` }
 		expect(reported({ ...listed, [PROBE]: made("import type { Setter } from './alias.ts'") })).toEqual([PROBE])
@@ -325,7 +325,7 @@ describe("comb/optional-undefined on a generic alias however it is exported and 
 	})
 })
 
-describe("comb/optional-undefined on a generic alias a barrel or a default export passes on", () => {
+describe("database/optional-undefined on a generic alias a barrel or a default export passes on", () => {
 	it("follows a barrel's export * and a default-exported interface, and no default through export *", () => {
 		const starred = {
 			[ALIAS]: `export ${SETTER}export default interface Sink<T> { put(value: T): void }\n`,
@@ -341,8 +341,8 @@ describe("comb/optional-undefined on a generic alias a barrel or a default expor
 })
 
 /* D4-3 of the area D round-four review: a class's optional method refuses undefined as an interface's does (N9, N10) */
-describe("comb/optional-undefined on a class's optional method", () => {
-	it("rejects an optional method a caller sets, declared or defined, and leaves comb's own", () => {
+describe("database/optional-undefined on a class's optional method", () => {
+	it("rejects an optional method a caller sets, declared or defined, and leaves database's own", () => {
 		const reports = [{ file: at, message: MESSAGE }]
 		expect(lint("export class C { m?(): void }\n")).toEqual(reports)
 		expect(lint("export class C { m?() { return 1 } }\n")).toEqual(reports)
@@ -352,7 +352,7 @@ describe("comb/optional-undefined on a class's optional method", () => {
 })
 
 /* D5-3 of the area D round-five review: a generic class and an `import("…")` type flow as a generic alias does (Q1-Q3) */
-describe("comb/optional-undefined on a generic class and an import type", () => {
+describe("database/optional-undefined on a generic class and an import type", () => {
 	const BOX = "export class Box<T> { put(_value: T): void {} }\n"
 
 	it("follows a generic class's method parameter, declared here or imported, and a caller-set field (Q1)", () => {

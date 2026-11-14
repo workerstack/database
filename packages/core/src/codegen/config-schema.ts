@@ -1,5 +1,5 @@
 /**
- * The Zod schema comb.config.ts is held to as comb loads it: every object
+ * The Zod schema database.config.ts is held to as database loads it: every object
  * is strict, so a misspelled key is refused by name instead of falling back to its default, which a
  * config built through a helper passes `tsc --strict` with. Typed with CodegenConfig, so the two
  * cannot drift.
@@ -24,10 +24,10 @@ const databaseSchema = () =>
 		tables: nonBlank(),
 	})
 
-/** comb.config.ts's schema */
+/** database.config.ts's schema */
 const codegenConfigSchema = (): z.ZodType<CodegenConfig> =>
 	z.strictObject({
-		/* An empty map generates nothing, and CI would pass on stale files, as comb.migrate.config.ts refuses */
+		/* An empty map generates nothing, and CI would pass on stale files, as database.migrate.config.ts refuses */
 		databases: z
 			.record(nonBlank(), databaseSchema())
 			.refine((databases) => Object.keys(databases).length > 0, { message: "databases declares no database" }),

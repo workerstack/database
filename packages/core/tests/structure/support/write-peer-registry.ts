@@ -1,5 +1,5 @@
 /**
- * Records __snapshots__/peer-registry.json from the npm registry: for each of comb's peer ranges, every
+ * Records __snapshots__/peer-registry.json from the npm registry: for each of database's peer ranges, every
  * version it admits and the peerDependencies of its floor and of its newest, so tests/structure/peers.test.ts reads the
  * registry without the network: `bun tests/structure/support/write-peer-registry.ts`. Run it after any
  * peer range changes, and before a release, so a newly published version is in it.

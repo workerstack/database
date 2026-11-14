@@ -1,7 +1,7 @@
 /**
  * The partitioned tables a Postgres history leaves, which rating reads, each
  * followed through its RENAME, SET SCHEMA and DROP, and the statements Postgres refuses on one, with
- * comb's route around each: Postgres refuses a NOT VALID foreign key on a partitioned table, and
+ * database's route around each: Postgres refuses a NOT VALID foreign key on a partitioned table, and
  * CREATE INDEX CONCURRENTLY, ADD … USING INDEX and DROP INDEX CONCURRENTLY of a partitioned index.
  * Its indexes are pg-indexes.ts's.
  */
@@ -70,7 +70,7 @@ function dropRefusal(node: Node, facts: Facts): string | undefined {
 
 /**
  * Why Postgres refuses a statement on a table or index `facts` hold partitioned, in a transaction
- * or out of one, with comb's route; undefined
+ * or out of one, with database's route; undefined
  * for one it runs
  */
 function partitionedRefusal(type: string, node: Node, facts: Facts): string | undefined {

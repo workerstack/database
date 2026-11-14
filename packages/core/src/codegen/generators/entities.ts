@@ -63,7 +63,7 @@ function generateEntities(ctx: GeneratorContext, config: EntitiesConfig): void {
 	lines.push("export { entityPrefixes, generateEntityId, generateUlid, type EntityName }")
 	lines.push("")
 
-	writeGenFile(outputPath, lines.join("\n"), { generator: "comb", staged: ctx.staged })
+	writeGenFile(outputPath, lines.join("\n"), { generator: "database", staged: ctx.staged })
 
 	if (config.updatePackageJson) {
 		const packageJsonPath = findNearestPackageJson(path.dirname(outputPath), ctx.cwd)

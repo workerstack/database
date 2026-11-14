@@ -35,7 +35,7 @@ type Step = {
 
 /** A run's probe-name prefix: a token of its own, so no temp trigger a file made can take a probe's name */
 /* a UUID's hex, a string whatever Buffer's type is: Workers' types and Node's both name one */
-const probePrefix = (): string => `comb_probe_${randomUUID().replaceAll("-", "").slice(0, 16)}_`
+const probePrefix = (): string => `database_probe_${randomUUID().replaceAll("-", "").slice(0, 16)}_`
 
 /** Main's root pages: the table each stores, an index's root its table's, and which are tables' own */
 function rootsOf(db: LocalDb): Pick<Context, "main" | "tables"> {
@@ -86,7 +86,7 @@ function schemaOf(db: LocalDb): ExtractedSchema {
 
 /**
  * The triggers whose firing makes a write unsafe, by lower-case name: those on existing tables,
- * comb's FTS sync triggers aside, main's and temp's alike
+ * database's FTS sync triggers aside, main's and temp's alike
  */
 function watching(db: LocalDb, existing: ReadonlySet<string>): Set<string> {
 	/* an FTS sync trigger is read from its body and the external-content FTS tables before it: the
@@ -206,7 +206,7 @@ function tablesOf(db: LocalDb): Tables {
  * The statements of `statements` the classifier alone rates: a DROP TABLE, which with foreign keys
  * on SQLite codes as a delete of the table's rows and of what cascades from them (the classifier
  * rates a drop, a rebuild and an FTS index's drop, and the row compare checks what they leave), and
- * each statement of comb's guard around a rebuild, exactly as comb wrote it, which empties and
+ * each statement of database's guard around a rebuild, exactly as database wrote it, which empties and
  * refills what the drop reaches (rebuild-guard.ts). Only their deletes are the classifier's: a
  * trigger one of them fires is still the engine's finding.
  */
@@ -286,7 +286,7 @@ function engineFindings(steps: readonly Step[], start: Tables): { cautious: stri
 		}
 		for (const table of effects.deletes) unsafe.push(`${at}: deletes existing rows of ${table}`)
 		for (const table of effects.drops) unsafe.push(`${at}: drops ${table} outside a DROP TABLE`)
-		for (const unread of effects.unread) unsafe.push(`${at}: does what comb cannot read to ${unread}`)
+		for (const unread of effects.unread) unsafe.push(`${at}: does what database cannot read to ${unread}`)
 		for (const trigger of effects.triggers) unsafe.push(`${at}: fires trigger ${trigger} (its WHEN is not evaluated)`)
 		if (effects.virtual) unsafe.push(`${at}: writes over rows of a virtual table`)
 		for (const { name, type } of shadows.filter((shadow) => !shadowed.has(shadow.name))) {

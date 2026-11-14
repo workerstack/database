@@ -1,7 +1,7 @@
 /**
  * Fakes of the two binaries a SQLite apply runs. `atlas migrate hash` writes a sum over the
  * directory's files, `atlas schema diff` answers as told. wrangler runs on an in-memory SQLite
- * (node:sqlite) the way the D1 commands comb calls behave: `d1 execute --json --command` returns
+ * (node:sqlite) the way the D1 commands database calls behave: `d1 execute --json --command` returns
  * rows, `--file` runs all-or-nothing, and `d1 migrations apply` runs each unapplied file with its
  * row in the migrations table, made first as wrangler makes it, in wrangler's order: the INSERT appended on the next line, as
  * wrangler appends it, with no `;` of its own before it.
@@ -14,11 +14,17 @@ import { localD1Path } from "../../migrate/core/d1-binding.ts"
 import { projectBin } from "../../migrate/core/optional-peer.ts"
 import { WRANGLER } from "../../migrate/core/peer-needs.ts"
 import { wranglerOrder } from "../../migrate/core/plan-apply.ts"
-import { type ProjectBin, type Run, type RunOptions, type RunResult, run as spawn } from "../../migrate/core/process.ts"
+import {
+	type ProjectBin,
+	type MigrateRun,
+	type RunOptions,
+	type RunResult,
+	run as spawn,
+} from "../../migrate/core/process.ts"
 
 const ok = (stdout = ""): RunResult => ({ code: 0, stderr: "", stdout })
 
-/** The wrangler a D1 test's target runs: comb's own, resolved from the package as a command resolves it */
+/** The wrangler a D1 test's target runs: database's own, resolved from the package as a command resolves it */
 export const wranglerBin = (): ProjectBin => projectBin(WRANGLER, import.meta.dirname)
 
 /**
@@ -38,7 +44,7 @@ const isProof = (args: readonly string[], options: RunOptions | undefined): bool
  * A runner for a test that reads each call as asCalled gives it, a bin peer's spawn as `wrangler d1 …`;
  * the D1 proof's spawn runs for real
  */
-export function asWrangler(inner: Run): Run {
+export function asWrangler(inner: MigrateRun): MigrateRun {
 	return (cmd, args, options) => {
 		if (isProof(args, options)) return spawn(cmd, args, options)
 		if (options?.peer === undefined) return inner(cmd, args, options)
@@ -68,7 +74,7 @@ export function localD1(configDir: string, binding: Parameters<typeof localD1Pat
 type AtlasAnswers = { schemaDiff?: RunResult | undefined }
 
 /** atlas: `migrate hash` writes the fake sum; `schema diff` answers `answers.schemaDiff`, synced by default */
-export function fakeAtlas(answers: AtlasAnswers = {}): Run {
+export function fakeAtlas(answers: AtlasAnswers = {}): MigrateRun {
 	return async (_cmd, args) => {
 		if (args[1] === "hash") {
 			writeSum((args[args.indexOf("--dir") + 1] as string).replace("file://", ""))
@@ -86,10 +92,10 @@ type D1Options = {
 	table?: string | undefined
 }
 
-export type FakeD1 = Run & { calls: string[][]; db: DatabaseSync }
+export type FakeD1 = MigrateRun & { calls: string[][]; db: DatabaseSync }
 
 /** wrangler on an in-memory D1, with atlas faked alongside; the D1 proof's spawn runs for real */
-export function fakeD1(options: D1Options, atlas: Run = fakeAtlas()): FakeD1 {
+export function fakeD1(options: D1Options, atlas: MigrateRun = fakeAtlas()): FakeD1 {
 	const db = new DatabaseSync(":memory:")
 	const calls: string[][] = []
 	const table = options.table ?? "d1_migrations"
@@ -118,7 +124,7 @@ export function fakeD1(options: D1Options, atlas: Run = fakeAtlas()): FakeD1 {
 		}
 		return ok()
 	}
-	const run: Run = async (spawned, argv, spawnOptions) => {
+	const run: MigrateRun = async (spawned, argv, spawnOptions) => {
 		if (isProof(argv, spawnOptions)) return spawn(spawned, argv, spawnOptions)
 		const [cmd, args] = asCalled(spawned, argv, spawnOptions?.peer)
 		calls.push([cmd, ...args])
@@ -127,7 +133,7 @@ export function fakeD1(options: D1Options, atlas: Run = fakeAtlas()): FakeD1 {
 		const command = args.find((arg) => arg.startsWith("--command="))
 		if (command !== undefined) {
 			try {
-				/* wrangler answers each statement of a command, split here as comb joins them */
+				/* wrangler answers each statement of a command, split here as database joins them */
 				const statements = command.slice("--command=".length).split(";\n")
 				return ok(JSON.stringify(statements.map((sql) => ({ results: db.prepare(sql).all() }))))
 			} catch (error) {

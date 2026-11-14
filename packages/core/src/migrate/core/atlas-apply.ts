@@ -1,14 +1,14 @@
 /**
- * `comb migrate apply` on Postgres: Atlas applies, comb decides what may run. Everything reads a
+ * `database migrate apply` on Postgres: Atlas applies, database decides what may run. Everything reads a
  * private snapshot of the migrations directory (atlas-dir.ts), so Atlas executes exactly the bytes
- * comb classified. In order: Atlas's status, which must report no error except a file it ran
+ * database classified. In order: Atlas's status, which must report no error except a file it ran
  * halfway outside a transaction; a dry run, so a database that needs a baseline fails before anyone
  * is asked (a check of a database with no history inspects it instead, atlas-clean.ts); each
- * pending file classified and approved (approval.ts); then the apply. comb passes no flag that
+ * pending file classified and approved (approval.ts); then the apply. database passes no flag that
  * would skip a check (--allow-dirty, --tx-mode, --baseline), and gives each file a call of its own
  * (atlas-apply-runs.ts), so no session setting of one file reaches the next.
  * The dry run and every apply pass `--exec-order non-linear`, so Atlas runs files by name, as
- * comb orders them on SQLite: its linear order also compares versions, which refuses a later name
+ * database orders them on SQLite: its linear order also compares versions, which refuses a later name
  * with a lower version (20260101_a.sql after 20260101000000_b.sql). checkHistory refuses what that
  * order would skip, a file named before the last applied one (atlas-foreign.ts's ownHistory).
  */
@@ -43,10 +43,10 @@ import { readPending } from "./atlas-pending.ts"
 import { type ReadPlaced, readPlaced } from "./pg-live-storage.ts"
 import type { ReadHeld } from "./pg-schema-members.ts"
 
-/** What Postgres's adoption reads beside Atlas: the catalog, the replay, the dev schema and whether the schema holds anything, comb's own unless a test says otherwise */
+/** What Postgres's adoption reads beside Atlas: the catalog, the replay, the dev schema and whether the schema holds anything, database's own unless a test says otherwise */
 type Reads = Pick<ObjectsCompare, "readLive" | "readReplay" | "readyDev"> & {
 	readHeld?: ReadHeld | undefined
-	/** where the target keeps its relations, for a pending move: comb's own (pg-live-storage.ts) unless a test says otherwise */
+	/** where the target keeps its relations, for a pending move: database's own (pg-live-storage.ts) unless a test says otherwise */
 	readPlaced?: ReadPlaced | undefined
 }
 
@@ -56,7 +56,7 @@ type ApplyOptions = AtlasCommand &
 		approve(migration: ParsedMigration): Promise<Approval>
 		/** only check: stop once every pending file is approved, applying nothing */
 		checkOnly?: boolean | undefined
-		/** how check replays the history and the pending files on dev: comb's own (pg-check-replay.ts) unless a test says otherwise */
+		/** how check replays the history and the pending files on dev: database's own (pg-check-replay.ts) unless a test says otherwise */
 		replayPending?: typeof replayPending | undefined
 		sweepDev?: typeof sweepDev | undefined
 	}
@@ -224,7 +224,7 @@ async function baselineWithAtlas(options: AtlasCommand & Reads): Promise<string[
 		if (files.length === 0) throw new Error("there are no migrations to record")
 		/* the replay runs on a dev database holding the schema */
 		await (options.readyDev ?? readyDevSchema)(options.target)
-		/* comb's replay, in a database of its own, dropped after it, and Atlas reading what it left */
+		/* database's replay, in a database of its own, dropped after it, and Atlas reading what it left */
 		await refuseHistoryDrift(options, copy)
 		/* the highest version as Atlas reads the names, so Atlas records every file, as it prints */
 		const set = await atlas(options, copy, ["set", setTo(copy, files.length).top.Version])

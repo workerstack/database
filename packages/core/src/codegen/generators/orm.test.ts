@@ -15,7 +15,7 @@ type Config = Omit<Parameters<typeof generateOrm>[1], "dialect" | "driver" | "ou
 let tmpDir: string
 
 beforeEach(() => {
-	tmpDir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-gen-orm-"))
+	tmpDir = fs.mkdtempSync(path.join(fixtureRoot(), "database-gen-orm-"))
 })
 
 afterEach(() => {

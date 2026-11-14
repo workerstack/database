@@ -1,5 +1,5 @@
 /**
- * F58 of the 0.13.0 round: codegen loads the tables module from the working directory comb runs
+ * F58 of the 0.13.0 round: codegen loads the tables module from the working directory database runs
  * in, as the app and drizzle-kit load it, never the tables file's own directory. A module that
  * reads a root-relative path (a limits file, process.cwd()) loads for codegen as it loads for them.
  */
@@ -8,8 +8,8 @@ import { project, read, runCodegen, useProjects } from "../support/codegen-proje
 
 useProjects()
 
-describe("comb codegen's working directory as it loads the tables module (F58)", () => {
-	it("is comb's own, so a root-relative read finds the file the app finds", async () => {
+describe("database codegen's working directory as it loads the tables module (F58)", () => {
+	it("is database's own, so a root-relative read finds the file the app finds", async () => {
 		const dir = project({
 			"limits.json": JSON.stringify({ name: 40 }),
 			"src/db/db.core.tables.ts": `import fs from "node:fs"

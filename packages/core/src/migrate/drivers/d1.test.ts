@@ -5,7 +5,7 @@ import { DatabaseSync } from "node:sqlite"
 import { libsqlConnection } from "../__fixtures__/libsql-connection.ts"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { deliver, stubKill } from "../../../tests/support/signals.ts"
-import type { Run, RunOptions, RunResult } from "../core/process.ts"
+import type { MigrateRun, RunOptions, RunResult } from "../core/process.ts"
 import { localD1Path } from "../core/d1-binding.ts"
 import type { D1ProviderConfig, ResolvedDatabaseConfig } from "../types.ts"
 import { createD1Provider, executeAll } from "./d1.ts"
@@ -31,7 +31,7 @@ vi.mock("../core/cleanup.ts", async (original) => {
 })
 
 /** A runner that answers each call, recording a wrangler spawn as `wrangler` and its own arguments; `spawns` keeps them raw */
-function fakeRun(answer: (call: Call) => RunResult): Run & { calls: Call[]; spawns: Call[] } {
+function fakeRun(answer: (call: Call) => RunResult): MigrateRun & { calls: Call[]; spawns: Call[] } {
 	const calls: Call[] = []
 	const spawns: Call[] = []
 	const fake = async (spawned: string, argv: readonly string[], options?: RunOptions) => {
@@ -49,7 +49,7 @@ const json = (value: unknown): RunResult => ({ code: 0, stderr: "", stdout: JSON
 const CONFIG: D1ProviderConfig = { databaseName: "core", type: "d1" }
 const DB: ResolvedDatabaseConfig = { migrationsDir: "m", name: "core-local", provider: CONFIG }
 
-async function connect(run: Run, config: D1ProviderConfig = CONFIG) {
+async function connect(run: MigrateRun, config: D1ProviderConfig = CONFIG) {
 	return createD1Provider(config, run).connect(DB)
 }
 
@@ -165,7 +165,7 @@ describe("createD1Provider: batch and close", () => {
 		const conn = await connect(run, { ...CONFIG, local: false })
 		/* a hash row as recordHashes writes it, 173 bytes with its terminator, so 590 pass the 100 KiB cap */
 		const statements = Array.from({ length: 590 }, (_, i) => ({
-			sql: `INSERT OR REPLACE INTO _comb_migration_hashes (name, hash) VALUES ('${migrationName(i)}', '${"h".repeat(64)}')`,
+			sql: `INSERT OR REPLACE INTO _database_migration_hashes (name, hash) VALUES ('${migrationName(i)}', '${"h".repeat(64)}')`,
 		}))
 		await conn.batch(statements)
 		const commands = run.calls.map(({ args }) => args.at(-1) as string)
@@ -272,7 +272,7 @@ const BUSY_COLORED: RunResult = {
 }
 const LOCAL: D1ProviderConfig = { ...CONFIG, local: true }
 const LOCKED =
-	"wrangler failed (exit 1): the local D1 database stayed locked by another process (wrangler dev, a wrangler command or a second comb migrate) for 5 s: let it finish and rerun"
+	"wrangler failed (exit 1): the local D1 database stayed locked by another process (wrangler dev, a wrangler command or a second database migrate) for 5 s: let it finish and rerun"
 
 /** A runner answering each call with the next of `answers`, the last one ever after */
 const answering = (...answers: RunResult[]) => {
@@ -292,7 +292,7 @@ function fakeClock(): void {
 /* a --local request takes the file's write lock even to read, and fails at once while another process holds it */
 /* a cold miniflare start on a loaded machine can take longer than the whole window */
 const slowly =
-	(run: Run): Run =>
+	(run: MigrateRun): MigrateRun =>
 	async (...args) => {
 		await new Promise((resolve) => setTimeout(resolve, 6000))
 		return run(...args)
@@ -381,7 +381,7 @@ describe("createD1Provider: a local database another process has locked", () => 
 /* CI on 84332342: wrangler's answer names only an internal error, and a run can end before workerd's line is forwarded */
 /** A local config whose wrangler config binds `core`, and its database file, made */
 function project(): { config: D1ProviderConfig; file: string } {
-	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "comb-d1-held-"))
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "database-d1-held-"))
 	const wranglerConfig = path.join(dir, "wrangler.json")
 	const d1 = { binding: "DB", database_id: "id-core", database_name: "core" }
 	fs.writeFileSync(wranglerConfig, JSON.stringify({ d1_databases: [d1], name: "w" }))
@@ -418,7 +418,7 @@ describe("createD1Provider: a local lock wrangler's output does not name", () =>
 	})
 })
 
-describe("createD1Provider: a lock comb does not wait out", () => {
+describe("createD1Provider: a lock database does not wait out", () => {
 	const kill = stubKill()
 	fakeClock()
 
@@ -437,13 +437,13 @@ describe("createD1Provider: a lock comb does not wait out", () => {
 		expect([locked.calls.length, remote.calls.length]).toEqual([1, 1])
 	})
 
-	it("starts no wrangler again once a signal stops comb while it waits", async () => {
+	it("starts no wrangler again once a signal stops database while it waits", async () => {
 		const run = answering(BUSY, json([]))
 		const failed = (await connect(run, LOCAL)).execute("x").then(unexpected, (error: unknown) => error as Error)
 		await vi.advanceTimersByTimeAsync(0)
 		await deliver("SIGTERM")
 		expect((await failed).message).toBe(
-			"wrangler failed (exit 1): comb stopped (SIGTERM) while the local D1 database was locked by another process",
+			"wrangler failed (exit 1): database stopped (SIGTERM) while the local D1 database was locked by another process",
 		)
 		await vi.advanceTimersByTimeAsync(5000)
 		expect([run.calls.length, kill.calls()]).toEqual([1, [[process.pid, "SIGTERM"]]])

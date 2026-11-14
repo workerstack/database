@@ -1,13 +1,13 @@
 /**
  * Standalone configuration for @workerstack/database migrations.
- * No ProjectConfig dependency — accepts a direct CombMigrateConfig object.
+ * No ProjectConfig dependency — accepts a direct MigrateConfig object.
  */
 import { existsSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { pathToFileURL } from "node:url"
 import * as z from "zod"
-import { type CombMigrateConfig, configInputSchema, DEFAULT_PG_DEV_URL } from "./config-schema.ts"
-import type { Run } from "./core/process.ts"
+import { type MigrateConfig, configInputSchema, DEFAULT_PG_DEV_URL } from "./config-schema.ts"
+import type { MigrateRun } from "./core/process.ts"
 import { createD1Provider } from "./drivers/d1.ts"
 import { createBunSqliteProvider, createLibsqlProvider, createTursoProvider } from "./drivers/sqlite.ts"
 import type {
@@ -19,7 +19,7 @@ import type {
 	ResolvedDatabaseConfig,
 } from "./types.ts"
 
-export { type CombMigrateConfig, DEFAULT_PG_DEV_URL }
+export { type MigrateConfig, DEFAULT_PG_DEV_URL }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    RESOLVE PROVIDER CONFIG
@@ -51,10 +51,10 @@ function resolveProviderConfig(input: ProviderConfig): ResolvedDatabaseConfig["p
 /** What a provider that shells out runs processes with: D1 drives wrangler */
 export type ProviderDeps = {
 	/** runs one command and resolves with its exit code and output; default: spawns the real process */
-	run?: Run | undefined
+	run?: MigrateRun | undefined
 }
 
-/** The connection for a provider comb applies through itself; Postgres goes through Atlas instead */
+/** The connection for a provider database applies through itself; Postgres goes through Atlas instead */
 export function createProvider(config: ConnectionProviderConfig, deps: ProviderDeps = {}): ConnectionProvider {
 	switch (config.type) {
 		case "turso":
@@ -66,7 +66,7 @@ export function createProvider(config: ConnectionProviderConfig, deps: ProviderD
 		case "d1":
 			return createD1Provider(config, deps.run)
 		default:
-			throw new Error("Atlas applies Postgres migrations; comb opens no connection to postgres")
+			throw new Error("Atlas applies Postgres migrations; database opens no connection to postgres")
 	}
 }
 
@@ -124,11 +124,11 @@ export function resolveDatabaseConfig(dbConfig: DatabaseConfig, envName?: string
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /**
- * `input`, typed: comb.migrate.config.ts's default export, or what a function export returns, as in
+ * `input`, typed: database.migrate.config.ts's default export, or what a function export returns, as in
  * `export default async () => defineConfig({…})`, so TypeScript holds an object written inline to its
  * known keys in either form. It checks nothing at runtime: `loadConfig` validates the config
  */
-export function defineConfig(input: CombMigrateConfig): CombMigrateConfig {
+export function defineConfig(input: MigrateConfig): MigrateConfig {
 	return input
 }
 
@@ -157,9 +157,9 @@ export async function parseConfig(input: unknown): Promise<MigrationConfig> {
    LOAD CONFIG
    ═══════════════════════════════════════════════════════════════════════════ */
 
-const CONFIG_FILE_NAMES = ["comb.migrate.config.ts", "comb.migrate.config.js"]
+const CONFIG_FILE_NAMES = ["database.migrate.config.ts", "database.migrate.config.js"]
 
-/* names comb read before 0.19, which other migration tools use too: refused, never run */
+/* names database read before 0.19, which other migration tools use too: refused, never run */
 const RETIRED_FILE_NAMES = [
 	"db-migration.config.ts",
 	"db-migration.config.js",
@@ -176,9 +176,9 @@ export type LoadedConfig = {
 }
 
 /**
- * The migrate config file in `cwd`, by the names comb looks for in order; undefined when there is
- * none. A file by a name comb read before 0.19, with no comb config beside it, is refused unrun:
- * without a config comb reads the database name as a D1 binding, so ignoring it could migrate
+ * The migrate config file in `cwd`, by the names database looks for in order; undefined when there is
+ * none. A file by a name database read before 0.19, with no database config beside it, is refused unrun:
+ * without a config database reads the database name as a D1 binding, so ignoring it could migrate
  * another database.
  */
 export function findConfigFile(cwd: string): string | undefined {
@@ -187,7 +187,7 @@ export function findConfigFile(cwd: string): string | undefined {
 	const retired = RETIRED_FILE_NAMES.find((name) => existsSync(resolve(cwd, name)))
 	if (retired !== undefined)
 		throw new Error(
-			`comb no longer reads ${retired}, and did not run it: rename it to comb.migrate.config.ts if it is comb's migrate config, or add a comb.migrate.config.ts beside it if it is another tool's`,
+			`database no longer reads ${retired}, and did not run it: rename it to database.migrate.config.ts if it is database's migrate config, or add a database.migrate.config.ts beside it if it is another tool's`,
 		)
 	return undefined
 }
@@ -196,7 +196,7 @@ export function findConfigFile(cwd: string): string | undefined {
 export async function loadConfig(configPath?: string, cwd: string = process.cwd()): Promise<LoadedConfig> {
 	const resolvedPath = configPath === undefined ? findConfigFile(cwd) : resolve(cwd, configPath)
 	if (resolvedPath === undefined) {
-		throw new Error("No config file found. Create comb.migrate.config.ts (or comb.migrate.config.js)")
+		throw new Error("No config file found. Create database.migrate.config.ts (or database.migrate.config.js)")
 	}
 	if (!existsSync(resolvedPath)) throw new Error(`Config file not found: ${resolvedPath}`)
 

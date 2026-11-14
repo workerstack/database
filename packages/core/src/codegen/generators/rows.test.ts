@@ -24,7 +24,7 @@ async function analyzeIn(dir: string, content: string): Promise<ReturnType<typeo
 }
 
 describe("generateRows — row types", () => {
-	const tmpDir = useTmpDir("comb-gen-rows-")
+	const tmpDir = useTmpDir("database-gen-rows-")
 	const writeTablesAndAnalyze = async (content: string) => await analyzeIn(tmpDir(), content)
 
 	it("generates row types for each table", async () => {
@@ -60,7 +60,7 @@ export const post = createTable("post", { id: c.id(), title: c.text("title") })
 })
 
 describe("generateRows — the tables import", () => {
-	const tmpDir = useTmpDir("comb-gen-rows-")
+	const tmpDir = useTmpDir("database-gen-rows-")
 	const writeTablesAndAnalyze = async (content: string) => await analyzeIn(tmpDir(), content)
 
 	it("generates correct import path", async () => {

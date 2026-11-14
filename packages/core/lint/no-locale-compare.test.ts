@@ -6,7 +6,7 @@ const rule = plugin.rules["no-locale-compare"]
 const MESSAGE =
 	"localeCompare orders by the machine's locale, so output differs between machines; compare with byCodeUnit from src/codegen/utils/order.ts"
 
-describe("comb/no-locale-compare", () => {
+describe("database/no-locale-compare", () => {
 	it("rejects localeCompare in core source, called or passed, by name or by string", () => {
 		const fixture = {
 			"packages/core/src/codegen/runtime/to-meta.ts":
@@ -28,7 +28,7 @@ describe("comb/no-locale-compare", () => {
 		expect(reportsOf(rule, fixture)).toEqual([])
 	})
 
-	it("fails oxlint through the comb plugin entry", () => {
+	it("fails oxlint through the database plugin entry", () => {
 		const fixture = { "packages/core/src/codegen/generators/relations.ts": 'export const n = "a".localeCompare("b")\n' }
 		expect(oxlintReports("no-locale-compare", fixture)).toEqual([
 			{ file: "packages/core/src/codegen/generators/relations.ts", message: MESSAGE },

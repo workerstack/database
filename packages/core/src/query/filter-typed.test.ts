@@ -7,7 +7,7 @@ import type { FieldType, FilterOperator } from "./types.ts"
 const MIN_NORMAL = 2 ** -1022
 
 describe("parseFilterNumber", () => {
-	it("refuses the spellings Number() takes that comb does not, and an integer past 2^53 - 1", () => {
+	it("refuses the spellings Number() takes that database does not, and an integer past 2^53 - 1", () => {
 		for (const raw of ["0x4d2", "0b10011010010", "0o2322", "", " 1", "1_000", "Infinity", "1e999"])
 			expect(parseFilterNumber(raw)).toEqual({ error: `expects a number, got '${raw}'` })
 		expect(parseFilterNumber("9007199254740993")).toEqual({

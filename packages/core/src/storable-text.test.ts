@@ -24,11 +24,11 @@ describe("storableText", () => {
 		expect(schema.safeParse(1).success).toBe(false)
 	})
 
-	it("publishes the rule as x-comb-text, never as a pattern", () => {
+	it("publishes the rule as x-database-text, never as a pattern", () => {
 		expect(z.toJSONSchema(storableText())).toEqual({
 			$schema: "https://json-schema.org/draft/2020-12/schema",
 			type: "string",
-			"x-comb-text": "no U+0000 or unpaired surrogate",
+			"x-database-text": "no U+0000 or unpaired surrogate",
 		})
 	})
 

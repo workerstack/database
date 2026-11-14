@@ -70,7 +70,7 @@ async function pageAll(
 	let cursor: string | undefined
 	for (let page = 0; page < 20; page++) {
 		const rows = await db.query.vals.findMany(queryHelpers.listOptions({ ...query, cursor }, SEALED) as never)
-		const read = texts ? rows : rows.map(({ _combKeyTexts, ...row }: Record<string, unknown>) => row)
+		const read = texts ? rows : rows.map(({ _cursorKeyTexts, ...row }: Record<string, unknown>) => row)
 		const [items, meta] = queryHelpers.paginate(read as Array<{ id: number }>, built({ ...query, cursor }, SEALED))
 		seen.push(...items.map((row) => row.id))
 		if (anchor !== undefined && items.at(-1)?.id === anchor) {
@@ -185,7 +185,7 @@ describe.each(MINTS)(
 			const inOrder = await seeded(sessions, INFINITE("tz"))
 			expect(await inOrder("tz.asc")).toHaveLength(8)
 			const query = schema.parse({ order: "tz.asc" })
-			const row = { _combId: 1, id: 1, tz: new Date(Number.NaN) }
+			const row = { _cursorId: 1, id: 1, tz: new Date(Number.NaN) }
 			/* QL8: a page by number serves the row and mints no cursor from it; a page by cursor refuses it */
 			expect(queryHelpers.paginate([row, row], built(query, { ...SEALED, keyset: "derived" }))[1]).toMatchObject({
 				hasMore: true,
@@ -277,7 +277,7 @@ describe("keyset pagination past a finite timestamptz read as an Invalid Date (A
 			const [items, meta] = queryHelpers.paginate(rows, list)
 			return [items.map((row) => row.id), meta.nextCursor]
 		}
-		let cursor: string | null = createCursor({ ...anchor, _combId: anchor.id }, parsed.parsedSort, SEALED)
+		let cursor: string | null = createCursor({ ...anchor, _cursorId: anchor.id }, parsed.parsedSort, SEALED)
 		const seen: string[] = []
 		for (let page = 0; cursor !== null && page < 8; page++) {
 			const [ids, next]: [string[], string | null] = await pageOf(cursor)

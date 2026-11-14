@@ -36,7 +36,7 @@ const SYNTAX = "Invalid filter syntax"
 
 /**
  * The deepest nesting the parser reads, whatever cap a caller sets: it descends one call per group,
- * so a bound keeps a deep filter a refusal instead of a stack overflow on every runtime comb runs on
+ * so a bound keeps a deep filter a refusal instead of a stack overflow on every runtime database runs on
  */
 const FILTER_MAX_DEPTH = 256
 

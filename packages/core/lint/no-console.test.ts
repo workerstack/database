@@ -5,7 +5,7 @@ import { oxlintReports, reportsOf } from "./rule-harness.ts"
 const rule = plugin.rules["no-console"]
 const MESSAGE = "console belongs to src/log.ts, src/cli/output.ts and src/bin.ts; write through the injected sink"
 
-describe("comb/no-console", () => {
+describe("database/no-console", () => {
 	it("rejects console in core source", () => {
 		const fixture = {
 			"packages/core/src/cli.ts": 'console.log("x")\n',
@@ -32,7 +32,7 @@ describe("comb/no-console", () => {
 		expect(reportsOf(rule, fixture)).toEqual([])
 	})
 
-	it("fails oxlint through the comb plugin entry", () => {
+	it("fails oxlint through the database plugin entry", () => {
 		const fixture = {
 			"packages/core/src/cli.ts": 'console.log("x")\n',
 			"packages/core/src/log.ts": 'console.log("x")\n',

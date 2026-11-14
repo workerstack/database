@@ -104,7 +104,7 @@ describe("migrate apply on D1 without a migrate config: a failed apply", () => {
 		const no = makeIo(declined, fakeD1({ declines: true, dir: join(declined, "atlas-migrations") }))
 		expect(await runCliWithFakes(["migrate", "apply", "core", "--local"], no)).toBe(1)
 		expect(no.errors).toEqual([
-			"wrangler recorded nothing in d1_migrations, where comb checked 20260101000000_init.sql; wrangler said: About to apply… continue? no",
+			"wrangler recorded nothing in d1_migrations, where database checked 20260101000000_init.sql; wrangler said: About to apply… continue? no",
 		])
 	})
 })
@@ -131,7 +131,7 @@ describe("migrate apply on D1 without a migrate config: order and refusals", () 
 		const dir = worker(INIT)
 		const cases: Array<[string[], string, string]> = [
 			[["--file", "x.sql"], dir, "--file does not apply to a D1 database: wrangler applies its migrations directory"],
-			[["-e", "prod"], dir, "-e/--env needs comb.migrate.config.ts to define environments"],
+			[["-e", "prod"], dir, "-e/--env needs database.migrate.config.ts to define environments"],
 			[["--local"], temp.make(), "no wrangler config in "],
 		]
 		for (const [flags, cwd, message] of cases) {
@@ -147,7 +147,7 @@ describe("migrate apply on D1 without a migrate config: order and refusals", () 
 		const file = makeIo(dir)
 		expect(await runCliWithFakes(["migrate", "apply", "blog", "--local", "--dir", "afile.sql"], file)).toBe(1)
 		expect(file.errors).toEqual([`Migrations dir ${join(dir, "afile.sql")} is not a directory`])
-		/* without a runner given, comb runs the real wrangler, which the refusal comes before */
+		/* without a runner given, database runs the real wrangler, which the refusal comes before */
 		const real = makeIo(dir)
 		expect(await runCliWithFakes(["migrate", "apply", "blog", "--local"], real)).toBe(1)
 		expect(real.errors).toEqual([`${join(dir, "wrangler.toml")} has no D1 database named or bound as blog`])
@@ -158,7 +158,7 @@ describe("migrate apply on D1 without a migrate config: order and refusals", () 
 		const io = makeIo(elsewhere, fakeD1({ dir }))
 		expect(await runCliWithFakes(["migrate", "apply", "core", "--local"], io)).toBe(1)
 		expect(io.errors[0]).toContain(
-			`applies core's migrations from ${join(elsewhere, "migrations")}, but comb reads them`,
+			`applies core's migrations from ${join(elsewhere, "migrations")}, but database reads them`,
 		)
 		const pattern = worker(
 			INIT,
@@ -170,7 +170,7 @@ describe("migrate apply on D1 without a migrate config: order and refusals", () 
 	})
 })
 
-/** A database comb 0.7 migrated: the init file recorded by hash in __drizzle_migrations */
+/** A database that database 0.7 migrated: the init file recorded by hash in __drizzle_migrations */
 async function migratedBy07(dir: string, d1: FakeD1): Promise<void> {
 	d1.db.exec(
 		"CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY, hash TEXT NOT NULL UNIQUE, created_at INTEGER)",
@@ -203,7 +203,7 @@ describe("migrate on D1: wrangler itself", () => {
 	})
 })
 
-describe("migrate apply on D1: comb's history before 0.8", () => {
+describe("migrate apply on D1: database's history before 0.8", () => {
 	it("refuses to apply until baseline copies the record, then applies only the rest", async () => {
 		const dir = worker(INIT)
 		const d1 = fakeD1({ dir: join(dir, "atlas-migrations") })
@@ -211,13 +211,13 @@ describe("migrate apply on D1: comb's history before 0.8", () => {
 		const refused = makeIo(dir, d1)
 		expect(await runCliWithFakes(["migrate", "apply", "core", "--local"], refused)).toBe(1)
 		expect(refused.errors).toEqual([
-			"core records 20260101000000_init.sql in __drizzle_migrations, comb's history before 0.8, but not in d1_migrations, wrangler's; run comb migrate baseline once to copy the record",
+			"core records 20260101000000_init.sql in __drizzle_migrations, database's history before 0.8, but not in d1_migrations, wrangler's; run database migrate baseline once to copy the record",
 		])
 		const baseline = makeIo(dir, d1)
 		expect(await runCliWithFakes(["migrate", "baseline", "core", "--local"], baseline)).toBe(0)
 		expect(baseline.outputs).toEqual([
 			"Marked applied: 20260101000000_init.sql",
-			"Not marked: 20260102000000_more.sql (__drizzle_migrations has no record of it; comb migrate apply runs it)",
+			"Not marked: 20260102000000_more.sql (__drizzle_migrations has no record of it; database migrate apply runs it)",
 			"\nBaseline done: 1 marked",
 		])
 		const status = makeIo(dir, d1)
@@ -228,7 +228,7 @@ describe("migrate apply on D1: comb's history before 0.8", () => {
 	})
 
 	/* M44: D1 keeps no time a hash was recorded; the pre-0.8 record still holding the pre-0.5.0 hash vouches for it */
-	it("copies the pre-0.5.0 hash comb 0.7 recorded for a file, so check passes while that record holds it", async () => {
+	it("copies the pre-0.5.0 hash database 0.7 recorded for a file, so check passes while that record holds it", async () => {
 		const sql = "INSERT INTO post VALUES ('a -- b\nc');"
 		const dir = worker({ ...INIT, "20260101000001_row.sql": sql })
 		const d1 = fakeD1({ dir: join(dir, "atlas-migrations") })
@@ -254,17 +254,17 @@ describe("migrate apply on D1: comb's history before 0.8", () => {
 	})
 })
 
-/** A database that applied INIT and MORE before comb recorded hashes */
+/** A database that applied INIT and MORE before database recorded hashes */
 async function unhashed(): Promise<{ d1: FakeD1; dir: string }> {
 	const dir = worker({ ...INIT, "20260102000000_more.sql": "CREATE TABLE tag (id TEXT);" })
 	const d1 = fakeD1({ dir: join(dir, "atlas-migrations") })
 	expect(await runCliWithFakes(["migrate", "apply", "core", "--local"], makeIo(dir, d1))).toBe(0)
-	d1.db.exec("DELETE FROM _comb_migration_hashes")
+	d1.db.exec("DELETE FROM _database_migration_hashes")
 	return { d1, dir }
 }
 
 /*
- * M1: a file applied before comb recorded hashes has none, so comb cannot tell whether it was edited
+ * M1: a file applied before database recorded hashes has none, so database cannot tell whether it was edited
  * since; `baseline --hashes`, run once by an operator who checked the files against git, records them
  */
 describe("migrate baseline --hashes on D1", () => {
@@ -281,7 +281,7 @@ describe("migrate baseline --hashes on D1", () => {
 			"\nBaseline done: 2 hashes recorded",
 		])
 		const { generateMigrationHash } = await import("../migrate/core/parse.ts")
-		expect(d1.db.prepare("SELECT name, hash FROM _comb_migration_hashes ORDER BY name").all()).toEqual([
+		expect(d1.db.prepare("SELECT name, hash FROM _database_migration_hashes ORDER BY name").all()).toEqual([
 			{ hash: generateMigrationHash(INIT["20260101000000_init.sql"]), name: "20260101000000_init.sql" },
 			{ hash: generateMigrationHash("CREATE TABLE tag (id TEXT);"), name: "20260102000000_more.sql" },
 		])
@@ -291,7 +291,7 @@ describe("migrate baseline --hashes on D1", () => {
 		const again = makeIo(dir, d1)
 		expect(await runCliWithFakes(["migrate", "baseline", "core", "--local", "--hashes"], again)).toBe(0)
 		expect(again.outputs).toEqual(["\nBaseline done: 0 hashes recorded"])
-		d1.db.exec("DELETE FROM _comb_migration_hashes WHERE name = '20260102000000_more.sql'")
+		d1.db.exec("DELETE FROM _database_migration_hashes WHERE name = '20260102000000_more.sql'")
 		const one = makeIo(dir, d1)
 		expect(await runCliWithFakes(["migrate", "baseline", "core", "--local", "--hashes"], one)).toBe(0)
 		expect(one.outputs).toEqual(["Hash recorded: 20260102000000_more.sql", "\nBaseline done: 1 hash recorded"])
@@ -303,7 +303,7 @@ describe("migrate baseline --hashes on D1", () => {
 		const io = makeIo(dir, d1)
 		expect(await runCliWithFakes(["migrate", "baseline", "core", "--local", "--hashes"], io)).toBe(1)
 		expect(io.errors[0]).toMatch(/^1 applied migration matches no file in .+ \(20251231000000_gone.sql\)/)
-		expect(d1.db.prepare("SELECT name FROM _comb_migration_hashes").all()).toEqual([])
+		expect(d1.db.prepare("SELECT name FROM _database_migration_hashes").all()).toEqual([])
 	})
 })
 
@@ -322,7 +322,7 @@ migrations_table = "schema_history"
 vars = { STAGE = "staging" }
 `
 
-/** db/ holds comb.migrate.config.ts and the migrations; worker/ holds the wrangler config that binds them */
+/** db/ holds database.migrate.config.ts and the migrations; worker/ holds the wrangler config that binds them */
 function split(): { db: string; root: string } {
 	const root = temp.make()
 	mkdirSync(join(root, "worker"))
@@ -331,7 +331,7 @@ function split(): { db: string; root: string } {
 	writeFileSync(join(root, "db", "atlas-migrations", "20260101000000_init.sql"), INIT["20260101000000_init.sql"])
 	writeSum(join(root, "db", "atlas-migrations"))
 	writeFileSync(
-		join(root, "db", "comb.migrate.config.ts"),
+		join(root, "db", "database.migrate.config.ts"),
 		`export default { databases: { core: { migrationsDir: "./atlas-migrations", environments: {
 prod: { name: "core-prod", provider: { type: "d1", databaseName: "core-prod", wranglerConfig: "../worker/wrangler.toml", wranglerEnv: "prod" } },
 staging: { name: "core-staging", provider: { type: "d1", databaseName: "core-staging", wranglerConfig: "../worker/wrangler.toml", wranglerEnv: "staging" } },
@@ -340,7 +340,7 @@ staging: { name: "core-staging", provider: { type: "d1", databaseName: "core-sta
 	return { db: join(root, "db"), root }
 }
 
-describe("migrate apply on D1 through comb.migrate.config.ts", () => {
+describe("migrate apply on D1 through database.migrate.config.ts", () => {
 	it("reads an env-only binding with a custom migrations table, and passes its config and env to wrangler", async () => {
 		const { db, root } = split()
 		const d1 = fakeD1({ dir: join(db, "atlas-migrations"), table: "schema_history" })
@@ -372,15 +372,17 @@ describe("migrate apply on D1 through comb.migrate.config.ts", () => {
 		])
 		const local = makeIo(db, fakeD1({ dir: join(db, "atlas-migrations") }))
 		expect(await runCliWithFakes(["migrate", "apply", "core", "-e", "prod", "--local"], local)).toBe(1)
-		expect(local.errors).toEqual(["--local applies without comb.migrate.config.ts; set local: true on its d1 provider"])
+		expect(local.errors).toEqual([
+			"--local applies without database.migrate.config.ts; set local: true on its d1 provider",
+		])
 	})
 })
 
-describe("migrate apply on D1 through comb.migrate.config.ts: the database's name", () => {
+describe("migrate apply on D1 through database.migrate.config.ts: the database's name", () => {
 	it("names the database to wrangler by its provider's databaseName, not the environment's name", async () => {
 		const { db, root } = split()
 		writeFileSync(
-			join(db, "comb.migrate.config.ts"),
+			join(db, "database.migrate.config.ts"),
 			`export default { databases: { core: { migrationsDir: "./atlas-migrations", environments: {
 prod: { name: "prod", provider: { type: "d1", databaseName: "CORE_DB", wranglerConfig: "../worker/wrangler.toml", wranglerEnv: "prod" } },
 } } } }\n`,
@@ -394,11 +396,11 @@ prod: { name: "prod", provider: { type: "d1", databaseName: "CORE_DB", wranglerC
 	})
 })
 
-describe("migrate apply on D1 through comb.migrate.config.ts: its wrangler config", () => {
-	it("takes the wrangler config beside comb.migrate.config.ts when none is set, and refuses when there is none", async () => {
+describe("migrate apply on D1 through database.migrate.config.ts: its wrangler config", () => {
+	it("takes the wrangler config beside database.migrate.config.ts when none is set, and refuses when there is none", async () => {
 		const dir = worker(INIT)
 		writeFileSync(
-			join(dir, "comb.migrate.config.ts"),
+			join(dir, "database.migrate.config.ts"),
 			'export default { databases: { core: { migrationsDir: "./atlas-migrations", name: "core", provider: { type: "d1", databaseName: "core", local: true } } } }\n',
 		)
 		const d1 = fakeD1({ dir: join(dir, "atlas-migrations") })
@@ -406,13 +408,13 @@ describe("migrate apply on D1 through comb.migrate.config.ts: its wrangler confi
 		expect(recorded(d1)).toEqual(["20260101000000_init.sql"])
 		const bare = temp.make()
 		writeFileSync(
-			join(bare, "comb.migrate.config.ts"),
+			join(bare, "database.migrate.config.ts"),
 			`export default { databases: { core: { migrationsDir: "./m", name: "core", provider: { type: "d1", databaseName: "core" } } } }\n`,
 		)
 		const io = makeIo(bare, fakeD1({ dir: bare }))
 		expect(await runCliWithFakes(["migrate", "apply", "core"], io)).toBe(1)
 		expect(io.errors).toEqual([
-			"no wrangler config next to comb.migrate.config.ts; set wranglerConfig on core's d1 provider",
+			"no wrangler config next to database.migrate.config.ts; set wranglerConfig on core's d1 provider",
 		])
 	})
 })

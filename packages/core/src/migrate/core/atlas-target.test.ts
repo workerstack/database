@@ -211,7 +211,7 @@ describe("pgUrlProblems: a dev database that is the target (M89)", () => {
 })
 
 describe("pgUrlProblems: the schema's name (M87)", () => {
-	it("refuses a name Postgres folds where comb writes it unquoted, naming what it folds to", () => {
+	it("refuses a name Postgres folds where database writes it unquoted, naming what it folds to", () => {
 		expect(pgUrlProblems(target({ schema: "Tenant" })).errors).toEqual([
 			'schema must be a lowercase plain name such as "public": Postgres folds Tenant to tenant where it is unquoted',
 		])
@@ -261,7 +261,7 @@ describe("a secret holding a percent sign", () => {
 	const percent: PgTarget = { devUrl: "postgres://localhost/dev", lockTimeout: "5s", schema: "public", url }
 
 	it("runs Atlas with the URL in its environment", () => {
-		expect(withAtlasEnv(percent, { url: true }, (env) => env.env["COMB_ATLAS_URL"])).toContain("app:50%25off@")
+		expect(withAtlasEnv(percent, { url: true }, (env) => env.env["DATABASE_ATLAS_URL"])).toContain("app:50%25off@")
 	})
 })
 
@@ -269,19 +269,19 @@ describe("withAtlasEnv", () => {
 	it("hands Atlas the URLs through env and a config that reads them, never through argv", () => {
 		const seen = withAtlasEnv(target(), { dev: true, dir: "/m/core", url: true }, (atlas) => {
 			const config = atlas.args[1] as string
-			expect(atlas.args).toEqual(["--config", config, "--env", "comb"])
+			expect(atlas.args).toEqual(["--config", config, "--env", "database"])
 			expect(atlas.args.join(" ")).not.toContain("S3cret")
 			const hcl = readFileSync(config.replace("file://", ""), "utf8")
-			expect(hcl).toBe(`env "comb" {
-  url = getenv("COMB_ATLAS_URL")
-  dev = getenv("COMB_ATLAS_DEV_URL")
+			expect(hcl).toBe(`env "database" {
+  url = getenv("DATABASE_ATLAS_URL")
+  dev = getenv("DATABASE_ATLAS_DEV_URL")
   migration {
     dir = "file:///m/core"
     revisions_schema = "atlas_schema_revisions"
   }
 }
 `)
-			expect(atlas.env.COMB_ATLAS_URL).toContain("search_path=public")
+			expect(atlas.env.DATABASE_ATLAS_URL).toContain("search_path=public")
 			return atlas.dir
 		})
 		expect(existsSync(seen)).toBe(false)
@@ -323,13 +323,13 @@ describe("withAtlasEnv", () => {
 	})
 })
 
-/* 16.3 (b) of plan 21: Atlas reads the database comb's replay left, never replaying the files on a postgres:// dev */
+/* 16.3 (b) of plan 21: Atlas reads the database that database's replay left, never replaying the files on a postgres:// dev */
 describe("withAtlasEnv's src", () => {
 	it("hands Atlas a database to compare with as src, through env, scoped and scrubbed as the target is", () => {
-		const src = "postgres://dev:S3cret@localhost/comb_replay_1"
+		const src = "postgres://dev:S3cret@localhost/database_replay_1"
 		withAtlasEnv(target(), { src, url: true }, (atlas) => {
-			expect(readFileSync(`${atlas.dir}/atlas.hcl`, "utf8")).toContain('  src = getenv("COMB_ATLAS_SRC_URL")\n')
-			expect(atlas.env.COMB_ATLAS_SRC_URL).toBe(`${src}?search_path=public`)
+			expect(readFileSync(`${atlas.dir}/atlas.hcl`, "utf8")).toContain('  src = getenv("DATABASE_ATLAS_SRC_URL")\n')
+			expect(atlas.env.DATABASE_ATLAS_SRC_URL).toBe(`${src}?search_path=public`)
 			expect(atlas.scrub(`at ${src}?search_path=public`)).not.toContain("S3cret")
 		})
 	})
@@ -365,7 +365,7 @@ describe("revisionsSchema", () => {
 	})
 })
 
-/* M39 of the 0.13 review, PA7 of r22b: comb migrates one schema, so a URL's own search_path must be that one */
+/* M39 of the 0.13 review, PA7 of r22b: database migrates one schema, so a URL's own search_path must be that one */
 describe("pgUrlProblems: a search_path in a url", () => {
 	const base = "postgres://app@db.example.com/app"
 	const dev = "postgres://app@db.example.com/dev"
@@ -378,7 +378,7 @@ describe("pgUrlProblems: a search_path in a url", () => {
 	it.each(["url", "devUrl"] as const)(
 		"refuses the %s's search_path naming another schema or more than one, by field name",
 		(field) => {
-			const fix = `comb migrates one: set schema to it, and drop search_path from the ${field}`
+			const fix = `database migrates one: set schema to it, and drop search_path from the ${field}`
 			expect(pgUrlProblems(scopedTo(field, "public,extensions", "public")).errors).toEqual([
 				`the ${field}'s search_path names more than one schema (public,extensions); ${fix}`,
 			])
@@ -397,7 +397,7 @@ describe("pgUrlProblems: a search_path in a url", () => {
 	})
 })
 
-/* r18 P18: the password crosses the network to the address comb and Atlas connect to: hostaddr, when given */
+/* r18 P18: the password crosses the network to the address database and Atlas connect to: hostaddr, when given */
 describe("pgUrlProblems: plaintext warning by the address connected to", () => {
 	it("warns of a remote hostaddr behind host=localhost, and not of a tunnel to 127.0.0.1", () => {
 		const remote = pgUrlProblems(
@@ -411,7 +411,7 @@ describe("pgUrlProblems: plaintext warning by the address connected to", () => {
 	})
 })
 
-/* r18 P20: a TLS option comb cannot use is refused by the field that holds it, before anything connects */
+/* r18 P20: a TLS option database cannot use is refused by the field that holds it, before anything connects */
 describe("pgUrlProblems: TLS options, per field", () => {
 	it("refuses an sslmode libpq does not take, naming the field", () => {
 		expect(pgUrlProblems(target({ url: "postgres://localhost/app?sslmode=verify_full" })).errors).toEqual([

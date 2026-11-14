@@ -24,10 +24,10 @@ function flipped(cursor: string, at: number): string {
 }
 
 describe("cursorKey: HKDF-SHA256 of the secret", () => {
-	it("equals Web Crypto's HKDF-SHA256 with no salt and comb's info, 32 bytes", async () => {
+	it("equals Web Crypto's HKDF-SHA256 with no salt and database's info, 32 bytes", async () => {
 		for (const secret of [KEYS.cursorSecret, "字".repeat(11), "x".repeat(200)]) {
 			const ikm = await crypto.subtle.importKey("raw", bytes(secret), "HKDF", false, ["deriveBits"])
-			const params = { hash: "SHA-256", info: bytes("comb cursor v1"), name: "HKDF", salt: new Uint8Array() }
+			const params = { hash: "SHA-256", info: bytes("database cursor v1"), name: "HKDF", salt: new Uint8Array() }
 			const expected = new Uint8Array(await crypto.subtle.deriveBits(params, ikm, 256))
 			expect(hex(cursorKey(secret))).toBe(hex(expected))
 		}

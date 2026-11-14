@@ -14,7 +14,7 @@ function namesSchema(name: string): boolean {
 	}
 }
 
-describe("RESERVED_SCHEMA_WORDS, held to the parser comb ships", () => {
+describe("RESERVED_SCHEMA_WORDS, held to the parser database ships", () => {
 	it("holds exactly the keywords Postgres refuses as an unquoted schema name", () => {
 		const refused = PG_KEYWORDS.filter((word) => !namesSchema(word))
 		expect(new Set(refused)).toEqual(RESERVED_SCHEMA_WORDS)

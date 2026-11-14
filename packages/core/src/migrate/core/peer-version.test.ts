@@ -56,7 +56,7 @@ const VERSIONS = [
 	"not-a-version",
 ]
 
-/* the forms comb's ranges may take besides the ones they take today */
+/* the forms database's ranges may take besides the ones they take today */
 const OTHER_RANGES = ["^0.2.3", "^0.0.3", "<=1.2.3", ">1.0.0-rc.1", "=1.0.0", ">=17.7", "1.0.0-rc.4 || >=3.4.9 <4"]
 
 describe("admits", () => {
@@ -67,12 +67,12 @@ describe("admits", () => {
 
 	/* npm reads `<=1` as `<2.0.0-0` and `>1.2` as `>=1.3.0`: zero-filled, either would admit what npm does not */
 	it.each(["<=1", ">1.2", "^1", "=1.2", "1"])("refuses %s, a partial bound npm reads otherwise", (range) => {
-		expect(() => admits(range, "1.0.0")).toThrow(new TypeError(`comb reads no partial version in "${range}"`))
+		expect(() => admits(range, "1.0.0")).toThrow(new TypeError(`database reads no partial version in "${range}"`))
 	})
 })
 
 describe("installedVersion", () => {
-	const root = mkdtempSync(join(tmpdir(), "comb-peer-version-"))
+	const root = mkdtempSync(join(tmpdir(), "database-peer-version-"))
 	afterAll(() => rmSync(root, { force: true, recursive: true }))
 
 	it("reads the version of the package.json up from the entry that names the peer, at a path or a file: URL", () => {

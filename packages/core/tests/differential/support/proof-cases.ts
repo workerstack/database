@@ -2,9 +2,10 @@
  * The generator of D1 proof cases: a live schema of plain tables, views over them and over each other, and
  * triggers that write one table when another is written or that make a view writable (INSTEAD OF, for some of a
  * view's events), and one pending file that drops, renames and adds what those triggers and views use. Every
- * file is approved (`-- comb:allow-unsafe`, and check runs with --yes), so comb's verdict is its proof's alone. A
+ * file is approved (each version's `allow-unsafe` marker, and check runs with --yes), so database's verdict is its proof's alone. A
  * case is plain SQL, so every version checks the same text (proof.ts).
  */
+import { approvalOf, ORACLES } from "./oracles.ts"
 import type { Random } from "./random.ts"
 
 /** One case: the live schema's statements, with a row in each table, and the pending file */
@@ -18,8 +19,13 @@ type Schema = { tables: Table[]; triggers: Trigger[]; views: View[] }
 const EVENTS = ["INSERT", "UPDATE", "DELETE"] as const
 type Event = (typeof EVENTS)[number]
 
-/* the approval every file carries, so no rule of comb's that an operator can approve refuses it */
-export const APPROVED = "-- comb:allow-unsafe: the differential approves every file\n"
+/*
+ * the approval every file carries, so no rule of database's that an operator can approve refuses it: the tip's line and
+ * each pinned release's own (a release reads only its brand's marker), so every version checks the same text
+ */
+export const APPROVED = [
+	...new Set(["-- database:allow-unsafe: the differential approves every file\n", ...ORACLES.map(approvalOf)]),
+].join("")
 
 const tableSql = ({ columns, name }: Table): string =>
 	`CREATE TABLE ${name} (id INTEGER PRIMARY KEY, ${columns.map((column) => `${column} TEXT`).join(", ")});`
