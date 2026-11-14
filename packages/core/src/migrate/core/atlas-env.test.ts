@@ -4,7 +4,7 @@ import { applySqliteMigrationTransforms, normalizeSqliteExport, sqliteDevUrl } f
 describe("sqliteDevUrl", () => {
 	it("names an in-memory database of its own for each Atlas run, as Atlas locks per dev URL across the host", () => {
 		const [first, second] = [sqliteDevUrl(), sqliteDevUrl()]
-		expect(first).toMatch(/^sqlite:\/\/comb-[0-9a-f-]{36}\?mode=memory$/)
+		expect(first).toMatch(/^sqlite:\/\/database-[0-9a-f-]{36}\?mode=memory$/)
 		expect(second).not.toBe(first)
 	})
 })

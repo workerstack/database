@@ -1,5 +1,5 @@
 /**
- * The graph behind comb/public-jsdoc: what a package's `exports` map reaches, by name or through a type position,
+ * The graph behind database/public-jsdoc: what a package's `exports` map reaches, by name or through a type position,
  * read from a real package on disk because the graph crosses files.
  */
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs"
@@ -11,7 +11,7 @@ import { findPackageRoot, publicSurface } from "./public-surface.js"
 const roots: string[] = []
 
 function packageOf(entries: Record<string, string>, files: Record<string, string>): string {
-	const root = realpathSync(mkdtempSync(join(tmpdir(), "comb-surface-")))
+	const root = realpathSync(mkdtempSync(join(tmpdir(), "database-surface-")))
 	roots.push(root)
 	const exports = Object.fromEntries(
 		Object.entries(entries).map(([key, file]) => [key, { "types@>=5.7": "./types/index.d.ts", default: file }]),

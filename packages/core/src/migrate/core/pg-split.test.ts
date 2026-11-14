@@ -74,15 +74,15 @@ describe("atlasFile: statements written so Atlas sends each one alone", () => {
 	})
 
 	it("takes a delimiter no statement holds", () => {
-		const file = atlasFile(["SELECT '@comb0@' -- x"])
-		expect(file.split("\n")[0]).toBe("-- atlas:delimiter @comb1@")
-		expect(pgStatements(file)).toEqual(["SELECT '@comb0@' -- x"])
+		const file = atlasFile(["SELECT '@database0@' -- x"])
+		expect(file.split("\n")[0]).toBe("-- atlas:delimiter @database1@")
+		expect(pgStatements(file)).toEqual(["SELECT '@database0@' -- x"])
 	})
 
 	it("refuses statements Atlas splits wrongly either way, naming them", () => {
 		/* Atlas reads no backslash escape, so its quote ends early where Postgres's does not */
 		expect(() => atlasFile(["SELECT E'a\\'b'"])).toThrow(
-			`comb cannot write these statements so that Atlas sends each alone: ["SELECT E'a\\\\'b'"]`,
+			`database cannot write these statements so that Atlas sends each alone: ["SELECT E'a\\\\'b'"]`,
 		)
 	})
 })

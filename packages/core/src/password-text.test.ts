@@ -84,20 +84,20 @@ describe("passwordText's JSON Schema", () => {
 			maxLength: 128,
 			minLength: 15,
 			type: "string",
-			"x-comb-text": "no U+0000 or unpaired surrogate",
-			"x-comb-transform": ["nfc"],
+			"x-database-text": "no U+0000 or unpaired surrogate",
+			"x-database-transform": ["nfc"],
 		})
-		expect(z.toJSONSchema(passwordText())).not.toHaveProperty("x-comb-maxUtf8Bytes")
-		expect(z.toJSONSchema(passwordText({ hash: "bcrypt" }))).toMatchObject({ "x-comb-maxUtf8Bytes": 72 })
-		expect(z.toJSONSchema(passwordText({ hash: "bcrypt" }))).not.toHaveProperty("x-comb-maxBytes")
+		expect(z.toJSONSchema(passwordText())).not.toHaveProperty("x-database-maxUtf8Bytes")
+		expect(z.toJSONSchema(passwordText({ hash: "bcrypt" }))).toMatchObject({ "x-database-maxUtf8Bytes": 72 })
+		expect(z.toJSONSchema(passwordText({ hash: "bcrypt" }))).not.toHaveProperty("x-database-maxBytes")
 		expect(z.toJSONSchema(passwordText({ hash: "bcrypt" }), { io: "input" })).toMatchObject({ minLength: 15 })
 	})
 })
 
 /*
  * C1, C2, C3 of r22 and CD10 of r22b: a reader that applies each published key as meta-contract §2.1
- * defines it, and nothing else, agrees with comb's own parse; the bounds are zod's own, so a short or
- * long password is the too_small or too_big issue every other comb length is
+ * defines it, and nothing else, agrees with database's own parse; the bounds are zod's own, so a short or
+ * long password is the too_small or too_big issue every other database length is
  */
 
 const utf8 = (value: string): number => new TextEncoder().encode(value).length
@@ -115,7 +115,7 @@ const EDGE = [
 	`${"x".repeat(20)}\\${"x".repeat(20)}`,
 ]
 
-describe("passwordText's published keys, read as meta-contract §2.1 defines them (C1, C2; sibling: a c.json field's x-comb-maxBytes)", () => {
+describe("passwordText's published keys, read as meta-contract §2.1 defines them (C1, C2; sibling: a c.json field's x-database-maxBytes)", () => {
 	it.each([
 		["passwordText()", passwordText()],
 		['passwordText({ hash: "bcrypt" })', passwordText({ hash: "bcrypt" })],
@@ -126,7 +126,7 @@ describe("passwordText's published keys, read as meta-contract §2.1 defines the
 			expect(contractReader(published(schema), value), JSON.stringify(value)).toBe(schema.safeParse(value).success)
 	})
 
-	it("bounds the NFC form: 128 é typed as NFD pass comb and the reader, 8 fail both", () => {
+	it("bounds the NFC form: 128 é typed as NFD pass database and the reader, 8 fail both", () => {
 		const long = NFD_E.repeat(128)
 		const short = NFD_E.repeat(8)
 		expect(passwordText().safeParse(long).success).toBe(true)
@@ -148,7 +148,7 @@ describe("passwordText's published keys, read as meta-contract §2.1 defines the
 		expect(contractReader(published(schema), NFD_E.repeat(37))).toBe(false)
 	})
 
-	it("sibling: codegen's x-comb-maxBytes on a c.json field still measures the JSON text, quotes included", () => {
+	it("sibling: codegen's x-database-maxBytes on a c.json field still measures the JSON text, quotes included", () => {
 		const Doc = z.object({ a: z.string() })
 		const field = parseField("doc", 'c.json("doc", Doc, { maxBytes: 9 })', { scope: { Doc } })
 		const code = generateFieldSchema(field, "create", {
@@ -157,14 +157,14 @@ describe("passwordText's published keys, read as meta-contract §2.1 defines the
 		const meta = new Function(
 			`return {${SHARED_META_KEYS.map((key) => `${key}: ${SHARED_META_VALUES[key]}`).join(",")}}`,
 		)()
-		const schema = new Function("z", "comb", "_m", "Doc", ts.transpile(`return ${code}`))(
+		const schema = new Function("z", "database", "_m", "Doc", ts.transpile(`return ${code}`))(
 			z,
 			{ isStorableText },
 			meta,
 			Doc,
 		) as z.ZodType
 		const keys = published(schema)
-		expect(keys["x-comb-maxBytes"]).toBe(9)
+		expect(keys["x-database-maxBytes"]).toBe(9)
 		for (const value of [{ a: "x" }, { a: "xy" }, { a: '"' }])
 			expect(contractReader(keys, value), JSON.stringify(value)).toBe(schema.safeParse(value).success)
 		expect(schema.safeParse({ a: "x" }).success).toBe(true)

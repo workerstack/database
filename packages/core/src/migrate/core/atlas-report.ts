@@ -8,7 +8,7 @@ import { explainAtlasFailure, failedStatement } from "./atlas-failure.ts"
 import { json, type Ran } from "./atlas-status.ts"
 import { outsideTransaction } from "./atlas-header.ts"
 
-/** Atlas runs files by name, as comb orders them; its default, linear, also compares versions */
+/** Atlas runs files by name, as database orders them; its default, linear, also compares versions */
 const NON_LINEAR = ["--exec-order", "non-linear"] as const
 
 const APPLY_FORMAT = '{"target":{{ json .Target }},"applied":{{ json .Applied }},"error":{{ json .Error }}}'

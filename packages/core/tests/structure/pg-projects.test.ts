@@ -79,7 +79,7 @@ describe("the Postgres projects", () => {
 	it("reads a suite as reaching the server by a Postgres helper's import or the server's variable, and not by a name that only resembles one", () => {
 		expect(PG_REACH.test('import { pgUrl } from "../support/pg.ts"')).toBe(true)
 		expect(PG_REACH.test('import { query } from "../support/pg-roles.ts"')).toBe(true)
-		expect(PG_REACH.test("env: { COMB_TEST_PG_URL: url }")).toBe(true)
+		expect(PG_REACH.test("env: { DATABASE_TEST_PG_URL: url }")).toBe(true)
 		expect(PG_REACH.test('import { parse } from "../support/pg-parser.ts"')).toBe(false)
 		expect(PG_REACH.test('import { libsql } from "../support/libsql.ts"')).toBe(false)
 	})
@@ -98,9 +98,9 @@ describe("every test file that reaches the Postgres test server", () => {
 
 	it("take the server's URL through pgUrl, which refuses it unset or empty, never by reading the variable", () => {
 		expect(testFiles.filter((file) => readsPgVar(readFileSync(join(CORE, file), "utf8")))).toEqual([])
-		expect(readsPgVar('const url = process.env["COMB_TEST_PG_URL"] ?? ""')).toBe(true)
-		expect(readsPgVar("JSON.stringify(process.env.COMB_TEST_PG_URL)")).toBe(true)
-		expect(readsPgVar("spawn(cmd, { env: { COMB_TEST_PG_URL: pgUrl() } })")).toBe(false)
+		expect(readsPgVar('const url = process.env["DATABASE_TEST_PG_URL"] ?? ""')).toBe(true)
+		expect(readsPgVar("JSON.stringify(process.env.DATABASE_TEST_PG_URL)")).toBe(true)
+		expect(readsPgVar("spawn(cmd, { env: { DATABASE_TEST_PG_URL: pgUrl() } })")).toBe(false)
 		expect(readsPgVar("const url = env[PG_URL_VAR]")).toBe(false)
 	})
 
@@ -111,17 +111,17 @@ describe("every test file that reaches the Postgres test server", () => {
 			'import { pgUrl } from "../integration/support/pg.ts"',
 			'import { pgUrl } from "../support/pg-url.ts"',
 			'const pg = await import("pg")',
-			"const url = process.env.COMB_TEST_PG_URL",
-			'const url = process.env["COMB_TEST_PG_URL"]',
-			"spawn(cmd, { env: { COMB_TEST_PG_URL: url } })",
+			"const url = process.env.DATABASE_TEST_PG_URL",
+			'const url = process.env["DATABASE_TEST_PG_URL"]',
+			"spawn(cmd, { env: { DATABASE_TEST_PG_URL: url } })",
 		])
 			expect(reachesPg(code), code).toBe(true)
 		for (const code of [
 			'import type pg from "pg"',
 			'import { type Sql } from "postgres"',
 			`const fixture = 'import pg from "pg"'`,
-			'expect(text).toContain("COMB_TEST_PG_URL: postgres://comb@localhost/comb")',
-			"// reads COMB_TEST_PG_URL",
+			'expect(text).toContain("DATABASE_TEST_PG_URL: postgres://database@localhost/database")',
+			"// reads DATABASE_TEST_PG_URL",
 			'import { parse } from "../support/pg-parser.ts"',
 		])
 			expect(reachesPg(code), code).toBe(false)

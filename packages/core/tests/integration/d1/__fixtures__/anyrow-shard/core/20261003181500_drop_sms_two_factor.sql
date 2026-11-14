@@ -1,4 +1,4 @@
--- Hand-written: a generated diff rebuilds every core table (comb emits `id text NULL` and named
+-- Hand-written: a generated diff rebuilds every core table (database emits `id text NULL` and named
 -- FKs; prod has `id text NOT NULL` and FKs named `0`), and rebuilding `user` cascade-deletes all of
 -- its child rows. Only user_two_factor is rebuilt here; nothing references it.
 PRAGMA defer_foreign_keys = on;

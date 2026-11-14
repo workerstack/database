@@ -3,9 +3,9 @@
  * lines of `host:port:database:user:password`, `#` comments and blank lines skipped, `\` escaping
  * the next character, a field of `*` alone matching anything, the first line that matches winning.
  * The host field is read as Atlas's driver, lib/pq, reads it where libpq differs, so
- * comb and Atlas take one password from one file: the host given, else `localhost` whatever the
+ * database and Atlas take one password from one file: the host given, else `localhost` whatever the
  * hostaddr, and a socket's directory or `localhost`. A missing file gives none, as libpq's does; one others can
- * read is refused, as libpq ignores it. comb never reads ~/.pgpass or PGPASSFILE: the URL is the
+ * read is refused, as libpq ignores it. database never reads ~/.pgpass or PGPASSFILE: the URL is the
  * connection (README §configuration).
  */
 import { readFileSync, type Stats, statSync } from "node:fs"

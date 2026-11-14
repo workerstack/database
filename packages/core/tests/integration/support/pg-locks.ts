@@ -1,5 +1,5 @@
 /**
- * The locks a Postgres transaction holds, read from pg_locks, for the lock oracles that hold comb's
+ * The locks a Postgres transaction holds, read from pg_locks, for the lock oracles that hold database's
  * lock warnings to Postgres's own (PA8, PA9, PA10 of r22b and their sibling 0005).
  */
 import pg from "pg"
@@ -87,7 +87,7 @@ type Unnamed = {
 	owners?: readonly string[] | undefined
 }
 
-/** What comb says of what `unnamed` says the file locks that it cannot name, clause by clause */
+/** What database says of what `unnamed` says the file locks that it cannot name, clause by clause */
 function unnamedSaid({ cascades = [], others = [], owners = [] }: Unnamed): string[] {
 	const measures = [
 		...(cascades.length > 0 ? [`this file's DROP … CASCADE locks what depends on ${listed(cascades.toSorted())}`] : []),
@@ -96,13 +96,15 @@ function unnamedSaid({ cascades = [], others = [], owners = [] }: Unnamed): stri
 	return [
 		...(measures.length > 0 ? [`${measures.join(", and ")}, which only check on a postgres:// devUrl names`] : []),
 		...(owners.length > 0
-			? [`this file ${measures.length > 0 ? "also " : ""}locks ${listed(owners.toSorted())}, which comb cannot name`]
+			? [
+					`this file ${measures.length > 0 ? "also " : ""}locks ${listed(owners.toSorted())}, which database cannot name`,
+				]
 			: []),
 	]
 }
 
 /**
- * comb's warning of `validate`, a VALIDATE of a constraint on `table`, when its file holds `held`, as
+ * database's warning of `validate`, a VALIDATE of a constraint on `table`, when its file holds `held`, as
  * Postgres reports it, and, from the file's text alone, locks what `unnamed` says it cannot name; none
  * when it holds nothing
  */

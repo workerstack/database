@@ -25,7 +25,7 @@ export const post = createTable("post", {
 let tmpDir: string
 
 beforeEach(() => {
-	tmpDir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-gen-translations-"))
+	tmpDir = fs.mkdtempSync(path.join(fixtureRoot(), "database-gen-translations-"))
 })
 
 afterEach(() => {

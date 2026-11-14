@@ -1,6 +1,6 @@
 /**
- * comb's own `migrate diff` output on SQLite, through the real Atlas, never needs an in-file
- * approval unless it destroys data: each shape comb's generators and Atlas's transforms write
+ * database's own `migrate diff` output on SQLite, through the real Atlas, never needs an in-file
+ * approval unless it destroys data: each shape database's generators and Atlas's transforms write
  * (an enum CHECK, indexes, the FTS sync triggers, ADD COLUMN, a plain rebuild, a guarded rebuild of
  * a referenced table) rates safe or cautious against the history before it.
  */
@@ -28,8 +28,8 @@ const STEPS: Array<{ name: string; target: string }> = [
 	{ name: "guarded_rebuild", target: schema({ column: ", `bio` text", strictName: true, strictTag: true }) },
 ]
 
-describe("comb's own diff output on SQLite", () => {
-	describe("each file comb writes", () => {
+describe("database's own diff output on SQLite", () => {
+	describe("each file database writes", () => {
 		it("rates safe or cautious, never unsafe, against the history before it", async () => {
 			const h = history(undefined, FTS)
 			try {
@@ -50,8 +50,8 @@ describe("comb's own diff output on SQLite", () => {
 				}
 				/* the rebuilds and the NOT NULL they make are what a person confirms */
 				expect(written.get("init")).toMatch(/CREATE TRIGGER IF NOT EXISTS post_fts_ai/)
-				expect(written.get("guarded_rebuild")).toMatch(/_comb_keep_/)
-				expect(written.get("plain_rebuild")).not.toMatch(/_comb_keep_/)
+				expect(written.get("guarded_rebuild")).toMatch(/_database_keep_/)
+				expect(written.get("plain_rebuild")).not.toMatch(/_database_keep_/)
 				expect(ratings).toEqual([
 					"init: safe",
 					"add_column: safe",

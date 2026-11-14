@@ -1,6 +1,6 @@
 /**
  * M71 of the 0.13.0 round: an auto-updatable view writes its base table, so a write through it
- * runs the base table's triggers, rules and defaults; a view comb cannot resolve to one table is
+ * runs the base table's triggers, rules and defaults; a view database cannot resolve to one table is
  * unsafe to write; and a view's own INSTEAD OF trigger follows it through a rename.
  */
 import { describe, expect, it } from "vitest"
@@ -56,7 +56,7 @@ CREATE VIEW app.v AS SELECT * FROM app.u; CREATE VIEW app.j AS SELECT 1 AS x FRO
 	})
 })
 
-describe("a Postgres view's columns, and a view comb cannot follow (M71)", () => {
+describe("a Postgres view's columns, and a view database cannot follow (M71)", () => {
 	it("maps a view's renamed column to its base column", () => {
 		const renamed = `${BASE} CREATE VIEW v AS SELECT id, email AS mail FROM users;`
 		expect(rate(renamed, "UPDATE v SET mail = NULL;").notes).toContain("updates existing rows of users (email)")
@@ -79,7 +79,7 @@ describe("a Postgres view's columns, and a view comb cannot follow (M71)", () =>
 		expect(rate(star, "UPDATE s SET email = NULL;").notes).toContain("users (email)")
 	})
 
-	it("rates a write to a view comb cannot resolve to one table unsafe, naming the view", () => {
+	it("rates a write to a view database cannot resolve to one table unsafe, naming the view", () => {
 		const joined = `${BASE} CREATE TABLE o (id int); CREATE VIEW j AS SELECT users.id FROM users JOIN o USING (id);`
 		expect(rate(joined, "UPDATE j SET id = 2;").notes).toContain("writes through the view j")
 		expect(rate(`${BASE} CREATE VIEW c AS VALUES (1);`, "DELETE FROM c;").notes).toContain("writes through the view c")

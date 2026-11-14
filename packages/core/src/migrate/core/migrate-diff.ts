@@ -3,13 +3,13 @@
  * a dev database, diffs the result against the target schema, and emits only the delta.
  *
  * Atlas works on a temporary copy of the history with what it cannot handle stripped, against a
- * target without it, and comb writes that part itself: on SQLite the FTS5 objects (its dev SQLite
+ * target without it, and database writes that part itself: on SQLite the FTS5 objects (its dev SQLite
  * has no fts5 module; fts-migration.ts), on Postgres the views, policies, sequences, roles and
  * extensions Atlas OSS refuses (pg-objects.ts).
  */
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import type { Dialect } from "../types.ts"
+import type { MigrateDialect } from "../types.ts"
 import { freshVersion, hashDir, nextVersion, sqlFiles, verifySum } from "./atlas-dir.ts"
 import { applySqliteMigrationTransforms, sqliteDevUrl } from "./atlas-env.ts"
 import { explainAtlasFailure } from "./atlas-failure.ts"
@@ -21,21 +21,21 @@ import { readyDevSchema } from "./pg-dev-schema.ts"
 import { devPrelude, emptyPgObjects, pgDelta, separatePgObjects, wrapAtlasFile } from "./pg-objects.ts"
 import { atlasFile, pgStatements } from "./pg-split.ts"
 import { atlasHeader } from "./atlas-header.ts"
-import { type Run, run } from "./process.ts"
+import { type MigrateRun, run } from "./process.ts"
 import { scratchDir } from "./cleanup.ts"
 
 export type MigrateDiffOptions = {
-	dialect: Dialect
+	dialect: MigrateDialect
 	/** SQLite: the target's FTS5 DDL, kept apart from `targetSchema` because Atlas cannot load it */
 	ftsSql?: string | undefined
 	migrationName: string
 	migrationsDir: string
 	targetSchema: string
 	/** The process runner; tests pass a fake. */
-	run?: Run | undefined
+	run?: MigrateRun | undefined
 	/** Postgres: the database's dev database and schema Atlas diffs in */
 	target?: PgTarget | undefined
-	/** Postgres: how the dev database gets the target schema, comb's own unless a test fakes it */
+	/** Postgres: how the dev database gets the target schema, database's own unless a test fakes it */
 	readyDev?: ((target: PgTarget) => Promise<void>) | undefined
 }
 
@@ -50,7 +50,7 @@ export type MigrateDiffResult = {
 type Diffed = Omit<MigrateDiffResult, "notices">
 
 /** How a diff runs Atlas, and what Atlas said as it succeeded */
-type Atlas = { dialect: Dialect; exec: Run; notices: string[]; target?: PgTarget | undefined }
+type Atlas = { dialect: MigrateDialect; exec: MigrateRun; notices: string[]; target?: PgTarget | undefined }
 
 /** A migration to diff: its name and the schema it should reach */
 type Target = { name: string; schema: string }
@@ -81,7 +81,7 @@ function afterHistory(dir: string, history: readonly string[], added: readonly s
 
 /** The files `atlas migrate diff` adds to `dir` for the target; none when it is in sync */
 async function atlasDiff(atlas: Atlas, dir: string, { name, schema }: Target): Promise<string[]> {
-	const { dir: work, remove: removeWork } = scratchDir("comb-migrate-diff-")
+	const { dir: work, remove: removeWork } = scratchDir("database-migrate-diff-")
 	try {
 		const target = join(work, "schema.sql")
 		writeFileSync(target, schema)
@@ -110,11 +110,11 @@ async function atlasDiff(atlas: Atlas, dir: string, { name, schema }: Target): P
 	}
 }
 
-/** The plain-only diff on a stripped copy of the history, and the FTS delta comb adds to it */
+/** The plain-only diff on a stripped copy of the history, and the FTS delta database adds to it */
 async function diffWithFts(atlas: Atlas, options: MigrateDiffOptions): Promise<Diffed> {
 	await verifySum(atlas.exec, options.migrationsDir)
 	const groups = new Set<string>()
-	const { dir: copy, remove: removeCopy } = scratchDir("comb-migrate-history-")
+	const { dir: copy, remove: removeCopy } = scratchDir("database-migrate-history-")
 	try {
 		let history: FtsState = new Map()
 		/* the schema the whole history leaves, FTS triggers included, which the rebuild guard reads */
@@ -145,7 +145,7 @@ type Finish = {
 	fts: string
 	options: MigrateDiffOptions
 	plainDiff: string
-	/** the SQLite rewrite of what comb writes: the pragma swap and the rebuild guard */
+	/** the SQLite rewrite of what database writes: the pragma swap and the rebuild guard */
 	transform: (sql: string) => string
 }
 
@@ -165,13 +165,13 @@ async function finish({ added, atlas, copy, fts, options, plainDiff, transform }
 /**
  * The Postgres diff: Atlas replays a copy of the history without the objects it refuses but the
  * views, which it runs in place inside DO blocks so their dependents replay (each file keeping its
- * atlas: directives), and diffs it against the target read the same way; comb wraps the file Atlas
+ * atlas: directives), and diffs it against the target read the same way; database wraps the file Atlas
  * writes with those objects' part (pg-objects.ts)
  */
 async function diffPostgres(atlas: Atlas, options: MigrateDiffOptions): Promise<Diffed> {
 	const { migrationName, migrationsDir } = options
 	await verifySum(atlas.exec, migrationsDir)
-	const { dir: copy, remove: removeCopy } = scratchDir("comb-migrate-history-")
+	const { dir: copy, remove: removeCopy } = scratchDir("database-migrate-history-")
 	try {
 		const history = emptyPgObjects()
 		const plain = sqlFiles(migrationsDir).map((file) => {

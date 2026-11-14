@@ -13,7 +13,7 @@ import {
 /** `value` as the cursor carries it: encoded, written as JSON and read back */
 const roundTrip = (value: unknown): unknown => decodeValue(JSON.parse(JSON.stringify(encodeValue(value))))
 
-/* QL5 of r22b: the codec is closed over what a mint takes, so every cursor comb mints is one it reads */
+/* QL5 of r22b: the codec is closed over what a mint takes, so every cursor database mints is one it reads */
 describe("the cursor codec reads back every value a key column reads (QL5 of r22b; sibling: what it refuses)", () => {
 	const KEY_VALUES: [string, unknown][] = [
 		["null", null],

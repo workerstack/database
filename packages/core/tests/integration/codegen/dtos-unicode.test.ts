@@ -27,7 +27,7 @@ export const item = pgTable("item", { id: c.id("itm"), note: c.text("note"), dat
 		}
 		expect(create.safeParse({ data: { s: "a😀b" }, note: "a😀b" }).success).toBe(true)
 		expect(create.safeParse({ note: "a\u0000b" }).success).toBe(false)
-		/* the rule is a refine, which JSON Schema publishes as x-comb-text, never as a pattern (F56) */
+		/* the rule is a refine, which JSON Schema publishes as x-database-text, never as a pattern (F56) */
 		expect(JSON.stringify(z.toJSONSchema(create, { io: "input" }))).not.toContain("uD800")
 	})
 })
@@ -66,14 +66,14 @@ export const item = sqliteTable("item", { id: c.id("itm"), note: c.text("note"),
 })
 
 /*
- * F56 and F63 of the 0.13.0 round: the text guard is a refine, stated as `x-comb-text`, never a
+ * F56 and F63 of the 0.13.0 round: the text guard is a refine, stated as `x-database-text`, never a
  * pattern: Go's and Rust's regex engines refuse `\u` and a surrogate, a field's own pattern stays its
  * `pattern`, and a c.json field stays a `$ref` to its schema, its description its own
  */
 describe("the text guard, published (F56, F63)", () => {
 	const RULE = "no U+0000 or unpaired surrogate"
 	for (const dialect of ["postgres", "sqlite"] as const) {
-		it(`keeps a field's own pattern and a c.json $ref, and names the guard in x-comb-text, on ${dialect}`, async () => {
+		it(`keeps a field's own pattern and a c.json $ref, and names the guard in x-database-text, on ${dialect}`, async () => {
 			const table = dialect === "postgres" ? "pgTable" : "sqliteTable"
 			const dtos = await generatedDtos(
 				`f56-${dialect}`,
@@ -88,13 +88,13 @@ export const page = ${table}("page", { id: c.id("pag"), slug: c.text("slug", { m
 					$defs: Record<string, { description?: string }>
 					properties: Record<string, Record<string, unknown>>
 				}
-				expect(published.properties["slug"]).toMatchObject({ pattern: "^[a-z0-9-]+$", "x-comb-text": RULE })
+				expect(published.properties["slug"]).toMatchObject({ pattern: "^[a-z0-9-]+$", "x-database-text": RULE })
 				expect(published.properties["slug"]).not.toHaveProperty("allOf")
-				expect(published.properties["prefs"]).toEqual({ $ref: "#/$defs/Prefs", "x-comb-text": RULE })
+				expect(published.properties["prefs"]).toEqual({ $ref: "#/$defs/Prefs", "x-database-text": RULE })
 				/* a nullable one is that $ref beside null, its rule on both, so `.unwrap()` keeps it (C2 of r21, C2a) */
 				expect(published.properties["extra"]).toEqual({
-					anyOf: [{ $ref: "#/$defs/Prefs", "x-comb-text": RULE }, { type: "null" }],
-					"x-comb-text": RULE,
+					anyOf: [{ $ref: "#/$defs/Prefs", "x-database-text": RULE }, { type: "null" }],
+					"x-database-text": RULE,
 				})
 				expect(published.$defs["Prefs"]?.description).toBe("The account's display preferences")
 				expect(JSON.stringify(published)).not.toMatch(/\\u|uD800|uDFFF/i)
@@ -159,11 +159,11 @@ CREATE TABLE plain (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, home_id TEXT, b
 })
 
 /*
- * G1 of the 0.13.1 consumers review: the text guard has one source, comb's isStorableText, which
+ * G1 of the 0.13.1 consumers review: the text guard has one source, database's isStorableText, which
  * every generated file that holds text to it imports, where each inlined its own copy of the regex
  */
 describe("the text guard's one source (G1)", () => {
-	it("is comb's isStorableText, imported by each generated file that refines with it", async () => {
+	it("is database's isStorableText, imported by each generated file that refines with it", async () => {
 		const dtos = await generatedDtos(
 			"g1",
 			`export const note = sqliteTable("note", { id: c.id("not"), body: c.text("body").notNull(), title: c.text("title", { max: 80 }) })`,
@@ -171,10 +171,10 @@ describe("the text guard's one source (G1)", () => {
 		const files = (fs.readdirSync(generatedDir("g1"), { recursive: true }) as string[])
 			.filter((name) => name.endsWith(".gen.ts"))
 			.map((name) => fs.readFileSync(path.join(generatedDir("g1"), name), "utf8"))
-		const refining = files.filter((source) => source.includes(".refine(comb.isStorableText,"))
+		const refining = files.filter((source) => source.includes(".refine(database.isStorableText,"))
 		expect(refining.length).toBeGreaterThan(0)
-		/* under comb's namespace, which no c.json import can take (C2 of r17) */
-		for (const source of refining) expect(source).toContain('import * as comb from "@workerstack/database"')
+		/* under database's namespace, which no c.json import can take (C2 of r17) */
+		for (const source of refining) expect(source).toContain('import * as database from "@workerstack/database"')
 		for (const source of files) expect(source).not.toContain("\\u0000\\uD800")
 		const create = dtos["note"]?.["noteDtoCreateSchema"] as z.ZodObject
 		expect(create.safeParse({ body: "a😀b" }).success).toBe(true)
@@ -183,12 +183,12 @@ describe("the text guard's one source (G1)", () => {
 })
 
 /*
- * C2 of r17: generated code names comb's predicates under one namespace and the globals through
+ * C2 of r17: generated code names database's predicates under one namespace and the globals through
  * globalThis, so a c.json schema exported under one of their names is the user's alone
  */
-describe("a c.json schema named as comb's predicate or a global the generated code calls (C2)", () => {
+describe("a c.json schema named as database's predicate or a global the generated code calls (C2)", () => {
 	it.each(["isStorableText", "isCidr", "TextEncoder", "JSON", "Number", "Infinity"])(
-		"leaves comb's own %s to the generated code",
+		"leaves database's own %s to the generated code",
 		async (name) => {
 			const dtos = await generatedDtos(
 				`c2-${name.toLowerCase()}`,
@@ -204,7 +204,7 @@ export const one = sqliteTable("one", { id: c.id("one"), title: c.text("title"),
 	)
 })
 
-/* C11 of r19: the published x-comb-maxBytes holds every value, a falsy one's JSON being as long as it is */
+/* C11 of r19: the published x-database-maxBytes holds every value, a falsy one's JSON being as long as it is */
 describe("a c.json maxBytes", () => {
 	it.each([
 		["sqlite", "sqliteTable"],

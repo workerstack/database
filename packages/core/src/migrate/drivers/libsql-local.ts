@@ -2,7 +2,7 @@
  * A private database on libsql's own engine: a libsql or Turso target's proof copy and
  * baseline's replay run on the SQLite its files apply on, with its grammar, its functions and its
  * vector indexes, not on the runtime's newer one, which runs syntax libsql refuses and refuses
- * libsql's own. libsql's Database is the one the @libsql/client comb resolves loads (libsql-file.ts).
+ * libsql's own. libsql's Database is the one the @libsql/client database resolves loads (libsql-file.ts).
  */
 import { segments } from "../../sql-lexer.ts"
 import { bound, libsqlDatabase } from "./libsql-file.ts"

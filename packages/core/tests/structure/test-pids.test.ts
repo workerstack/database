@@ -68,7 +68,7 @@ describe("the pids a test's child records", () => {
 	 * to exist could read it empty: load.test.ts read a grandchild's pid as 0 in run 42083475773
 	 */
 	it("leave no file half written to a test waiting for it, from a script node or bun runs either way", () => {
-		const dir = mkdtempSync(join(tmpdir(), "comb-record-"))
+		const dir = mkdtempSync(join(tmpdir(), "database-record-"))
 		try {
 			const reads = [
 				[process.execPath, "-e"],
@@ -113,7 +113,7 @@ describe("the pids a test's child records", () => {
 	})
 })
 
-/* comb's own code, tests and lint rules, where a child's script that records a pid could be written */
+/* database's own code, tests and lint rules, where a child's script that records a pid could be written */
 const CORE = resolve(import.meta.dirname, "../..")
 function sources(): (readonly [string, string])[] {
 	return ["src", "tests", "lint"].flatMap((root) =>

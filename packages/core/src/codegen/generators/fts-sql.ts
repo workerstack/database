@@ -153,7 +153,7 @@ function generateFtsSql(
 /**
  * The FTS SQL a person applies by hand: each configured index's triggers and table dropped, made
  * again, and rebuilt from its content table, so applying it after a column change replaces the
- * old index rather than leaving it in place. `comb migrate diff` takes generateFtsSql, and writes
+ * old index rather than leaving it in place. `database migrate diff` takes generateFtsSql, and writes
  * a changed index this way itself.
  */
 function ftsReferenceSql(

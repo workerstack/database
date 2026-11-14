@@ -1,7 +1,7 @@
 /**
  * Each statement Postgres refuses inside a transaction block for a partitioned table or index
  * (REINDEX, CLUSTER), or runs there for a plain one, after its history: index-names-oracle.test.ts
- * holds comb's rating to Postgres 17, and check-partitioned.test.ts holds check's replay to it.
+ * holds database's rating to Postgres 17, and check-partitioned.test.ts holds check's replay to it.
  */
 
 export const P = [

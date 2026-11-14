@@ -1,6 +1,6 @@
 /**
  * PA15 of r22b: a Postgres file's COPY rated by what it does, as the pinned Atlas runs it
- * (tests/integration/postgres/copy-execute-oracle.test.ts), never as a statement comb does not
+ * (tests/integration/postgres/copy-execute-oracle.test.ts), never as a statement database does not
  * recognize. Atlas's driver cannot run a COPY FROM STDIN or TO STDOUT, so the check refuses one; a
  * COPY that runs a program or writes a server file reaches past the database; a COPY from a server
  * file loads rows.
@@ -38,7 +38,7 @@ describe("a COPY with the client's stream, which Atlas cannot run (PA15 of r22b)
 	])("refuses %j at check, past any approval", (sql, why) => {
 		const statement = sql.split(";")[0] as string
 		expect(() => rate(sql)).toThrow(`${statement}: ${why}`)
-		expect(() => rate(`-- comb:allow-unsafe: loads rows\n${sql}`)).toThrow(why)
+		expect(() => rate(`-- database:allow-unsafe: loads rows\n${sql}`)).toThrow(why)
 	})
 })
 

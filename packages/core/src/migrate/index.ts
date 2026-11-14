@@ -1,5 +1,5 @@
 export {
-	type CombMigrateConfig,
+	type MigrateConfig,
 	createProvider,
 	DEFAULT_PG_DEV_URL,
 	defineConfig,
@@ -61,12 +61,12 @@ export type {
 export type {
 	BunSqliteProviderConfig,
 	CircuitBreakerState,
-	Connection,
+	MigrateConnection,
 	ConnectionProvider,
 	ConnectionProviderConfig,
 	D1ProviderConfig,
 	DatabaseConfig,
-	Dialect,
+	MigrateDialect,
 	EnvironmentConfig,
 	LibsqlProviderConfig,
 	MigrationConfig,
@@ -83,5 +83,5 @@ export type { DatabaseShared, EnvironmentsDatabaseConfig, SingleDatabaseConfig }
 export type { FtsObject, FtsState } from "./core/fts-migration.ts"
 export type { ProviderDeps } from "./config.ts"
 export type { PgTarget } from "./core/atlas-target.ts"
-export type { BinPeer, Run, RunOptions, RunResult } from "./core/process.ts"
+export type { BinPeer, MigrateRun, RunOptions, RunResult } from "./core/process.ts"
 export type { TursoCredentialsRequest, TursoDeps } from "./drivers/sqlite.ts"

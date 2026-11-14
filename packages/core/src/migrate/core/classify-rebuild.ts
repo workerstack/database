@@ -6,7 +6,7 @@
  * the writes a trigger made.
  */
 import type { ExtractedSchema } from "../migration-types.ts"
-import type { Dialect } from "../types.ts"
+import type { MigrateDialect } from "../types.ts"
 import type { Finding } from "./classify-alter.ts"
 import { NO_TRANSACTION, type Rebuilds } from "./rebuild-copy.ts"
 import { extractSchema } from "./schema.ts"
@@ -18,21 +18,21 @@ type RebuildContext = {
 	/** the schema the whole file leaves, whose triggers tell which the file created again */
 	after: ExtractedSchema | undefined
 	before: ExtractedSchema | undefined
-	dialect: Dialect
+	dialect: MigrateDialect
 	/** how names are keyed: SQLite's way, or Postgres's under its schema */
 	naming: Naming
 	/** how many DROPs of each rebuilt table the file has read so far: the next pairs with the next rebuild */
 	drops: Map<string, number>
 	/** rebuilt tables whose guard fires a trigger as it keeps their rows, with why */
 	fired: Map<string, string>
-	/** rebuilt tables comb guarded, with the tables whose rows the guard keeps */
+	/** rebuilt tables database guarded, with the tables whose rows the guard keeps */
 	kept: Map<string, string[]>
 	rebuilds: Rebuilds
 	/** each rebuilt table's notes of the tables it leaves under new rowids */
 	renumbered: Map<string, string[]>
 	/** a SQLite file Atlas runs outside a transaction, as `-- atlas:txmode none` asks */
 	txmodeNone: boolean
-	/** rebuilt tables others reference whose rebuild comb did not guard, with the tables their drop reaches */
+	/** rebuilt tables others reference whose rebuild database did not guard, with the tables their drop reaches */
 	unguarded: Map<string, string[]>
 }
 
@@ -49,7 +49,7 @@ function rebuildRefusal(name: string, rebuild: FileRebuild, ctx: RebuildContext)
 	if (reached !== undefined) {
 		return {
 			level: "unsafe",
-			note: `rebuilds ${name} unguarded: its drop deletes or orphans the rows of ${reached.join(", ")}; let comb migrate diff write it`,
+			note: `rebuilds ${name} unguarded: its drop deletes or orphans the rows of ${reached.join(", ")}; let database migrate diff write it`,
 		}
 	}
 	return rebuild.problem === undefined ? undefined : { level: "unsafe", note: `rebuilds ${name}: ${rebuild.problem}` }
@@ -116,7 +116,7 @@ function rebuildFinding(table: string | undefined, ctx: RebuildContext): Finding
 	const kept = ctx.kept.get(name)
 	const renumbered = (ctx.renumbered.get(name) ?? []).map((note) => `; ${note}`).join("")
 	if (kept !== undefined)
-		return { level: "cautious", note: `rebuilds ${name}; comb keeps the rows of ${kept.join(", ")}${renumbered}` }
+		return { level: "cautious", note: `rebuilds ${name}; database keeps the rows of ${kept.join(", ")}${renumbered}` }
 	return { level: "cautious", note: `rebuilds ${name}, copying every column${renumbered}` }
 }
 

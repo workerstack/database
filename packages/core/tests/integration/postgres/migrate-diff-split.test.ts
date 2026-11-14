@@ -20,7 +20,7 @@ beforeAll(loadPostgresParser)
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-pg-diff-split-"))
+	dir = mkdtempSync(join(tmpdir(), "database-pg-diff-split-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
@@ -52,7 +52,7 @@ function handWritten(name: string, sql: string): void {
 	spawnSync("atlas", ["migrate", "hash", "--dir", `file://${dir}`])
 }
 
-const roleName = () => `comb_app_${randomUUID().slice(0, 8)}`
+const roleName = () => `database_app_${randomUUID().slice(0, 8)}`
 
 const POST = 'CREATE TABLE "post" ("id" integer PRIMARY KEY, "title" text NOT NULL);\n'
 

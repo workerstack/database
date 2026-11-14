@@ -4,7 +4,6 @@
 	"description": "Database framework for Cloudflare D1, PostgreSQL, and SQLite. Schema builders, error handling, D1 sessions, sharding, codegen, migrations.",
 	"keywords": [
 		"cloudflare-d1",
-		"comb",
 		"database",
 		"drizzle",
 		"framework",
@@ -25,7 +24,7 @@
 		"directory": "packages/core"
 	},
 	"bin": {
-		"comb": "src/bin.ts"
+		"database": "src/bin.ts"
 	},
 	"files": [
 		"docs",

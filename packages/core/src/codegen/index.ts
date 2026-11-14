@@ -22,7 +22,7 @@ export { type FieldConstraints, fieldConstraintsOf } from "./annotations.ts"
 export { deriveEntityMeta, isExcludedFromUpdate } from "./entity-meta.ts"
 export { validateTables } from "./utils/validate.ts"
 export type { OrmConfig } from "./config.ts"
-export type { CombColumnKind } from "../meta/column.ts"
+export type { ColumnMetaKind } from "../meta/column.ts"
 export type {
 	ConstantValue,
 	ExpressionIndexMeta,

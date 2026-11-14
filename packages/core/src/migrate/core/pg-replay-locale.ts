@@ -42,7 +42,7 @@ async function targetLocale(connect: Connect, target: PgTarget, stops: string): 
 	} catch (error) {
 		const failed = { field: "url", url: target.url, urls: [target.url, target.devUrl] } as const
 		throw new ReplayFailed(
-			`comb could not read the target database's locale on url, which the replay's database takes: ${failureOf(error, failed)}; ${stops}`,
+			`database could not read the target database's locale on url, which the replay's database takes: ${failureOf(error, failed)}; ${stops}`,
 			{ cause: error },
 		)
 	} finally {

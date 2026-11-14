@@ -1,6 +1,6 @@
 /**
- * The version of a peer comb loads, and whether a range of comb's admits it: npm's
- * semver for the forms comb's ranges take, without semver itself, which comb does not ship.
+ * The version of a peer database loads, and whether a range of database's admits it: npm's
+ * semver for the forms database's ranges take, without semver itself, which database does not ship.
  */
 import { existsSync, readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
@@ -49,7 +49,7 @@ function comparatorsOf(word: string): Comparator[] {
 	const op = match[1] ?? "="
 	const text = match[2] as string
 	const parts = (text.split("-", 1)[0] as string).split(".").length
-	if (parts !== 3 && op !== "<" && op !== ">=") throw new TypeError(`comb reads no partial version in "${word}"`)
+	if (parts !== 3 && op !== "<" && op !== ">=") throw new TypeError(`database reads no partial version in "${word}"`)
 	const full = parts === 3 ? text : `${text}${".0".repeat(3 - parts)}${op === "<" ? "-0" : ""}`
 	const version = versionOf(full) as Version
 	if (op !== "^") return [{ op: op as Comparator["op"], version }]
@@ -71,7 +71,7 @@ const ADMITS: Readonly<Record<Comparator["op"], (order: number) => boolean>> = {
 }
 
 /**
- * Whether `range` admits `version`, as npm's semver does for the forms comb's ranges take (`>=`,
+ * Whether `range` admits `version`, as npm's semver does for the forms database's ranges take (`>=`,
  * `<`, an exact version, `^`, `||`): a prerelease only where a comparator of the same set names a
  * prerelease of its major, minor and patch.
  */

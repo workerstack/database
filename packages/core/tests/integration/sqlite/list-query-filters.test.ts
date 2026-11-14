@@ -6,7 +6,7 @@ import { sql } from "drizzle-orm"
 import type { LibSQLDatabase } from "drizzle-orm/libsql"
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
 import { afterEach, describe, expect, it } from "vitest"
-import { CombError } from "../../../src/error.ts"
+import { DatabaseError } from "../../../src/error.ts"
 import { createListQuerySchema } from "../../../src/query/schema.ts"
 import { applyListQuery, buildListQuery } from "../../../src/query/sqlite/build-list-query.ts"
 import { buildFilterSQL } from "../../../src/query/sqlite/filter-sql.ts"
@@ -112,20 +112,20 @@ describe("is (Q-H2)", () => {
 
 describe("declared fields the query cannot resolve fail closed (Q-H3)", () => {
 	it("throws for a computed field with no resolver instead of returning every row", async () => {
-		await expect(ids("@score.gt.9", {} as { "@score": ComputedFilterResolver })).rejects.toThrow(CombError)
+		await expect(ids("@score.gt.9", {} as { "@score": ComputedFilterResolver })).rejects.toThrow(DatabaseError)
 	})
 
 	it("throws for a relation field with no relation configured", async () => {
 		const relational = createListQuerySchema({ filter: { "author.name": "string" }, sort: ["id"] })
 		const parsed = relational.parse({ filter: "author.name.eq.zzz" })
-		expect(() => buildListQuery({ ...SEALED, parsed, table: post })).toThrow(CombError)
+		expect(() => buildListQuery({ ...SEALED, parsed, table: post })).toThrow(DatabaseError)
 	})
 
 	it("throws when a resolver declines the operator it was given", async () => {
 		const declining = createListQuerySchema({ filter: { "@score": "number" }, sort: ["id"] })
 		const parsed = declining.parse({ filter: "@score.lt.9" })
 		expect(() => buildListQuery({ ...SEALED, computedFilters: { "@score": score }, parsed, table: post })).toThrow(
-			CombError,
+			DatabaseError,
 		)
 	})
 })

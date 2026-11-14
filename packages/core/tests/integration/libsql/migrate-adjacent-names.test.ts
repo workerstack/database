@@ -1,6 +1,6 @@
 /**
  * On a real SQLite file: `ALTER TABLE "users"DROP COLUMN email` drops the column as the spelling with
- * a space does. comb's reading rated it safe, and only the proof run's loss stood between it and a
+ * a space does. database's reading rated it safe, and only the proof run's loss stood between it and a
  * table the proof cannot seed; check and apply now refuse the statement itself, and the column stays.
  */
 import { afterEach, describe, expect, it } from "vitest"

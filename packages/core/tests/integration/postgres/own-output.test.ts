@@ -1,5 +1,5 @@
 /**
- * comb's own `migrate diff` output on Postgres, through the real Atlas and comb's own policy diff,
+ * database's own `migrate diff` output on Postgres, through the real Atlas and database's own policy diff,
  * never needs an in-file approval unless it destroys data: an enum, a CHECK, indexes, row level
  * security and its policies made, changed and dropped, and ADD COLUMN all rate safe or cautious
  * against the history before them.
@@ -15,7 +15,7 @@ import { extractSchema } from "../../../src/migrate/core/schema.ts"
 import { withScratchDb } from "../support/pg.ts"
 import { loadPostgresParser } from "../../../src/migrate/core/pg-parser.ts"
 
-/* a caller of classifyMigration on Postgres loads comb's parser first */
+/* a caller of classifyMigration on Postgres loads database's parser first */
 beforeAll(loadPostgresParser)
 
 const TABLES = `CREATE TYPE "status" AS ENUM ('active', 'banned');
@@ -34,10 +34,10 @@ const STEPS: Array<{ name: string; target: string }> = [
 	{ name: "drop_policy", target: TABLES.replace("COLUMN", ', "bio" text') },
 ]
 
-describe("comb's own diff output on Postgres", () => {
+describe("database's own diff output on Postgres", () => {
 	describe("with Atlas v1.3.0", () => {
 		it("rates safe or cautious, never unsafe, against the history before it", async () => {
-			const dir = mkdtempSync(join(tmpdir(), "comb-pg-own-"))
+			const dir = mkdtempSync(join(tmpdir(), "database-pg-own-"))
 			try {
 				await withScratchDb(async (dev) => {
 					const ratings: string[] = []

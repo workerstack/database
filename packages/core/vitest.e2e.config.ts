@@ -5,7 +5,7 @@ import { MAX_WORKERS } from "./tests/support/workers.ts"
    workers forked after this file is read inherit it (tests/structure/workflows.test.ts holds it) */
 process.env.TZ = "UTC"
 
-/* The e2e suites: the comb binary on scratch apps, real Atlas, libsql and wrangler --local. */
+/* The e2e suites: the database binary on scratch apps, real Atlas, libsql and wrangler --local. */
 export default defineConfig({
 	test: {
 		maxWorkers: MAX_WORKERS,

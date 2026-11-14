@@ -12,9 +12,9 @@ import { buildDerivedListQuery, buildListQuery } from "./sqlite/build-list-query
 const post = sqliteTable("post", { id: integer("id").primaryKey(), title: text("title") })
 const schema = createListQuerySchema({ pagination: { defaultLimit: 2, maxLimit: 10 }, sort: ["title", "@views"] })
 const rows = [
-	{ _combId: 1, _total: 3, id: 1, title: "a" },
-	{ _combId: 2, _total: 3, id: 2, title: "b" },
-	{ _combId: 3, _total: 3, id: 3, title: "c" },
+	{ _cursorId: 1, _total: 3, id: 1, title: "a" },
+	{ _cursorId: 2, _total: 3, id: 2, title: "b" },
+	{ _cursorId: 3, _total: 3, id: 3, title: "c" },
 ]
 
 /* Q6 of the 0.14.1 review: a computed sort leaves nothing a cursor can resume from */
@@ -33,7 +33,7 @@ describe("paginate on a list ordered by a computed sort", () => {
 			parsed: schema.parse({ limit: "2", order: "title.asc" }),
 			table: post,
 		})
-		const read = rows.map((row) => ({ ...row, _combTextKeys: "[null]" }))
+		const read = rows.map((row) => ({ ...row, _cursorTextKeys: "[null]" }))
 		expect(paginate(read, byColumn)[1].nextCursor).toEqual(expect.any(String))
 	})
 })

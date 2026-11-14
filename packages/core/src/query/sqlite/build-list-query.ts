@@ -1,8 +1,8 @@
 import { Column, getTableColumns, is, sql, type SQL, type SQLWrapper } from "drizzle-orm"
 import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core"
 import { own } from "../../constraint-map.ts"
-import { CombError } from "../../error.ts"
-import { combErrorKeys } from "../../types.ts"
+import { DatabaseError } from "../../error.ts"
+import { databaseErrorKeys } from "../../types.ts"
 import { CURSOR_TIEBREAK_COLUMN } from "../cursor.ts"
 import { listDialect } from "../list-dialect.ts"
 import type { ComputedSortResolver, FilterAST, SortField } from "../types.ts"
@@ -43,10 +43,10 @@ function resolveBaseWhere(baseWhere: BuildListQueryOpts<SQLiteTable>["baseWhere"
 }
 
 /** A sort the schema accepted but this table cannot run is a wiring mistake, not a reason to reorder */
-function sortNotWired(field: string, missing: string): CombError {
-	return new CombError({
+function sortNotWired(field: string, missing: string): DatabaseError {
+	return new DatabaseError({
 		cause: `Sort on '${field}' has no ${missing} to run it`,
-		errorKey: combErrorKeys.SORT_NOT_WIRED,
+		errorKey: databaseErrorKeys.SORT_NOT_WIRED,
 		status: "internal_server_error",
 	})
 }
@@ -83,9 +83,9 @@ function searchWhere(q: string | undefined, search: LikeSearchResolver | undefin
 	if (search) return search(q)
 	/* The schema accepted `q`, so the endpoint promised search. Dropping it
 	   would answer every query with the unfiltered list. */
-	throw new CombError({
+	throw new DatabaseError({
 		cause: "Request carries q but buildListQuery got no search resolver",
-		errorKey: combErrorKeys.SEARCH_NOT_WIRED,
+		errorKey: databaseErrorKeys.SEARCH_NOT_WIRED,
 		status: "internal_server_error",
 	})
 }
@@ -104,7 +104,7 @@ function refuseUnmergeable(sort: readonly SortField[], idColumn: SQLiteColumn | 
 				? `a merged list needs an "${CURSOR_TIEBREAK_COLUMN}" column to break ties across shards, and this table has none`
 				: undefined
 	if (cause !== undefined)
-		throw new CombError({ cause, errorKey: combErrorKeys.SORT_NOT_WIRED, status: "internal_server_error" })
+		throw new DatabaseError({ cause, errorKey: databaseErrorKeys.SORT_NOT_WIRED, status: "internal_server_error" })
 }
 
 /**
@@ -142,9 +142,9 @@ function buildListQuery<TTable extends SQLiteTable>(
 	if (parsed.cursor && !idColumn) {
 		/* Without a tiebreak column there is no predicate to add, and ignoring the
 		   cursor would quietly re-serve the first page. This is a schema mistake. */
-		throw new CombError({
+		throw new DatabaseError({
 			cause: `Table has no "${CURSOR_TIEBREAK_COLUMN}" property to break ties on`,
-			errorKey: combErrorKeys.CURSOR_PAGINATION_UNSUPPORTED,
+			errorKey: databaseErrorKeys.CURSOR_PAGINATION_UNSUPPORTED,
 			status: "internal_server_error",
 		})
 	}

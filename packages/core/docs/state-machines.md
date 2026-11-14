@@ -2,15 +2,15 @@
 
 Status: **implemented** in `@workerstack/database` (`packages/core`). The declaration
 is the third argument to `c.enum`; the runtime guard lives at `@workerstack/database/states`;
-the published subset is `CombEntityMeta.states`.
+the published subset is `EntityMeta.states`.
 
 ## 1. What this is for
 
-comb already knows a column's legal _values_ — `c.enum("status", ["draft", "sent", "failed"])`
+database already knows a column's legal _values_ — `c.enum("status", ["draft", "sent", "failed"])`
 generates a CHECK constraint from them. It does not know which of those values a row may move
 _between_, or which of them are final.
 
-That gap costs comb two things it should have on its own merits:
+That gap costs database two things it should have on its own merits:
 
 - **Transition validation on write.** `draft → sent` is legal, `sent → draft` is not. Today nothing
   can say so, and every app that cares re-implements the check by hand next to each update.
@@ -76,7 +76,7 @@ It warns, and does not reject, on:
 
 - a non-terminal state with no outgoing transitions, when `transitions` is partial. That is how an
   app declares the cheap half, so it must stay legal.
-- a machine on a column whose values are a reference comb cannot read, such as a const from a
+- a machine on a column whose values are a reference database cannot read, such as a const from a
   package outside the project. The machine is not checked and not published.
 
 ## 4. Runtime
@@ -108,25 +108,25 @@ status: c.enum("status", deliveryStates.values, deliveryStates)
 canTransition(deliveryStates, "queued", "sending") // true
 canTransition(deliveryStates, "sent", "queued") // false — sent is terminal
 canTransition(deliveryStates, "sent", "sent") // true — staying put is not a transition
-assertTransition(deliveryStates, current, next) // throws CombError, 422
+assertTransition(deliveryStates, current, next) // throws DatabaseError, 422
 ```
 
-Failure raises `CombError` with `status: "unprocessable_entity"` and
-`invalid_state_transition`, matching how every other comb-detected violation surfaces. The error
+Failure raises `DatabaseError` with `status: "unprocessable_entity"` and
+`invalid_state_transition`, matching how every other database-detected violation surfaces. The error
 names the column the machine declares as `column` (`defineStateMachine({ column: "phase", … })`),
 or `status` when it declares none.
 
-Deliberately **not** an automatic hook on update. comb does not own the write path — a caller may
+Deliberately **not** an automatic hook on update. database does not own the write path — a caller may
 be doing a bulk correction, a backfill, or a migration where the transition rules do not apply. An
 explicit call at the boundary that cares is honest; a hidden interception in the ORM would be a
 rule you cannot see at the call site and cannot opt out of.
 
 ## 5. What the meta contract exposes
 
-An additive field on `CombEntityMeta`, so **no `v` bump** (§4.1 of the meta contract):
+An additive field on `EntityMeta`, so **no `v` bump** (§4.1 of the meta contract):
 
 ```jsonc
-"x-comb": {
+"x-database": {
   "v": 1,
   "kind": "entity",
   // …
@@ -151,22 +151,22 @@ branching. Widening to an array later is additive on the consumer side only if t
 defensively, so if this is likely, the field should be an array from the start — **open question,
 see §7.**
 
-## 6. What a consumer does with it, and what comb does not do
+## 6. What a consumer does with it, and what database does not do
 
 oat's `x-async` wants `until: "status.in.complete,partial,failed"` and
 `successWhen: "status.eq.complete"`. Those are derivable:
 
 - `until` — the column plus its `terminal` set
-- `successWhen` — **not derivable.** comb knows which states are final. It does not know which
+- `successWhen` — **not derivable.** database knows which states are final. It does not know which
   of them mean _success_. `partial` is terminal; whether it counts as success is a product
   decision that lives nowhere in the schema.
 
-comb should not add a `success:` key to close that gap. It would be a field with exactly one
+database should not add a `success:` key to close that gap. It would be a field with exactly one
 consumer and one meaning, invented to complete someone else's predicate — the boundary §1 exists to
-hold. The honest split: comb publishes the lifecycle, the app declares which terminal state its
+hold. The honest split: database publishes the lifecycle, the app declares which terminal state its
 contract considers success, and honey maps both onto the tag.
 
-The predicate _syntax_ is likewise not comb's. comb publishes `terminal: ["sent", "partial"]`; the
+The predicate _syntax_ is likewise not database's. database publishes `terminal: ["sent", "partial"]`; the
 consumer renders `status.in.sent,partial` if that is its grammar, or something else if it is not.
 
 ## 7. Decisions (were open, now closed)
@@ -179,7 +179,7 @@ consumer renders `status.in.sent,partial` if that is its grammar, or something e
    needs. A contract tester can ignore it.
 3. **`transitions` do not drive the CHECK constraint.** `c.enum` still generates
    `CHECK (status IN (…))`. A transition rule cannot be expressed as a column CHECK without
-   a trigger, and comb does not generate triggers.
+   a trigger, and database does not generate triggers.
 4. **`softDelete` is orthogonal.** A soft-deleted row stays in its declared state. The
    tombstone is a different fact; folding it into `terminal` would make that field mean two
    things.

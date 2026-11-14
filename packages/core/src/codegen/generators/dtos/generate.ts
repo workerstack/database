@@ -36,7 +36,7 @@ function fieldInfosOf(meta: TableMeta, ctx: GeneratorContext): FieldInfo[] {
 function tableInfoOf(meta: TableMeta, ctx: GeneratorContext): TableInfo {
 	return {
 		/* the stamp reads the rule fieldSchemaOf drops a write field by, writesOf, so it states what the DTOs take */
-		combMeta: deriveEntityMeta(meta),
+		databaseMeta: deriveEntityMeta(meta),
 		fields: fieldInfosOf(meta, ctx),
 		hasTimestamps: {
 			createdAt: meta.timestamps.createdAt,
@@ -61,11 +61,11 @@ function writeShared(written: Written, config: DtosConfig, ctx: GeneratorContext
 	const sharedDir = path.join(written.outputDir, "_shared")
 	const imported = new Set(written.tables.flatMap((table) => sharedImportsOf(table, written.sharedSchemas)))
 	const content = generateSharedFile(collectUsedTimestampCombos(written.tables), written.sharedSchemas, {
-		combFrom: config.importFrom,
+		databaseFrom: config.importFrom,
 		imported,
 	})
 	const file = path.join(sharedDir, config.filePrefix ? `${config.filePrefix}._shared.gen.ts` : "index.gen.ts")
-	writeGenFile(file, content, { generator: "comb", staged: ctx.staged })
+	writeGenFile(file, content, { generator: "database", staged: ctx.staged })
 	ctx.log(`Generated: ${path.relative(ctx.cwd, file)}`)
 }
 
@@ -78,13 +78,13 @@ function writeEntities(written: Written, config: DtosConfig, ctx: GeneratorConte
 			entityDir,
 			filePrefix: config.filePrefix,
 			importStyle: ctx.importStyle,
-			combFrom: config.importFrom,
+			databaseFrom: config.importFrom,
 			metaImportFrom: config.importFrom === undefined ? undefined : `${config.importFrom}/meta`,
 			schemaImports: schemaImportsOf(metas.get(table.name) as TableMeta),
 			sharedSchemas: written.sharedSchemas,
 		})
 		const file = path.join(entityDir, config.filePrefix ? `${config.filePrefix}.${kebabName}.gen.ts` : "index.gen.ts")
-		writeGenFile(file, content, { generator: "comb", staged: ctx.staged })
+		writeGenFile(file, content, { generator: "database", staged: ctx.staged })
 		ctx.log(`Generated: ${path.relative(ctx.cwd, file)}`)
 	}
 }

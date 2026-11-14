@@ -4,7 +4,7 @@ import { type D1Target, localD1Path, resolveBinding } from "./d1-binding.ts"
 
 const file = (name: string) => join("/w", ".wrangler", "state", "v3", "d1", "miniflare-D1DatabaseObject", name)
 
-/* M33 of the 0.13 review; tests/integration/d1 holds it to the wrangler comb pins */
+/* M33 of the 0.13 review; tests/integration/d1 holds it to the wrangler database pins */
 describe("localD1Path", () => {
 	it("names the file as Miniflare's idFromName does: the preview id, else the id, else the binding", () => {
 		const id = "00000000-0000-0000-0000-000000000000"

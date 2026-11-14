@@ -4,8 +4,8 @@
  */
 import { type SQL, sql } from "drizzle-orm"
 
-import { CombError } from "../../error.ts"
-import { combErrorKeys } from "../../types.ts"
+import { DatabaseError } from "../../error.ts"
+import { databaseErrorKeys } from "../../types.ts"
 
 import type { FilterCondition, FilterGroup } from "../types.ts"
 import { quoteIdent } from "./identifier.ts"
@@ -49,9 +49,9 @@ function buildFilterSQL(group: FilterGroup, config: FilterSQLConfig): SQL {
 function requireConditionSQL(condition: FilterCondition, config: FilterSQLConfig): SQL {
 	const built = buildConditionSQL(condition, config)
 	if (built) return built
-	throw new CombError({
+	throw new DatabaseError({
 		cause: `Filter on '${condition.field}' (${condition.operator}) has no mapped column to run it`,
-		errorKey: combErrorKeys.FILTER_NOT_WIRED,
+		errorKey: databaseErrorKeys.FILTER_NOT_WIRED,
 		status: "internal_server_error",
 	})
 }
@@ -70,10 +70,10 @@ function buildConditionSQL(condition: FilterCondition, config: FilterSQLConfig):
 			`buildFilterSQL: columnMap.${condition.field} is a bare column name; \`${JSON.stringify(mapped)}\` is \`{ column: ${JSON.stringify(mapped)}, kind: "as-is" }\` since 0.17`,
 		)
 	const { column, kind } = mapped
-	/* a kind comb does not know, as JavaScript may still pass the shape before 0.16, would bind as text: refused */
+	/* a kind database does not know, as JavaScript may still pass the shape before 0.16, would bind as text: refused */
 	if (!COLUMN_KINDS.includes(kind))
 		throw new TypeError(
-			`buildFilterSQL: columnMap.${condition.field} has no kind comb knows (${COLUMN_KINDS.join(", ")}); \`unit: "s"\` is \`kind: "date-s"\` since 0.16`,
+			`buildFilterSQL: columnMap.${condition.field} has no kind database knows (${COLUMN_KINDS.join(", ")}); \`unit: "s"\` is \`kind: "date-s"\` since 0.16`,
 		)
 	return lowerOn(
 		{ kind, sql: sql`${sql.raw(quoteIdent(config.tableAlias))}.${sql.raw(quoteIdent(column))}` },

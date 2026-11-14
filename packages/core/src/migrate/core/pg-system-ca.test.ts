@@ -8,7 +8,7 @@ import { postgresOptionsOf } from "./pg-url.ts"
 
 /** A stand-in PEM certificate named `name` */
 const pem = (name: string) => `-----BEGIN CERTIFICATE-----\n${name}\n-----END CERTIFICATE-----`
-const dir = mkdtempSync(join(tmpdir(), "comb-system-ca-"))
+const dir = mkdtempSync(join(tmpdir(), "database-system-ca-"))
 const BUNDLE = join(dir, "bundle.pem")
 writeFileSync(BUNDLE, `# the system's bundle\n${pem("ROOT_A")}\n${pem("ROOT_B")}\n`)
 const CERTS = join(dir, "certs")
@@ -73,9 +73,9 @@ describe("systemCas", () => {
 	})
 })
 
-/* a verification failure says which CAs comb verified against, so a divergence from Atlas is named */
+/* a verification failure says which CAs database verified against, so a divergence from Atlas is named */
 describe("readLiveObjects on a server sslrootcert=system cannot verify", () => {
-	it("names where comb's CAs came from", async () => {
+	it("names where database's CAs came from", async () => {
 		vi.stubEnv("SSL_CERT_FILE", BUNDLE)
 		vi.stubEnv("SSL_CERT_DIR", EMPTY)
 		const failure = Object.assign(new Error("unable to verify the first certificate"), {
@@ -89,7 +89,9 @@ describe("readLiveObjects on a server sslrootcert=system cannot verify", () => {
 		})
 		await expect(
 			readLiveObjects({ schema: "app", url: "postgres://app@db.example/app?sslrootcert=system" }, load),
-		).rejects.toThrow(`unable to verify the first certificate; comb verified the server against ${systemCas().source}`)
+		).rejects.toThrow(
+			`unable to verify the first certificate; database verified the server against ${systemCas().source}`,
+		)
 		await expect(
 			readLiveObjects(
 				{ schema: "app", url: `postgres://app@db.example/app?sslmode=verify-full&sslrootcert=${BUNDLE}` },

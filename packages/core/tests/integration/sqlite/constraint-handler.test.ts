@@ -4,7 +4,7 @@
  */
 import { sql } from "drizzle-orm"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { CombError } from "../../../src/error.ts"
+import { DatabaseError } from "../../../src/error.ts"
 import {
 	classifySqliteError,
 	constraintError,
@@ -152,9 +152,9 @@ describe("sqliteErrorHandler on libsql through drizzle: mapped", () => {
 
 	it.each(MAPPED)("maps $name", async ({ column, errorKey, sql: statement, status }) => {
 		const thrown = await classify(db(), statement)
-		expect(thrown).toBeInstanceOf(CombError)
+		expect(thrown).toBeInstanceOf(DatabaseError)
 		expect(thrown).toMatchObject({ errorKey, status, table: "member" })
-		expect((thrown as CombError).column).toBe(column)
+		expect((thrown as DatabaseError).column).toBe(column)
 	})
 
 	it("handleConstraintViolation takes the error itself, wrapper and all", async () => {
@@ -165,7 +165,7 @@ describe("sqliteErrorHandler on libsql through drizzle: mapped", () => {
 	})
 
 	it("keeps the engine error off the client-facing cause and on source", async () => {
-		const thrown = (await classify(db(), "INSERT INTO member (id, email) VALUES ('m2', 'a@x')")) as CombError
+		const thrown = (await classify(db(), "INSERT INTO member (id, email) VALUES ('m2', 'a@x')")) as DatabaseError
 		expect(thrown.cause).toBe("Email in use")
 		expect(thrown.source).toBeInstanceOf(Error)
 		expect(JSON.stringify(thrown)).not.toContain("INSERT")
@@ -202,7 +202,7 @@ describe("sqliteErrorHandler on libsql: a delete of a row others still reference
 			status: 409,
 			table: "post",
 		})
-		expect((thrown as CombError).column).toBeUndefined()
+		expect((thrown as DatabaseError).column).toBeUndefined()
 	})
 
 	it("reports a composite unique that no map names as the pair, never as its first column", async () => {
@@ -311,7 +311,7 @@ INSERT INTO "line-item" VALUES ('l1', 'A', 1);`)
 	afterEach(() => punctuated.close())
 
 	/** What the handler makes of `statement`'s violation */
-	async function mapped(statement: string): Promise<CombError> {
+	async function mapped(statement: string): Promise<DatabaseError> {
 		try {
 			await punctuated.db.run(sql.raw(statement))
 		} catch (error) {

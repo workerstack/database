@@ -1,5 +1,5 @@
 /**
- * SL2 of r22: comb applies each piece of its split as one statement, and a driver that runs the
+ * SL2 of r22: database applies each piece of its split as one statement, and a driver that runs the
  * first statement of a string alone drops the rest. So the proof asks SQLite where each piece's
  * first statement ends, and refuses a piece SQLite reads as more than one, naming the file and the
  * statement. The splitter here is made to fold a file into one piece, as 0.20.1's did after a

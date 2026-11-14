@@ -1,7 +1,7 @@
 /**
- * P11 of r19: comb's own read and Atlas take one password from one passfile, read by Atlas's driver's
+ * P11 of r19: database's own read and Atlas take one password from one passfile, read by Atlas's driver's
  * host rule (pg-passfile.ts). Each shape gives a role with a password one right and one wrong line, and
- * comb and real Atlas must connect or fail together. CI's Postgres checks passwords, so it is real
+ * database and real Atlas must connect or fail together. CI's Postgres checks passwords, so it is real
  * there. The local test server trusts every password, so it cannot fail this suite: both always
  * connect. Its red was shown on a password-checking cluster with P11 reverted
  * (.tmp/grunt/p18/runs/*-p11-ci-red-*). Only TCP shapes: CI's server has no socket to reach.
@@ -17,8 +17,8 @@ import { run } from "../../../src/migrate/core/process.ts"
 import { pgUrl } from "../support/pg.ts"
 
 const server = new URL(pgUrl() as string)
-const role = `comb_pf_${randomUUID().replaceAll("-", "").slice(0, 12)}`
-const dir = mkdtempSync(join(tmpdir(), "comb-passfile-"))
+const role = `database_pf_${randomUUID().replaceAll("-", "").slice(0, 12)}`
+const dir = mkdtempSync(join(tmpdir(), "database-passfile-"))
 
 /** Run `sql` as the test server's own user */
 async function admin(sql: string): Promise<void> {
@@ -68,19 +68,20 @@ const SHAPES: readonly Shape[] = [
 	{ host: "127.0.0.1", label: "host 127.0.0.1, localhost's line", lines: [line("localhost", "right")], query: "" },
 ]
 
-describe("a passfile read by comb and by Atlas", () => {
-	it.each(SHAPES)("$label: comb and Atlas connect or fail together", async ({ host, label, lines, query }) => {
+describe("a passfile read by database and by Atlas", () => {
+	it.each(SHAPES)("$label: database and Atlas connect or fail together", async ({ host, label, lines, query }) => {
 		const file = join(dir, label.replaceAll(/\W+/g, "_"))
 		writeFileSync(file, `${lines.join("\n")}\n`)
 		chmodSync(file, 0o600)
 		const url = urlOf(host, query, file)
 		const atlas = await run("atlas", ["schema", "inspect", "-u", url, "--format", "{{ len .Realm.Schemas }}"])
-		const comb = await readLiveObjects({ schema: "public", url }).then(
+		const database = await readLiveObjects({ schema: "public", url }).then(
 			() => "connects",
 			(error: Error) => `fails: ${error.message}`,
 		)
-		expect(comb === "connects", `comb ${comb}; Atlas ${atlas.code === 0 ? "connects" : `fails: ${atlas.stderr}`}`).toBe(
-			atlas.code === 0,
-		)
+		expect(
+			database === "connects",
+			`database ${database}; Atlas ${atlas.code === 0 ? "connects" : `fails: ${atlas.stderr}`}`,
+		).toBe(atlas.code === 0)
 	})
 })

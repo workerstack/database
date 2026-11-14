@@ -1,7 +1,7 @@
 /**
  * M77 of the 0.13.0 round, with the real Atlas: a schema other than public migrated under 0.12
  * kept its history in the shared atlas_schema_revisions. When its own history is missing or empty,
- * comb adopts the shared rows that match this directory's files as a prefix: apply and baseline
+ * database adopts the shared rows that match this directory's files as a prefix: apply and baseline
  * record them in the schema's own history, check and status say so and write nothing, and the
  * shared rows are never changed.
  */
@@ -25,7 +25,7 @@ beforeAll(loadPostgresParser)
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-pg-adopt-"))
+	dir = mkdtempSync(join(tmpdir(), "database-pg-adopt-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
@@ -38,7 +38,7 @@ async function migrations(files: Record<string, string>): Promise<void> {
 	await hashDir(run, dir)
 }
 
-/** What comb 0.12 did: Atlas applies the directory to `schema`, its history in the shared atlas_schema_revisions */
+/** What database 0.12 did: Atlas applies the directory to `schema`, its history in the shared atlas_schema_revisions */
 function applyAs012(url: string, schema: string, from = dir): void {
 	const target = `${url}${url.includes("?") ? "&" : "?"}search_path=${schema}`
 	const args = [
@@ -55,11 +55,11 @@ function applyAs012(url: string, schema: string, from = dir): void {
 	if (ran.status !== 0) throw new Error(`atlas migrate apply: ${ran.stderr}${ran.stdout}`)
 }
 
-/** comb's approval, never asking: the files here are safe */
+/** database's approval, never asking: the files here are safe */
 const approve = (m: ParsedMigration) => approveMigration(m, { target: "core", yes: false })
 
 /** The options applyWithAtlas takes for schema app of the database at `url`, collecting what it prints */
-function command(url: string, devUrl = "postgres://comb-no-dev.invalid/dev") {
+function command(url: string, devUrl = "postgres://database-no-dev.invalid/dev") {
 	const out: string[] = []
 	const target = { devUrl, lockTimeout: "5s", schema: "app", url }
 	return { approve, dir, out, print: (line: string) => out.push(line), target }
@@ -201,7 +201,7 @@ describe("migrate on Postgres: what adopting 0.12's shared history refuses and k
 				await expect(applyWithAtlas(command(url, devUrl))).rejects.toThrow(changed)
 				await migrations({ "20260101000000_users.sql": USERS, "20251231000000_first.sql": "SELECT 1;\n" })
 				const skipped =
-					"0.12's shared history records 20260101000000_users.sql but not 20251231000000_first.sql, which comes before it, so comb cannot tell what ran; record it by hand"
+					"0.12's shared history records 20260101000000_users.sql but not 20251231000000_first.sql, which comes before it, so database cannot tell what ran; record it by hand"
 				await expect(applyWithAtlas({ ...command(url, devUrl), checkOnly: true })).rejects.toThrow(skipped)
 				expect(await own(url)).toBeUndefined()
 				expect(await shared(url)).toEqual(before)
@@ -227,7 +227,7 @@ describe("migrate on Postgres: what adopting 0.12's shared history refuses and k
 		it("adopts beside public's shared rows, which name no file here and stay", async () => {
 			await withDevAndTarget(async (devUrl, url) => {
 				const mine = dir
-				dir = mkdtempSync(join(tmpdir(), "comb-pg-adopt-public-"))
+				dir = mkdtempSync(join(tmpdir(), "database-pg-adopt-public-"))
 				try {
 					await migrations({ "20260101000000_p.sql": 'CREATE TABLE "p" ("id" integer);\n' })
 					applyAs012(url, "public")
@@ -312,7 +312,7 @@ describe("migrate on Postgres: an empty schema sharing public's directory migrat
 			await withDevAndTarget(async (devUrl, url) => {
 				await publicMigrated(url, devUrl)
 				await query(url, 'CREATE TABLE app."a" ("id" integer)')
-				const refusal = `app does not hold what 0.12's shared history ran (${A}, ${B}), so comb adopts none of it`
+				const refusal = `app does not hold what 0.12's shared history ran (${A}, ${B}), so database adopts none of it`
 				await expect(applyWithAtlas({ ...command(url, devUrl), checkOnly: true })).rejects.toThrow(refusal)
 				await expect(applyWithAtlas(command(url, devUrl))).rejects.toThrow(refusal)
 				await expect(baselineWithAtlas(command(url, devUrl))).rejects.toThrow(refusal)

@@ -1,4 +1,4 @@
-/* The escapes a pattern may hold: what each engine comb names reads otherwise in one, and its spelling there */
+/* The escapes a pattern may hold: what each engine database names reads otherwise in one, and its spelling there */
 
 const BOUNDARY = "the characters on either side as classes, such as (?:^|[^A-Za-z0-9_])"
 
@@ -22,7 +22,7 @@ export const UNREAD =
 export const DOT =
 	"., which ECMAScript reads as any character but a line terminator and Go's RE2 and Rust's regex as any but \\n: write [^\\n\\r], or the class meant"
 
-/* NUL as every engine comb names spells it */
+/* NUL as every engine database names spells it */
 const OCTAL =
 	"which Rust's regex refuses as an octal escape, so a validator there refuses the whole document: write \\x00, which ECMAScript, Go's RE2 and Rust's regex read as NUL"
 
@@ -102,7 +102,7 @@ function unicodeEscapeAt(source: string, at: number): { end: number; refused: st
 	return { end: at + text.length - 1, refused: `${text}${instead}` }
 }
 
-/** The escape whose backslash is at `at`: what an engine comb names reads otherwise in it, or null, and its last index */
+/** The escape whose backslash is at `at`: what an engine database names reads otherwise in it, or null, and its last index */
 export function escapeAt(source: string, at: number): { end: number; refused: string | null } {
 	const escaped = source[at + 1] as string
 	const one = (refused: string | null) => ({ end: at + 1, refused })
@@ -131,7 +131,7 @@ export function escapeAt(source: string, at: number): { end: number; refused: st
 	}
 }
 
-/** A construct a pattern holds that an engine comb names reads otherwise, or not at all, named as the error states it */
+/** A construct a pattern holds that an engine database names reads otherwise, or not at all, named as the error states it */
 export class Unportable extends Error {}
 
 /** Ends the scan, refusing the pattern for `held` */

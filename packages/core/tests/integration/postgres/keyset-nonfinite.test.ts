@@ -3,7 +3,7 @@
  * ±Infinity and NaN, and `timestamp` holds 'infinity', a common "valid until" sentinel. Each is
  * paged one row at a time through queryHelpers.listOptions and paginate, and every row comes back
  * once, in the order Postgres gives. A timestamp that may hold 'infinity' is read in string mode:
- * drizzle's date mode parses it as 2000-01-01 local time, a wrong value comb cannot tell apart.
+ * drizzle's date mode parses it as 2000-01-01 local time, a wrong value database cannot tell apart.
  */
 import { defineRelations } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/node-postgres"

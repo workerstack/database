@@ -2,10 +2,10 @@
  * Each pending D1 file proven on D1's own engine: after the bun:sqlite proof, the
  * files run in order on a scratch local D1 that the checked wrangler's own Miniflare opens, holding the
  * live schema and the proof's seed rows (proof-copy.ts). Miniflare runs on node, as wrangler's apply runs
- * it, whatever runtime comb runs on: the proof is a node child (d1-engine-child.mjs) started through
+ * it, whatever runtime database runs on: the proof is a node child (d1-engine-child.mjs) started through
  * process.ts, handed its input as JSON in the proof's scratch directory, and answering D1's refusal in
  * D1's words. What D1 refuses is refused, with no override: D1's authorizer, functions, modules and
- * limits are the engine's, with no list of comb's to keep. A file whose text wrangler would rewrite is
+ * limits are the engine's, with no list of database's to keep. A file whose text wrangler would rewrite is
  * refused before anything runs.
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
@@ -13,7 +13,7 @@ import { join } from "node:path"
 import { refuseCompiled } from "./compiled.ts"
 import type { ProofInput, ProofResult } from "./d1-engine-child.mjs"
 import { binEntry } from "./optional-peer.ts"
-import { type ProjectBin, type Run, run } from "./process.ts"
+import { type ProjectBin, type MigrateRun, run } from "./process.ts"
 import { copyScript, type LiveObject } from "./proof-copy.ts"
 import { quote } from "./proof-seed.ts"
 import { scratchDir } from "./cleanup.ts"
@@ -25,7 +25,7 @@ type File = { name: string; sql: string }
 const CONFIG = {
 	compatibility_date: "2025-01-01",
 	d1_databases: [{ binding: "DB", database_id: "00000000-0000-0000-0000-000000000000", database_name: "proof" }],
-	name: "comb-d1-proof",
+	name: "database-d1-proof",
 }
 
 /* what wrangler's trimSqlQuery looks for: a file holding it has its first "BEGIN TRANSACTION;" and "COMMIT;" cut */
@@ -92,7 +92,7 @@ async function proofInput(
  * Proves `files`, in order, on a scratch D1 of the checked wrangler `bin` holding the copy of the live
  * schema `live`, in a child on wrangler's runtime that `exec` starts; `table` is the binding's migration
  * history, which each file's appended row goes to. Throws D1's refusal, or how the child failed; answers
- * each file D1's engine could not prove, as comb's local D1 crashed on its probes, and why
+ * each file D1's engine could not prove, as database's local D1 crashed on its probes, and why
  */
 async function proveOnD1(
 	live: readonly LiveObject[],
@@ -102,15 +102,15 @@ async function proveOnD1(
 		exec = run,
 		moduleUrl = import.meta.url,
 		table,
-	}: { bin: ProjectBin; exec?: Run | undefined; moduleUrl?: string | undefined; table: string },
+	}: { bin: ProjectBin; exec?: MigrateRun | undefined; moduleUrl?: string | undefined; table: string },
 ): Promise<Array<{ name: string; why: string }>> {
-	/* the child is handed d1-engine-child.mjs by comb's own URL, which `moduleUrl` is unless a test says otherwise */
+	/* the child is handed d1-engine-child.mjs by database's own URL, which `moduleUrl` is unless a test says otherwise */
 	refuseCompiled(
 		moduleUrl,
-		"check proves the pending files in a child on wrangler's runtime, which cannot read the modules a Bun single-file executable embeds: run comb migrate with bun or node, not from a compiled executable",
+		"check proves the pending files in a child on wrangler's runtime, which cannot read the modules a Bun single-file executable embeds: run database migrate with bun or node, not from a compiled executable",
 	)
 	for (const file of files) refuseRewritten(file)
-	const { dir, remove: removeDir } = scratchDir("comb-d1-proof-")
+	const { dir, remove: removeDir } = scratchDir("database-d1-proof-")
 	try {
 		const input = join(dir, "input.json")
 		const output = join(dir, "result.json")

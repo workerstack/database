@@ -3,14 +3,14 @@
  * empty SQLite would, and a write refuses. A run reads a missing target through it, so a refused
  * run creates nothing, and opens the real database only once every check has passed.
  */
-import type { Connection } from "../types.ts"
+import type { MigrateConnection } from "../types.ts"
 import { openMemory } from "./local-db.ts"
 
 /** The missing database `name`, read as an empty SQLite; `ownedPrefix` is its engine's, as the real one's */
-export async function absentDatabase(name: string, ownedPrefix?: string): Promise<Connection> {
+export async function absentDatabase(name: string, ownedPrefix?: string): Promise<MigrateConnection> {
 	const db = await openMemory()
 	return {
-		batch: () => Promise.reject(new Error(`${name} does not exist yet; comb creates it only to apply to it`)),
+		batch: () => Promise.reject(new Error(`${name} does not exist yet; database creates it only to apply to it`)),
 		close: () => {
 			db.close()
 			return Promise.resolve()

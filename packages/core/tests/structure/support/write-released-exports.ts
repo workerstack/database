@@ -36,8 +36,8 @@ if (!response.ok) throw new Error(`@workerstack/database ${version}: the registr
 /* unpacked inside the package, so the release's declarations resolve its dependencies */
 const dir = mkdtempSync(join(import.meta.dirname, "../../..", ".tmp-released-"))
 try {
-	writeFileSync(join(dir, "comb.tgz"), new Uint8Array(await response.arrayBuffer()))
-	const untar = spawnSync("tar", ["-xzf", join(dir, "comb.tgz"), "-C", dir], { encoding: "utf8" })
+	writeFileSync(join(dir, "database.tgz"), new Uint8Array(await response.arrayBuffer()))
+	const untar = spawnSync("tar", ["-xzf", join(dir, "database.tgz"), "-C", dir], { encoding: "utf8" })
 	if (untar.status !== 0) throw new Error(`tar exited ${untar.status}\n${untar.stderr}`)
 	const { exports, inputs, members } = releasedApiOf(join(dir, "package"))
 	const target = join(import.meta.dirname, "../__snapshots__/released-exports.json")

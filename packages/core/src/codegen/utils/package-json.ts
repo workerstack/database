@@ -69,7 +69,7 @@ export function setPackageExport(
 }
 
 /**
- * `exports` as comb writes it: `.` first, then every subpath by key, so a run of the databases in
+ * `exports` as database writes it: `.` first, then every subpath by key, so a run of the databases in
  * any order writes the same bytes. Node matches a subpath by its key alone, so the order a
  * map holds them in changes nothing it resolves.
  */

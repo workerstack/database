@@ -1,7 +1,7 @@
 /**
  * M78: public's shared history beside another schema's 0.12 rows, with a fake Atlas. A row with
  * no file of public's is ignored only when that schema's own history holds the same version and
- * hash, and public's position is then its own revisions'. A history comb cannot read
+ * hash, and public's position is then its own revisions'. A history database cannot read
  * leaves the row refused as gone, with the reason.
  */
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
@@ -11,11 +11,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { applyWithAtlas, statusWithAtlas } from "./atlas-apply.ts"
 import { sqlFiles } from "./atlas-dir.ts"
 import type { AtlasRevision } from "./atlas-history.ts"
-import type { Run, RunResult } from "./process.ts"
+import type { MigrateRun, RunResult } from "./process.ts"
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-atlas-foreign-"))
+	dir = mkdtempSync(join(tmpdir(), "database-atlas-foreign-"))
 	for (const name of ["1_a.sql", "3_c.sql"]) writeFileSync(join(dir, name), "SELECT 1;\n")
 	hashed(["migrate", "hash", "--dir", `file://${dir}`])
 })
@@ -55,9 +55,9 @@ const status = (applied: AtlasRevision[], error = "") =>
 type Answers = { apply?: RunResult; inspect?: RunResult; own?: RunResult; shared: RunResult }
 
 /** Atlas answering by the history its config pins, every call kept */
-function fakeAtlas(answers: Answers): Run & { calls: string[][] } {
+function fakeAtlas(answers: Answers): MigrateRun & { calls: string[][] } {
 	const calls: string[][] = []
-	const exec: Run = async (_cmd, args) => {
+	const exec: MigrateRun = async (_cmd, args) => {
 		calls.push([...args])
 		if (args[1] === "hash") return hashed(args)
 		if (args[0] === "schema")
@@ -157,7 +157,7 @@ describe("public's history holding a row no schema's own history matches (G1-b)"
 	it("says the row may be another schema's from 0.12 when another schema exists, and not otherwise", async () => {
 		const p21 = fakeAtlas({ inspect: ok('{"schemas":[{"name":"public"},{"name":"app"}]}'), shared: withApps() })
 		await expect(applyWithAtlas({ approve, dir, exec: p21, print: () => undefined, target })).rejects.toThrow(
-			`${gone}; if it is another schema's row from comb 0.12, run apply on that schema first to adopt it`,
+			`${gone}; if it is another schema's row from database 0.12, run apply on that schema first to adopt it`,
 		)
 		const alone = fakeAtlas({
 			/* a schema Atlas lists without a name suggests nothing */
@@ -180,7 +180,7 @@ describe("public's history read with a password that spells another schema's nam
 			await applyWithAtlas({ approve, dir, exec: atlas, print: (line) => out.push(line), target: secret }),
 		).toEqual(["3_c.sql"])
 		expect(out[0]).toBe("5 is schema ***'s, recorded in atlas_schema_revisions_***; public ignores it")
-		/* comb's own words stay whole when the password spells one: only the schema's name is masked */
+		/* database's own words stay whole when the password spells one: only the schema's name is masked */
 		const words: string[] = []
 		const spelled = { ...target, url: "postgres://app:schema@localhost/app" }
 		await applyWithAtlas({

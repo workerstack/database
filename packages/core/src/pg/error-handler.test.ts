@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { CombError } from "../error.ts"
+import { DatabaseError } from "../error.ts"
 import type { ConstraintMap } from "../types.ts"
 import { classifyPgError, pgErrorHandler } from "./error-handler.ts"
 
@@ -29,11 +29,11 @@ const pk = (table: string) =>
 	nodePg({ code: "23505", constraint: `${table}_pkey`, detail: "Key (id)=(1) already exists.", table })
 const fk = (fields: Record<string, string>) => thrown(nodePg({ code: "23503", table: "store", ...fields }))
 
-function thrown(error: unknown, maps = MAPS): CombError | undefined {
+function thrown(error: unknown, maps = MAPS): DatabaseError | undefined {
 	try {
 		pgErrorHandler(error, maps)
 	} catch (caught) {
-		return caught as CombError
+		return caught as DatabaseError
 	}
 	return undefined
 }
@@ -295,7 +295,7 @@ describe("classifyPgError: what pgErrorHandler would throw, thrown by nobody (C6
 		],
 		["a value the column cannot hold", nodePg({ code: "22P02" })],
 		["a server shutting down", nodePg({ code: "57P01" })],
-		["a code comb does not map", nodePg({ code: "42601" })],
+		["a code database does not map", nodePg({ code: "42601" })],
 		["no server error", new Error("boom")],
 	])("returns for %s what the handler throws, or undefined when it throws nothing", (_, error) => {
 		expect(classifyPgError(error, MAPS)).toEqual(thrownBy((e) => pgErrorHandler(e, MAPS), error))

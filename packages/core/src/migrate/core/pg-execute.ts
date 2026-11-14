@@ -2,10 +2,10 @@
  * A Postgres EXECUTE read from its parse tree, as the pinned Atlas runs it
  * (tests/integration/postgres/copy-execute-oracle.test.ts). Postgres runs an EXECUTE wherever it
  * stands, bare, under a CREATE TABLE AS or an EXPLAIN ANALYZE, so each is rated by
- * the query its file prepared under that name. comb's apply runs one Atlas call per file
+ * the query its file prepared under that name. database's apply runs one Atlas call per file
  * (atlas-apply-runs.ts), so an earlier file's PREPARE never reaches it: one whose name
  * nothing before it in its file prepared fails the file, unless a statement before it ran user code,
- * which may PREPARE any name. A refusal is as sound as a rating, so comb refuses no file Postgres
+ * which may PREPARE any name. A refusal is as sound as a rating, so database refuses no file Postgres
  * runs: a DML statement fires triggers, a DDL statement fires event triggers (under a CREATE TABLE
  * AS, at ddl_command_start, before its EXECUTE's lookup), and a DO block, a CALL, a function call or
  * a resolved EXECUTE runs code of its own; only a PREPARE, a DEALLOCATE, a transaction statement, a
@@ -42,9 +42,9 @@ function executeFindings(
 	if (preparing.has(name)) return []
 	if (dynamic === undefined)
 		throw new Error(
-			`no statement before it in its file prepares ${name}, and comb applies each file in a session of its own, so an earlier file's PREPARE never reaches it: Postgres fails the file with "prepared statement "${name}" does not exist"; PREPARE it in this file`,
+			`no statement before it in its file prepares ${name}, and database applies each file in a session of its own, so an earlier file's PREPARE never reaches it: Postgres fails the file with "prepared statement "${name}" does not exist"; PREPARE it in this file`,
 		)
-	const note = `runs a prepared statement comb cannot read, which ${dynamic} before it may prepare; approve it in the file`
+	const note = `runs a prepared statement database cannot read, which ${dynamic} before it may prepare; approve it in the file`
 	return [{ level: "unsafe", note }]
 }
 

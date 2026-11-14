@@ -1,5 +1,5 @@
 /**
- * Atlas's migrate commands on a Postgres target, run on comb's snapshot of the directory: each
+ * Atlas's migrate commands on a Postgres target, run on database's snapshot of the directory: each
  * through an Atlas config that keeps the URL in the environment, its output scrubbed, and its
  * status read through a template that never selects the URL.
  */
@@ -7,7 +7,7 @@ import type { AtlasStatus } from "./atlas-history.ts"
 import { explainAtlasFailure } from "./atlas-failure.ts"
 import { type PgTarget, withAtlasEnv } from "./atlas-target.ts"
 import { scrubAtlasOutput } from "./atlas-secrets.ts"
-import { type Run, type RunResult, run } from "./process.ts"
+import { type MigrateRun, type RunResult, run } from "./process.ts"
 
 const STATUS_FORMAT =
 	'{"status":{{ json .Status }},"current":{{ json .Current }},"available":{{ json .Available }},"pending":{{ json .Pending }},' +
@@ -19,7 +19,7 @@ const STATUS_FORMAT =
 type AtlasCommand = {
 	dir: string
 	/** The process runner; tests pass a fake. */
-	exec?: Run | undefined
+	exec?: MigrateRun | undefined
 	print(line: string): void
 	/** a history other than the target's own, by its schema: 0.12's shared one, or another schema's own */
 	revisions?: string | undefined
@@ -27,15 +27,15 @@ type AtlasCommand = {
 }
 
 /**
- * What an Atlas call returned, as Atlas wrote it, for comb's decisions; `said`, its stderr as comb
- * prints it (explained, scrubbed, then trimmed to Atlas's words); `scrub`, for any other text comb prints of it
+ * What an Atlas call returned, as Atlas wrote it, for database's decisions; `said`, its stderr as database
+ * prints it (explained, scrubbed, then trimmed to Atlas's words); `scrub`, for any other text database prints of it
  */
 type Ran = RunResult & { said: string; scrub(text: string): string }
 
 /**
- * `atlas migrate <args>` on the snapshot `copy` against the target. Its stdout is JSON comb parses
+ * `atlas migrate <args>` on the snapshot `copy` against the target. Its stdout is JSON database parses
  * as written, its stderr too, and never scrubbed, since a secret that spells a key, a name or
- * a word Atlas prints would change what comb reads; a caller scrubs a value only where it prints it.
+ * a word Atlas prints would change what database reads; a caller scrubs a value only where it prints it.
  */
 function atlas(options: AtlasCommand, copy: string, args: readonly string[]): Promise<Ran> {
 	return withAtlasEnv(options.target, { revisions: options.revisions, url: true }, async (env) => {
@@ -72,11 +72,11 @@ async function atlasStatus(
 	if (ran.code !== 0 && notClean && /connected database is not clean/.test(ran.stderr)) return NO_HISTORY
 	if (ran.code !== 0)
 		throw new Error(`atlas migrate status: ${ran.said || `exit ${ran.code}: ${ran.scrub(ran.stdout).trim()}`}`)
-	/* as Atlas wrote it: what comb prints of it is scrubbed where it prints it (checkHistory's `scrub`) */
+	/* as Atlas wrote it: what database prints of it is scrubbed where it prints it (checkHistory's `scrub`) */
 	return json<AtlasStatus>(ran.stdout, "status")
 }
 
-/** The scrubber for text comb prints of `target`'s Atlas calls, outside one */
+/** The scrubber for text database prints of `target`'s Atlas calls, outside one */
 const scrubbing =
 	(target: PgTarget) =>
 	(text: string): string =>

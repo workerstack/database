@@ -1,5 +1,5 @@
 /**
- * `comb codegen` over whole projects, the layouts of the 0.7.0 review (fresh/codegen/proj and
+ * `database codegen` over whole projects, the layouts of the 0.7.0 review (fresh/codegen/proj and
  * proj2): two databases in one folder, two databases sharing one output and one package.json, and
  * a database named apart from its tables file. Each database gets only its own tables and its own
  * package exports, and every generated import resolves under tsc.
@@ -16,10 +16,10 @@ import { c } from "@workerstack/database/sqlite/columns"
 export const ${name}Item = sqliteTable("${name}_item", { id: c.id("it${name}"), name: c.text("name").notNull() })
 `
 
-describe("comb codegen: two databases in one folder (D1)", () => {
+describe("database codegen: two databases in one folder (D1)", () => {
 	it("gives each database only the tables its own tables file declares", async () => {
 		const dir = project({
-			"comb.config.ts": `export default { databases: {
+			"database.config.ts": `export default { databases: {
 	core: { tables: "./src/db/db.core.tables.ts" },
 	audit: { tables: "./src/db/db.audit.tables.ts" },
 } }\n`,
@@ -41,12 +41,12 @@ const sharedOutput = (order: readonly string[]) =>
 		.map((name) => `${name}: { tables: "./src/${name}/db.${name}.tables.ts", output: { default: "./src/gen" } }`)
 		.join(", ")} } }\n`
 
-describe("comb codegen: two databases sharing one output and one package.json (D2, S6)", () => {
+describe("database codegen: two databases sharing one output and one package.json (D2, S6)", () => {
 	it.each([[["core", "audit"]], [["audit", "core"]]])(
 		"keeps each database's _shared file and exports, namespaced by database, in config order %j",
 		async (order) => {
 			const dir = project({
-				"comb.config.ts": sharedOutput(order),
+				"database.config.ts": sharedOutput(order),
 				"src/audit/db.audit.tables.ts": tables("audit"),
 				"src/core/db.core.tables.ts": tables("core"),
 			})
@@ -66,7 +66,7 @@ describe("comb codegen: two databases sharing one output and one package.json (D
 	)
 })
 
-describe("comb codegen: a database named apart from its tables file (D3)", () => {
+describe("database codegen: a database named apart from its tables file (D3)", () => {
 	it.each([
 		["with output.default", ', output: { default: "./src/gen" }', "src/gen"],
 		["without it", "", "src/db"],
@@ -74,7 +74,7 @@ describe("comb codegen: a database named apart from its tables file (D3)", () =>
 		"writes ORM and relations imports that resolve, %s",
 		async (_, output, outDir) => {
 			const dir = project({
-				"comb.config.ts": `export default { databases: { main: { tables: "./src/db/db.core.tables.ts", dialect: "sqlite", driver: "d1"${output} } } }\n`,
+				"database.config.ts": `export default { databases: { main: { tables: "./src/db/db.core.tables.ts", dialect: "sqlite", driver: "d1"${output} } } }\n`,
 				"src/db/db.core.tables.ts": tables("core"),
 			})
 			await codegen(dir)
@@ -89,10 +89,10 @@ describe("comb codegen: a database named apart from its tables file (D3)", () =>
 /** A table name that breaks any string literal, block comment or SQL identifier written around it unescaped */
 const HOSTILE = 'quo"ted */ \\ end'
 
-describe("comb codegen: SQL names that are not plain identifiers", () => {
+describe("database codegen: SQL names that are not plain identifiers", () => {
 	it("writes every name it reads into valid TypeScript, comments and string literals alike", async () => {
 		const dir = project({
-			"comb.config.ts": `export default { databases: { core: { tables: "./src/db/db.core.tables.ts", fts: { ${JSON.stringify(HOSTILE)}: { columns: ["label"] } } } } }\n`,
+			"database.config.ts": `export default { databases: { core: { tables: "./src/db/db.core.tables.ts", fts: { ${JSON.stringify(HOSTILE)}: { columns: ["label"] } } } } }\n`,
 			"src/db/db.core.tables.ts": `import { sqliteTable, uniqueIndex } from "drizzle-orm/sqlite-core"
 import { c } from "@workerstack/database/sqlite/columns"
 export const account = sqliteTable("account", { id: c.id("acc") })
@@ -112,7 +112,7 @@ export const quoted = sqliteTable(${JSON.stringify(HOSTILE)}, {
 
 	it("writes a _shared file that typechecks when the database has no tables", async () => {
 		const dir = project({
-			"comb.config.ts": `export default { databases: { core: { tables: "./src/db/db.core.tables.ts" } } }\n`,
+			"database.config.ts": `export default { databases: { core: { tables: "./src/db/db.core.tables.ts" } } }\n`,
 			"src/db/db.core.tables.ts": "export {}\n",
 		})
 		await codegen(dir)

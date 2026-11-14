@@ -5,7 +5,7 @@
  * (tests/structure/pg-projects.test.ts), so an unset or empty URL fails a suite on its cause, never
  * later on whatever an empty URL breaks.
  */
-export const PG_URL_VAR = "COMB_TEST_PG_URL"
+export const PG_URL_VAR = "DATABASE_TEST_PG_URL"
 
 /** The server URL; unset or empty, the run fails, since a skipped suite would pass the gates. */
 export function pgUrl(env: NodeJS.ProcessEnv = process.env): string {

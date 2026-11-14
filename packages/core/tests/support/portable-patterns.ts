@@ -1,5 +1,5 @@
 /**
- * Declared patterns comb takes, each one rule under ECMAScript on every Node comb supports, Go's
+ * Declared patterns database takes, each one rule under ECMAScript on every Node database supports, Go's
  * RE2 and Rust's regex. `src/codegen/utils/pattern.grammar.test.ts` takes each, and the consumers
  * job compiles each on Node's floor, so a construct only a newer ECMAScript reads fails there.
  */

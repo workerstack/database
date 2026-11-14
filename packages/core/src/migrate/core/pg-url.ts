@@ -1,6 +1,6 @@
 /**
  * A Postgres URL read as libpq reads it, for each part of
- * comb that reaches the database itself or judges where a URL reaches: a query key over the URI's
+ * database that reaches the database itself or judges where a URL reaches: a query key over the URI's
  * part for the host, port, database, user and password, the userinfo percent-decoded, and a host
  * that is a path a Unix socket's directory. WHATWG's URL takes no socket target with a password,
  * and postgres.js reads none of libpq's query keys and sends each one it does not know to the
@@ -65,7 +65,7 @@ function userinfoOf(authority: string): { password: string | undefined; user: st
 /**
  * The host and port an authority's host part names, libpq's query over it. An empty host is
  * localhost over TCP, as Atlas's driver reads it: a deliberate divergence from libpq, whose default
- * socket would split comb's own reads from the server Atlas migrates. A socket target is spelled
+ * socket would split database's own reads from the server Atlas migrates. A socket target is spelled
  * with its directory, `?host=/run/postgresql`.
  */
 function hostOf(
@@ -120,7 +120,7 @@ const SSL_MODES: ReadonlySet<string> = /* @__PURE__ */ new Set([
 	"verify-full",
 ])
 
-// lookup-table: the sslmodes under which libpq, Atlas's driver and comb read no TLS file, falling back to no TLS
+// lookup-table: the sslmodes under which libpq, Atlas's driver and database read no TLS file, falling back to no TLS
 const READS_NO_FILES: ReadonlySet<string> = /* @__PURE__ */ new Set(["disable", "allow", "prefer"])
 /* a PKCS#8 or a legacy PEM key that needs a passphrase, which Atlas's driver cannot read */
 const ENCRYPTED_KEY = /-----BEGIN ENCRYPTED PRIVATE KEY-----|^Proc-Type: 4,ENCRYPTED$/m
@@ -187,7 +187,7 @@ const anyHost = (): undefined => undefined
 
 /**
  * postgres.js's `ssl` for `url`'s sslmode, its files read: none on a socket, and require where the URL
- * names none, as Atlas's driver reads it, so comb and Atlas read one URL one way
+ * names none, as Atlas's driver reads it, so database and Atlas read one URL one way
  */
 function sslOf(url: LibpqUrl, field: "devUrl" | "url"): unknown {
 	if (url.socket) return false
@@ -207,7 +207,7 @@ function sslOf(url: LibpqUrl, field: "devUrl" | "url"): unknown {
 	if (mode === "verify-ca" || (mode === "require" && files["ca"] !== undefined))
 		return { ...files, checkServerIdentity: anyHost, rejectUnauthorized: true }
 	if (mode === "require") return "require"
-	/* a hostaddr is where comb connects; the certificate still names the host */
+	/* a hostaddr is where database connects; the certificate still names the host */
 	if (mode === "verify-full")
 		return {
 			...files,
@@ -268,7 +268,7 @@ function undecodable(text: string): boolean {
 }
 
 /**
- * Why a Postgres URL comb cannot read is refused, by where it goes wrong, never naming its value:
+ * Why a Postgres URL database cannot read is refused, by where it goes wrong, never naming its value:
  * a bad escape in the query or in the host and database name; a socket
  * spelled as a percent-encoded host, which libpq reads and Atlas refuses; a bad escape in the user
  * name; else the password's

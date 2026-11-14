@@ -30,7 +30,7 @@ function seedMirrors(db: LocalDb, mirrors: ReadonlyArray<{ name: string; sql: st
 			// reason: an index the copy cannot build proves nothing, so its table is listed unproven with why
 			failed.push([
 				asciiFold(name),
-				`comb could not build its full-text index in the copy: ${(error as Error).message}`,
+				`database could not build its full-text index in the copy: ${(error as Error).message}`,
 			])
 		}
 	}

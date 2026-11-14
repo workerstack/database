@@ -3,12 +3,12 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { freshVersion, hashDir, nextVersion, snapshotDir, sqlFiles, sumHashes, verifySum } from "./atlas-dir.ts"
-import type { Run, RunResult } from "./process.ts"
+import type { MigrateRun, RunResult } from "./process.ts"
 
 const ok = (stdout = ""): RunResult => ({ code: 0, stderr: "", stdout })
 
 /** `atlas migrate hash` as a fake: the sum lists each file with its length as the hash */
-const fakeHash: Run = async (_cmd, args) => {
+const fakeHash: MigrateRun = async (_cmd, args) => {
 	const dir = (args[args.indexOf("--dir") + 1] as string).replace("file://", "")
 	const lines = sqlFiles(dir).map((file) => `${file} h1:${file.length}=`)
 	writeFileSync(join(dir, "atlas.sum"), `h1:total=\n${lines.join("\n")}\n`)
@@ -17,7 +17,7 @@ const fakeHash: Run = async (_cmd, args) => {
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-atlas-dir-"))
+	dir = mkdtempSync(join(tmpdir(), "database-atlas-dir-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
@@ -82,7 +82,7 @@ describe("a CRLF atlas.sum", () => {
 	})
 })
 
-/* S9 and K3 of the 0.15.0 review: what `comb migrate init` makes holds no file and no sum */
+/* S9 and K3 of the 0.15.0 review: what `database migrate init` makes holds no file and no sum */
 describe("verifySum and snapshotDir on a directory without atlas.sum", () => {
 	it("take a directory with no migration as an empty history", async () => {
 		await expect(verifySum(fakeHash, dir)).resolves.toBeUndefined()
@@ -94,9 +94,9 @@ describe("verifySum and snapshotDir on a directory without atlas.sum", () => {
 		}
 	})
 
-	it("refuse migrations with no sum, naming comb migrate diff", async () => {
+	it("refuse migrations with no sum, naming database migrate diff", async () => {
 		writeFileSync(join(dir, "1_a.sql"), "CREATE TABLE a (x int);")
-		const refusal = `${dir} has migrations but no atlas.sum; comb migrate diff writes a migration and its sum, and atlas migrate hash --dir file://${dir} hashes ones written by hand`
+		const refusal = `${dir} has migrations but no atlas.sum; database migrate diff writes a migration and its sum, and atlas migrate hash --dir file://${dir} hashes ones written by hand`
 		await expect(verifySum(fakeHash, dir)).rejects.toThrow(refusal)
 		await expect(snapshotDir(fakeHash, dir)).rejects.toThrow(refusal)
 	})
@@ -122,12 +122,12 @@ describe("snapshotDir", () => {
 		writeFileSync(join(dir, "1_a.sql"), "")
 		await hashDir(fakeHash, dir)
 		writeFileSync(join(dir, "2_b.sql"), "")
-		const own = mkdtempSync(join(tmpdir(), "comb-atlas-tmp-"))
+		const own = mkdtempSync(join(tmpdir(), "database-atlas-tmp-"))
 		const shared = process.env["TMPDIR"]
 		process.env["TMPDIR"] = own
 		try {
 			await expect(snapshotDir(fakeHash, dir)).rejects.toThrow(`${dir}/atlas.sum does not match its migrations`)
-			expect(readdirSync(own).filter((name) => name.startsWith("comb-migrate-snapshot-"))).toEqual([])
+			expect(readdirSync(own).filter((name) => name.startsWith("database-migrate-snapshot-"))).toEqual([])
 		} finally {
 			if (shared === undefined) delete process.env["TMPDIR"]
 			else process.env["TMPDIR"] = shared

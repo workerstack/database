@@ -1,8 +1,8 @@
 /**
  * CS1, CS2, CS3 of r22b: a JSON Schema reader compiles `pattern` under `u` (ECMA-262's unicode
  * mode, as Ajv does), and Go's and Rust's validators compile it with RE2 or its subset, which has
- * no lookaround and no backreference (README, "Go's and Rust's validators compile every comb
- * document"). So every pattern comb publishes, its own or a declared one, compiles under both, and
+ * no lookaround and no backreference (README, "Go's and Rust's validators compile every database
+ * document"). So every pattern database publishes, its own or a declared one, compiles under both, and
  * the field's zod schema takes exactly what a reader built from the published document takes.
  */
 import { Ajv2020 } from "ajv/dist/2020.js"
@@ -290,8 +290,8 @@ const annotationsOf = (node: unknown): string[] =>
 
 /*
  * AA10, A2-2 of r22: a reader checks `format` too, with every format ajv-formats 3 defines, in
- * Ajv's default strict mode, which refuses a format it does not know; comb's `x-` keys are
- * annotations it declares, but `x-comb-format`, whose registry a reader checks as §2.1 says. What it
+ * Ajv's default strict mode, which refuses a format it does not know; database's `x-` keys are
+ * annotations it declares, but `x-database-format`, whose registry a reader checks as §2.1 says. What it
  * takes: the field's transforms applied, then the schema
  */
 function readerOf(field: Node, defs: unknown, re2 = false): (value: string) => boolean {
@@ -299,17 +299,17 @@ function readerOf(field: Node, defs: unknown, re2 = false): (value: string) => b
 		new Ajv2020({ logger: false, validateFormats: true, ...(re2 ? { code: { regExp: re2Engine } } : {}) }),
 	)
 	ajv.addKeyword({
-		keyword: "x-comb-format",
+		keyword: "x-database-format",
 		validate: (format: string, data: unknown) => typeof data !== "string" || takesFormat(format, data),
 	})
-	for (const key of new Set(annotationsOf({ defs, field }))) if (key !== "x-comb-format") ajv.addKeyword(key)
+	for (const key of new Set(annotationsOf({ defs, field }))) if (key !== "x-database-format") ajv.addKeyword(key)
 	const validate = ajv.compile({ ...field, $defs: defs ?? {} })
-	const transforms = (field["x-comb-transform"] as string[] | undefined) ?? []
+	const transforms = (field["x-database-transform"] as string[] | undefined) ?? []
 	return (value) =>
 		validate(transforms.reduce((text, name) => (TRANSFORMS[name] as (t: string) => string)(text), value))
 }
 
-describe("the patterns comb publishes (CS1, CS2, CS3; siblings: the id, the MAC, the interval and the email patterns)", () => {
+describe("the patterns database publishes (CS1, CS2, CS3; siblings: the id, the MAC, the interval and the email patterns)", () => {
 	it("each compile under u and under RE2, with no lookaround and no backreference", async () => {
 		const refused: string[] = []
 		for (const { dialect, name, schema } of await lanes())

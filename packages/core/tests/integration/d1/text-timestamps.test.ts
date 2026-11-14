@@ -50,7 +50,7 @@ const WALKS = (["s", "m"] as const).flatMap((key) =>
 
 describe("TEXT in a SQLite timestamp column pages or is refused by name (B2-3 of area B; sibling: AB3's seconds)", () => {
 	it.each(["table", "listOptions"] as const)(
-		"strips _combTextKeys from the %s page's rows, a TEXT key's row included",
+		"strips _cursorTextKeys from the %s page's rows, a TEXT key's row included",
 		async (shape) => {
 			for (const key of ["s", "m"] as const) {
 				const rows = await firstPage(await dbsFor(shape), { direction: "desc", key, shape })
@@ -58,7 +58,7 @@ describe("TEXT in a SQLite timestamp column pages or is refused by name (B2-3 of
 					rows.map((row) => row["id"]),
 					key,
 				).toEqual([TEXT_SERVED.desc[0]])
-				expect(rows[0], key).not.toHaveProperty("_combTextKeys")
+				expect(rows[0], key).not.toHaveProperty("_cursorTextKeys")
 			}
 		},
 	)

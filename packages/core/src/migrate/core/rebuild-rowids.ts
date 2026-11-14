@@ -81,7 +81,7 @@ function renumberedBy(
 
 /**
  * A closure table's columns as the keep table holds them: its rowid first when it carries one
- * apart and it fits; comb 0.8 (`legacy`) carried every rowid table's
+ * apart and it fits; database 0.8 (`legacy`) carried every rowid table's
  */
 function kept(table: string, schema: ExtractedSchema, legacy: boolean): { columns: string[]; rowid: boolean } {
 	const columns = stored(table, schema)

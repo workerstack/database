@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// `bun scripts/registries.ts`: fetch the pinned release of each registry comb's text formats check, and write the
+// `bun scripts/registries.ts`: fetch the pinned release of each registry database's text formats check, and write the
 // modules that hold them under packages/core/src/formats/. The releases are the constants below and every list is
 // sorted, so a rerun writes the same bytes; when a source releases, raise its constant, rerun, and review the diff of
 // the five modules. A source whose shape changed fails here, by name, rather than writing a short list.

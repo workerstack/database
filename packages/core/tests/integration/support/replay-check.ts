@@ -21,7 +21,7 @@ export const replayDatabases = async (role: string): Promise<string[]> =>
 	(
 		await query(
 			pgUrl(),
-			`SELECT datname FROM pg_database WHERE datname LIKE 'comb\\_replay\\_%' AND datacl::text LIKE '%${role}=%'`,
+			`SELECT datname FROM pg_database WHERE datname LIKE 'database\\_replay\\_%' AND datacl::text LIKE '%${role}=%'`,
 		)
 	).map((row) => String(row["datname"]))
 

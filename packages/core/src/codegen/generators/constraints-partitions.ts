@@ -1,5 +1,5 @@
 /**
- * comb.config.ts's `partitions` checked against the analyzed tables, for the constraint map: each
+ * database.config.ts's `partitions` checked against the analyzed tables, for the constraint map: each
  * partitioned table's partitions as its entry lists them.
  */
 import type { TableMeta } from "../analyzer-types.ts"

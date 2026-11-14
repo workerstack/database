@@ -1,8 +1,8 @@
 /**
- * F53 of the 0.13.0 round: a consumer's TypeScript resolves the relative imports comb writes. Under
+ * F53 of the 0.13.0 round: a consumer's TypeScript resolves the relative imports database writes. Under
  * `node16` or `nodenext` a relative import names its file's extension, `.js` for a TypeScript file,
  * or the `.ts` itself under `allowImportingTsExtensions`; under `bundler` it may leave it out, as
- * comb always did. codegen reads the consumer's tsconfig and writes each in the form it takes.
+ * database always did. codegen reads the consumer's tsconfig and writes each in the form it takes.
  */
 import fs from "node:fs"
 import path from "node:path"
@@ -31,7 +31,7 @@ function relativeImports(dir: string): string[] {
 		)
 }
 
-/* the lines of tsc's output that name a generated file: comb's own source imports `.ts` paths, which only
+/* the lines of tsc's output that name a generated file: database's own source imports `.ts` paths, which only
    a project with allowImportingTsExtensions compiles, as the README says, so it is no part of this check */
 const generatedErrors = (output: string) => output.split("\n").filter((line) => line.includes(".gen.ts"))
 
@@ -46,7 +46,7 @@ async function generated(compilerOptions: Record<string, unknown>): Promise<stri
 	return dir
 }
 
-describe("comb codegen's relative imports, as the consumer resolves them (F53)", () => {
+describe("database codegen's relative imports, as the consumer resolves them (F53)", () => {
 	const NODENEXT = { module: "nodenext", moduleResolution: "nodenext" }
 
 	it("writes .js under nodenext, which tsc resolves there", async () => {

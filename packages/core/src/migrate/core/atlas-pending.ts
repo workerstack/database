@@ -19,7 +19,7 @@ function named<T>(name: string, read: () => T): T {
 	try {
 		return read()
 	} catch (error) {
-		throw new Error(`comb could not read ${name}: ${(error as Error).message}`, { cause: error })
+		throw new Error(`database could not read ${name}: ${(error as Error).message}`, { cause: error })
 	}
 }
 
@@ -58,7 +58,7 @@ export function readPending(
 		schema = schemaOfRead(file, readAs.schema, before)
 		const { unreadable } = file.read
 		unread ??=
-			unreadable && `comb could not read ${Name}: ${JSON.stringify(unreadable.statement)} (${unreadable.error})`
+			unreadable && `database could not read ${Name}: ${JSON.stringify(unreadable.statement)} (${unreadable.error})`
 		if (!waiting.has(Name)) continue
 		at ??= before.statements.length
 		moves ||= movesStorage(file.read.statements.map(({ tree }) => tree))

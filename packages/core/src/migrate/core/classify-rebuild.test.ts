@@ -54,7 +54,7 @@ describe("rebuildFinding", () => {
 			),
 		).toEqual({
 			level: "cautious",
-			note: "rebuilds t; comb keeps the rows of c; c gets new rowids",
+			note: "rebuilds t; database keeps the rows of c; c gets new rowids",
 		})
 	})
 
@@ -104,14 +104,14 @@ CREATE TRIGGER post_audit AFTER UPDATE ON post BEGIN SELECT 1; END;`)
 		])
 	})
 
-	/* a trigger comb does not write, such as the audit one, is rated on its own, needing the file's approval */
+	/* a trigger database does not write, such as the audit one, is rated on its own, needing the file's approval */
 	it("drops no trigger the file creates again, so its rebuild copies every column", () => {
 		const again = `CREATE TRIGGER post_ai AFTER INSERT ON post BEGIN INSERT INTO post_fts(rowid, title) VALUES (new.id, new.title); END;
 CREATE TRIGGER post_audit AFTER UPDATE ON post BEGIN SELECT 1; END;`
 		const rated = classifyMigration(rebuildPost(again), { before: history, dialect: "sqlite" })
 		expect(rated.cautiousStatements).toEqual(["DROP TABLE `post` (rebuilds post, copying every column)"])
 		expect(rated.unsafeStatements).toEqual([
-			"CREATE TRIGGER post_audit AFTER UPDATE ON post BEGIN SELECT 1; END (comb rates every trigger change unsafe; approve it in the file)",
+			"CREATE TRIGGER post_audit AFTER UPDATE ON post BEGIN SELECT 1; END (database rates every trigger change unsafe; approve it in the file)",
 		])
 	})
 })

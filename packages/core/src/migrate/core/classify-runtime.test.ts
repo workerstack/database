@@ -12,7 +12,7 @@ describe("runtimeFindings", () => {
 		},
 	)
 
-	/* S4 of r19: on is the state comb's transaction keeps anyway, and a read changes nothing, so neither carries the note */
+	/* S4 of r19: on is the state database's transaction keeps anyway, and a read changes nothing, so neither carries the note */
 	it.each(["PRAGMA foreign_keys = on", "PRAGMA foreign_keys(1)", "PRAGMA foreign_keys"])(
 		"gives %j no finding of its own",
 		(sql) => {
@@ -24,12 +24,12 @@ describe("runtimeFindings", () => {
 		expect(runtimeFindings('PRAGMA "writable_schema" = 1').map((finding) => finding.level)).toEqual(["unsafe"])
 	})
 
-	it("rates a pragma by name: comb's own nothing, foreign_keys cautious, writable_schema unsafe, any other nothing", () => {
+	it("rates a pragma by name: database's own nothing, foreign_keys cautious, writable_schema unsafe, any other nothing", () => {
 		expect(runtimeFindings("PRAGMA main.defer_foreign_keys = on")).toEqual([])
 		expect(runtimeFindings("PRAGMA foreign_keys = off")).toEqual([
 			{
 				level: "cautious",
-				note: "does nothing inside the transaction comb runs each file in: foreign keys stay on, and comb migrate diff writes defer_foreign_keys instead",
+				note: "does nothing inside the transaction database runs each file in: foreign keys stay on, and database migrate diff writes defer_foreign_keys instead",
 			},
 		])
 		expect(runtimeFindings("PRAGMA WRITABLE_SCHEMA = 1")[0]?.level).toBe("unsafe")
@@ -135,7 +135,7 @@ describe("runtimeFindings on foreign_keys's value (S2 of r20)", () => {
 		"'1'",
 		"+1",
 		"+ 1",
-	])("gives foreign_keys = %s, which comb writes as on, no note", (value) => {
+	])("gives foreign_keys = %s, which database writes as on, no note", (value) => {
 		expect(levels(`PRAGMA foreign_keys = ${value}`)).toEqual([])
 		expect(levels(`PRAGMA foreign_keys(${value})`)).toEqual([])
 	})
@@ -166,9 +166,9 @@ describe("runtimeFindings on a trigger (M1)", () => {
 		expect(rated("CREATE TRIGGER t AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION f()")).toEqual([])
 	})
 
-	it("rates a trigger whose body comb cannot read cautious", () => {
+	it("rates a trigger whose body database cannot read cautious", () => {
 		expect(rated("CREATE TRIGGER t AFTER INSERT ON t FOR EACH ROW WHEN (1)")).toEqual([
-			{ level: "cautious", note: "a trigger whose body comb cannot read" },
+			{ level: "cautious", note: "a trigger whose body database cannot read" },
 		])
 	})
 })

@@ -1,5 +1,5 @@
 /**
- * The run's lock on the shared Postgres test server (comb-9d, plan 21): a session-level advisory lock
+ * The run's lock on the shared Postgres test server (database-9d, plan 21): a session-level advisory lock
  * on one fixed key, so no two runs of suites that reach the server overlap on it, however each was
  * started. vitest's Postgres projects take it in their global setup (tests/integration/support/
  * pg-run-lock.ts); a suite that runs apart from them (bun:test, the consumer cells, e2e) takes it in
@@ -12,8 +12,8 @@
  */
 import pg from "pg"
 
-/** The lock's key pair: comb's test pair, apart from stale-replay.ts's ('comb test', 'a replay left') */
-export const RUN_KEY = "hashtext('comb test'), hashtext('a postgres run')"
+/** The lock's key pair: database's test pair, apart from stale-replay.ts's ('database test', 'a replay left') */
+export const RUN_KEY = "hashtext('database test'), hashtext('a postgres run')"
 
 /**
  * How long a suite's hook waits for the lock: past any one run of the Postgres suites, as their global
@@ -24,7 +24,7 @@ export const PG_LOCK_WAIT_MS = 60 * 60_000
 
 type Held = { holders: number; session: Promise<pg.Client> }
 
-const HELD = Symbol.for("comb.test.pg-run-lock")
+const HELD = Symbol.for("database.test.pg-run-lock")
 const store = globalThis as typeof globalThis & { [HELD]?: Held }
 
 /**
@@ -39,7 +39,7 @@ async function take(url: string): Promise<pg.Client> {
 		if (rows[0]?.got !== true) {
 			const { host, pathname } = new URL(url)
 			process.stderr.write(
-				`[comb] waiting for another run's Postgres suites on ${host}${pathname}: advisory lock (${RUN_KEY})\n`,
+				`[database] waiting for another run's Postgres suites on ${host}${pathname}: advisory lock (${RUN_KEY})\n`,
 			)
 			await session.query(`SELECT pg_advisory_lock(${RUN_KEY})`)
 		}

@@ -3,7 +3,7 @@
  * comments blanked, a `DO` body read as the code it runs. Names come back unquoted, and a list or
  * an action list splits only at its top-level commas.
  */
-import type { Dialect } from "../types.ts"
+import type { MigrateDialect } from "../types.ts"
 import { bodyText, segments } from "../../sql-lexer.ts"
 import { NEVER_NAMES } from "./sqlite-keywords.ts"
 
@@ -28,16 +28,16 @@ const unquote = (name: string): string => [...name.matchAll(PARTS)].map((match) 
 const lastPart = (name: string): string => unquote(name).split(".").at(-1) as string
 
 /**
- * How names are keyed: SQLite's way, or Postgres's under the schema comb scopes every URL's
+ * How names are keyed: SQLite's way, or Postgres's under the schema database scopes every URL's
  * search_path to, where an unqualified name resolves
  */
 type Naming = "sqlite" | { schema: string }
 
 /** The naming of `dialect`, a Postgres one under `schema` */
-const namingOf = (dialect: Dialect, schema = "public"): Naming => (dialect === "sqlite" ? "sqlite" : { schema })
+const namingOf = (dialect: MigrateDialect, schema = "public"): Naming => (dialect === "sqlite" ? "sqlite" : { schema })
 
 /** The dialect a naming reads names as */
-const dialectOf = (naming: Naming): Dialect => (naming === "sqlite" ? "sqlite" : "postgres")
+const dialectOf = (naming: Naming): MigrateDialect => (naming === "sqlite" ? "sqlite" : "postgres")
 
 /**
  * The name a table, trigger or routine is matched by, as `naming` resolves it. SQLite matches
@@ -60,7 +60,7 @@ function nameKey(name: string, naming: Naming): string {
 const asciiFold = (name: string): string => name.replace(/[A-Z]+/g, (letters) => letters.toLowerCase())
 
 /** One name part as `dialect` resolves it (see nameKey) */
-function partKey(part: string, dialect: Dialect): string {
+function partKey(part: string, dialect: MigrateDialect): string {
 	const bare = unquotePart(part)
 	return dialect === "sqlite" || bare === part ? asciiFold(bare) : bare
 }

@@ -1,4 +1,4 @@
-/** The unique indexes an entity payload publishes, read as readCombEntityMeta reads them: absent, none; malformed, refused */
+/** The unique indexes an entity payload publishes, read as readEntityMeta reads them: absent, none; malformed, refused */
 import type { PartialUniqueIndexMeta, UniqueIndexMeta } from "./contract.ts"
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -8,7 +8,7 @@ const isStringArray = (value: unknown): value is string[] =>
 	Array.isArray(value) && value.every((item) => typeof item === "string")
 
 /**
- * `uniqueIndexes` arrived in a later comb than the contract's v1, so a payload
+ * `uniqueIndexes` arrived in a later database than the contract's v1, so a payload
  * without it is normal and reads as [] — absence is not an error, only a
  * malformed value is.
  */

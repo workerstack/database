@@ -1,10 +1,10 @@
 /**
- * KT9 of r22b: every consumer installs comb's `dependencies`, so each must be one its shipped files
+ * KT9 of r22b: every consumer installs database's `dependencies`, so each must be one its shipped files
  * need: a package a shipped source file imports, or an `@types` package for a module a shipped source
- * file or declaration names. A consumer's tsc reads comb's types/, which no longer names pluralize,
- * but an install with no types/ (a `file:` or git install, which never ran prepack) compiles comb's
+ * file or declaration names. A consumer's tsc reads database's types/, which no longer names pluralize,
+ * but an install with no types/ (a `file:` or git install, which never ran prepack) compiles database's
  * source, and without `@types/pluralize` fails it with TS7016 (the consumer cell "falls back to
- * comb's source"), so `@types/pluralize` stays a dependency.
+ * database's source"), so `@types/pluralize` stays a dependency.
  */
 import { matchesGlob } from "node:path"
 import { readdirSync, readFileSync } from "node:fs"
@@ -52,7 +52,7 @@ const typedBy = (name: string): string | undefined => {
 	return bare.includes("__") ? `@${bare.replace("__", "/")}` : bare
 }
 
-describe("comb's dependencies are what its shipped files need (KT9; sibling: an @types package)", () => {
+describe("database's dependencies are what its shipped files need (KT9; sibling: an @types package)", () => {
 	it("holds each to a shipped import, and an @types one to a shipped source or declaration naming its module", () => {
 		const imported = packagesIn(join(ROOT, "src"), ".ts", shipped)
 		const declared = withEmitted(ROOT, ({ dir }) => packagesIn(dir, ".d.ts"))

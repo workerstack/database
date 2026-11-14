@@ -38,7 +38,7 @@ describe("a libsql target is proven on libsql's engine (SL3; sibling: SD1's D1 e
 			const check = await migrateCli(project.dir, ["migrate", "check", "core"])
 			expect(check.code).toBe(1)
 			expect(check.errors.join("\n")).toMatch(
-				/0002_new\.sql is unsafe \(proof run: comb could not run this in the proof copy on libsql's SQLite 3\.\d+\.\d+: /,
+				/0002_new\.sql is unsafe \(proof run: database could not run this in the proof copy on libsql's SQLite 3\.\d+\.\d+: /,
 			)
 		} finally {
 			project.dispose()

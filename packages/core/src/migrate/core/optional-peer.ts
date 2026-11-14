@@ -1,14 +1,14 @@
 /**
- * comb's optional peers, each with the range packages/core/package.json states for it
- * (tests/structure/peers.test.ts holds the two equal), and the one refusal comb gives when a
- * command needs a peer the project does not have: the package, its range, why comb
+ * database's optional peers, each with the range packages/core/package.json states for it
+ * (tests/structure/peers.test.ts holds the two equal), and the one refusal database gives when a
+ * command needs a peer the project does not have: the package, its range, why database
  * needs it here, and an install that lands in range. A peer outside its range is refused as one
  * missing, naming the version found. What each migrate command needs on each provider
  * (peer-needs.ts) the CLI resolves here before any connect, fetch, spawn or Atlas call.
- * A peer comb spawns is resolved from the
+ * A peer database spawns is resolved from the
  * project, cwd up, and that one package is checked, read and run: PATH never counts.
  * Atlas, which no package ships, is a row of the same table, its version read from `atlas version`,
- * as is ts-morph for a SQLite diff whose comb.config.ts declares FTS.
+ * as is ts-morph for a SQLite diff whose database.config.ts declares FTS.
  */
 import { existsSync, readFileSync } from "node:fs"
 import { createRequire } from "node:module"
@@ -19,7 +19,7 @@ import { ATLAS, type BinNeed, type Command, type Need, needsOf, type Provider, t
 import { admits, installedVersion, manifestOf } from "./peer-version.ts"
 import { ATLAS_INSTALL, ATLAS_RANGE, type BinPeer, type ProjectBin, type RunResult } from "./process.ts"
 
-// lookup-table: each optional peer and the range comb is tested against
+// lookup-table: each optional peer and the range database is tested against
 const OPTIONAL_PEER_RANGES = {
 	"@libsql/client": ">=0.17.4 <0.18",
 	"drizzle-kit": "1.0.0-rc.4 || 1.0.0-rc.5 || ^1.0.0",
@@ -31,28 +31,28 @@ const OPTIONAL_PEER_RANGES = {
 
 type OptionalPeer = keyof typeof OPTIONAL_PEER_RANGES
 
-/** A peer comb needs: an npm package, or Atlas on PATH */
+/** A peer database needs: an npm package, or Atlas on PATH */
 type Peer = OptionalPeer | "atlas"
 
 // lookup-table: each peer and its range, Atlas's among them
 const RANGES: Readonly<Record<Peer, string>> = { ...OPTIONAL_PEER_RANGES, atlas: ATLAS_RANGE }
 
-/* the peers comb spawns rather than imports, each on the runtime 0.20.1 ran it on: wrangler's
-   bin is a Node program that starts workerd, which comb under bun must not move onto bun; 0.20.1's `bun drizzle-kit`
-   followed the bin's node shebang, so drizzle-kit runs on whatever runs comb, needing no other */
-// lookup-table: each optional peer comb spawns, and the runtime that runs its bin: node, or comb's own
-const BIN_PEERS: Readonly<Record<BinPeer, "comb" | "node">> = { "drizzle-kit": "comb", wrangler: "node" }
+/* the peers database spawns rather than imports, each on the runtime 0.20.1 ran it on: wrangler's
+   bin is a Node program that starts workerd, which database under bun must not move onto bun; 0.20.1's `bun drizzle-kit`
+   followed the bin's node shebang, so drizzle-kit runs on whatever runs database, needing no other */
+// lookup-table: each optional peer database spawns, and the runtime that runs its bin: node, or database's own
+const BIN_PEERS: Readonly<Record<BinPeer, "database" | "node">> = { "drizzle-kit": "database", wrangler: "node" }
 
 /** The bin peers a command resolved, each the one package it checked and runs */
 type Peers = { readonly [P in BinPeer]?: ProjectBin | undefined }
 
 const isBinPeer = (peer: OptionalPeer): peer is BinPeer => Object.hasOwn(BIN_PEERS, peer)
 
-/** A peer comb could not use: missing, or `found` at a version outside its range */
+/** A peer database could not use: missing, or `found` at a version outside its range */
 type Problem = { found?: string | undefined; peer: Peer; why: string }
 
 /**
- * What comb says of the peers in `problems`: each, its range and why comb needs it, and one install
+ * What database says of the peers in `problems`: each, its range and why database needs it, and one install
  * of them all, Atlas's by its install page
  */
 function refusal(problems: readonly Problem[]): string {
@@ -63,13 +63,13 @@ function refusal(problems: readonly Problem[]): string {
 	/* quoted, so a shell passes each range whole: bun, npm and pnpm each install its newest admitted version */
 	const npm = problems.flatMap(({ peer }) => (peer === "atlas" ? [] : [`"${peer}@${RANGES[peer]}"`]))
 	const atlas = problems.some(({ peer }) => peer === "atlas") ? [`atlas from ${ATLAS_INSTALL}`] : []
-	return `comb needs ${needs.join(", and ")}; install ${[npm.join(" "), ...atlas].filter((part) => part !== "").join(", and ")}`
+	return `database needs ${needs.join(", and ")}; install ${[npm.join(" "), ...atlas].filter((part) => part !== "").join(", and ")}`
 }
 
-/** What comb says when the peer `need` names is missing */
+/** What database says when the peer `need` names is missing */
 const missingPeer = (need: Need): string => refusal([need])
 
-/** A peer comb needed and did not find, or found outside its range; its message is the whole report */
+/** A peer database needed and did not find, or found outside its range; its message is the whole report */
 class MissingPeerError extends Error {
 	override name = "MissingPeerError"
 }
@@ -84,7 +84,7 @@ function isMissing(error: unknown, peer: string): boolean {
 	return (typeof message === "string" && said.some((text) => message.includes(text))) || isMissing(cause, peer)
 }
 
-/* the failure of loading `peer`, as comb reports it: the refusal for a missing peer, any other as it is */
+/* the failure of loading `peer`, as database reports it: the refusal for a missing peer, any other as it is */
 function refusalOf(error: unknown, need: Need): unknown {
 	return isMissing(error, need.peer) ? new MissingPeerError(refusal([need]), { cause: error }) : error
 }
@@ -102,15 +102,15 @@ function refuseOutOfRange(need: Need, entry: string): void {
 	if (problem !== undefined) throw new MissingPeerError(refusal([problem]))
 }
 
-/** The entry of `peer` as comb's own imports resolve it */
+/** The entry of `peer` as database's own imports resolve it */
 const resolved = (peer: OptionalPeer): string => import.meta.resolve(peer)
 
-/** Where optionalPeer looks: `locate` finds the peer's entry, and `moduleUrl` (comb's own) tells a compiled executable */
+/** Where optionalPeer looks: `locate` finds the peer's entry, and `moduleUrl` (database's own) tells a compiled executable */
 type PeerSeams = { locate?: (() => string) | undefined; moduleUrl?: string | undefined }
 
 /**
- * What `load` loads: `peer`, or a module of comb's that imports it, once `locate` (the peer's
- * entry, as comb resolves it) shows it in range. A missing `peer` throws a MissingPeerError
+ * What `load` loads: `peer`, or a module of database's that imports it, once `locate` (the peer's
+ * entry, as database resolves it) shows it in range. A missing `peer` throws a MissingPeerError
  * naming it, its range and the install, as does one outside its range; any other failure passes
  * on as it is. A compiled executable is refused before either.
  */
@@ -168,14 +168,14 @@ function inProject(peer: OptionalPeer, cwd: string): string {
 	}
 }
 
-/** The bin peer whose file `entry` is, as comb spawns it: the bin its package.json names for it, on its runtime */
+/** The bin peer whose file `entry` is, as database spawns it: the bin its package.json names for it, on its runtime */
 function binAt(peer: BinPeer, entry: string): ProjectBin {
 	const manifest = manifestOf(peer, entry) as string
 	const { bin } = JSON.parse(readFileSync(manifest, "utf8")) as { bin?: unknown }
 	/* a string bin is the package's one bin, named as the package (manifestOf found it by that name) */
 	const path = typeof bin === "string" ? bin : (bin as Record<string, unknown> | undefined)?.[peer]
 	if (typeof path !== "string") throw new Error(`${manifest} names no ${peer} bin`)
-	const runtime = BIN_PEERS[peer] === "comb" ? process.execPath : "node"
+	const runtime = BIN_PEERS[peer] === "database" ? process.execPath : "node"
 	return { bin: join(dirname(manifest), path), manifest, peer, runtime }
 }
 
@@ -198,7 +198,7 @@ function refuseCompiledNeeds(command: Command, needs: readonly Requirement[], mo
 
 /**
  * Where requirePeers looks: `atlas` reads `atlas version`, `locate` finds an npm peer's entry, `fts`
- * says a SQLite diff declares FTS, and `moduleUrl` (comb's own) tells a compiled executable
+ * says a SQLite diff declares FTS, and `moduleUrl` (database's own) tells a compiled executable
  */
 type Finders = {
 	atlas: () => Promise<RunResult>
@@ -211,7 +211,7 @@ type Finders = {
 /**
  * Refuses `command` on `provider` unless each peer it needs is there and in range, naming every
  * one that is not in one refusal, with one install, and gives each bin peer it found. `locate`
- * finds a peer's entry: by default a bin peer in the project from `cwd` up, any other as comb's
+ * finds a peer's entry: by default a bin peer in the project from `cwd` up, any other as database's
  * own imports resolve it. Atlas is read once, by `atlas`, where the command runs it. A compiled
  * executable is refused first: for the child process a tables file loads in, or naming each peer
  * the command loads rather than spawns, which none there can.
@@ -254,14 +254,14 @@ async function requirePeers(
 /** The bin requirePeers resolved for `peer`, for a command whose row needs it */
 function binOf(peers: Peers, peer: BinPeer): ProjectBin {
 	const bin = peers[peer]
-	if (bin === undefined) throw new Error(`comb resolved no ${peer} for this command`)
+	if (bin === undefined) throw new Error(`database resolved no ${peer} for this command`)
 	return bin
 }
 
-/** The entry module of the package `bin` is from: the one package comb checked and spawns */
+/** The entry module of the package `bin` is from: the one package database checked and spawns */
 const binEntry = (bin: ProjectBin): string => createRequire(bin.manifest).resolve(dirname(bin.manifest))
 
-/** The module of the package `bin` is from, by its entry; refused in a compiled executable, which `moduleUrl` (comb's own) tells */
+/** The module of the package `bin` is from, by its entry; refused in a compiled executable, which `moduleUrl` (database's own) tells */
 async function importBin<T>(bin: ProjectBin, moduleUrl: string = import.meta.url): Promise<T> {
 	refuseCompiled(moduleUrl, compiledRefusal([bin.peer]))
 	return (await import(pathToFileURL(binEntry(bin)).href)) as T

@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest"
 import * as z from "zod"
-import type { CombEntityMetaInput } from "../../../src/meta.ts"
+import type { EntityMetaInput } from "../../../src/meta.ts"
 import {
-	carryCombMeta,
-	COMB_META_KEY,
-	COMB_META_VERSION,
-	combMeta,
-	readCombEntityMeta,
-	readCombMeta,
-	readCombQueryMeta,
+	carryDatabaseMeta,
+	DATABASE_META_KEY,
+	DATABASE_META_VERSION,
+	databaseMeta,
+	readEntityMeta,
+	readDatabaseMeta,
+	readQueryMeta,
 } from "../../../src/meta.ts"
 
-const entityInput: CombEntityMetaInput = {
+const entityInput: EntityMetaInput = {
 	generated: ["id", "created_at"],
 	identity: "id",
 	immutable: ["id"],
@@ -23,24 +23,24 @@ const entityInput: CombEntityMetaInput = {
 	uniqueIndexes: [],
 }
 
-describe("combMeta", () => {
+describe("databaseMeta", () => {
 	it("stamps the current contract version so callers never write it", () => {
-		const stamp = combMeta({ ...entityInput })
-		expect(stamp[COMB_META_KEY].v).toBe(COMB_META_VERSION)
+		const stamp = databaseMeta({ ...entityInput })
+		expect(stamp[DATABASE_META_KEY].v).toBe(DATABASE_META_VERSION)
 	})
 
 	it("nests everything under one reserved key", () => {
-		expect(Object.keys(combMeta({ ...entityInput }))).toEqual([COMB_META_KEY])
+		expect(Object.keys(databaseMeta({ ...entityInput }))).toEqual([DATABASE_META_KEY])
 	})
 })
 
 describe("stamped meta survives z.toJSONSchema", () => {
-	const schema = z.object({ id: z.string(), title: z.string() }).meta(combMeta({ ...entityInput }))
+	const schema = z.object({ id: z.string(), title: z.string() }).meta(databaseMeta({ ...entityInput }))
 
 	it("lands on the JSON Schema root, in both io views", () => {
 		for (const io of ["input", "output"] as const) {
 			const json = z.toJSONSchema(schema, { io })
-			expect(readCombEntityMeta(json)?.name).toBe("post")
+			expect(readEntityMeta(json)?.name).toBe("post")
 		}
 	})
 
@@ -48,75 +48,75 @@ describe("stamped meta survives z.toJSONSchema", () => {
 		const json = z.toJSONSchema(z.array(schema)) as unknown as { items?: unknown }
 		/* The reader is root-only on purpose — unwrapping has one owner, the
 		   consumer that already resolved which schema to read. */
-		expect(readCombEntityMeta(json)).toBeNull()
-		expect(readCombEntityMeta(json.items)?.name).toBe("post")
+		expect(readEntityMeta(json)).toBeNull()
+		expect(readEntityMeta(json.items)?.name).toBe("post")
 	})
 
 	it("survives an optional wrapper", () => {
 		const json = z.toJSONSchema(z.object({ post: schema.optional() })) as unknown as {
 			properties: { post: unknown }
 		}
-		expect(readCombEntityMeta(json.properties.post)?.name).toBe("post")
+		expect(readEntityMeta(json.properties.post)?.name).toBe("post")
 	})
 })
 
 describe("collision rules", () => {
-	const base = z.object({ id: z.string() }).meta(combMeta({ ...entityInput }))
+	const base = z.object({ id: z.string() }).meta(databaseMeta({ ...entityInput }))
 
 	it("merges with a user's own .meta() rather than replacing it", () => {
 		const json = z.toJSONSchema(base.meta({ description: "mine" })) as Record<string, unknown>
 		expect(json["description"]).toBe("mine")
-		expect(readCombEntityMeta(json)?.name).toBe("post")
+		expect(readEntityMeta(json)?.name).toBe("post")
 	})
 
 	it("leaves the original schema untouched — .meta() clones", () => {
 		base.meta({ description: "mine" })
 		const json = z.toJSONSchema(base) as Record<string, unknown>
 		expect(json["description"]).toBeUndefined()
-		expect(readCombEntityMeta(json)?.name).toBe("post")
+		expect(readEntityMeta(json)?.name).toBe("post")
 	})
 
 	it("lets a user deliberately overwrite the reserved key, and refuses the result if malformed", () => {
-		const clobbered = base.meta({ [COMB_META_KEY]: { nonsense: true } })
+		const clobbered = base.meta({ [DATABASE_META_KEY]: { nonsense: true } })
 		const messages: string[] = []
-		expect(readCombMeta(z.toJSONSchema(clobbered), { onDiagnostic: (m) => messages.push(m) })).toBeNull()
+		expect(readDatabaseMeta(z.toJSONSchema(clobbered), { onDiagnostic: (m) => messages.push(m) })).toBeNull()
 		expect(messages[0]).toContain("no valid integer")
 	})
 
-	it("carryCombMeta recovers facts that .extend() silently dropped", () => {
+	it("carryDatabaseMeta recovers facts that .extend() silently dropped", () => {
 		const extended = base.extend({ extra: z.string() })
-		expect(readCombEntityMeta(z.toJSONSchema(extended))).toBeNull()
+		expect(readEntityMeta(z.toJSONSchema(extended))).toBeNull()
 
-		const restored = carryCombMeta(z.toJSONSchema(base), extended)
+		const restored = carryDatabaseMeta(z.toJSONSchema(base), extended)
 		expect(restored).not.toBeNull()
-		expect(readCombEntityMeta(z.toJSONSchema(restored!))?.name).toBe("post")
+		expect(readEntityMeta(z.toJSONSchema(restored!))?.name).toBe("post")
 	})
 })
 
 describe("versioning", () => {
 	it("refuses a payload newer than the reader, rather than guessing", () => {
 		const messages: string[] = []
-		const future = { [COMB_META_KEY]: { ...entityInput, v: COMB_META_VERSION + 1 } }
+		const future = { [DATABASE_META_KEY]: { ...entityInput, v: DATABASE_META_VERSION + 1 } }
 
-		expect(readCombMeta(future, { onDiagnostic: (m) => messages.push(m) })).toBeNull()
+		expect(readDatabaseMeta(future, { onDiagnostic: (m) => messages.push(m) })).toBeNull()
 		expect(messages[0]).toContain("refusing to guess")
 	})
 
 	it("accepts a payload at or below the reader's version", () => {
-		expect(readCombMeta({ [COMB_META_KEY]: { ...entityInput, v: COMB_META_VERSION } })).not.toBeNull()
+		expect(readDatabaseMeta({ [DATABASE_META_KEY]: { ...entityInput, v: DATABASE_META_VERSION } })).not.toBeNull()
 	})
 
 	it("ignores unknown fields, so an additive producer change needs no reader change", () => {
 		const withExtras = {
-			[COMB_META_KEY]: { ...entityInput, futureField: ["anything"], v: COMB_META_VERSION },
+			[DATABASE_META_KEY]: { ...entityInput, futureField: ["anything"], v: DATABASE_META_VERSION },
 		}
-		const meta = readCombEntityMeta(withExtras)
+		const meta = readEntityMeta(withExtras)
 		expect(meta?.name).toBe("post")
 		expect(meta).not.toHaveProperty("futureField")
 	})
 
 	it("distinguishes 'known to be nothing' from 'not said' on softDelete", () => {
-		const hard = readCombEntityMeta({ [COMB_META_KEY]: { ...entityInput, softDelete: null, v: 1 } })
+		const hard = readEntityMeta({ [DATABASE_META_KEY]: { ...entityInput, softDelete: null, v: 1 } })
 		expect(hard?.softDelete).toBeNull()
 	})
 })
@@ -124,13 +124,13 @@ describe("versioning", () => {
 describe("versioning: states", () => {
 	it("treats a missing states field as null — it arrived after v1 shipped", () => {
 		const { states: _dropped, ...legacy } = entityInput
-		const meta = readCombEntityMeta({ [COMB_META_KEY]: { ...legacy, v: 1 } })
+		const meta = readEntityMeta({ [DATABASE_META_KEY]: { ...legacy, v: 1 } })
 		expect(meta?.states).toBeNull()
 	})
 
 	it("reads a well-formed states payload and drops transitions", () => {
-		const meta = readCombEntityMeta({
-			[COMB_META_KEY]: {
+		const meta = readEntityMeta({
+			[DATABASE_META_KEY]: {
 				...entityInput,
 				states: {
 					column: "status",
@@ -154,8 +154,8 @@ describe("versioning: states", () => {
 	it("refuses a malformed states payload rather than guessing", () => {
 		const messages: string[] = []
 		expect(
-			readCombMeta(
-				{ [COMB_META_KEY]: { ...entityInput, states: { column: 1 }, v: 1 } },
+			readDatabaseMeta(
+				{ [DATABASE_META_KEY]: { ...entityInput, states: { column: 1 }, v: 1 } },
 				{ onDiagnostic: (m) => messages.push(m) },
 			),
 		).toBeNull()
@@ -166,7 +166,7 @@ describe("versioning: states", () => {
 describe("versioning: uniqueIndexes", () => {
 	it("treats a missing uniqueIndexes field as [] — it arrived after v1 shipped", () => {
 		const { uniqueIndexes: _dropped, ...legacy } = entityInput
-		const meta = readCombEntityMeta({ [COMB_META_KEY]: { ...legacy, v: 1 } })
+		const meta = readEntityMeta({ [DATABASE_META_KEY]: { ...legacy, v: 1 } })
 		expect(meta?.uniqueIndexes).toEqual([])
 	})
 
@@ -175,8 +175,8 @@ describe("versioning: uniqueIndexes", () => {
 			{ columns: ["email"], name: "idx_user_email" },
 			{ columns: ["org_id", "slug"], extra: true, name: "idx_user_org_slug" },
 		]
-		const meta = readCombEntityMeta({
-			[COMB_META_KEY]: { ...entityInput, uniqueIndexes, v: 1 },
+		const meta = readEntityMeta({
+			[DATABASE_META_KEY]: { ...entityInput, uniqueIndexes, v: 1 },
 		})
 		expect(meta?.uniqueIndexes).toEqual([
 			{ columns: ["email"], name: "idx_user_email" },
@@ -196,8 +196,8 @@ describe("versioning: uniqueIndexes", () => {
 		for (const [label, uniqueIndexes] of cases) {
 			const messages: string[] = []
 			expect(
-				readCombMeta(
-					{ [COMB_META_KEY]: { ...entityInput, uniqueIndexes, v: 1 } },
+				readDatabaseMeta(
+					{ [DATABASE_META_KEY]: { ...entityInput, uniqueIndexes, v: 1 } },
 					{ onDiagnostic: (m) => messages.push(m) },
 				),
 				label,
@@ -213,13 +213,13 @@ describe("uniqueIndexes round-trip through JSON Schema", () => {
 			{ columns: ["email"], name: "idx_user_email" },
 			{ columns: ["org_id", "slug"], name: "idx_user_org_slug" },
 		]
-		const schema = z.object({ id: z.string() }).meta(combMeta({ ...entityInput, uniqueIndexes }))
-		expect(readCombEntityMeta(z.toJSONSchema(schema))?.uniqueIndexes).toEqual(uniqueIndexes)
+		const schema = z.object({ id: z.string() }).meta(databaseMeta({ ...entityInput, uniqueIndexes }))
+		expect(readEntityMeta(z.toJSONSchema(schema))?.uniqueIndexes).toEqual(uniqueIndexes)
 	})
 
 	it("reads zero indexes as []", () => {
-		const schema = z.object({ id: z.string() }).meta(combMeta({ ...entityInput, uniqueIndexes: [] }))
-		expect(readCombEntityMeta(z.toJSONSchema(schema))?.uniqueIndexes).toEqual([])
+		const schema = z.object({ id: z.string() }).meta(databaseMeta({ ...entityInput, uniqueIndexes: [] }))
+		expect(readEntityMeta(z.toJSONSchema(schema))?.uniqueIndexes).toEqual([])
 	})
 })
 
@@ -255,22 +255,22 @@ describe("reader rejects malformed payloads loudly", () => {
 	for (const [label, payload, expected] of cases) {
 		it(`refuses ${label}`, () => {
 			const messages: string[] = []
-			expect(readCombMeta({ [COMB_META_KEY]: payload }, { onDiagnostic: (m) => messages.push(m) })).toBeNull()
+			expect(readDatabaseMeta({ [DATABASE_META_KEY]: payload }, { onDiagnostic: (m) => messages.push(m) })).toBeNull()
 			expect(messages.join(" ")).toContain(expected)
 		})
 	}
 
 	it("returns null without a diagnostic when the key is simply absent", () => {
 		const messages: string[] = []
-		expect(readCombMeta({ type: "object" }, { onDiagnostic: (m) => messages.push(m) })).toBeNull()
+		expect(readDatabaseMeta({ type: "object" }, { onDiagnostic: (m) => messages.push(m) })).toBeNull()
 		expect(messages).toEqual([])
 	})
 })
 
 describe("kind narrowing", () => {
 	it("does not return an entity payload to a query reader, or the reverse", () => {
-		const stamped = { [COMB_META_KEY]: { ...entityInput, v: 1 } }
-		expect(readCombEntityMeta(stamped)).not.toBeNull()
-		expect(readCombQueryMeta(stamped)).toBeNull()
+		const stamped = { [DATABASE_META_KEY]: { ...entityInput, v: 1 } }
+		expect(readEntityMeta(stamped)).not.toBeNull()
+		expect(readQueryMeta(stamped)).toBeNull()
 	})
 })

@@ -111,7 +111,7 @@ const QUIET_PRAGMAS: readonly string[] = [
 	"recursive_triggers",
 ]
 
-/** Whether statement `stmt` is a PRAGMA that reads the schema: any but a quiet one, and one comb cannot read */
+/** Whether statement `stmt` is a PRAGMA that reads the schema: any but a quiet one, and one database cannot read */
 function reflectingPragma(stmt: string): boolean {
 	const code = codeOf(stmt, "sqlite")
 	return /^PRAGMA\b/i.test(code) && !QUIET_PRAGMAS.includes(pragmaOf(code)?.name as string)

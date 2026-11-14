@@ -9,7 +9,7 @@ import { compilerOptionsFor, tsconfigOptions } from "./ts-options.mjs"
 let dir: string
 
 beforeEach(() => {
-	dir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-module-graph-"))
+	dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-module-graph-"))
 })
 
 afterEach(() => fs.rmSync(dir, { force: true, recursive: true }))
@@ -170,7 +170,7 @@ describe("runtimeSpecifiers: a CommonJS module's top-level requires", () => {
 	})
 
 	it("reads a file with no package.json above it as CommonJS, as node does", () => {
-		const loose = fs.mkdtempSync(path.join(os.tmpdir(), "comb-module-graph-"))
+		const loose = fs.mkdtempSync(path.join(os.tmpdir(), "database-module-graph-"))
 		try {
 			fs.writeFileSync(path.join(loose, "a.ts"), `require("./b")\n`)
 			/* the walk sees only the scratch directory: a package.json above the system's temp directory is the machine's, not the test's */
@@ -213,9 +213,9 @@ export const all = [roles, b, c, d, e]
 	})
 })
 
-/* F53: the consumer's own options, which decide what its TypeScript takes of comb's output */
+/* F53: the consumer's own options, which decide what its TypeScript takes of database's output */
 describe("tsconfigOptions", () => {
-	it("is what the nearest tsconfig sets, and nothing where there is none, never comb's own defaults", () => {
+	it("is what the nearest tsconfig sets, and nothing where there is none, never database's own defaults", () => {
 		expect(tsconfigOptions(path.join(os.tmpdir(), "no-tsconfig-here", "a.ts"))).toEqual({})
 		write({
 			"tsconfig.json": JSON.stringify({ compilerOptions: { moduleResolution: "nodenext", module: "nodenext" } }),

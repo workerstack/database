@@ -1,4 +1,4 @@
-/** The syntax walk comb/public-jsdoc and its surface share: what of a declaration a consumer sees. */
+/** The syntax walk database/public-jsdoc and its surface share: what of a declaration a consumer sees. */
 import { describe, expect, it } from "vitest"
 import { walkPublic } from "./public-declarations.js"
 

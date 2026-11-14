@@ -1,5 +1,5 @@
 /**
- * comb starts processes in one place, src/migrate/core/process.ts. Everything else takes a `Run`,
+ * database starts processes in one place, src/migrate/core/process.ts. Everything else takes a `Run`,
  * so atlas, wrangler and drizzle-kit calls are testable with a fake and the real spawner is
  * tested once.
  */

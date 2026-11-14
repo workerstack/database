@@ -1,6 +1,6 @@
 /**
  * The D1 proof differential (plan 25's 2.4): generated live schemas and pending files that drop, rename and add
- * what triggers and views use, each checked by the tip's and 0.21.0's `comb migrate check`, and held to what D1
+ * what triggers and views use, each checked by the tip's and 0.21.0's `database migrate check`, and held to what D1
  * local then does with the file and an app's reads and writes. The fixed seeds and one fresh seed per run, printed;
  * the expectations table names the findings still open on each version. 0.20.1 is not compared: the D1 engine
  * proof under test came in 0.21.0 (SD1 of r22), so 0.20.1 has none.

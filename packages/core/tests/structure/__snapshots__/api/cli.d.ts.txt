@@ -1,53 +1,53 @@
 // cli/index.d.ts
-/** @workerstack/database/cli: run the comb CLI in process. */
+/** @workerstack/database/cli: run the database CLI in process. */
 export { CliError, type CliIo, processIo } from "./output.ts";
 export { help, runCli } from "./run.ts";
-export type { Terminal } from "./output.ts";
-export type { BinPeer, Run, RunOptions, RunResult } from "../migrate/core/process.ts";
+export type { CliTerminal } from "./output.ts";
+export type { BinPeer, MigrateRun, RunOptions, RunResult } from "../migrate/core/process.ts";
 
 // cli/output.d.ts
 /**
  * Where the CLI meets the process: the IO it writes and asks through, and the error it reports
  * as a message and an exit code. The only CLI module that touches the console.
  */
-import type { Run, RunResult } from "../migrate/core/process.ts";
+import type { MigrateRun, RunResult } from "../migrate/core/process.ts";
 import type { LiveRead } from "../migrate/core/pg-live-types.ts";
 import type { replayCatalog } from "../migrate/core/pg-replay.ts";
 /** Where the CLI reads its working directory, writes its output, asks, and starts processes. */
 export type CliIo = {
-    /** The folder the CLI finds comb.config.ts, comb.migrate.config.ts and their files in, and resolves relative paths against */
+    /** The folder the CLI finds database.config.ts, database.migrate.config.ts and their files in, and resolves relative paths against */
     cwd: string;
     /** Writes one line of a command's output, with no trailing newline; with --json, the command's one JSON object */
     out(line: string): void;
     /** Writes one line of diagnostics, a refusal or a question's context, with no trailing newline; never part of --json output */
     err(line: string): void;
-    /** How the CLI starts a process (atlas, wrangler, drizzle-kit): comb's own, which spawns it and resolves with its exit code and output, unless the embedder supplies one */
-    run?: Run | undefined;
+    /** How the CLI starts a process (atlas, wrangler, drizzle-kit): database's own, which spawns it and resolves with its exit code and output, unless the embedder supplies one */
+    run?: MigrateRun | undefined;
     /** Ask the person running the CLI a yes/no question; absent when nobody can answer (no TTY) */
     confirm?: ((question: string) => Promise<boolean>) | undefined;
 };
 /**
- * What a command reads besides its io, comb's own unless its tests fake one: typed by
- * comb's internals, so they stay off the public CliIo and reach the CLI through runCliWith alone.
+ * What a command reads besides its io, database's own unless its tests fake one: typed by
+ * database's internals, so they stay off the public CliIo and reach the CLI through runCliWith alone.
  */
 export type CliDeps = {
     /** How a Postgres baseline reads the database's catalog of what Atlas OSS does not compare, postgres.js unless a test fakes it */
     readPgObjects?: LiveRead | undefined;
-    /** How a Postgres baseline reads the history replayed on its dev database, comb's own (pg-replay.ts) unless a test fakes it */
+    /** How a Postgres baseline reads the history replayed on its dev database, database's own (pg-replay.ts) unless a test fakes it */
     replayPgHistory?: typeof replayCatalog | undefined;
-    /** How a diff, baseline or adoption gives the dev database a non-public target schema, comb's own unless a test fakes it */
+    /** How a diff, baseline or adoption gives the dev database a non-public target schema, database's own unless a test fakes it */
     readyPgDev?: ((target: {
         devUrl: string;
         schema: string;
     }) => Promise<void>) | undefined;
-    /** How a migrate command finds an optional peer's entry before its first I/O, as comb and `bun` find it unless a test fakes it */
+    /** How a migrate command finds an optional peer's entry before its first I/O, as database and `bun` find it unless a test fakes it */
     locatePeer?: ((peer: string) => string) | undefined;
     /** How a migrate command reads Atlas's version before its first I/O, `atlas version` through `run` unless a test fakes it */
     readAtlasVersion?: (() => Promise<RunResult>) | undefined;
 };
 /** The io a command runs on, with the seams runCliWith was given */
 export type CliContext = CliIo & CliDeps;
-/** What `comb migrate check` reports once every pending migration is approved */
+/** What `database migrate check` reports once every pending migration is approved */
 /** What a migrate apply, check or status found: the files it applied, or found applied, and those pending */
 export type MigrateOutcome = {
     applied: string[];
@@ -71,10 +71,10 @@ export declare class ShowHelp extends Error {
     constructor(text: string);
 }
 /**
- * The streams `processIo` asks its yes/no questions on, typed as the calls comb makes on them, so a
+ * The streams `processIo` asks its yes/no questions on, typed as the calls database makes on them, so a
  * consumer without Node's types reads them too: process.stdin and process.stderr, or any stream like them
  */
-export type Terminal = {
+export type CliTerminal = {
     /** Where the answers are read, a line each, in the terminal's cooked mode: it echoes and edits the line */
     input: {
         /** True when `input` is a terminal; any other value leaves `CliIo.confirm` absent, so nothing is asked */
@@ -111,14 +111,14 @@ type NextLine = () => Promise<string | undefined>;
  * of the listeners on it. Once it ends, every call resolves `undefined` at once; once it fails,
  * every call rejects with its error.
  */
-export declare function lineReader(input: Terminal["input"]): NextLine;
+export declare function lineReader(input: CliTerminal["input"]): NextLine;
 /**
- * The IO the comb binary runs with: the process's working directory, stdout for output, stderr for
+ * The IO the database binary runs with: the process's working directory, stdout for output, stderr for
  * diagnostics, and yes/no questions when `input` is a terminal. Questions are written to `output`,
  * stderr by default, so a command's stdout, its --json object among it, holds only what it prints.
  */
 export declare function processIo({ input, output, }?: {
-    [K in keyof Terminal]?: Terminal[K] | undefined;
+    [K in keyof CliTerminal]?: CliTerminal[K] | undefined;
 }): CliIo;
 export {};
 
@@ -127,19 +127,19 @@ import { type CliDeps, type CliIo } from "./output.ts";
 /** The help, from the declarations the commands parse with */
 export declare const help: () => string;
 /**
- * Runs the comb CLI on `argv` with `deps` in place of comb's own seams, for comb's tests.
+ * Runs the database CLI on `argv` with `deps` in place of database's own seams, for database's tests.
  * Of `io` it reads the documented fields alone, so a seam an io carries is never read.
  */
 export declare function runCliWith(argv: readonly string[], io: CliIo, deps: CliDeps): Promise<number>;
-/** Runs the comb CLI on `argv` (the arguments after the script) and returns its exit code. */
+/** Runs the database CLI on `argv` (the arguments after the script) and returns its exit code. */
 export declare function runCli(argv: readonly string[], io: CliIo): Promise<number>;
 
 // migrate/core/process.d.ts
-/** An optional peer comb spawns rather than imports */
+/** An optional peer database spawns rather than imports */
 export type BinPeer = "drizzle-kit" | "wrangler";
 /**
  * A bin peer as the project holds it: its package.json, the bin file it names for the peer, and the
- * runtime that runs it, `node` or the executable running comb (process.execPath)
+ * runtime that runs it, `node` or the executable running database (process.execPath)
  */
 export type ProjectBin = {
     bin: string;
@@ -153,13 +153,13 @@ export type RunResult = {
     code: number;
     /** Everything the process wrote to stdout, as UTF-8 */
     stdout: string;
-    /** Everything the process wrote to stderr, as UTF-8; on a failure comb made or saw, such as a timeout or a signal, it says what happened */
+    /** Everything the process wrote to stderr, as UTF-8; on a failure database made or saw, such as a timeout or a signal, it says what happened */
     stderr: string;
 };
 /**
- * The Atlas releases comb runs on, which comb reads from `atlas version` before a command's first
- * I/O and refuses outside it: the floor is the oldest release comb's integration suite
- * passes on, and the next major may change what comb reads from Atlas
+ * The Atlas releases database runs on, which database reads from `atlas version` before a command's first
+ * I/O and refuses outside it: the floor is the oldest release database's integration suite
+ * passes on, and the next major may change what database reads from Atlas
  */
 export declare const ATLAS_RANGE = ">=1.2.0 <2";
 /** Where Atlas, which no package ships, is installed from */
@@ -178,7 +178,7 @@ export type RunOptions = {
     peer?: BinPeer | undefined;
     /** Milliseconds before the process is stopped, which answers 124 as timeout(1) does; default none */
     timeoutMs?: number | undefined;
-    /** Milliseconds a process comb stopped gets to end before SIGKILL, as timeout(1)'s -k gives it; default 10 s */
+    /** Milliseconds a process database stopped gets to end before SIGKILL, as timeout(1)'s -k gives it; default 10 s */
     killAfterMs?: number | undefined;
 } & ({
     /** Text written to the child's stdin, which is then closed; closed with nothing written when omitted */
@@ -189,23 +189,23 @@ export type RunOptions = {
     /** No `input` with a lifeline: the child's stdin is never written */
     input?: undefined;
     /**
-     * The child's stdin left open and never written while comb runs, so its end tells the child
-     * comb is gone, however comb ended, a SIGKILL included
+     * The child's stdin left open and never written while database runs, so its end tells the child
+     * database is gone, however database ended, a SIGKILL included
      */
     lifeline: true;
 });
 /**
- * How comb starts a process (atlas, wrangler, drizzle-kit): `cmd` with `args`, no shell. It resolves
+ * How database starts a process (atlas, wrangler, drizzle-kit): `cmd` with `args`, no shell. It resolves
  * with the process's end, a failed or unstartable command among them, and never rejects for one.
  */
-export type Run = (cmd: string, args: readonly string[], options?: RunOptions) => Promise<RunResult>;
-/** Runs `cmd` and reports how it ended; it never rejects for a failed command. Started while a signal stops comb, it waits with the rest. */
-export declare const run: Run;
+export type MigrateRun = (cmd: string, args: readonly string[], options?: RunOptions) => Promise<RunResult>;
+/** Runs `cmd` and reports how it ended; it never rejects for a failed command. Started while a signal stops database, it waits with the rest. */
+export declare const run: MigrateRun;
 /**
  * What runs `bin`'s peer through `exec`: its runtime on the bin file of the package the project
- * holds, the one comb checked, never a name looked up on PATH
+ * holds, the one database checked, never a name looked up on PATH
  */
-export declare const runPeer: (exec: Run, bin: ProjectBin) => (args: readonly string[], options?: RunOptions) => Promise<RunResult>;
+export declare const runPeer: (exec: MigrateRun, bin: ProjectBin) => (args: readonly string[], options?: RunOptions) => Promise<RunResult>;
 
 // migrate/core/pg-live-types.d.ts
 /** The shape of a Postgres baseline's catalog read (pg-live-objects.ts), apart so the CLI's io names it without its code. */
@@ -306,7 +306,7 @@ type PgTarget = {
     devUrl: string;
     /** how long a statement waits for a lock before the migration fails, as `5s`, `1500ms` or `0` for no bound */
     lockTimeout: string;
-    /** the one schema comb migrates */
+    /** the one schema database migrates */
     schema: string;
     /** the database migrated: a direct, non-pooled URL */
     url: string;
@@ -359,7 +359,7 @@ declare function refuseUrlProblems(target: PgTarget, needs: AtlasNeeds): void;
  */
 declare function withAtlasEnv<T>(target: PgTarget, needs: AtlasNeeds, body: (atlas: AtlasEnv) => T): T;
 /**
- * What Atlas said on stderr as it succeeded, a line each: comb passes each on as a warning, as Atlas
+ * What Atlas said on stderr as it succeeded, a line each: database passes each on as a warning, as Atlas
  * OSS may say it left part of a schema out of what it compared
  */
 declare const atlasNotices: (stderr: string) => string[];
@@ -368,7 +368,7 @@ export { atlasConfig, type AtlasEnv, type AtlasNeeds, atlasNotices, atlasUrls, p
 // migrate/core/pg-live-objects.d.ts
 import { COMPARED } from "./pg-live-catalog.ts";
 import type { LiveObjects, LiveTarget } from "./pg-live-types.ts";
-/** The postgres.js client, as far as comb uses it */
+/** The postgres.js client, as far as database uses it */
 type Sql = {
     end(options?: {
         timeout?: number | undefined;
@@ -376,7 +376,7 @@ type Sql = {
     unsafe(query: string, params: unknown[]): Promise<Array<Record<string, unknown>>>;
 };
 type Connect = (options: Record<string, unknown>) => Sql;
-/** Where a postgres.js failure came from: the field whose URL comb connected to, and every URL whose secrets it may hold */
+/** Where a postgres.js failure came from: the field whose URL database connected to, and every URL whose secrets it may hold */
 type FailedAt = {
     field: "devUrl" | "url";
     url: string;
@@ -385,8 +385,8 @@ type FailedAt = {
 /**
  * What a postgres.js failure on `at.field` says: its message, or, for the AggregateError it throws
  * with none when every address refuses, each address's answer joined, each
- * secret of `at.urls` masked; for a server sslrootcert=system cannot verify, where comb's CAs came from.
- * comb's own words follow the mask, so a password that is one of them stays out of them
+ * secret of `at.urls` masked; for a server sslrootcert=system cannot verify, where database's CAs came from.
+ * database's own words follow the mask, so a password that is one of them stays out of them
  */
 declare function failureOf(error: unknown, at: FailedAt): string;
 /**
@@ -395,7 +395,7 @@ declare function failureOf(error: unknown, at: FailedAt): string;
  * work on one, that its cleanup would miss, while the cleanup's own queries go on
  */
 declare function pastStops(connect: Connect): Connect;
-/** postgres.js, every query past a stop (pastStops), or the refusal naming it, its range and `why` comb needs it here */
+/** postgres.js, every query past a stop (pastStops), or the refusal naming it, its range and `why` database needs it here */
 declare function loadPostgres(why: string): Promise<Connect>;
 /**
  * What `schema` holds of what Atlas OSS does not compare, read through `sql` by the one catalog
@@ -423,11 +423,12 @@ export { COMPARED, type Connect, failureOf, liveDrift, loadPostgres, pastStops, 
 // migrate/core/pg-replay-database.d.ts
 import type { Connect } from "./pg-live-objects.ts";
 type Sql = ReturnType<Connect>;
-declare const TAG = "comb_replay";
+declare const TAG = "database_replay";
 declare const STALE_MS: number;
 /** A Postgres error's SQLSTATE */
 declare const codeOf: (error: unknown) => unknown;
 declare const literal: (text: string) => string;
+type Session = Record<string, unknown>;
 /**
  * The backend `admin` runs on, as a replay's database name and role tag carry it, `<pid>_<start>`,
  * and the settings a replay connection takes: that owner as its application_name, by
@@ -441,13 +442,17 @@ declare function claim(admin: Sql): Promise<{
     version: number;
 }>;
 /**
- * What a replay whose run is over left: its databases, each with the backends it left in it and
- * whether it is a template, and its tagged roles
+ * The server's backends, and of them those of the replays over at `now`, in any database: a killed
+ * replay's own, which may still commit what its statement was making (a tagged role) until it ends
  */
+declare function overBackends(sql: Sql, now: number): Promise<{
+    pids: unknown[];
+    sessions: Session[];
+}>;
+/** What a replay whose run is over left: its databases, each with whether it is a template, and its tagged roles */
 type Leftovers = {
     databases: Array<{
         name: string;
-        pids: unknown[];
         template: boolean;
     }>;
     roles: string[];
@@ -455,9 +460,12 @@ type Leftovers = {
 /**
  * What replays over at `now` left on `sql`'s server, which a sweep takes: the replay databases of
  * any role, or only those `sql`'s role may drop (`droppable`), but one with a session in it other
- * than the backends its own replay left, and the tagged roles
+ * than the backends its own replay left, and the tagged roles; read with `sessions` when given
  */
-declare function leftovers(sql: Sql, now: number, droppable: boolean): Promise<Leftovers>;
+declare function leftovers(sql: Sql, now: number, { droppable, sessions: read }: {
+    droppable: boolean;
+    sessions?: readonly Session[] | undefined;
+}): Promise<Leftovers>;
 /** devUrl's options for one replay connection, notices unread; with `at`, the replay's own to its database, with its settings */
 declare function replayOptions(devUrl: string, at?: {
     database: string;
@@ -495,7 +503,7 @@ declare function copyExtensions(from: Sql, to: Sql, { makes, refused }: {
     makes: ReadonlySet<string>;
     refused: (name: string, error: unknown) => Error;
 }): Promise<(to: Sql) => Promise<void>>;
-export { claim, codeOf, copyExtensions, extensionsOf, leftovers, literal, makeDatabase, replayOptions, replayUrl, type Sql, STALE_MS, TAG, };
+export { claim, codeOf, copyExtensions, extensionsOf, leftovers, literal, makeDatabase, overBackends, replayOptions, replayUrl, type Sql, STALE_MS, TAG, };
 
 // migrate/core/pg-replay-statement.d.ts
 import type { Locked } from "./pg-held-types.ts";
@@ -605,7 +613,7 @@ import type { Snapshot } from "./pg-server-snapshot.ts";
  * One replay's state: its connection, the server as committed (`admin`), its database, the backend
  * that owns it, its role (`role`, which CURRENT_USER and its kin name in a file), whether that role
  * is a superuser, which reads pg_authid, whether it has CREATEROLE (`createrole`), and the roles it made; the
- * open transaction's own writes, comb's CREATE ROLEs', with the rows they left; the shared catalogs
+ * open transaction's own writes, database's CREATE ROLEs', with the rows they left; the shared catalogs
  * as last read committed (`seen`)
  */
 type Run = {
@@ -631,7 +639,7 @@ declare function devRoleOf(sql: Sql): Promise<{
     role: string;
     superuser: boolean;
 }>;
-/** `act` run, its writes to the shared catalogs counted as comb's own, with the rows of them that are `mine` */
+/** `act` run, its writes to the shared catalogs counted as database's own, with the rows of them that are `mine` */
 declare function own(run: Run, act: () => Promise<void>, mine: (subject: string) => boolean): Promise<void>;
 /**
  * The CREATE ROLE a replay runs for a history's `node`: the role with BARE's attributes and the
@@ -722,7 +730,7 @@ type Catalog = {
 declare const catalogsOf: (superuser: boolean) => Readonly<Record<string, Catalog>>;
 /** The fields of a row that differ, in order */
 declare const changedFields: (before: Record<string, unknown>, after: Record<string, unknown>) => string[];
-/** Rows by subject, each as JSON: what comb's own CREATE ROLE left them */
+/** Rows by subject, each as JSON: what database's own CREATE ROLE left them */
 type Rows = Map<string, string>;
 /** One row's change: its kind, its subject, the names it is about, the fields that changed, none when added or removed, and how it reads */
 type Change = {
@@ -742,7 +750,7 @@ declare function subjectRows({ catalogs, sql }: {
 /**
  * What the `counted` writes changed, by catalog in order, as the open transaction on `sql` sees the
  * server against the committed server `was` reads, through `catalogs`, one change per row; a row
- * still as comb's own CREATE ROLE left it (`ours`) is comb's, and no change. The committed server is
+ * still as database's own CREATE ROLE left it (`ours`) is database's, and no change. The committed server is
  * read before the transaction's read and after it, and a change is one only against both: what
  * another session commits meanwhile, on a server others share, is in one of them
  */
@@ -768,7 +776,7 @@ export { addWrites, CATALOGS, type Catalog, catalogsOf, type Change, changedFiel
  * backend's counts never see (pg-server-writes.ts). The read is the server's, another session's work
  * in it too, so each row carries the names of the objects it is about: a change is a file's when it
  * is to the replay's own database, or to a name the file spells (namesIn in sql-code.ts) beside a
- * statement that can run code comb cannot read (pg-replay-hidden.ts). A replay's own rows are left out, but
+ * statement that can run code database cannot read (pg-replay-hidden.ts). A replay's own rows are left out, but
  * for the fields of its own database's row that keep the cleanup from dropping it, which only that
  * replay changes. Beside the catalogs, the server's replication slots, which no catalog
  * holds.

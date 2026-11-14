@@ -1,5 +1,5 @@
 /**
- * The comb-local types a consumer meets in comb's public declarations but cannot import (KT6 of
+ * The database-local types a consumer meets in database's public declarations but cannot import (KT6 of
  * r22b): each type or value a public declaration names, through a type reference, an `extends` or
  * a `typeof`, that no export subpath exports, followed through the declarations of those it finds.
  * It walks the declarations a consumer's compiler reads, emitted from tsconfig.strict.json as the

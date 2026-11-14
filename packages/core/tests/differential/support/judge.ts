@@ -13,7 +13,7 @@ export type Verdict =
 	| { kind: "refused"; why: string }
 	| { kind: "fail"; shape: ShapeId | undefined; what: string }
 
-/* comb's deterministic refusals of a list it cannot page (500, sort_not_wired), which a cursor walk may meet */
+/* database's deterministic refusals of a list it cannot page (500, sort_not_wired), which a cursor walk may meet */
 const REFUSALS = new Set(["sort_not_wired", "page_not_wired"])
 
 /** Whether a SQL literal is a TEXT that reads as a number, as '10' or '-2.5' */

@@ -1,6 +1,6 @@
 /**
  * The runtime reader: load the tables module, find every drizzle table it exports, and read each
- * as drizzle built it (getTableConfig) and as comb's `c` helpers recorded it (combColumnMeta).
+ * as drizzle built it (getTableConfig) and as database's `c` helpers recorded it (columnMeta).
  * Objects a generated file must import, a c.json schema or a text or number column's schema, are
  * located by identity among the exports of the project modules the tables module loads.
  */
@@ -8,15 +8,15 @@ import { Column, getTableColumns, is, type SQL, type Table } from "drizzle-orm"
 import { ExtraConfigColumn, getTableConfig as pgConfig, IndexedColumn, PgDialect, PgTable } from "drizzle-orm/pg-core"
 import { getTableConfig as sqliteConfig, SQLiteDialect, SQLiteTable } from "drizzle-orm/sqlite-core"
 import { byCodeUnit } from "../utils/order.ts"
-import { combColumnMeta, type CombColumnMeta } from "../../meta/column.ts"
+import { columnMeta, type ColumnMeta } from "../../meta/column.ts"
 import { dimensionsOf, filledByDefault, type ReadColumn, unnamedUnique } from "./read-column.ts"
-import { columnSchemaOf, constraintsOf, refuseJsonDocument, skipped, statesOf, STRING_LIST } from "./read-comb.ts"
+import { columnSchemaOf, constraintsOf, refuseJsonDocument, skipped, statesOf, STRING_LIST } from "./read-database.ts"
 import type { ElementNulls } from "./element-types.ts"
 import type {
 	ModuleExport,
 	Snapshot,
 	SnapshotColumn,
-	SnapshotComb,
+	SnapshotDatabase,
 	SnapshotIndex,
 	SnapshotTable,
 } from "./snapshot-types.ts"
@@ -58,7 +58,7 @@ const locate = (value: unknown, context: Context): ModuleExport | null =>
 
 /** Where a c.json column's schema is exported; an error naming the column when nowhere, or for a schema that is no stored document */
 function jsonSchemaOf(
-	meta: CombColumnMeta,
+	meta: ColumnMeta,
 	column: ReadColumn,
 	{ at, context }: { at: string; context: Context },
 ): ModuleExport | null {
@@ -75,8 +75,8 @@ function jsonSchemaOf(
 	return schema
 }
 
-function combOf(column: ReadColumn, at: string, context: Context): SnapshotComb | null {
-	const meta = combColumnMeta(column)
+function databaseMetaOf(column: ReadColumn, at: string, context: Context): SnapshotDatabase | null {
+	const meta = columnMeta(column)
 	if (meta === undefined) return null
 	if (meta.values !== undefined && !STRING_LIST(meta.values)) throw new Error(`${at}: c.enum takes an array of strings`)
 	const own = columnSchemaOf(meta, at, { locate: (value) => locate(value, context), unloaded: context.unloaded })
@@ -97,7 +97,7 @@ function columnOf([key, column]: [string, ReadColumn], table: string, context: C
 	const dimensions = dimensionsOf(column, at)
 	return {
 		autoIncrement: column.autoIncrement === true,
-		comb: combOf(column, at, context),
+		database: databaseMetaOf(column, at, context),
 		columnType: column.columnType,
 		dataType: column.dataType,
 		dimensions,
@@ -269,7 +269,7 @@ function readTable(entry: [Table, string], context: Context): SnapshotTable {
 		return tableOf(entry, context)
 	} catch (error) {
 		if (!(error instanceof Error) || error.constructor === Error) throw error
-		throw new Error(`comb could not read table ${entry[1]}: ${error.message}`, { cause: error })
+		throw new Error(`database could not read table ${entry[1]}: ${error.message}`, { cause: error })
 	}
 }
 

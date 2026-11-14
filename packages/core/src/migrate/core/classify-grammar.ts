@@ -1,5 +1,5 @@
 /**
- * Default-deny: the statement shapes comb rates on its own. A statement is rated by the rules only
+ * Default-deny: the statement shapes database rates on its own. A statement is rated by the rules only
  * when it is a shape this module recognizes; every other is unsafe, named, and approved in the file
  * or not at all. Four review rounds found SQL the rules never read rated safe, one construct at a
  * time (a trigger's RAISE, a temp table shadowing a real one, a function in a DEFAULT); a closed
@@ -11,14 +11,14 @@
  * foreign-key pragmas; savepoints, and Postgres's transaction control (SQLite's is refused); ANALYZE, REINDEX, VACUUM and CLUSTER; CALL; policies
  * made, altered or dropped, which are cautious: a policy destroys no value, it changes which rows
  * a role sees, and it can be reversed. Not recognized, so unsafe: triggers, functions, procedures
- * and rules (made, replaced, altered or dropped), DO blocks, and every other pragma. The one trigger shape comb recognizes is
+ * and rules (made, replaced, altered or dropped), DO blocks, and every other pragma. The one trigger shape database recognizes is
  * the one it writes: an external-content FTS5 table's sync trigger, whose body only inserts the
  * row's columns or the `'delete'` command into that table; its DROP, when the file makes it again.
  * What a recognized statement writes, shadows or fires is the engine's to read: SQLite's in the
  * proof run, Postgres's parser in pg-tree.ts.
  */
 import type { ExtractedSchema } from "../migration-types.ts"
-import type { Dialect } from "../types.ts"
+import type { MigrateDialect } from "../types.ts"
 import type { Finding } from "./classify-alter.ts"
 import { nameKey, type Naming, pragmaOf, QNAME, unquote } from "./sql-code.ts"
 import { normalizeSql } from "./sql-scan.ts"
@@ -27,7 +27,7 @@ import { SYNC_TRIGGER, syncTriggerOf } from "./fts-sync.ts"
 /** What the grammar needs from the file: the schema before it, and the FTS sync triggers it makes */
 type GrammarContext = {
 	before: ExtractedSchema | undefined
-	dialect: Dialect
+	dialect: MigrateDialect
 	ftsTriggers: ReadonlySet<string>
 	naming: Naming
 	/** whether a Postgres parse-tree rule rated the whole statement (pg-tree.ts), which then needs no shape here */
@@ -123,7 +123,7 @@ function policyNote(code: string): string | undefined {
 }
 
 /**
- * The first two words of a SQLite statement comb does not recognize, as its reason names it, a TEMP
+ * The first two words of a SQLite statement database does not recognize, as its reason names it, a TEMP
  * or TEMPORARY left out; a Postgres statement is named by its parse tree's command tag
  */
 function kindOf(code: string): string {
@@ -134,27 +134,27 @@ function kindOf(code: string): string {
 		.join(" ")
 }
 
-/* the families default-deny rates unsafe by rule, whatever else comb reads of them: made, replaced, altered or dropped */
+/* the families default-deny rates unsafe by rule, whatever else database reads of them: made, replaced, altered or dropped */
 const DENIED =
 	/^(?:(?:CREATE (?:OR REPLACE )?(?:(?:TEMP|TEMPORARY) )?(?:CONSTRAINT )?|ALTER |DROP )(TRIGGER|FUNCTION|PROCEDURE|RULE)\b|(DO)\b)/i
 
 /**
- * Why comb rates an unrecognized statement unsafe: the rule, for a trigger or a routine, which
+ * Why database rates an unrecognized statement unsafe: the rule, for a trigger or a routine, which
  * another reading may describe as well; else that it does not recognize it
  */
 function unrecognized(code: string, kind = kindOf(code)): string {
-	/* a pragma comb does not write is rated by its own rule too (classify-runtime.ts), never "not recognized" */
-	if (/^PRAGMA\b/i.test(code)) return "comb rates every pragma it does not write unsafe; approve it in the file"
+	/* a pragma database does not write is rated by its own rule too (classify-runtime.ts), never "not recognized" */
+	if (/^PRAGMA\b/i.test(code)) return "database rates every pragma it does not write unsafe; approve it in the file"
 	const [, family, block] = DENIED.exec(code) ?? []
-	if (block !== undefined) return "comb rates every DO block unsafe; approve it in the file"
-	if (family !== undefined) return `comb rates every ${family.toLowerCase()} change unsafe; approve it in the file`
-	return `comb does not recognize ${kind}; approve it in the file`
+	if (block !== undefined) return "database rates every DO block unsafe; approve it in the file"
+	if (family !== undefined) return `database rates every ${family.toLowerCase()} change unsafe; approve it in the file`
+	return `database does not recognize ${kind}; approve it in the file`
 }
 
 /**
- * Whether `code` sets one of the foreign-key pragmas comb writes, on the main schema, however the name is spelled:
- * defer_foreign_keys as comb writes it, foreign_keys with any value, since each is a no-op inside the transaction
- * comb runs a file in (classify-runtime.ts notes the ones SQLite reads off)
+ * Whether `code` sets one of the foreign-key pragmas database writes, on the main schema, however the name is spelled:
+ * defer_foreign_keys as database writes it, foreign_keys with any value, since each is a no-op inside the transaction
+ * database runs a file in (classify-runtime.ts notes the ones SQLite reads off)
  */
 function foreignKeyPragma(code: string): boolean {
 	const pragma = pragmaOf(code)
@@ -165,7 +165,7 @@ function foreignKeyPragma(code: string): boolean {
 	)
 }
 
-/** What the grammar makes of one top-level statement: nothing when comb recognizes it as it is */
+/** What the grammar makes of one top-level statement: nothing when database recognizes it as it is */
 function grammarFindings(statement: string, ctx: GrammarContext): Finding[] {
 	/* an EXPLAIN is the statement it explains (ANALYZE runs it) */
 	const code = statement.replace(/^EXPLAIN (?:\([^)]*\) )?(?:(?:ANALYZE|ANALYSE|VERBOSE) )*/i, "")

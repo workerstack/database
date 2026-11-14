@@ -103,7 +103,7 @@ describe("parseFieldConstraints: every key the column types allow, and no other 
 
 	it("fails on a key it does not handle, naming it, rather than ignoring it", () => {
 		expect(() => parseFieldConstraints('c.text("n", { nmae: true })')).toThrow(
-			"/fixture/db.core.tables.ts: fixture.f: comb reads no constraint named nmae",
+			"/fixture/db.core.tables.ts: fixture.f: database reads no constraint named nmae",
 		)
 	})
 
@@ -252,11 +252,11 @@ describe("each c helper takes only the keys its constraint type names (CD9 of r2
 		expect(parseFieldConstraints('c.json("f", schema, { maxBytes: 9, tenant: false })').maxBytes).toBe(9)
 		expect(parseFieldConstraints('c.enum("f", ["a"], { tenant: true })').tenant).toBe(true)
 		expect(() => parseFieldConstraints('c.integer("f", { colour: true })')).toThrow(
-			"fixture.f: comb reads no constraint named colour",
+			"fixture.f: database reads no constraint named colour",
 		)
 	})
 
-	it("refuses, from a direct call, a key on a drizzle column and a helper comb has none of", () => {
+	it("refuses, from a direct call, a key on a drizzle column and a helper database has none of", () => {
 		const options = { fieldName: "f", filled: false, measure: "value", place: "t.f", values: null } as const
 		expect(() => fieldConstraintsOf({ min: 1 }, { ...options, helper: null })).toThrow(
 			"t.f: a drizzle column takes no min",
@@ -266,7 +266,7 @@ describe("each c helper takes only the keys its constraint type names (CD9 of r2
 				{},
 				{ ...options, helper: "bigint" as unknown as Parameters<typeof fieldConstraintsOf>[1]["helper"] },
 			),
-		).toThrow("t.f: comb has no helper c.bigint")
+		).toThrow("t.f: database has no helper c.bigint")
 	})
 })
 

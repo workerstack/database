@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import * as z from "zod"
 import { INTEGER_FORMATS, TEXT_FORMATS } from "../../../formats/catalog.ts"
-import * as comb from "../../../index.ts"
+import * as database from "../../../index.ts"
 import { fieldOf, parseField } from "../../__fixtures__/runtime.ts"
 import type { FieldMeta, ImportsMeta } from "../../analyzer-types.ts"
 import { generateExampleMeta, SHARED_META_KEYS, SHARED_META_VALUES } from "./example-meta.ts"
@@ -15,8 +15,8 @@ const code = (raw: string, overrides: Partial<FieldMeta> = {}) =>
 	generateExampleMeta(field(raw, overrides))?.code ?? null
 
 describe("generateExampleMeta", () => {
-	/* comb's own timestamp columns take timestampSchema, whose meta carries the example */
-	it("gives private, password, reference, JSON and comb-filled timestamp columns no example", () => {
+	/* database's own timestamp columns take timestampSchema, whose meta carries the example */
+	it("gives private, password, reference, JSON and database-filled timestamp columns no example", () => {
 		for (const raw of [
 			'c.text("f", { private: true })',
 			'c.text("f", { password: true })',
@@ -134,7 +134,7 @@ const evenMinutes = z.int().refine((value) => value % 2 === 0, { error: "Must be
 function createdOf(raw: string): { examples: unknown; schema: z.ZodType } {
 	const imports: ImportsMeta = { enumImports: new Map(), identifiers: new Map(), jsonSchemaImports: new Set() }
 	const generated = generateFieldSchema(fieldOf("f", raw), "create", { imports }) as string
-	const schema = new Function("z", "comb", "_m", `return ${generated}`)(z, comb, {}) as z.ZodType
+	const schema = new Function("z", "database", "_m", `return ${generated}`)(z, database, {}) as z.ZodType
 	const published = z.toJSONSchema(schema, { io: "input" }) as {
 		anyOf?: Array<{ examples?: unknown }>
 		examples?: unknown
@@ -178,9 +178,9 @@ describe("generateExampleMeta: a format column's example", () => {
 	})
 })
 
-/* plan 24: a column schema's rule may be a refine its published JSON Schema does not state, so comb knows no value it takes */
+/* plan 24: a column schema's rule may be a refine its published JSON Schema does not state, so database knows no value it takes */
 describe("generateExampleMeta: a schema'd column", () => {
-	it("gets no example of comb's", () => {
+	it("gets no example of database's", () => {
 		for (const raw of [
 			'c.text("f", { schema: dateOrder })',
 			'c.text("f", { format: "iso4217", schema: dateOrder })',

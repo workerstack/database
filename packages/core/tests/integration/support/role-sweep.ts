@@ -1,5 +1,5 @@
 /**
- * The test roles the Postgres suites make on the shared test server, comb_t_* (pg-roles.ts's
+ * The test roles the Postgres suites make on the shared test server, database_t_* (pg-roles.ts's
  * testRoles and unique), and the sweep of the ones a killed run left: each test drops its own as it
  * ends, which a killed run never reaches. The Postgres projects' global setup sweeps once the run's
  * lock is held (pg-run-lock.ts, then pg-sweeps.ts), when no other run's Postgres suites are running, so none of their
@@ -21,14 +21,14 @@ function kept(role: Seen): string | undefined {
 }
 
 /**
- * Drop each test role a killed run left, those named `like` (comb_t_* by default), on `admin`'s
+ * Drop each test role a killed run left, those named `like` (database_t_* by default), on `admin`'s
  * server; keep and log every other. A role that gained a dependent or a session since the read keeps
  * its drop from running, and is kept and logged
  */
 export async function sweepTestRoles(
 	admin: pg.Client,
 	{
-		like = "comb\\_t\\_%",
+		like = "database\\_t\\_%",
 		log = (line: string) => void process.stderr.write(`${line}\n`),
 	}: { like?: string | undefined; log?: ((line: string) => void) | undefined } = {},
 ): Promise<{ dropped: string[] }> {
@@ -43,15 +43,15 @@ export async function sweepTestRoles(
 	for (const role of rows) {
 		const why = kept(role)
 		if (why !== undefined) {
-			log(`[comb] role sweep keeps ${role.name}: ${why}`)
+			log(`[database] role sweep keeps ${role.name}: ${why}`)
 			continue
 		}
 		try {
 			await admin.query(`DROP ROLE ${admin.escapeIdentifier(role.name)}`)
 			dropped.push(role.name)
-			log(`[comb] role sweep dropped ${role.name}, which a killed run left`)
+			log(`[database] role sweep dropped ${role.name}, which a killed run left`)
 		} catch (error) {
-			log(`[comb] role sweep keeps ${role.name}: its drop failed, ${(error as Error).message}`)
+			log(`[database] role sweep keeps ${role.name}: its drop failed, ${(error as Error).message}`)
 		}
 	}
 	return { dropped }

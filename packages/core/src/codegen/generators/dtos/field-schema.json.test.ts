@@ -33,7 +33,7 @@ function published(schema: z.ZodType) {
 	return { defs: Object.keys(document.$defs ?? {}), p: document.properties.p }
 }
 
-const RULE = { "x-comb-text": "no U+0000 or unpaired surrogate" }
+const RULE = { "x-database-text": "no U+0000 or unpaired surrogate" }
 
 describe("a written c.json's published schema (C4, C5)", () => {
 	it("is its schema's $ref beside null when the column takes null, the rules on both", () => {
@@ -48,14 +48,14 @@ describe("a written c.json's published schema (C4, C5)", () => {
 		expect(published(profile('c.json("p", Profile, { maxBytes: 64 })', "create"))).toEqual({
 			defs: ["C4Profile"],
 			p: {
-				anyOf: [{ $ref: "#/$defs/C4Profile", ...RULE, "x-comb-maxBytes": 64 }, { type: "null" }],
+				anyOf: [{ $ref: "#/$defs/C4Profile", ...RULE, "x-database-maxBytes": 64 }, { type: "null" }],
 				...RULE,
-				"x-comb-maxBytes": 64,
+				"x-database-maxBytes": 64,
 			},
 		})
 		expect(published(profile('c.json("p", Profile, { maxBytes: 64 }).notNull()', "create"))).toEqual({
 			defs: ["C4Profile"],
-			p: { $ref: "#/$defs/C4Profile", ...RULE, "x-comb-maxBytes": 64 },
+			p: { $ref: "#/$defs/C4Profile", ...RULE, "x-database-maxBytes": 64 },
 		})
 	})
 })
@@ -121,10 +121,10 @@ function plainRead(raw: string): Record<string, unknown> {
 		dialect: "postgres",
 		imports: { enumImports: new Map(), identifiers: new Map(), jsonSchemaImports: new Set() },
 	}) as string
-	return published(new Function("z", "comb", `return ${code}`)(z, { jsonValue }) as z.ZodType).p
+	return published(new Function("z", "database", `return ${code}`)(z, { jsonValue }) as z.ZodType).p
 }
 
-/* C6 of r20: comb's JSON value takes null itself, so a nullable plain json read publishes no second null beside it */
+/* C6 of r20: database's JSON value takes null itself, so a nullable plain json read publishes no second null beside it */
 describe("a plain json column's read", () => {
 	it.each(["json", "jsonb"])("takes null once, nullable or not, on %s", (type) => {
 		const nullable = plainRead(`${type}("p")`)
@@ -172,9 +172,9 @@ describe("a nullable written JSON value taken as required", () => {
 				expect(optional, type).toBeInstanceOf(z.ZodNullable)
 				const member = (optional as z.ZodNullable<z.ZodType>).unwrap()
 				const keys = (schema: z.ZodType) =>
-					Object.fromEntries(Object.entries(published(schema).p).filter(([key]) => key.startsWith("x-comb-")))
+					Object.fromEntries(Object.entries(published(schema).p).filter(([key]) => key.startsWith("x-database-")))
 				expect(keys(member), type).toEqual(keys(field))
-				expect(Object.keys(keys(member)), type).toContain("x-comb-text")
+				expect(Object.keys(keys(member)), type).toContain("x-database-text")
 				expect(member.safeParse(null).success, type).toBe(false)
 			}
 		},

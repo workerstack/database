@@ -12,14 +12,14 @@ const nobody = { target: "core", yes: false }
 
 describe("inFileApproval", () => {
 	it.each([
-		["-- comb:allow-unsafe: moved to the archive\nDROP TABLE post;", "moved to the archive"],
-		["DROP TABLE post;\n  --comb:allow-unsafe:   kept a copy   \n", "kept a copy"],
-		["-- comb:allow-unsafe:\nDROP TABLE post;", undefined],
-		["-- comb:allow-unsafe:   \nDROP TABLE post;", undefined],
-		["SELECT 1; -- comb:allow-unsafe: trailing\n", undefined],
+		["-- database:allow-unsafe: moved to the archive\nDROP TABLE post;", "moved to the archive"],
+		["DROP TABLE post;\n  --database:allow-unsafe:   kept a copy   \n", "kept a copy"],
+		["-- database:allow-unsafe:\nDROP TABLE post;", undefined],
+		["-- database:allow-unsafe:   \nDROP TABLE post;", undefined],
+		["SELECT 1; -- database:allow-unsafe: trailing\n", undefined],
 		["DROP TABLE post;", undefined],
-		["INSERT INTO t VALUES ('\n-- comb:allow-unsafe: smuggled\n');\nDROP TABLE post;", undefined],
-		["/* x */ -- comb:allow-unsafe: after a comment\nDROP TABLE post;", undefined],
+		["INSERT INTO t VALUES ('\n-- database:allow-unsafe: smuggled\n');\nDROP TABLE post;", undefined],
+		["/* x */ -- database:allow-unsafe: after a comment\nDROP TABLE post;", undefined],
 	])("reads %j as %j", (sql, reason) => {
 		expect(inFileApproval(sql)).toBe(reason)
 	})
@@ -27,9 +27,9 @@ describe("inFileApproval", () => {
 
 describe("inFileApproval on Postgres", () => {
 	it("reads no approval inside a function body, and one after it", () => {
-		const body = "CREATE FUNCTION f() RETURNS void AS $$\n-- comb:allow-unsafe: smuggled\n$$ LANGUAGE sql;"
+		const body = "CREATE FUNCTION f() RETURNS void AS $$\n-- database:allow-unsafe: smuggled\n$$ LANGUAGE sql;"
 		expect(inFileApproval(body, "postgres")).toBeUndefined()
-		expect(inFileApproval(`${body}\n-- comb:allow-unsafe: reviewed`, "postgres")).toBe("reviewed")
+		expect(inFileApproval(`${body}\n-- database:allow-unsafe: reviewed`, "postgres")).toBe("reviewed")
 	})
 })
 
@@ -59,12 +59,12 @@ describe("approveMigration", () => {
 	})
 
 	it("takes the file's own approval of an unsafe file and reports it", async () => {
-		const sql = "-- comb:allow-unsafe: archived\nDROP TABLE post;"
+		const sql = "-- database:allow-unsafe: archived\nDROP TABLE post;"
 		expect(await approveMigration(reviewed(sql), nobody)).toEqual({ approvedBy: "archived", ok: true })
 	})
 
 	it("takes no in-file approval for a cautious file, which --yes covers", async () => {
-		const sql = "-- comb:allow-unsafe: archived\nDROP INDEX i;"
+		const sql = "-- database:allow-unsafe: archived\nDROP INDEX i;"
 		expect(await approveMigration(reviewed(sql), nobody)).toEqual({
 			message: "2_x.sql is cautious (DROP INDEX i); pass --yes or confirm it on a terminal",
 			ok: false,
@@ -74,7 +74,7 @@ describe("approveMigration", () => {
 	it("says how to approve an unsafe file it refuses", async () => {
 		expect(await approveMigration(reviewed("TRUNCATE post;"), nobody)).toEqual({
 			message:
-				'2_x.sql is unsafe (TRUNCATE post); confirm it on a terminal, or approve it in the file with a line "-- comb:allow-unsafe: <reason>"',
+				'2_x.sql is unsafe (TRUNCATE post); confirm it on a terminal, or approve it in the file with a line "-- database:allow-unsafe: <reason>"',
 			ok: false,
 		})
 	})
@@ -87,7 +87,7 @@ describe("approveMigration: what the refusal names", () => {
 		const approval = await approveMigration(parseMigration(sql, "1_x.sql", { dialect: "sqlite" }), nobody)
 		expect(approval).toEqual({
 			message:
-				'1_x.sql is unsafe (DROP TABLE `vote`; DROP TABLE IF EXISTS legacy; ALTER TABLE post DROP COLUMN body); confirm it on a terminal, or approve it in the file with a line "-- comb:allow-unsafe: <reason>"',
+				'1_x.sql is unsafe (DROP TABLE `vote`; DROP TABLE IF EXISTS legacy; ALTER TABLE post DROP COLUMN body); confirm it on a terminal, or approve it in the file with a line "-- database:allow-unsafe: <reason>"',
 			ok: false,
 		})
 	})
@@ -105,7 +105,7 @@ describe("approveMigration: what the refusal names", () => {
  */
 describe("approveMigration's cautious notes, on every path a file takes", () => {
 	const KEEP_CHILDREN = "PRAGMA foreign_keys = off;\nDROP TABLE parent;\nPRAGMA foreign_keys = on;"
-	const note = /PRAGMA foreign_keys = off \(does nothing inside the transaction comb runs each file in/
+	const note = /PRAGMA foreign_keys = off \(does nothing inside the transaction database runs each file in/
 
 	it("lists an unsafe file's cautious statements after its unsafe ones, each once", async () => {
 		const refused = await approveMigration(reviewed(KEEP_CHILDREN), nobody)
@@ -128,7 +128,7 @@ describe("approveMigration's cautious notes, on every path a file takes", () => 
 	})
 
 	it.each([
-		["approved in the file", `-- comb:allow-unsafe: keep the children\n${KEEP_CHILDREN}`, nobody],
+		["approved in the file", `-- database:allow-unsafe: keep the children\n${KEEP_CHILDREN}`, nobody],
 		[
 			"cautious, run with --yes",
 			"PRAGMA foreign_keys = off;\nCREATE TABLE t (id INTEGER PRIMARY KEY);",
@@ -140,7 +140,7 @@ describe("approveMigration's cautious notes, on every path a file takes", () => 
 		expect((approval as { cautions: string[] }).cautions).toEqual([expect.stringMatching(note)])
 	})
 
-	it("rates foreign_keys on, SQLite's own state inside comb's transaction, safe, so only off carries the note", () => {
+	it("rates foreign_keys on, SQLite's own state inside database's transaction, safe, so only off carries the note", () => {
 		expect(classifyMigration("PRAGMA foreign_keys = on;", { dialect: "sqlite" }).safety).toBe("safe")
 		expect(
 			classifyMigration('PRAGMA foreign_keys = ON;\nPRAGMA "foreign_keys" = 1;', { dialect: "sqlite" }).safety,

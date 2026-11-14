@@ -1,20 +1,20 @@
 /**
  * Looking a constraint violation up in the app's ConstraintMaps, shared by the SQLite and the
  * Postgres handlers: each dialect finds the table, column or constraint name its own way, and
- * both turn what they found into the same CombError.
+ * both turn what they found into the same DatabaseError.
  */
-import { CombError } from "./error.ts"
+import { DatabaseError } from "./error.ts"
 import { warnOnError } from "./log.ts"
-import type { CombDatabaseErrorKey, ConstraintMap, ConstraintMapEntry, StatusKey } from "./types.ts"
+import type { DatabaseDriverErrorKey, ConstraintMap, ConstraintMapEntry, StatusKey } from "./types.ts"
 
 export type TableMap = NonNullable<ConstraintMap[string]>
 
 /** The generic error for a kind of violation, used when no map entry matches. */
-export type Fallback = {
-	/** the message safe to show the client, which the CombError carries as its `cause` */
+export type ConstraintFallback = {
+	/** the message safe to show the client, which the DatabaseError carries as its `cause` */
 	cause: string
 	/** the key a client branches on */
-	errorKey: CombDatabaseErrorKey
+	errorKey: DatabaseDriverErrorKey
 	/** the HTTP status the error answers with, by key: `conflict` is 409, `service_unavailable` 503 */
 	status: StatusKey
 }
@@ -23,7 +23,7 @@ export type Fallback = {
 export type Found = {
 	column?: string | undefined
 	entry: ConstraintMapEntry | undefined
-	fallback: Fallback
+	fallback: ConstraintFallback
 	table?: string | undefined
 }
 
@@ -83,7 +83,7 @@ export function checkedOnce(maps: readonly ConstraintMap[]): readonly Constraint
 		CHECKED.add(map)
 		for (const key of Object.keys(map).filter((each) => malformed(each) && !WARNED.has(each))) {
 			WARNED.add(key)
-			warnOnError("comb.constraint-maps.error", {
+			warnOnError("database.constraint-maps.error", {
 				key,
 				message: `${ruleOf(key)}; it matches no table. Build the maps with defineConstraintMaps, which refuses such a key at load`,
 			})
@@ -156,9 +156,9 @@ export function findNamed(
 	return undefined
 }
 
-/** The CombError for what a handler found; `source` is the original error, kept for logs. */
-export function toCombError({ column, entry, fallback, table }: Found, source: unknown): CombError {
-	if (entry === undefined) return new CombError({ ...fallback, column, source, table })
+/** The DatabaseError for what a handler found; `source` is the original error, kept for logs. */
+export function toDatabaseError({ column, entry, fallback, table }: Found, source: unknown): DatabaseError {
+	if (entry === undefined) return new DatabaseError({ ...fallback, column, source, table })
 	const status = entry.statusKey ?? (fallback.status === "bad_request" ? "bad_request" : "conflict")
-	return new CombError({ cause: entry.cause, column, errorKey: entry.errorKey, source, status, table })
+	return new DatabaseError({ cause: entry.cause, column, errorKey: entry.errorKey, source, status, table })
 }

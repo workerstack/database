@@ -1,5 +1,5 @@
 /**
- * SQLite constraint violations mapped to CombErrors, one handler per extended result code.
+ * SQLite constraint violations mapped to DatabaseErrors, one handler per extended result code.
  * Shared by the libsql, bun:sqlite and D1 handlers: the engine is the same, only the way the
  * driver carries the code differs, and `readSqliteError` absorbs that.
  */
@@ -12,11 +12,11 @@ import {
 	own,
 	shown,
 	shownColumn,
-	toCombError,
+	toDatabaseError,
 } from "../constraint-map.ts"
 import { connectionLost, UNAVAILABLE } from "../connection-lost.ts"
-import { CombError } from "../error.ts"
-import { type ConstraintMap, combErrorKeys } from "../types.ts"
+import { DatabaseError } from "../error.ts"
+import { type ConstraintMap, databaseErrorKeys } from "../types.ts"
 import { valueError } from "../value-error.ts"
 import { readSqliteError, type SqliteErrorRead } from "./read-error.ts"
 import { resourceOutcome } from "./resource-outcome.ts"
@@ -68,13 +68,13 @@ function failedColumns(
 	return { columns: pairs.map((pair) => pair.column), table: pairs[0]?.table }
 }
 
-const toError = (v: Violation, found: Found) => toCombError(found, v.source)
+const toError = (v: Violation, found: Found) => toDatabaseError(found, v.source)
 
 /** A unique index on an expression, by name: in the statement's table first, as a CHECK, then in any */
-function uniqueIndex(v: Violation, index: string): CombError {
+function uniqueIndex(v: Violation, index: string): DatabaseError {
 	const fallback = {
 		cause: "Duplicate value detected",
-		errorKey: combErrorKeys.UNIQUE_CONSTRAINT_VIOLATION,
+		errorKey: databaseErrorKeys.UNIQUE_CONSTRAINT_VIOLATION,
 		status: "conflict",
 	} as const
 	const table = statementTable(v.read.query, "sqlite")?.table
@@ -85,7 +85,7 @@ function uniqueIndex(v: Violation, index: string): CombError {
 	return toError(v, { entry: found?.entry, fallback, table: found?.table ?? table })
 }
 
-function unique(v: Violation): CombError {
+function unique(v: Violation): DatabaseError {
 	const index = failedIndex(v.read.message)
 	if (index !== undefined) return uniqueIndex(v, index)
 	const { columns, table } = failedColumns(v.read.message, { maps: v.maps, query: v.read.query })
@@ -97,28 +97,28 @@ function unique(v: Violation): CombError {
 		named.length === 0
 			? "Duplicate value detected"
 			: `Duplicate value for ${named.map((c) => `${table}.${c}`).join(", ")}`
-	const fallback = { cause, errorKey: combErrorKeys.UNIQUE_CONSTRAINT_VIOLATION, status: "conflict" } as const
+	const fallback = { cause, errorKey: databaseErrorKeys.UNIQUE_CONSTRAINT_VIOLATION, status: "conflict" } as const
 	return toError(v, { column, entry, fallback, table })
 }
 
-function primaryKey(v: Violation): CombError {
+function primaryKey(v: Violation): DatabaseError {
 	const { columns, table } = failedColumns(v.read.message, { maps: v.maps, query: v.read.query })
 	/* a map written before 0.5.0 may list the key column under `unique` */
 	const entry = lookup(v.maps, table, (t) => t.primaryKey ?? own(t.unique, columns[0]))
 	const fallback = {
 		cause: "Duplicate primary key value",
-		errorKey: combErrorKeys.PRIMARY_KEY_VIOLATION,
+		errorKey: databaseErrorKeys.PRIMARY_KEY_VIOLATION,
 		status: "conflict",
 	} as const
 	return toError(v, { entry, fallback, table })
 }
 
-function check(v: Violation): CombError {
+function check(v: Violation): DatabaseError {
 	/* the rest of the line: a name may hold any character, and an unnamed CHECK is its expression */
 	const name = /CHECK constraint failed: (.+)$/i.exec(v.read.message)?.[1]
 	const fallback = {
 		cause: "Data validation failed",
-		errorKey: combErrorKeys.CHECK_CONSTRAINT_VIOLATION,
+		errorKey: databaseErrorKeys.CHECK_CONSTRAINT_VIOLATION,
 		status: "bad_request",
 	} as const
 	/* CHECK names are only unique per table: look in the statement's table before any other */
@@ -129,13 +129,13 @@ function check(v: Violation): CombError {
 	return toError(v, { entry: found?.entry, fallback, table: found?.table })
 }
 
-function notNull(v: Violation): CombError {
+function notNull(v: Violation): DatabaseError {
 	const { columns, table } = failedColumns(v.read.message, { maps: v.maps, query: v.read.query })
 	const column = shownColumn(v.maps, table, columns[0])
-	return new CombError({
+	return new DatabaseError({
 		cause: column === undefined ? "Required field missing" : `Required field missing: ${column}`,
 		column,
-		errorKey: combErrorKeys.REQUIRED_FIELD_MISSING,
+		errorKey: databaseErrorKeys.REQUIRED_FIELD_MISSING,
 		source: v.source,
 		status: "bad_request",
 		table,
@@ -163,7 +163,7 @@ function insertLeaves(query: string | undefined, column: string | undefined): bo
  * fail on the other side, a row that references the deleted one, so no key of its own is blamed.
  * An UPDATE whose SET list assigns none of the foreign key columns the table's maps list blames no
  * key of its own either, and says neither side: a map need not list every key. */
-function foreignKey(v: Violation): CombError {
+function foreignKey(v: Violation): DatabaseError {
 	const table = statementTable(v.read.query, "sqlite")?.table
 	let column: string | undefined
 	/* every foreign key column a map lists for the table: none, one or many; undefined when no map lists it */
@@ -189,14 +189,14 @@ function foreignKey(v: Violation): CombError {
 	if (/^delete\b/i.test(statementHead(v.read.query ?? ""))) {
 		const fallback = {
 			cause: STILL_REFERENCED,
-			errorKey: combErrorKeys.FOREIGN_KEY_VIOLATION,
+			errorKey: databaseErrorKeys.FOREIGN_KEY_VIOLATION,
 			status: "conflict",
 		} as const
 		return toError(v, { entry: undefined, fallback, table })
 	}
 	const fallback = {
 		cause: MISSING_OR_REFERENCED,
-		errorKey: combErrorKeys.FOREIGN_KEY_VIOLATION,
+		errorKey: databaseErrorKeys.FOREIGN_KEY_VIOLATION,
 		status: "conflict",
 	} as const
 	if (unlisted || unset || changesReferenced) return toError(v, { entry: undefined, fallback, table })
@@ -215,11 +215,11 @@ function foreignKey(v: Violation): CombError {
  * may be the engine's, a column's name among them, as is a RAISE with no message to
  * show, when D1's exec() quoted the statement before it.
  */
-const raised = (v: Violation): CombError =>
-	new CombError({
+const raised = (v: Violation): DatabaseError =>
+	new DatabaseError({
 		cause:
 			v.read.code !== "SQLITE_CONSTRAINT_TRIGGER" || v.read.message === "" ? "Constraint violated" : v.read.message,
-		errorKey: combErrorKeys.CONSTRAINT_VIOLATION,
+		errorKey: databaseErrorKeys.CONSTRAINT_VIOLATION,
 		source: v.source,
 		status: "bad_request",
 	})
@@ -227,7 +227,7 @@ const raised = (v: Violation): CombError =>
 /** `name` with its ASCII letters lowercased: SQLite reads a column name in any ASCII case, and folds no other letter */
 const asciiFolded = (name: string): string => name.replace(/[A-Z]/g, (letter) => letter.toLowerCase())
 
-const CONSTRAINTS: Record<string, (v: Violation) => CombError> = {
+const CONSTRAINTS: Record<string, (v: Violation) => DatabaseError> = {
 	SQLITE_CONSTRAINT: raised,
 	SQLITE_CONSTRAINT_CHECK: check,
 	SQLITE_CONSTRAINT_FOREIGNKEY: foreignKey,
@@ -250,10 +250,10 @@ const mismatchAt = (
 }
 
 /**
- * The CombError for an SQLite constraint violation inside `error`, or for a value its column
+ * The DatabaseError for an SQLite constraint violation inside `error`, or for a value its column
  * cannot hold (value-error.ts); null when it is neither.
  */
-function constraintError(error: unknown, given: readonly ConstraintMap[]): CombError | null {
+function constraintError(error: unknown, given: readonly ConstraintMap[]): DatabaseError | null {
 	const maps = checkedOnce(given)
 	const read = readSqliteError(error)
 	if (read === null) return null
@@ -264,7 +264,7 @@ function constraintError(error: unknown, given: readonly ConstraintMap[]): CombE
 }
 
 /**
- * Throws the mapped CombError when `error` is an SQLite constraint violation; otherwise returns.
+ * Throws the mapped DatabaseError when `error` is an SQLite constraint violation; otherwise returns.
  * `error` is the thrown error, wrapper and all, or an engine message given as text.
  */
 function handleConstraintViolation(error: unknown, maps: readonly ConstraintMap[]): void {
@@ -273,17 +273,17 @@ function handleConstraintViolation(error: unknown, maps: readonly ConstraintMap[
 }
 
 /**
- * The CombError a libsql, Turso or bun:sqlite error is: a constraint violation, a resource error,
+ * The DatabaseError a libsql, Turso or bun:sqlite error is: a constraint violation, a resource error,
  * or a lost connection, as on D1 and Postgres; undefined for any other. It throws nothing, so a
  * caller can ask what an error is.
  */
 // classifies as D1 and Postgres do
-function classifySqliteError(error: unknown, maps: readonly ConstraintMap[]): CombError | undefined {
+function classifySqliteError(error: unknown, maps: readonly ConstraintMap[]): DatabaseError | undefined {
 	const constraint = constraintError(error, maps)
 	if (constraint !== null) return constraint
 	const resource = resourceOutcome(readSqliteError(error)?.code)
-	if (resource !== undefined) return new CombError({ ...resource, source: error })
-	return connectionLost(error) ? new CombError({ ...UNAVAILABLE, source: error }) : undefined
+	if (resource !== undefined) return new DatabaseError({ ...resource, source: error })
+	return connectionLost(error) ? new DatabaseError({ ...UNAVAILABLE, source: error }) : undefined
 }
 
 /** The error handler for libsql, Turso and bun:sqlite: throws what classifySqliteError finds; any other error is left for the caller */
@@ -293,4 +293,4 @@ function sqliteErrorHandler(error: unknown, maps: readonly ConstraintMap[]): voi
 }
 
 export { classifySqliteError, constraintError, handleConstraintViolation, resourceOutcome, sqliteErrorHandler }
-export type { Fallback } from "../constraint-map.ts"
+export type { ConstraintFallback } from "../constraint-map.ts"

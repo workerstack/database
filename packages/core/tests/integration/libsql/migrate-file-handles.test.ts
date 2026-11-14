@@ -53,7 +53,7 @@ describe("a local libsql file's connection is closed when its file ends (SL1 of 
 			expect((await migrateCli(project.dir, ["migrate", "apply", "core", "--yes"])).code).toBe(0)
 			fs.writeFileSync(
 				path.join(project.migrationsDir, "0002_x.sql"),
-				"-- comb:allow-unsafe: bulk load\nPRAGMA locking_mode = EXCLUSIVE;\nCREATE TABLE big (x INTEGER);\n",
+				"-- database:allow-unsafe: bulk load\nPRAGMA locking_mode = EXCLUSIVE;\nCREATE TABLE big (x INTEGER);\n",
 			)
 			fs.writeFileSync(path.join(project.migrationsDir, "0003_y.sql"), "CREATE TABLE more (x INTEGER);\n")
 			spawnSync("atlas", ["migrate", "hash", "--dir", `file://${project.migrationsDir}`])

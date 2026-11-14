@@ -1,9 +1,9 @@
 /**
- * How comb hands Atlas a Postgres database without leaking it. The URLs travel only in the
- * child's environment (`COMB_ATLAS_URL`, `COMB_ATLAS_DEV_URL`), which a temporary atlas.hcl reads
+ * How database hands Atlas a Postgres database without leaking it. The URLs travel only in the
+ * child's environment (`DATABASE_ATLAS_URL`, `DATABASE_ATLAS_DEV_URL`), which a temporary atlas.hcl reads
  * with getenv, so they never reach argv, where any local user can read them. Each URL is checked
  * before Atlas sees it, scoped to the configured schema (`search_path`), and the target's lock wait
- * is bounded (`lock_timeout`). Every byte of Atlas output comb relays is scrubbed of secrets (atlas-secrets.ts). Each
+ * is bounded (`lock_timeout`). Every byte of Atlas output database relays is scrubbed of secrets (atlas-secrets.ts). Each
  * schema keeps its own history: public the shared `atlas_schema_revisions`, any other its own.
  */
 import { createHash } from "node:crypto"
@@ -25,7 +25,7 @@ type PgTarget = {
 	devUrl: string
 	/** how long a statement waits for a lock before the migration fails, as `5s`, `1500ms` or `0` for no bound */
 	lockTimeout: string
-	/** the one schema comb migrates */
+	/** the one schema database migrates */
 	schema: string
 	/** the database migrated: a direct, non-pooled URL */
 	url: string
@@ -56,7 +56,7 @@ type AtlasEnv = {
 // lookup-table: hosts a password never leaves the machine for
 const LOCAL_HOSTS = /* @__PURE__ */ new Set(["localhost", "127.0.0.1", "[::1]", "::1"])
 const PLAIN_SCHEMA = /^[a-z_][a-z0-9_$]*$/
-/* where a URL comb cannot read goes wrong, by the part: the password, unless the part is another */
+/* where a URL database cannot read goes wrong, by the part: the password, unless the part is another */
 const HINTS = {
 	address: "percent-encode a % in the host or database name as %25",
 	password: "percent-encode special characters (#, /, ?, @) in the password",
@@ -87,7 +87,7 @@ function checkUrl(
 	if (blank(raw)) return { error: `${field} is empty` }
 	if (field === "devUrl" && isDocker(raw)) return { docker: true }
 	if (namesSeveralHosts(raw))
-		return { error: `${field} names several hosts; comb migrates one database, so name its primary alone` }
+		return { error: `${field} names several hosts; database migrates one database, so name its primary alone` }
 	const accepted = field === "devUrl" ? "a postgres:// or docker://" : "a postgres://"
 	const url = libpqUrl(raw)
 	const problem = urlProblem(raw)
@@ -96,17 +96,17 @@ function checkUrl(
 		return {
 			error: `${field} names a Unix socket as a percent-encoded host, which Atlas refuses; give its directory as ?host=, as in postgres://app@/db?host=/run/postgresql`,
 		}
-	/* lib/pq takes a service file's host, dbname and user over the URL's, where comb reads the URL */
+	/* lib/pq takes a service file's host, dbname and user over the URL's, where database reads the URL */
 	if (url?.params.has("service") === true)
 		return {
-			error: `${field} names a libpq service, which Atlas reads from ~/.pg_service.conf and comb does not; write its host, port, dbname and user into the URL`,
+			error: `${field} names a libpq service, which Atlas reads from ~/.pg_service.conf and database does not; write its host, port, dbname and user into the URL`,
 		}
 	if (url !== undefined) return { url }
 	return { error: `${field} is not ${accepted} URL; ${HINTS[problem]}` }
 }
 
 /**
- * Why `schema` cannot be the target's: comb writes it unquoted, so it must be a name Postgres keeps
+ * Why `schema` cannot be the target's: database writes it unquoted, so it must be a name Postgres keeps
  * as written, never one it folds, cuts or reads as a keyword
  */
 function schemaProblem(schema: string): string | undefined {
@@ -139,13 +139,13 @@ const fieldErrors = (
 		: [checked.error]
 
 /**
- * Why `field`'s own search_path cannot stand: comb migrates `schema` alone, and Atlas keeps a URL's
+ * Why `field`'s own search_path cannot stand: database migrates `schema` alone, and Atlas keeps a URL's
  * own search_path, so both URLs must name that schema or none (the devUrl's)
  */
 function scopeErrors(field: "devUrl" | "url", url: LibpqUrl | undefined, schema: string): string[] {
 	const scope = url?.params.get("search_path")
 	if (scope === undefined) return []
-	const fix = `comb migrates one: set schema to it, and drop search_path from the ${field}`
+	const fix = `database migrates one: set schema to it, and drop search_path from the ${field}`
 	if (scope.includes(",")) return [`the ${field}'s search_path names more than one schema (${scope}); ${fix}`]
 	return scope === schema ? [] : [`the ${field}'s search_path names ${scope}, but schema is ${schema}; ${fix}`]
 }
@@ -229,10 +229,10 @@ const hclString = (value: string) =>
 
 /** The atlas.hcl for `needs`: getenv for each URL, and the history pinned to `revisions` */
 function atlasConfig(needs: AtlasNeeds, revisions: string): string {
-	const lines = ['env "comb" {']
-	if (needs.url) lines.push('  url = getenv("COMB_ATLAS_URL")')
-	if (needs.dev) lines.push('  dev = getenv("COMB_ATLAS_DEV_URL")')
-	if (needs.src !== undefined) lines.push('  src = getenv("COMB_ATLAS_SRC_URL")')
+	const lines = ['env "database" {']
+	if (needs.url) lines.push('  url = getenv("DATABASE_ATLAS_URL")')
+	if (needs.dev) lines.push('  dev = getenv("DATABASE_ATLAS_DEV_URL")')
+	if (needs.src !== undefined) lines.push('  src = getenv("DATABASE_ATLAS_SRC_URL")')
 	lines.push("  migration {")
 	if (needs.dir !== undefined) lines.push(`    dir = ${hclString(`file://${needs.dir}`)}`)
 	lines.push(`    revisions_schema = ${hclString(revisions)}`, "  }", "}", "")
@@ -251,18 +251,18 @@ function refuseUrlProblems(target: PgTarget, needs: AtlasNeeds): void {
  */
 function withAtlasEnv<T>(target: PgTarget, needs: AtlasNeeds, body: (atlas: AtlasEnv) => T): T {
 	refuseUrlProblems(target, needs)
-	const { dir, remove } = scratchDir("comb-atlas-")
+	const { dir, remove } = scratchDir("database-atlas-")
 	let pending = false
 	try {
 		/* a dev-only call reads no history, and may have no target URL to scope one by */
 		const revisions = needs.revisions ?? (needs.url === true ? revisionsSchema(target) : SHARED_REVISIONS)
 		writeFileSync(join(dir, "atlas.hcl"), atlasConfig(needs, revisions), { mode: 0o600 })
 		const env: Record<string, string> = {}
-		if (needs.url) env["COMB_ATLAS_URL"] = needs.allSchemas === true ? unscoped(target.url) : atlasTargetUrl(target)
-		if (needs.dev) env["COMB_ATLAS_DEV_URL"] = atlasDevUrl(target)
-		if (needs.src !== undefined) env["COMB_ATLAS_SRC_URL"] = scoped(needs.src, target.schema)
+		if (needs.url) env["DATABASE_ATLAS_URL"] = needs.allSchemas === true ? unscoped(target.url) : atlasTargetUrl(target)
+		if (needs.dev) env["DATABASE_ATLAS_DEV_URL"] = atlasDevUrl(target)
+		if (needs.src !== undefined) env["DATABASE_ATLAS_SRC_URL"] = scoped(needs.src, target.schema)
 		const secrets = [target.url, target.devUrl, ...Object.values(env)].filter((url) => url !== "")
-		const args = ["--config", `file://${join(dir, "atlas.hcl")}`, "--env", "comb"]
+		const args = ["--config", `file://${join(dir, "atlas.hcl")}`, "--env", "database"]
 		const out = body({ args, dir, env, scrub: (text) => scrubAtlasOutput(text, secrets) })
 		if (out instanceof Promise) {
 			pending = true
@@ -275,7 +275,7 @@ function withAtlasEnv<T>(target: PgTarget, needs: AtlasNeeds, body: (atlas: Atla
 }
 
 /**
- * What Atlas said on stderr as it succeeded, a line each: comb passes each on as a warning, as Atlas
+ * What Atlas said on stderr as it succeeded, a line each: database passes each on as a warning, as Atlas
  * OSS may say it left part of a schema out of what it compared
  */
 const atlasNotices = (stderr: string): string[] =>

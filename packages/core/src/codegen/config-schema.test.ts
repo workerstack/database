@@ -33,7 +33,7 @@ describe("codegenConfigSchema (K14 of the 0.15.0 review)", () => {
 			{ fts: { post: { columns: ["a"], tokeniser: "x" } } },
 			["databases", "core", "fts", "post"],
 		],
-		["a dialect comb does not write", { dialect: "mysql" }, ["databases", "core", "dialect"]],
+		["a dialect database does not write", { dialect: "mysql" }, ["databases", "core", "dialect"]],
 		/* r18 K5: an FTS table of no column generates SQL SQLite refuses */
 		[
 			"an FTS table with no column",
@@ -55,9 +55,9 @@ describe("codegenConfigSchema (K14 of the 0.15.0 review)", () => {
 	})
 })
 
-/* S6 of r19 (K4's sibling in comb.config.ts), and the blank names and paths beside it */
+/* S6 of r19 (K4's sibling in database.config.ts), and the blank names and paths beside it */
 describe("codegenConfigSchema on what it declares empty or blank", () => {
-	it("refuses a config that declares no database, as comb.migrate.config.ts's schema does", () => {
+	it("refuses a config that declares no database, as database.migrate.config.ts's schema does", () => {
 		const result = codegenConfigSchema().safeParse({ databases: {} })
 		expect(result.error?.issues.map((issue) => issue.message)).toEqual(["databases declares no database"])
 	})

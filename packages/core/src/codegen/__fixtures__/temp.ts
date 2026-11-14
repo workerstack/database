@@ -1,6 +1,6 @@
 /**
  * Where a codegen test writes its tables files: inside the package (gitignored), so their imports
- * of drizzle, zod and comb resolve as an installed app's would when the runtime reader loads them
+ * of drizzle, zod and database resolve as an installed app's would when the runtime reader loads them
  */
 import fs from "node:fs"
 import path from "node:path"

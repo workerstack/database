@@ -9,7 +9,7 @@ import { testContext } from "../__fixtures__/context.ts"
 let tmpDir: string
 
 beforeEach(() => {
-	tmpDir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-gen-dtos-"))
+	tmpDir = fs.mkdtempSync(path.join(fixtureRoot(), "database-gen-dtos-"))
 })
 
 afterEach(() => {

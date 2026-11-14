@@ -1,5 +1,5 @@
 /**
- * The D1 proof oracle: a case (proof-cases.ts) checked by one version of comb's CLI (`comb migrate check core
+ * The D1 proof oracle: a case (proof-cases.ts) checked by one version of database's CLI (`database migrate check core
  * --local --yes` in a wrangler project whose local D1 holds the live schema), and the same file applied on D1
  * local, then read and written as an app does. The rule: check passes exactly the files D1 applies and that leave
  * every view readable and every table, and each view event an INSTEAD OF trigger makes writable, writable.
@@ -23,18 +23,18 @@ export type Cli = {
 	): Promise<number>
 }
 
-/* the wrangler every version's check runs: the one comb tests against, linked into each project, as an app installs it */
+/* the wrangler every version's check runs: the one database tests against, linked into each project, as an app installs it */
 const WRANGLER_PACKAGE = dirname(createRequire(import.meta.url).resolve("wrangler/package.json"))
 const D1 = { binding: "CORE", database_id: "00000000-0000-0000-0000-000000000000", database_name: "core" }
 const WRANGLER_TOML = `name = "differential"\ncompatibility_date = "2026-10-01"\n\n[[d1_databases]]\nbinding = "${D1.binding}"\ndatabase_name = "${D1.database_name}"\ndatabase_id = "${D1.database_id}"\nmigrations_dir = "atlas-migrations"\n`
 export const FILE_NAME = "20260101000000_next.sql"
 
 /**
- * A wrangler project for `c`, outside the repo so nothing above it resolves comb's own packages: wrangler linked
+ * A wrangler project for `c`, outside the repo so nothing above it resolves database's own packages: wrangler linked
  * in, the pending file and its atlas.sum, and the local D1 wrangler keeps holding the live schema
  */
 export function projectOf(c: ProofCase): { dir: string; remove(): void } {
-	const dir = mkdtempSync(join(tmpdir(), "comb-differential-proof-"))
+	const dir = mkdtempSync(join(tmpdir(), "database-differential-proof-"))
 	mkdirSync(join(dir, "node_modules"))
 	symlinkSync(WRANGLER_PACKAGE, join(dir, "node_modules", "wrangler"))
 	writeFileSync(join(dir, "wrangler.toml"), WRANGLER_TOML)
@@ -56,7 +56,7 @@ export function projectOf(c: ProofCase): { dir: string; remove(): void } {
 
 /** A copy of a project, so each version checks a local D1 no other version's wrangler holds open */
 export function copyOf(dir: string): { dir: string; remove(): void } {
-	const copy = mkdtempSync(join(tmpdir(), "comb-differential-proof-"))
+	const copy = mkdtempSync(join(tmpdir(), "database-differential-proof-"))
 	cpSync(dir, copy, { recursive: true, verbatimSymlinks: true })
 	return { dir: copy, remove: () => rmSync(copy, { force: true, recursive: true }) }
 }
@@ -64,7 +64,7 @@ export function copyOf(dir: string): { dir: string; remove(): void } {
 /** What a version's check said: its exit code and the lines it wrote */
 export type Check = { code: number; lines: string[] }
 
-/** The version's `comb migrate check` of the project's pending file, approved */
+/** The version's `database migrate check` of the project's pending file, approved */
 export async function checkOf(cli: Cli, dir: string): Promise<Check> {
 	const lines: string[] = []
 	const io = { cwd: dir, err: (line: string) => void lines.push(line), out: (line: string) => void lines.push(line) }

@@ -8,7 +8,7 @@ import { createBunSqliteProvider } from "../drivers/bun-sqlite.ts"
 import { createLibsqlProvider } from "../drivers/sqlite.ts"
 import { splitSqlStatements } from "./sql-scan.ts"
 import { applyEach, applyRecorded, checkMigrationHash, ensureMigrationsTable, recordMigrationHash } from "./apply.ts"
-import type { Connection } from "../types.ts"
+import type { MigrateConnection } from "../types.ts"
 import { libsqlConnection } from "../__fixtures__/libsql-connection.ts"
 import { lostRequest } from "../__fixtures__/libsql-stubs.ts"
 import { generateMigrationHash, legacyMigrationHash, migrationHashes } from "./parse.ts"
@@ -18,7 +18,7 @@ import { Stopped } from "./stopped.ts"
 
 vi.mock("bun:sqlite", () => import("../__fixtures__/bun-sqlite-node.ts"))
 
-function mockConnection(overrides: Partial<Connection> = {}): Connection {
+function mockConnection(overrides: Partial<MigrateConnection> = {}): MigrateConnection {
 	return {
 		batch: vi.fn(() => Promise.resolve()),
 		close: vi.fn(() => Promise.resolve()),
@@ -40,7 +40,7 @@ describe("ensureMigrationsTable", () => {
 		await conn.client.executeMultiple(
 			"CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, hash TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL, name TEXT);",
 		)
-		const failing: Connection = { ...conn, batch: () => Promise.reject(new Error("disk full")) }
+		const failing: MigrateConnection = { ...conn, batch: () => Promise.reject(new Error("disk full")) }
 		await expect(ensureMigrationsTable(failing)).rejects.toThrow(/^disk full$/)
 	})
 })
@@ -109,7 +109,7 @@ describe("applyRecorded", () => {
 		const conn = libsqlConnection()
 		await ensureMigrationsTable(conn)
 		let calls = 0
-		const lost: Connection = {
+		const lost: MigrateConnection = {
 			...conn,
 			batch: async (statements) => {
 				calls++
@@ -128,7 +128,7 @@ describe("applyRecorded", () => {
 		const conn = libsqlConnection()
 		await ensureMigrationsTable(conn)
 		let calls = 0
-		const flaky: Connection = {
+		const flaky: MigrateConnection = {
 			...conn,
 			batch: async (statements) => {
 				if (++calls === 1) throw Object.assign(new Error("ECONNRESET"), { code: "ECONNRESET" })
@@ -138,7 +138,7 @@ describe("applyRecorded", () => {
 		await applyRecorded(flaky, migration, { history: flaky, retry: NOW })
 		expect(calls).toBe(2)
 		expect((await conn.execute("SELECT count(*) FROM a")).rows[0]?.[0]).toBe(1)
-		const broken: Connection = { ...conn, batch: async () => Promise.reject(new Error("no such table: b")) }
+		const broken: MigrateConnection = { ...conn, batch: async () => Promise.reject(new Error("no such table: b")) }
 		await expect(
 			applyRecorded(broken, { ...migration, filename: "2_b.sql" }, { history: broken, retry: NOW }),
 		).rejects.toThrow("no such table: b")
@@ -155,7 +155,7 @@ describe("applyRecorded on a SQLite failure that names a 429", () => {
 		await ensureMigrationsTable(conn)
 		await conn.client.executeMultiple("CREATE TABLE t429 (body TEXT); INSERT INTO t429 VALUES ('a'), ('a');")
 		let calls = 0
-		const counted: Connection = { ...conn, batch: (statements) => (calls++, conn.batch(statements)) }
+		const counted: MigrateConnection = { ...conn, batch: (statements) => (calls++, conn.batch(statements)) }
 		const unique = { filename: "2_u.sql", hash: "h2", statements: ["CREATE UNIQUE INDEX u ON t429 (body)"] }
 		await expect(
 			applyRecorded(counted, unique, { history: counted, retry: { baseDelay: 0, maxDelay: 0 } }),
@@ -165,7 +165,7 @@ describe("applyRecorded on a SQLite failure that names a 429", () => {
 })
 
 /** Every file on `conn` itself, which the test reads after: closing it is left to the test */
-const kept = (conn: Connection) => () => Promise.resolve({ ...conn, close: () => Promise.resolve() })
+const kept = (conn: MigrateConnection) => () => Promise.resolve({ ...conn, close: () => Promise.resolve() })
 
 describe("applyEach", () => {
 	it("stops at the first file that fails, naming the files that committed and the ones still pending", async () => {
@@ -203,7 +203,7 @@ describe("applyEach", () => {
 	})
 
 	it("applies each file on a connection opened for it and closed after it, and stops where one will not open", async () => {
-		const opened: Connection[] = []
+		const opened: MigrateConnection[] = []
 		const open = async () => {
 			if (opened.length === 2) throw new Error("SQLITE_CANTOPEN: unable to open database file")
 			const conn = mockConnection()
@@ -242,7 +242,7 @@ async function stoppedDuringSecond(
 		fail = () => reject(new Error("SQLITE_FULL"))
 	})
 	let running = false
-	const opened: Connection[] = []
+	const opened: MigrateConnection[] = []
 	const open = async () => {
 		const conn = mockConnection(
 			opened.length === 1
@@ -341,7 +341,7 @@ describe("applyEach on a file another run applied while this one waited for the 
 /* S1 of r21: a pragma 0001 approved for itself never reaches 0002, which is refused together as apart */
 describe("applyEach on a libsql file: a file's pragmas end with the file (S1 of r21; siblings in tests/integration/libsql/migrate-pragma-scope.test.ts)", () => {
 	it("refuses 0002's CHECK-breaking insert after the 0001 that set ignore_check_constraints", async () => {
-		const dir = mkdtempSync(path.join(tmpdir(), "comb-apply-scope-"))
+		const dir = mkdtempSync(path.join(tmpdir(), "database-apply-scope-"))
 		const url = `file:${path.join(dir, "core.db")}`
 		const open = () =>
 			createLibsqlProvider({ type: "libsql", url }).connect({
@@ -373,7 +373,7 @@ const reset = () =>
 	new TypeError("fetch failed", { cause: Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" }) })
 
 /** `conn` once `lost` names a batch: that batch commits, then every call fails with `cut`, a lost connection */
-function losing(conn: Connection, lost: string, cut: () => unknown = reset): Connection {
+function losing(conn: MigrateConnection, lost: string, cut: () => unknown = reset): MigrateConnection {
 	let down = false
 	return {
 		...conn,
@@ -405,7 +405,7 @@ const bunConnection = () =>
 
 describe("applyEach on a batch whose answer is lost", () => {
 	it.each([
-		["libsql", async (): Promise<Connection> => libsqlConnection()],
+		["libsql", async (): Promise<MigrateConnection> => libsqlConnection()],
 		["bun:sqlite", bunConnection],
 	])("a committed batch with a lost answer is unknown, not pending, on %s", async (_, open) => {
 		const conn = await open()
@@ -424,7 +424,7 @@ describe("applyEach on a batch whose answer is lost", () => {
 			unknown: ["0002_t2.sql"],
 		})
 		expect(message).toBe(
-			"0002_t2.sql may have committed: its batch failed with fetch failed: read ECONNRESET, and no read of comb's history answered after it; comb migrate status says whether it applied",
+			"0002_t2.sql may have committed: its batch failed with fetch failed: read ECONNRESET, and no read of database's history answered after it; database migrate status says whether it applied",
 		)
 		expect((await conn.execute("SELECT name FROM __drizzle_migrations")).rows).toEqual([
 			["0001_t1.sql"],
@@ -436,7 +436,7 @@ describe("applyEach on a batch whose answer is lost", () => {
 		const conn = libsqlConnection()
 		await ensureMigrationsTable(conn)
 		let calls = 0
-		const refusing: Connection = {
+		const refusing: MigrateConnection = {
 			...conn,
 			batch: async () => Promise.reject(++calls === 1 ? reset() : new Error("no such table: b")),
 		}

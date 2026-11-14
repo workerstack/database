@@ -7,10 +7,10 @@
 import { Column, type ColumnDataType, is, SQL, type SQLWrapper, sql } from "drizzle-orm"
 import { SQLiteColumn } from "drizzle-orm/sqlite-core"
 
-import { CombError } from "../../error.ts"
+import { DatabaseError } from "../../error.ts"
 import { CursorRef } from "../cursor.ts"
 import { RealText } from "../cursor-codec.ts"
-import { combErrorKeys } from "../../types.ts"
+import { databaseErrorKeys } from "../../types.ts"
 import type { ListDialect } from "../list-dialect.ts"
 import { INTEGER_TEXT } from "../list-extras.ts"
 import { refersBack } from "./reads-back.ts"
@@ -26,7 +26,7 @@ import { carriedStored, carriedText, heldApart, holdsText, inSeconds } from "./t
  * `numeric()` column reads every value as a string, but a list that binds it as read carries a value
  * as SQLite stored it, an integer as a bigint and a REAL as its double, which NUMERIC
  * affinity compares as the number it is, so it holds those too. A `customType`
- * column holds whatever its `fromDriver` read, opaque to comb: any value a cursor carries, bound back
+ * column holds whatever its `fromDriver` read, opaque to database: any value a cursor carries, bound back
  * through its `toDriver`.
  */
 const HOLDS: Record<ColumnDataType, (value: unknown, dataType: string) => boolean> = {
@@ -124,7 +124,7 @@ function bindable(value: unknown): unknown {
 
 /**
  * Whether `column` reads its stored number rounded: a Postgres numeric in drizzle's number mode, whose
- * read is the nearest double, so every list carries its text (`_combKeyTexts`) and a
+ * read is the nearest double, so every list carries its text (`_cursorKeyTexts`) and a
  * cursor binds that. A SQLite numeric stores an INTEGER or a REAL, which its driver reads as stored
  */
 const readsRounded = (column: SQLWrapper | undefined): boolean =>
@@ -154,7 +154,7 @@ const affinityFree = (cast: SQL): SQL => sql`+${cast}`
  * binds as itself, past the column's mapper: cast to numeric on a key that reads rounded, and on a
  * Postgres custom column as a parameter Postgres types as the column it is compared with, its own type. A value as read binds through the mapper, so a custom
  * column's `toDriver` writes it as it writes the column, a text value that looks
- * like a number included; a cursor with no flag, as every released comb minted, holds only those
+ * like a number included; a cursor with no flag, as every released database minted, holds only those
  */
 function boundCarried(column: SQLWrapper | undefined, value: unknown, carried: boolean): unknown {
 	/* one SQLite parse of the text the list checked reads back as the key, on every driver */
@@ -241,7 +241,11 @@ function unfitIndex(columns: readonly SQLWrapper[], values: readonly unknown[], 
 /** Throw a 400 unless every cursor value, the tiebreak id last, fits its column (unfitIndex) */
 function assertCursorFits(columns: readonly SQLWrapper[], values: readonly unknown[], at: FitAt = {}): void {
 	if (unfitIndex(columns, values, at) === -1) return
-	throw new CombError({ cause: "Invalid cursor", errorKey: combErrorKeys.INVALID_CURSOR, status: "bad_request" })
+	throw new DatabaseError({
+		cause: "Invalid cursor",
+		errorKey: databaseErrorKeys.INVALID_CURSOR,
+		status: "bad_request",
+	})
 }
 
 /** A cursor value as `column`'s driver binds it: SQLite's way on a SQLite column, as it is elsewhere (Postgres reads 'Infinity') */

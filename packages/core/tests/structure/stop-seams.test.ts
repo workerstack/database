@@ -1,5 +1,5 @@
 /**
- * comb starts new work, a process, a database connection or session, or a request, in a few seams
+ * database starts new work, a process, a database connection or session, or a request, in a few seams
  * alone, and each waits for a signal's stop to end before it starts any (pastStop of cleanup.ts,
  * r22b): a loop between steps while a stop's cleanup runs, a replay's next file or a proof's next
  * scratch among them, then starts nothing the cleanup would miss. A file that starts such work is a
@@ -23,9 +23,9 @@ export function startsWork(text: string): boolean {
 
 // lookup-table: each file under src that starts new work, and how it waits for a stop, or why it need not
 const SEAMS: Readonly<Record<string, string>> = {
-	"codegen/generators/orm.ts": "writes a consumer's code, whose clients comb never opens",
+	"codegen/generators/orm.ts": "writes a consumer's code, whose clients database never opens",
 	"codegen/runtime/supervise.mjs":
-		"a process of its own that loads no comb module: it starts its one child before it listens for a signal, and kills that child's group on one",
+		"a process of its own that loads no database module: it starts its one child before it listens for a signal, and kills that child's group on one",
 	"migrate/core/pg-live-objects.ts": "pastStop",
 	"migrate/core/process.ts": "pastStop",
 	"migrate/drivers/bun-sqlite.ts": "pastStop",

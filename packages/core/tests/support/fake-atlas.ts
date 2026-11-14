@@ -1,13 +1,13 @@
 /**
  * A fake Atlas for the apply tests: hash writes atlas.sum from the files' name lengths, a schema
  * diff records the history it replayed, and status, inspect, dry run and apply answer as told. An
- * apply of n files, as comb runs each run of files that may share a session (PA1 of r22b), answers
+ * apply of n files, as database runs each run of files that may share a session (PA1 of r22b), answers
  * with the report's next n files, and status then records the files reported as applied, not pending.
  */
 import { readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { sqlFiles } from "../../src/migrate/core/atlas-dir.ts"
-import type { Run, RunResult } from "../../src/migrate/core/process.ts"
+import type { MigrateRun, RunResult } from "../../src/migrate/core/process.ts"
 
 const ok = (stdout = ""): RunResult => ({ code: 0, stderr: "", stdout })
 const fail = (stderr: string, stdout = ""): RunResult => ({ code: 1, stderr, stdout })
@@ -37,7 +37,7 @@ type Answers = {
 	/** status once an apply ran, as another apply or a skipped file leaves it; `status` until then */
 	statusAfterApply?: RunResult
 }
-type Fake = Run & {
+type Fake = MigrateRun & {
 	calls: Array<{ args: string[]; env: Readonly<Record<string, string | undefined>> | undefined }>
 	/** each file of the history a schema diff replayed, on a docker:// dev */
 	replayed: string[]
@@ -94,7 +94,7 @@ function fakeAtlas(answers: Answers): Fake {
 	const replayed: string[] = []
 	let applied = false
 	const taken: string[] = []
-	const run: Run = async (_cmd, args, runOptions) => {
+	const run: MigrateRun = async (_cmd, args, runOptions) => {
 		calls.push({ args: [...args], env: runOptions?.env })
 		if (args[1] === "hash") {
 			const dir = (args[args.indexOf("--dir") + 1] as string).replace("file://", "")
@@ -119,7 +119,7 @@ function fakeAtlas(answers: Answers): Fake {
 		if (args.includes("--dry-run")) return answers.dryRun ?? NOTHING
 		applied = true
 		const whole = answers.apply ?? NOTHING
-		/* comb's amount follows its --format and the format's value */
+		/* database's amount follows its --format and the format's value */
 		const amount = Number(args[args.indexOf("--format") + 2])
 		return Number.isInteger(amount) && whole.stdout.startsWith("{") ? nextOf(whole, taken, amount) : whole
 	}

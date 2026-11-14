@@ -11,7 +11,7 @@ const file = (name: string, current: string, legacy?: string) => ({
 	name,
 })
 
-/** A row recorded since 0.5.0, as every row the current comb writes is */
+/** A row recorded since 0.5.0, as every row the current database writes is */
 const NOW = Date.parse("2026-10-27T00:00:00Z")
 
 /* M44: a file's pre-0.5.0 hash matches only a row recorded before 0.5.0, so an edit its normalizing hides is an edit */
@@ -40,7 +40,7 @@ describe("matchHistory: the legacy hash", () => {
 	})
 })
 
-/* SL5 of r22 (sibling: the legacy hash): 0.5.0 to 0.20 folded every Unicode space, and no date tells which comb
+/* SL5 of r22 (sibling: the legacy hash): 0.5.0 to 0.20 folded every Unicode space, and no date tells which database
    recorded a row, so a row of any date matches by the folded hash */
 describe("matchHistory: the hash that folded every space", () => {
 	const unicode = "CREATE TABLE t (id INTEGER PRIMARY KEY, a\u00a0b);"

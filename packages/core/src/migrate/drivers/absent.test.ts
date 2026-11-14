@@ -16,7 +16,7 @@ describe("absentDatabase", () => {
 	it("refuses a write, naming the database", async () => {
 		const conn = await absentDatabase("core")
 		await expect(conn.batch([{ sql: "CREATE TABLE t (x)" }])).rejects.toThrow(
-			"core does not exist yet; comb creates it only to apply to it",
+			"core does not exist yet; database creates it only to apply to it",
 		)
 		await conn.close()
 	})

@@ -77,7 +77,7 @@ const NETWORKS: Array<[value: string, postgres: boolean]> = [
 	["fe80::%eth0/64", false],
 ]
 
-describe("comb's IPv6 rules, as Postgres reads an address (AA12 of r22)", () => {
+describe("database's IPv6 rules, as Postgres reads an address (AA12 of r22)", () => {
 	it.each(ADDRESSES)("ipv6 %j: Postgres %s", (value, postgres) => {
 		expect(schemaOf(ipv6Rule()).safeParse(value).success).toBe(postgres)
 		expect(schemaOf(cidrv6Rule()).safeParse(`${value}/64`).success).toBe(postgres)

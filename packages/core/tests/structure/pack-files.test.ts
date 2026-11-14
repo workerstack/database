@@ -17,7 +17,7 @@ afterEach(() => {
 
 /** A git repository under the OS temp dir that ignores `copy/` */
 function repo(): string {
-	const dir = mkdtempSync(join(tmpdir(), "comb-pack-files-"))
+	const dir = mkdtempSync(join(tmpdir(), "database-pack-files-"))
 	dirs.push(dir)
 	spawnSync("git", ["init", "-q"], { cwd: dir })
 	writeFileSync(join(dir, ".gitignore"), "copy/\n")

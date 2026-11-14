@@ -1,5 +1,5 @@
 /**
- * comb makes a scratch directory in one place, src/migrate/core/cleanup.ts (S2 and KC5 of r22): a
+ * database makes a scratch directory in one place, src/migrate/core/cleanup.ts (S2 and KC5 of r22): a
  * name carrying its process, so a later run sweeps a killed one's at once, and a removal SIGINT and
  * SIGTERM run too. A directory made anywhere else outlives a Ctrl-C, with whatever it held: a
  * migrations copy, a snapshot, an Atlas config naming the target's URL.
@@ -35,11 +35,11 @@ describe("single scratch boundary (S2 and KC5 of r22; sibling: the single proces
 	})
 
 	it.each([
-		['const dir = fs.mkdtempSync(path.join(os.tmpdir(), "comb-x-"))', true],
-		['const dir = mkdtempSync(join(tmpdir(), "comb-x-"))', true],
-		['const dir = await mkdtemp("comb-x-")', true],
-		['using dir = fs.mkdtempDisposableSync("comb-x-")', true],
-		['const { dir, remove } = scratchDir("comb-x-")', false],
+		['const dir = fs.mkdtempSync(path.join(os.tmpdir(), "database-x-"))', true],
+		['const dir = mkdtempSync(join(tmpdir(), "database-x-"))', true],
+		['const dir = await mkdtemp("database-x-")', true],
+		['using dir = fs.mkdtempDisposableSync("database-x-")', true],
+		['const { dir, remove } = scratchDir("database-x-")', false],
 		['const s = "mkdtemp is banned"', false],
 	])("the checker: %s → %s", (text, expected) => {
 		expect(makesScratch(text)).toBe(expected)

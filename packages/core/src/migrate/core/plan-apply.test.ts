@@ -10,7 +10,7 @@ import { guardRebuilds } from "./rebuild-guard.ts"
 import { extractSchema } from "./schema.ts"
 
 /** A D1 engine that could not prove 1_a.sql */
-const unproving = () => Promise.resolve([{ name: "1_a.sql", why: "comb's local D1 crashed" }])
+const unproving = () => Promise.resolve([{ name: "1_a.sql", why: "database's local D1 crashed" }])
 
 describe("wranglerOrder", () => {
 	it("orders by leading number, then by name, files without a number last", () => {
@@ -27,7 +27,7 @@ describe("wranglerOrder", () => {
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-plan-"))
+	dir = mkdtempSync(join(tmpdir(), "database-plan-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
@@ -57,7 +57,7 @@ describe("planApply", () => {
 			{
 				"1_a.sql": "CREATE TABLE t (id TEXT, a TEXT);",
 				"2_b.sql":
-					"-- comb:allow-unsafe: a is retired\nCREATE TABLE new_t (id TEXT);\nINSERT INTO new_t (id) SELECT id FROM t;\nDROP TABLE t;\nALTER TABLE new_t RENAME TO t;",
+					"-- database:allow-unsafe: a is retired\nCREATE TABLE new_t (id TEXT);\nINSERT INTO new_t (id) SELECT id FROM t;\nDROP TABLE t;\nALTER TABLE new_t RENAME TO t;",
 			},
 			{ applied: (name) => name === "1_a.sql" },
 		)
@@ -87,11 +87,13 @@ describe("planApply's proof run, on a database it reads", () => {
 			},
 			{ conn },
 		)
-		await expect(run()).rejects.toThrow(/^1_bad\.sql is unsafe \(proof run: comb could not run this in the proof copy/)
+		await expect(run()).rejects.toThrow(
+			/^1_bad\.sql is unsafe \(proof run: database could not run this in the proof copy/,
+		)
 		expect(out).toEqual([
-			"Proof run: 1_bad.sql, 2_ok.sql: unproven, comb could not seed codes (CHECK constraint failed: length(code) = 20)",
+			"Proof run: 1_bad.sql, 2_ok.sql: unproven, database could not seed codes (CHECK constraint failed: length(code) = 20)",
 			expect.stringMatching(
-				/^Proof run: 1_bad\.sql: comb could not run this in the proof copy on SQLite \d+\.\d+\.\d+: ALTER TABLE missing ADD COLUMN x TEXT: no such table: missing$/,
+				/^Proof run: 1_bad\.sql: database could not run this in the proof copy on SQLite \d+\.\d+\.\d+: ALTER TABLE missing ADD COLUMN x TEXT: no such table: missing$/,
 			),
 		])
 		await conn.close()
@@ -197,7 +199,7 @@ describe("planApply on an approved file with a cautious statement", () => {
 	it.each([
 		[
 			"approved in the file",
-			"-- comb:allow-unsafe: remove parent 1, keep its children\nPRAGMA foreign_keys = off;\nDROP TABLE parent;\nPRAGMA foreign_keys = on;",
+			"-- database:allow-unsafe: remove parent 1, keep its children\nPRAGMA foreign_keys = off;\nDROP TABLE parent;\nPRAGMA foreign_keys = on;",
 		],
 		[
 			"cautious, under --yes",
@@ -231,14 +233,14 @@ describe("planApply's target engine", () => {
 		await conn.close()
 	})
 
-	/* AC2-2 of area C round 2: comb's local D1 crashing on a probe proves nothing, either way */
+	/* AC2-2 of area C round 2: database's local D1 crashing on a probe proves nothing, either way */
 	it("rates a file the engine could not prove cautious, which an approval lets through, and not unsafe", async () => {
 		const conn = libsqlConnection()
 		await conn.client.executeMultiple("CREATE TABLE kept (id TEXT);")
 		const files = { "1_a.sql": "CREATE TABLE t (id TEXT);" }
 		const pending = await plan(files, { conn, engine: unproving }).run()
 		expect(pending[0]?.migration.classification).toMatchObject({
-			cautiousStatements: ["proof run: unproven on D1's engine: comb's local D1 crashed"],
+			cautiousStatements: ["proof run: unproven on D1's engine: database's local D1 crashed"],
 			safety: "cautious",
 		})
 		await expect(

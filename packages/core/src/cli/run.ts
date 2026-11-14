@@ -1,5 +1,5 @@
 /**
- * Comb CLI: database codegen and the migration toolkit, run in process by `runCli(argv, io)`.
+ * The database CLI: codegen and the migration toolkit, run in process by `runCli(argv, io)`.
  * The binary (src/bin.ts) hands it the process's argv and IO.
  */
 import { optionsHelp, refuseFurther } from "./args.ts"
@@ -9,7 +9,7 @@ import { CliError, type CliContext, type CliDeps, type CliIo, Reported, ShowHelp
 import { version } from "./version.ts"
 
 const COMMANDS: ReadonlyArray<[string, string]> = [
-	["codegen [db...]", "Run codegen for the databases in comb.config.ts (all, or those named)"],
+	["codegen [db...]", "Run codegen for the databases in database.config.ts (all, or those named)"],
 	["codegen --tables <path>", "Direct mode: analyze one tables file and generate beside it"],
 	["migrate init", "Create drizzle.config.ts and atlas-migrations/"],
 	["migrate diff <db> [name]", "Diff the schema and write the next migration"],
@@ -22,7 +22,7 @@ const COMMANDS: ReadonlyArray<[string, string]> = [
 /** The help, from the declarations the commands parse with */
 export const help = (): string =>
 	[
-		"comb — database codegen + migration toolkit",
+		"database — database codegen + migration toolkit",
 		"",
 		"COMMANDS:",
 		...COMMANDS.map(([usage, summary]) => `  ${usage.padEnd(26)}${summary}`),
@@ -62,7 +62,7 @@ async function dispatch(argv: readonly string[], io: CliContext): Promise<void> 
 const asksJson = (argv: readonly string[]): boolean => argv.some((arg) => arg === "--json" || arg.startsWith("--json="))
 
 /**
- * Runs the comb CLI on `argv` with `deps` in place of comb's own seams, for comb's tests.
+ * Runs the database CLI on `argv` with `deps` in place of database's own seams, for database's tests.
  * Of `io` it reads the documented fields alone, so a seam an io carries is never read.
  */
 export async function runCliWith(argv: readonly string[], io: CliIo, deps: CliDeps): Promise<number> {
@@ -90,7 +90,7 @@ export async function runCliWith(argv: readonly string[], io: CliIo, deps: CliDe
 	}
 }
 
-/** Runs the comb CLI on `argv` (the arguments after the script) and returns its exit code. */
+/** Runs the database CLI on `argv` (the arguments after the script) and returns its exit code. */
 export function runCli(argv: readonly string[], io: CliIo): Promise<number> {
 	return runCliWith(argv, io, {})
 }

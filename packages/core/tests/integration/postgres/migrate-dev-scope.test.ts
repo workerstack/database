@@ -1,7 +1,7 @@
 /**
- * PA7 of r22b: comb migrates one schema, and Atlas keeps a URL's own search_path, so a devUrl that
+ * PA7 of r22b: database migrates one schema, and Atlas keeps a URL's own search_path, so a devUrl that
  * names another schema diffed that schema on dev and called a new table of `schema` in sync. The
- * devUrl's search_path is held to the url's rule: it names `schema`, or comb refuses it by field name.
+ * devUrl's search_path is held to the url's rule: it names `schema`, or database refuses it by field name.
  */
 import { mkdtempSync, readdirSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -18,7 +18,7 @@ beforeAll(loadPostgresParser)
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-pg-dev-scope-"))
+	dir = mkdtempSync(join(tmpdir(), "database-pg-dev-scope-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
@@ -53,7 +53,7 @@ describe("migrate diff on Postgres: devUrl's search_path is checked against sche
 		it("refuses a devUrl whose search_path names public with schema app, writing nothing", async () => {
 			await withScratchDb(async (dev) => {
 				await expect(diff(await scopedDev(dev, "public"))).rejects.toThrow(
-					"the devUrl's search_path names public, but schema is app; comb migrates one: set schema to it, and drop search_path from the devUrl",
+					"the devUrl's search_path names public, but schema is app; database migrates one: set schema to it, and drop search_path from the devUrl",
 				)
 				expect(readdirSync(dir).filter((file) => file.endsWith(".sql"))).toEqual([])
 			})

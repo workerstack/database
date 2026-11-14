@@ -1,7 +1,7 @@
 /**
- * KT5 of r22b: Bun compiles comb's shipped source under the consumer's tsconfig. With
+ * KT5 of r22b: Bun compiles database's shipped source under the consumer's tsconfig. With
  * `useDefineForClassFields: false` (projects on legacy decorators) a class field is assigned, and
- * JavaScriptCore's own non-enumerable `Error.column` took `this.column`, so a CombError's JSON body
+ * JavaScriptCore's own non-enumerable `Error.column` took `this.column`, so a DatabaseError's JSON body
  * and its spread dropped the column that names which one conflicted.
  */
 import { afterEach, describe, expect, it } from "bun:test"
@@ -11,8 +11,8 @@ import { join } from "node:path"
 
 const SRC = join(import.meta.dir, "../../src")
 
-const PROBE = `import { CombError } from "./src/error.ts"
-const error = new CombError({ column: "email", errorKey: "unique_constraint_violation", status: "conflict", table: "user" })
+const PROBE = `import { DatabaseError } from "./src/error.ts"
+const error = new DatabaseError({ column: "email", errorKey: "unique_constraint_violation", status: "conflict", table: "user" })
 console.log(JSON.stringify({ body: JSON.parse(JSON.stringify(error)), spread: Object.keys({ ...error }).sort() }))
 `
 
@@ -21,9 +21,9 @@ afterEach(() => {
 	for (const dir of made.splice(0)) rmSync(dir, { force: true, recursive: true })
 })
 
-/** What a CombError serializes and spreads to, compiled by Bun under a project tsconfig of `compilerOptions` */
+/** What a DatabaseError serializes and spreads to, compiled by Bun under a project tsconfig of `compilerOptions` */
 function probe(compilerOptions: Record<string, unknown>): unknown {
-	const dir = mkdtempSync(join(tmpdir(), "comb-define-fields-"))
+	const dir = mkdtempSync(join(tmpdir(), "database-define-fields-"))
 	made.push(dir)
 	mkdirSync(join(dir, "src"))
 	for (const file of ["error.ts", "types.ts"]) copyFileSync(join(SRC, file), join(dir, "src", file))
@@ -40,7 +40,7 @@ const SHAPE = {
 	spread: ["column", "errorKey", "status", "statusKey", "table"],
 }
 
-describe("a CombError keeps its column under Bun, whatever the consumer's class-field setting (KT5; sibling: the default)", () => {
+describe("a DatabaseError keeps its column under Bun, whatever the consumer's class-field setting (KT5; sibling: the default)", () => {
 	it.each([
 		["useDefineForClassFields false", { target: "ES2022", useDefineForClassFields: false }],
 		["legacy decorators", { experimentalDecorators: true, useDefineForClassFields: false }],

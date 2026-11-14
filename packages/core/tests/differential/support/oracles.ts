@@ -1,8 +1,8 @@
 /**
  * The published releases the differential compares the tip with, each installed from npm into a box of its own
- * under ~/.cache/comb-test/diff/<version>: its package.json and bun.lock from ../oracles/<version>, and a copy
+ * under ~/.cache/database-test/diff/<version>: its package.json and bun.lock from ../oracles/<version>, and a copy
  * of entry.ts that resolves inside it. Nothing above ~/.cache holds a package.json, so a box resolves only what
- * it installed; a box inside the repo would resolve comb's own dev packages. Peers are left out (`--omit=peer`):
+ * it installed; a box inside the repo would resolve database's own dev packages. Peers are left out (`--omit=peer`):
  * a list needs only the drizzle, libsql and zod the box pins, and the migrate CLI runs the project's wrangler.
  */
 import { spawnSync } from "node:child_process"
@@ -18,7 +18,10 @@ export type Version = "tip" | Oracle
 export const VERSIONS: readonly Version[] = ["tip", ...ORACLES]
 
 const SOURCES = join(import.meta.dirname, "../oracles")
-const BOXES = join(homedir(), ".cache/comb-test/diff")
+
+/** The approval line `version`'s check reads, as that release spells it (oracles/<version>/approval.sql) */
+export const approvalOf = (version: Oracle): string => readFileSync(join(SOURCES, version, "approval.sql"), "utf8")
+const BOXES = join(homedir(), ".cache/database-test/diff")
 const COPIED = {
 	"entry-bun.ts": join(import.meta.dirname, "entry-bun.ts"),
 	"entry-cli.ts": join(import.meta.dirname, "entry-cli.ts"),
@@ -64,7 +67,7 @@ export function installOracle(version: Oracle): string {
 	})
 	if (installed.status !== 0) {
 		rmSync(staging, { force: true, recursive: true })
-		throw new Error(`bun install of comb ${version} failed:\n${installed.stdout}${installed.stderr}`)
+		throw new Error(`bun install of database ${version} failed:\n${installed.stdout}${installed.stderr}`)
 	}
 	writeFileSync(join(staging, ".stamp"), want)
 	rmSync(box, { force: true, recursive: true })

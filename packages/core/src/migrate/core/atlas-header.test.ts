@@ -47,7 +47,7 @@ function* regexLines(file: string, at = 0): Generator<string> {
 	for (let line = next.exec(file)?.[0] ?? ""; line !== ""; line = next.exec(file)?.[0] ?? "") yield line
 }
 
-/* the gate's pin (comb-9d): the indexOf reader has no arm for the null exec the regex one never met, and reads as it did */
+/* the gate's pin (database-9d): the indexOf reader has no arm for the null exec the regex one never met, and reads as it did */
 describe("linesOf", () => {
 	it.each([
 		["a file that ends without a line break", "-- atlas:txmode none\nSELECT 1", 0],

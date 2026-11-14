@@ -1,5 +1,5 @@
 /**
- * comb.config.ts: the databases `comb codegen` and `comb migrate diff` read. Write it through
+ * database.config.ts: the databases `database codegen` and `database migrate diff` read. Write it through
  * defineCodegenConfig so a mistyped generator, output key or driver fails to compile.
  */
 import type { FtsTableConfig } from "./generators/fts-sql.ts"
@@ -50,17 +50,17 @@ export type DatabaseCodegen = {
 	 * reads it as the parent's; a violation on a partition not listed names no column
 	 */
 	partitions?: Record<string, readonly string[]> | undefined
-	/** The tables file, relative to comb.config.ts */
+	/** The tables file, relative to database.config.ts */
 	tables: string
 }
 
-/** What comb.config.ts exports */
+/** What database.config.ts exports */
 export type CodegenConfig = {
-	/** each database, by the name `comb codegen` and `comb migrate diff` select it by and its generated files take (`db.<name>`) */
+	/** each database, by the name `database codegen` and `database migrate diff` select it by and its generated files take (`db.<name>`) */
 	databases: Record<string, DatabaseCodegen>
 }
 
-/** `config`, typed: the identity a comb.config.ts exports through */
+/** `config`, typed: the identity a database.config.ts exports through */
 export function defineCodegenConfig(config: CodegenConfig): CodegenConfig {
 	return config
 }

@@ -1,6 +1,6 @@
 /**
  * Q2 of r17 (N9, refined): the next cursor's id is the value the list breaks ties on, which the
- * builder selects itself as `_combId`. A row's own id, here a child's beside the parent the list
+ * builder selects itself as `_cursorId`. A row's own id, here a child's beside the parent the list
  * orders by, never reaches the cursor, so the list neither repeats nor skips a row.
  */
 import { eq } from "drizzle-orm"

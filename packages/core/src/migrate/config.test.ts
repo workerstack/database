@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { describe, expect, it } from "vitest"
 import {
-	type CombMigrateConfig,
+	type MigrateConfig,
 	createProvider,
 	DEFAULT_PG_DEV_URL,
 	defineConfig,
@@ -16,14 +16,14 @@ import {
 
 describe("migrate/config: defineConfig", () => {
 	it("returns its input as it is: loadConfig validates it (P11 of the 0.15.0 review)", () => {
-		const input: CombMigrateConfig = {
+		const input: MigrateConfig = {
 			databases: { core: { migrationsDir: "m", name: "core", provider: { databaseName: "core", type: "d1" } } },
 		}
 		expect(defineConfig(input)).toBe(input)
 	})
 
 	it("parses valid config with environments", async () => {
-		const input: CombMigrateConfig = {
+		const input: MigrateConfig = {
 			databases: {
 				core: {
 					environments: {
@@ -44,7 +44,7 @@ describe("migrate/config: defineConfig", () => {
 	})
 
 	it("parses config with legacy name+provider format", async () => {
-		const input: CombMigrateConfig = {
+		const input: MigrateConfig = {
 			databases: {
 				core: {
 					migrationsDir: "./migrations",
@@ -214,7 +214,7 @@ describe("resolveDatabaseConfig and createProvider — every provider", () => {
 const PG_URL = "postgres://app@db.example.com/app?sslmode=verify-full"
 
 describe("defineConfig and resolveDatabaseConfig — a Postgres provider", () => {
-	it("resolves a postgres provider with comb's defaults for what it leaves out", async () => {
+	it("resolves a postgres provider with database's defaults for what it leaves out", async () => {
 		const config = await parseConfig({
 			databases: { core: { migrationsDir: "m", name: "core", provider: { type: "postgres", url: PG_URL } } },
 		})
@@ -284,9 +284,9 @@ describe("defineConfig and createProvider — Postgres refusals and neighbors", 
 			name: "a",
 			provider: { type: "postgres", url: PG_URL },
 		})
-		// @ts-expect-error createProvider takes the providers comb connects to itself
+		// @ts-expect-error createProvider takes the providers database connects to itself
 		expect(() => createProvider(resolved.provider)).toThrow(
-			"Atlas applies Postgres migrations; comb opens no connection to postgres",
+			"Atlas applies Postgres migrations; database opens no connection to postgres",
 		)
 	})
 })
@@ -307,19 +307,19 @@ describe("parseConfig — the rest of the input", () => {
 	})
 })
 
-const project = () => mkdtempSync(join(tmpdir(), "comb-migrate-config-"))
+const project = () => mkdtempSync(join(tmpdir(), "database-migrate-config-"))
 
 /* a database a config file names, as source text */
 const DB = '{ migrationsDir: "m", name: "local", provider: { path: "db.sqlite", type: "bun-sqlite" } }'
 
 describe("findConfigFile and loadConfig", () => {
-	it("finds comb.migrate.config.ts first, and nothing in a project without one", () => {
+	it("finds database.migrate.config.ts first, and nothing in a project without one", () => {
 		const dir = project()
 		try {
 			expect(findConfigFile(dir)).toBeUndefined()
 			writeFileSync(join(dir, "migration.config.ts"), "export default {}\n")
-			writeFileSync(join(dir, "comb.migrate.config.ts"), "export default {}\n")
-			expect(findConfigFile(dir)).toBe(join(dir, "comb.migrate.config.ts"))
+			writeFileSync(join(dir, "database.migrate.config.ts"), "export default {}\n")
+			expect(findConfigFile(dir)).toBe(join(dir, "database.migrate.config.ts"))
 		} finally {
 			rmSync(dir, { force: true, recursive: true })
 		}
@@ -343,7 +343,7 @@ describe("findConfigFile and loadConfig", () => {
 				expect(Object.keys(loaded.config.databases)).toEqual([key])
 				expect(loaded.configDir).toBe(dir)
 			}
-			writeFileSync(join(dir, "comb.migrate.config.ts"), `export default { databases: { found: ${DB} } }\n`)
+			writeFileSync(join(dir, "database.migrate.config.ts"), `export default { databases: { found: ${DB} } }\n`)
 			expect(Object.keys((await loadConfig(undefined, dir)).config.databases)).toEqual(["found"])
 		} finally {
 			rmSync(dir, { force: true, recursive: true })
@@ -357,7 +357,7 @@ describe("findConfigFile and loadConfig", () => {
 				`Config file not found: ${join(dir, "nope.config.ts")}`,
 			)
 			await expect(loadConfig(undefined, dir)).rejects.toThrow(
-				"No config file found. Create comb.migrate.config.ts (or comb.migrate.config.js)",
+				"No config file found. Create database.migrate.config.ts (or database.migrate.config.js)",
 			)
 		} finally {
 			rmSync(dir, { force: true, recursive: true })

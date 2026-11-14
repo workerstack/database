@@ -161,7 +161,7 @@ function alternation(cursor: Cursor): Shape {
 }
 
 /**
- * What `source`, the engine's own as comb publishes it, holds that an engine comb names reads
+ * What `source`, the engine's own as database publishes it, holds that an engine database names reads
  * otherwise, or not at all, as the error states it; null for none
  */
 export function unportableOf(source: string): string | null {

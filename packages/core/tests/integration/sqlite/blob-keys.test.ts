@@ -1,5 +1,5 @@
 /**
- * QL5 of r22b: a cursor comb mints must be one comb reads. A list sorted by a BLOB column served page
+ * QL5 of r22b: a cursor database mints must be one database reads. A list sorted by a BLOB column served page
  * 1 and minted a cursor the next request answered `invalid_cursor`, a 400, on the table, the derived
  * and the merged list alike, as the codec wrote a Uint8Array as a JSON object its decoder refuses. It
  * now carries the bytes under a `$bytes` tag, so each list pages every row once in SQLite's byte
@@ -77,7 +77,7 @@ async function served(path: Path, order: string): Promise<{ ids: string[]; stran
 	return { ids, stranded: false }
 }
 
-describe("a minted cursor is one comb reads (QL5 of r22b; sibling: a cursor openCursor refuses)", () => {
+describe("a minted cursor is one database reads (QL5 of r22b; sibling: a cursor openCursor refuses)", () => {
 	it.each(["table", "derived", "merged"] as const)(
 		"pages a blob key on the %s list every row once, asc and desc",
 		async (path) => {

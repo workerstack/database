@@ -1,7 +1,7 @@
 import { fixtureRoot } from "../../../src/codegen/__fixtures__/temp.ts"
 /**
  * A column's SQL name is what the engine reports and what triggers reference, so everything
- * comb generates for the engine keys on it, not on the TypeScript property that holds it.
+ * database generates for the engine keys on it, not on the TypeScript property that holds it.
  * Here every property differs from its column, and the generated map and FTS DDL run on libsql.
  */
 import fs from "node:fs"
@@ -12,7 +12,7 @@ import { analyze } from "../../../src/codegen/analyzer.ts"
 import type { AnalysisResult } from "../../../src/codegen/analyzer-types.ts"
 import { generateConstraints } from "../../../src/codegen/generators/constraints.ts"
 import { generateFtsSql } from "../../../src/codegen/generators/fts-sql.ts"
-import type { CombError } from "../../../src/error.ts"
+import type { DatabaseError } from "../../../src/error.ts"
 import { sqliteErrorHandler } from "../../../src/sqlite/constraint-handler.ts"
 import type { ConstraintMap } from "../../../src/types.ts"
 import { libsqlMemory } from "../support/libsql.ts"
@@ -51,7 +51,7 @@ let analysis: AnalysisResult
 let map: ConstraintMap
 
 beforeAll(async () => {
-	dir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-sql-names-"))
+	dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-sql-names-"))
 	const tables = path.join(dir, "db.app.tables.ts")
 	fs.writeFileSync(tables, TABLES)
 	analysis = await analyze(tables)
@@ -94,7 +94,7 @@ describe("generated constraint map on libsql", () => {
 				() => null,
 				(error: unknown) => error,
 			)
-			expect(() => sqliteErrorHandler(failure, [map])).toThrow(expect.objectContaining({ errorKey }) as CombError)
+			expect(() => sqliteErrorHandler(failure, [map])).toThrow(expect.objectContaining({ errorKey }) as DatabaseError)
 		} finally {
 			close()
 		}

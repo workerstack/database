@@ -98,9 +98,9 @@ async function answering(
 	return { answers, input, written }
 }
 
-/* comb-5d's node-types finding: Terminal named NodeJS, which a consumer without @types/node reads as `any`;
+/* database-5d's node-types finding: Terminal named NodeJS, which a consumer without @types/node reads as `any`;
    and its runtime review of the reader that replaced readline */
-describe("a question on a terminal typed by what comb calls", () => {
+describe("a question on a terminal typed by what database calls", () => {
 	it("reads an answer split across chunks, as bytes or as strings", async () => {
 		const bytes = new TextEncoder().encode("Yes\n")
 		expect(await (await answering([bytes.slice(0, 2), bytes.slice(2)])).answers).toEqual([true])

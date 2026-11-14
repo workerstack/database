@@ -1,7 +1,7 @@
 /**
  * Every GitHub Action the workflows run is pinned to a full commit SHA, with the release it
  * names in a trailing comment. A tag can be moved to other code; a SHA cannot. And CI runs the
- * gates standards lists for comb, no more and no fewer, so the rule every agent reads names what CI checks.
+ * gates standards lists for database, no more and no fewer, so the rule every agent reads names what CI checks.
  */
 import { globSync, readdirSync, readFileSync } from "node:fs"
 import { availableParallelism, homedir } from "node:os"
@@ -9,6 +9,7 @@ import { join } from "node:path"
 import { describe, expect, it } from "vitest"
 import { ATLAS_FLOOR_PATH, ATLAS_FLOOR_SHA256, ATLAS_FLOOR_VERSION } from "../support/atlas-floor.ts"
 import { DATE_KEYS, OFF_UTC_INTEGRATION, OFF_UTC_POSTGRES, OFF_UTC_UNIT, OFF_UTC_ZONE } from "../support/off-utc.ts"
+import { PG_KEYWORDS } from "../support/pg-keywords.ts"
 import { POSIX_EXCLUDE, POSIX_INTEGRATION, POSIX_UNIT } from "../support/posix.ts"
 import { SQLD_ARCHIVE, SQLD_PATH, SQLD_VERSION } from "../support/sqld.ts"
 import { workers } from "../support/workers.ts"
@@ -135,7 +136,7 @@ function ciGates(): string[] {
 	return pkg.standards.ci
 }
 
-/** The script a `bun run` step runs, through comb's package filter or the root, whatever arguments it passes on */
+/** The script a `bun run` step runs, through database's package filter or the root, whatever arguments it passes on */
 const scriptOf = (command: string) => /^bun run (?:--filter \S+ )?(\S+)(?: .*)?$/.exec(command)?.[1]
 
 /* the coverage job merges the shards' blobs and runs no test of its own */
@@ -172,7 +173,7 @@ const scriptsOf = (lines: string) =>
 /* what a job off Linux runs: a part of a gate, never a gate of its own (4.19) */
 const OFF_LINUX = { "macos-latest": ["test:posix"] }
 
-describe("ci.yml runs the gates standards lists for comb", () => {
+describe("ci.yml runs the gates standards lists for database", () => {
 	const jobs = ciJobs(readFileSync(join(WORKFLOWS, "ci.yml"), "utf8"))
 	/* the 0.13 RC: CI ran test:coverage and the local gate ran test, so a local pass hid what CI failed */
 	it("every bun run step on Linux is a listed gate, every listed gate a Linux step, and every other step setup", () => {
@@ -216,7 +217,7 @@ describe("ci.yml runs the gates standards lists for comb", () => {
 		])
 	})
 
-	it("reads a step's script through comb's package filter, and a block step by its name", () => {
+	it("reads a step's script through database's package filter, and a block step by its name", () => {
 		expect(
 			ciSteps(
 				"      - run: bun run --filter @workerstack/database test:e2e\n      - name: x\n        run: |\n          y\n",
@@ -271,12 +272,12 @@ describe("ci.yml's sharded coverage", () => {
 
 /* 0.19's consumers job ran K7's missing-peer cells, which run atlas and reach Postgres, with neither */
 describe("ci.yml's suite jobs", () => {
-	it("give every Linux job that runs a suite Atlas, a Postgres 17 service and COMB_TEST_PG_URL", () => {
+	it("give every Linux job that runs a suite Atlas, a Postgres 17 service and DATABASE_TEST_PG_URL", () => {
 		const needs = [
 			"- name: install atlas v1.3.0",
 			"image: postgres:17",
 			"- name: test Postgres without fsync",
-			"COMB_TEST_PG_URL: postgres://comb:comb@localhost:5432/comb?sslmode=disable",
+			"DATABASE_TEST_PG_URL: postgres://database_test:database_test@localhost:5432/database_test?sslmode=disable",
 		]
 		const suites = ciJobs(readFileSync(join(WORKFLOWS, "ci.yml"), "utf8")).filter(
 			(job) => job.runsOn === "ubuntu-latest" && runsSuites(job.lines),
@@ -319,6 +320,28 @@ describe("ci.yml's differential job", () => {
 })
 
 /* plan 21 5.0: the remote libsql suites need the pinned sqld, which only the test job's own step provides */
+/**
+ * Each Postgres service's user and database in `yaml` that is a keyword. A check takes a server change
+ * to a name its file spells for the file's, and every file holding `DATABASE` spells a role named
+ * `database`: another test's grant to the server's own user then refuses that file (plan 50)
+ */
+export function keywordIdentities(yaml: string): string[] {
+	return [...yaml.matchAll(/^\s*POSTGRES_(?:DB|USER):\s*(\S+)\s*$/gm)]
+		.map(([, name]) => name!)
+		.filter((name) => PG_KEYWORDS.includes(name.toLowerCase()))
+}
+
+describe("ci.yml's Postgres test server", () => {
+	it("logs in as a role, into a database, that no keyword names", () => {
+		const ci = readFileSync(join(WORKFLOWS, "ci.yml"), "utf8")
+		expect(ci).toMatch(/POSTGRES_USER:/)
+		expect([keywordIdentities(ci), keywordIdentities("  POSTGRES_USER: database\n  POSTGRES_DB: app\n")]).toEqual([
+			[],
+			["database"],
+		])
+	})
+})
+
 describe("ci.yml's sqld", () => {
 	const jobs = ciJobs(readFileSync(join(WORKFLOWS, "ci.yml"), "utf8"))
 	const home = SQLD_PATH.slice(0, SQLD_PATH.indexOf(`/${SQLD_VERSION}/`) + SQLD_VERSION.length + 1).replace(
@@ -404,7 +427,7 @@ describe("the pass of the Date-key suites off UTC", () => {
 		expect([...OFF_UTC_UNIT, ...OFF_UTC_INTEGRATION, ...OFF_UTC_POSTGRES].toSorted()).toEqual(scanned)
 	})
 
-	/* a function whose name ends in timestamp, as Postgres's clock_timestamp(), is no comb timestamp column */
+	/* a function whose name ends in timestamp, as Postgres's clock_timestamp(), is no database timestamp column */
 	it("takes c.timestamp( as a Date key, and no name that only ends in timestamp(", () => {
 		expect(DATE_KEYS.test('c.timestamp("at")')).toBe(true)
 		expect(DATE_KEYS.test("timestamp(")).toBe(true)

@@ -1,5 +1,5 @@
 /**
- * A Postgres parse tree as comb reads it (libpg-query 17): its nodes by type, names as the parser
+ * A Postgres parse tree as database reads it (libpg-query 17): its nodes by type, names as the parser
  * lists their parts, and each name keyed as nameKey keys it; and the facts the history's trees
  * leave (pg-history.ts).
  */
@@ -168,7 +168,7 @@ type Facts = {
 	reads: Map<string, Reads>
 	/** where each table and materialized view keeps its rows, by its key */
 	storage: Map<string, Storage>
-	/** each partitioned table's one plain RANGE or LIST key column and its strategy as a bound writes it, by its key, whose bounds comb proves */
+	/** each partitioned table's one plain RANGE or LIST key column and its strategy as a bound writes it, by its key, whose bounds database proves */
 	partitionKeys: Map<string, { column: string; strategy: "l" | "r" }>
 	/** what each table's constraints prove of its rows, by its key (pg-bounds.ts) */
 	proofs: Map<string, Proof>

@@ -2,7 +2,7 @@
  * The walk over one statement's program, as `EXPLAIN` lists it (proof-engine.ts): what it does to
  * the tables that were there before the file, read default-deny. A cursor open for writing on an
  * existing table, or on one of its indexes, may read, seek and add a row; a Delete or an IdxDelete
- * deletes one, and any other opcode on it is one comb cannot read, so unsafe. Of the opcodes that
+ * deletes one, and any other opcode on it is one database cannot read, so unsafe. Of the opcodes that
  * name a root page, a Clear of a table's own root empties it (SQLite's truncation of a DELETE
  * without a WHERE), and a Destroy or DropTable of an existing table drops it.
  */
@@ -19,11 +19,11 @@ type Effects = {
 	/** the existing tables it drops */
 	drops: Set<string>
 	/**
-	 * the triggers on existing tables it can fire, directly or through another trigger, comb's FTS
+	 * the triggers on existing tables it can fire, directly or through another trigger, database's FTS
 	 * sync triggers aside; a trigger's WHEN is not evaluated
 	 */
 	triggers: string[]
-	/** what it does to an existing table that comb cannot read: the table and the opcode */
+	/** what it does to an existing table that database cannot read: the table and the opcode */
 	unread: Set<string>
 	/**
 	 * whether it updates, deletes or replaces rows of a virtual table itself, not through a trigger:

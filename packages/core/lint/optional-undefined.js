@@ -4,26 +4,26 @@ import { parseSync } from "oxc-parser"
 import { moduleOf, scopeOf } from "./generic-scope.js"
 import { srcPath } from "./scope.js"
 
-/* comb reads an optional key set to undefined as the key left out. A declaration that refuses
+/* database reads an optional key set to undefined as the key left out. A declaration that refuses
  * undefined says otherwise, so a consumer under exactOptionalPropertyTypes forwarding a maybe-unset
- * value got TS2379 for a value comb takes (KT8 of r22b). One rule: every optional property says it.
- * What comb hands back keeps a key absent or set, never undefined, so a consumer passes it on as it
+ * value got TS2379 for a value database takes (KT8 of r22b). One rule: every optional property says it.
+ * What database hands back keeps a key absent or set, never undefined, so a consumer passes it on as it
  * is: that is Partial<…>, in a return type or in an alias only return types reach (AD2 of the area D
- * review), a callback's parameter being one comb hands out. A Partial<…> a parameter or a config
+ * review), a callback's parameter being one database hands out. A Partial<…> a parameter or a config
  * property reaches is an input bag, and refuses undefined the same way: it is declared
- * `{ [K in …]?: T | undefined }`. A parameter typed by what comb itself built and hands back looks
- * the same as one typed by a consumer's input comb returns parsed (loadCombConfig's CodegenConfig),
- * so each such output comb takes back is named in TAKEN_BACK with why it stays Partial<…>. */
+ * `{ [K in …]?: T | undefined }`. A parameter typed by what database itself built and hands back looks
+ * the same as one typed by a consumer's input database returns parsed (loadDatabaseConfig's CodegenConfig),
+ * so each such output database takes back is named in TAKEN_BACK with why it stays Partial<…>. */
 const MESSAGE =
-	"an optional property takes undefined, which comb reads as the key left out: declare it `name?: T | undefined`, a method as `name?: ((…) => R) | undefined`"
+	"an optional property takes undefined, which database reads as the key left out: declare it `name?: T | undefined`, a method as `name?: ((…) => R) | undefined`"
 const MAPPED =
-	"an optional mapped key takes undefined, which comb reads as the key left out: declare it `{ [K in …]?: T | undefined }`"
+	"an optional mapped key takes undefined, which database reads as the key left out: declare it `{ [K in …]?: T | undefined }`"
 const TUPLE =
-	"an optional tuple element takes undefined, which comb reads as the element left out: declare it `[name?: T | undefined]`, an unnamed one `[(T | undefined)?]`"
+	"an optional tuple element takes undefined, which database reads as the element left out: declare it `[name?: T | undefined]`, an unnamed one `[(T | undefined)?]`"
 const PARTIAL =
-	"a Partial<…> that comb reads refuses undefined, which comb reads as the key left out: declare the input `{ [K in …]?: T | undefined }`; Partial<…> is for what comb hands back, in a return type or an alias only return types reach"
+	"a Partial<…> that database reads refuses undefined, which database reads as the key left out: declare the input `{ [K in …]?: T | undefined }`; Partial<…> is for what database hands back, in a return type or an alias only return types reach"
 
-/** The outputs comb takes back as it built them, each kept Partial<…> for the reason given */
+/** The outputs database takes back as it built them, each kept Partial<…> for the reason given */
 export const TAKEN_BACK = new Map([
 	[
 		"ListExtras",
@@ -38,7 +38,7 @@ const admitsUndefined = (type) =>
 	(type.type === "TSParenthesizedType" && admitsUndefined(type.typeAnnotation)) ||
 	(type.type === "TSUnionType" && type.types.some((member) => admitsUndefined(member)))
 
-/* a private or #-named class field or method is comb's own, which no caller sets (D2-6 of the area D round-two review, D4-3 of round four) */
+/* a private or #-named class field or method is database's own, which no caller sets (D2-6 of the area D round-two review, D4-3 of round four) */
 const ownField = (node) => node.accessibility === "private" || node.key.type === "PrivateIdentifier"
 
 /* a class field a caller or a subclass sets, an abstract one included (D3-3 of the area D round-three review) */
@@ -47,7 +47,7 @@ const callerField = (node) => FIELDS.has(node.type) && !ownField(node)
 
 /* an optional method's type is a function, which never admits undefined: a class's too (D4-3 of the area D round-four review) */
 const METHODS = new Set(["MethodDefinition", "TSAbstractMethodDefinition", "TSMethodSignature"])
-/* the class members a private or # name makes comb's own */
+/* the class members a private or # name makes database's own */
 const MEMBERS = new Set(["MethodDefinition", "PropertyDefinition"])
 
 /* what a reference names: a type reference's type, or the type an interface extends or a class
@@ -86,7 +86,7 @@ const ALIASES = new Set(["TSInterfaceDeclaration", "TSTypeAliasDeclaration"])
 /**
  * How type argument `index` of `owner` flows inside the generic alias or interface of src it
  * names: flipped (true) when its type parameter sits in a function parameter there, as it is (false)
- * when it is unused or no such alias holds it, and "both" when comb reads it and hands it out alike.
+ * when it is unused or no such alias holds it, and "both" when database reads it and hands it out alike.
  * `scope` looks up the generic a name in this file stands for (`lookup`), and in the file that
  * declares one (`scopes`), and holds in `seen` those already followed, so a cycle adds nothing.
  */
@@ -109,9 +109,9 @@ function argumentFlow(owner, index, scope) {
 
 /**
  * Which way a type written at the end of `path` (its ancestors, outermost first, each with the key
- * it hangs by) flows. Each function parameter it sits in flips it: comb reads its own parameter and
+ * it hangs by) flows. Each function parameter it sits in flips it: database reads its own parameter and
  * hands out a callback's. A type argument of a generic alias of src flows as that alias's type
- * parameter does there. At the top of the file it is comb's own value ("output"), a type a type
+ * parameter does there. At the top of the file it is database's own value ("output"), a type a type
  * parameter or a caller-set class field holds is a caller's ("input"), and one in an alias or
  * interface flows as that type does, flipped or not, as does one in the generic class a walk for a
  * type argument starts from (`at === 1`; D5-3 of the area D round-five review).

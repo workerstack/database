@@ -1,5 +1,5 @@
 /**
- * The check every SQLite apply runs before it writes anything, and all `comb migrate check`
+ * The check every SQLite apply runs before it writes anything, and all `database migrate check`
  * runs: the directory matches its atlas.sum, no pending file sorts before an applied one, and each
  * pending file is classified against the schema the files before it leave, proven on a seeded
  * in-memory copy of the database's own schema (proof-run.ts), and approved as the stricter of the
@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import type { ScratchEngine } from "../drivers/local-db.ts"
 import type { ExtractedSchema, ParsedMigration } from "../migration-types.ts"
-import type { Connection } from "../types.ts"
+import type { MigrateConnection } from "../types.ts"
 import type { Approval } from "./approval.ts"
 import type { TargetKind } from "./classify-target.ts"
 import { verifySum } from "./atlas-dir.ts"
@@ -22,7 +22,7 @@ import { parseMigration } from "./parse.ts"
 import { creatable, type LiveObject, liveObjects } from "./proof-copy.ts"
 import { type Proof, provePending } from "./proof-run.ts"
 import { Refused } from "./refused.ts"
-import type { Run } from "./process.ts"
+import type { MigrateRun } from "./process.ts"
 import { extractSchema } from "./schema.ts"
 
 /** A pending migration: its file name and text, classified against the files before it */
@@ -34,17 +34,17 @@ type PlanOptions = {
 	/** whether the database records `name` (whose text is `sql`) as applied */
 	applied(name: string, sql: string): boolean
 	dir: string
-	exec: Run
+	exec: MigrateRun
 	/** the file names of `dir`, in the order they apply */
 	files: readonly string[]
 	print(line: string): void
 	/** false for one file applied on its own, which no atlas.sum or order covers */
 	whole?: boolean | undefined
 	/** the database, whose own foreign keys and triggers a guarded rebuild is checked against */
-	conn?: Connection | undefined
+	conn?: MigrateConnection | undefined
 	/** where the files apply, whose own rule of what it runs check holds them to; local unnamed */
 	kind?: TargetKind | undefined
-	/** the tables the target's migration history lives in, which an empty target may hold (default: comb's and wrangler's) */
+	/** the tables the target's migration history lives in, which an empty target may hold (default: database's and wrangler's) */
 	historyTables?: readonly string[] | undefined
 	/**
 	 * the target's own engine, run after the proof: it runs the pending files as the target would, throws what it
@@ -128,7 +128,9 @@ function unprovenLines(proofs: ReadonlyMap<string, Proof>): string[] {
 		const tables = proof.unproven.map(({ table, why }) => `${table} (${why})`).join(", ")
 		files.set(tables, [...(files.get(tables) ?? []), name])
 	}
-	return [...files].map(([tables, names]) => `Proof run: ${names.join(", ")}: unproven, comb could not seed ${tables}`)
+	return [...files].map(
+		([tables, names]) => `Proof run: ${names.join(", ")}: unproven, database could not seed ${tables}`,
+	)
 }
 
 /** Each unapplied file, classified against the schema the files before it leave */
@@ -150,7 +152,7 @@ function classifyPending(
 }
 
 /** Whether the database holds no table but its engine's and its migration histories: nothing in it can be lost */
-async function isEmptyTarget(conn: Connection, historyTables: readonly string[]): Promise<boolean> {
+async function isEmptyTarget(conn: MigrateConnection, historyTables: readonly string[]): Promise<boolean> {
 	const { rows } = await conn.execute(
 		`SELECT count(*) FROM sqlite_master WHERE type = 'table'${notEngineTables(conn, historyTables)}`,
 	)
@@ -189,7 +191,7 @@ async function approveAll(
 
 /** Prove the pending files on the live schema, read once for the proof and the target's own engine, which runs after it */
 async function proveLive(
-	conn: Connection,
+	conn: MigrateConnection,
 	classified: readonly Pending[],
 	options: PlanOptions,
 ): Promise<Map<string, Proof>> {

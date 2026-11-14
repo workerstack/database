@@ -24,7 +24,7 @@ afterAll(() => cleanGeneratedDtos())
 describe("meta-contract §8, the worked example (C9)", () => {
 	it("shows, as step 2, the read schema codegen generates for step 1's table", async () => {
 		const doc = fs.readFileSync(DOC, "utf8")
-		const table = blockAfter(doc, "**1 — comb table definition**")
+		const table = blockAfter(doc, "**1 — database table definition**")
 		await generatedDtos("meta-contract", table)
 		const generated = fs.readFileSync(path.join(generatedDir("meta-contract"), "dtos/post/index.gen.ts"), "utf8")
 		const start = generated.indexOf("export const postDtoReadSchema")

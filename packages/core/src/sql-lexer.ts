@@ -6,7 +6,7 @@
  * identifiers with `"`, backticks or brackets and has flat comments; Postgres quotes them with `"`
  * only, nests comments, escapes with backslashes in `E'…'`, and dollar-quotes `$tag$…$tag$`.
  */
-import type { Dialect } from "./migrate/types.ts"
+import type { MigrateDialect } from "./migrate/types.ts"
 
 /**
  * `body` is a dollar-quoted `DO` body: it runs during the migration, so it is code to classify,
@@ -15,7 +15,7 @@ import type { Dialect } from "./migrate/types.ts"
 type Segment = { kind: "body" | "code" | "comment" | "identifier" | "literal"; text: string }
 
 /** Opening quote → closing quote, by dialect */
-const QUOTES: Readonly<Record<Dialect, Readonly<Record<string, string>>>> = {
+const QUOTES: Readonly<Record<MigrateDialect, Readonly<Record<string, string>>>> = {
 	postgres: { '"': '"', "'": "'" },
 	sqlite: { '"': '"', "'": "'", "[": "]", "`": "`" },
 }
@@ -26,7 +26,7 @@ const DOLLAR_TAG = /^\$(?:[A-Za-z_\u0080-\uffff][\w\u0080-\uffff]*)?\$/
 const IDENT_CHAR = /[\w$\u0080-\uffff]/
 const DO_STATEMENT = /^\s*DO\b/i
 
-type Lexer = { dialect: Dialect; sql: string }
+type Lexer = { dialect: MigrateDialect; sql: string }
 
 /** Whether the text at `at` opens a backslash-escaped Postgres string: `E'` or `e'`, not part of a word */
 const isEscapeString = ({ dialect, sql }: Lexer, at: number) =>
@@ -103,7 +103,7 @@ const opensSpecial = (lexer: Lexer, at: number) =>
 	dollarTag(lexer, at) !== undefined
 
 /** `sql` as consecutive segments that concatenate back to it, read as `dialect` reads it */
-function segments(sql: string, dialect: Dialect = "sqlite"): Segment[] {
+function segments(sql: string, dialect: MigrateDialect = "sqlite"): Segment[] {
 	const lexer: Lexer = { dialect, sql }
 	const out: Segment[] = []
 	/* the code since the last top-level ;, which tells a DO body from a function body */
@@ -137,7 +137,7 @@ function bodyText(text: string): string {
  * space. A quoted name is a token of its own, so a word written against it is set off by a space, as `ALTER TABLE
  * "users"DROP COLUMN email` drops the column `ALTER TABLE "users" DROP COLUMN email` does; `"main".t` and `"a"(` stay
  */
-function joined(stmt: string, dialect: Dialect, strings: boolean): string {
+function joined(stmt: string, dialect: MigrateDialect, strings: boolean): string {
 	let out = ""
 	let quoted = false
 	for (const { kind, text } of segments(stmt, dialect)) {
@@ -154,7 +154,7 @@ function joined(stmt: string, dialect: Dialect, strings: boolean): string {
  * A statement's code: identifiers kept, a DO body read as code itself, strings and comments one
  * space, whitespace collapsed; a SQLite pragma keeps a quoted value, its operand
  */
-function codeOf(stmt: string, dialect: Dialect): string {
+function codeOf(stmt: string, dialect: MigrateDialect): string {
 	const code = joined(stmt, dialect, false)
 	return dialect === "sqlite" && /^PRAGMA\b/i.test(code) ? joined(stmt, dialect, true) : code
 }

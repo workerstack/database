@@ -53,9 +53,9 @@ function writeEntityCols(table: TableEntry, out: ColumnsOutput, staged: Staged |
 	const sqlEntityDir = path.join(out.absoluteOutputDir, "sql-cols", segment)
 	const sqlRelTablesPath = specifierFor(sqlEntityDir, out.tablesFile, out.importStyle)
 	const fileName = genFileName(out.filePrefix, segment)
-	writeGenFile(path.join(rqbEntityDir, fileName), generateRqbColsFile(table), { generator: "comb", staged })
+	writeGenFile(path.join(rqbEntityDir, fileName), generateRqbColsFile(table), { generator: "database", staged })
 	writeGenFile(path.join(sqlEntityDir, fileName), generateSqlColsFile(table, sqlRelTablesPath), {
-		generator: "comb",
+		generator: "database",
 		staged,
 	})
 }
@@ -80,7 +80,7 @@ export function generateColumns(ctx: GeneratorContext, config: ColumnsConfig): v
 
 	for (const table of entries) writeEntityCols(table, out, ctx.staged)
 	const tableNamesFile = path.join(out.absoluteOutputDir, "table-names", genFileName(config.filePrefix, "table-names"))
-	writeGenFile(tableNamesFile, generateTableNamesFile(entries), { generator: "comb", staged: ctx.staged })
+	writeGenFile(tableNamesFile, generateTableNamesFile(entries), { generator: "database", staged: ctx.staged })
 
 	const packageJsonPath = path.join(ctx.cwd, "package.json")
 	if (config.updatePackageJson && fs.existsSync(packageJsonPath))

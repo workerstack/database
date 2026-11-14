@@ -2,7 +2,7 @@
  * A file's temp relations, named as Postgres's search path names them. pg_temp leads
  * the search path, so once a file makes a temp table, view or sequence, an unqualified name of it
  * in a later statement of the file is the temp relation, not a table of that name; a CREATE without
- * TEMP still makes its relation in the current schema. comb's apply runs one Atlas call per file, a
+ * TEMP still makes its relation in the current schema. database's apply runs one Atlas call per file, a
  * session of its own, so a temp relation dies when its file ends. resolveTemps writes each such
  * name `pg_temp.<name>` in a copy of the statement's tree, so every rule that keys a relation keys
  * it apart from the table it shadows; historyFacts then forgets every pg_temp key at each file's end

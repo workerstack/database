@@ -1,6 +1,6 @@
 /**
- * A constraint's `pattern`, checked at codegen and written back as a regex literal comb built.
- * The value is spliced into the generated DTOs, so one comb cannot emit (no slashes, a newline, a
+ * A constraint's `pattern`, checked at codegen and written back as a regex literal database built.
+ * The value is spliced into the generated DTOs, so one database cannot emit (no slashes, a newline, a
  * slash unescaped, a template string) failed tsc, or compiled and threw when the module loaded.
  * JSON Schema's `pattern` has no flags, so `i`, `m` and `s`, which change what matches, would
  * publish another rule than the server applies; `g` and `y` mean nothing to one test. JSON
@@ -12,7 +12,7 @@
  * sets (RE2's \s is ASCII, Rust's \d and \w Unicode), so a pattern writes each class out,
  * a `.` too, and holds no lookaround or backreference, which neither compiles, nor a `\0`, which Rust's
  * regex refuses. It holds only the escapes and classes every engine reads alike, as Go
- * and Rust compile the source comb publishes, in the grammar all three read as one rule:
+ * and Rust compile the source database publishes, in the grammar all three read as one rule:
  * pattern-grammar.ts holds it.
  */
 
@@ -26,7 +26,7 @@ function loneSurrogateOf(source: string): string | null {
 	return `a lone surrogate, ${code}, which a JSON document carries as \\u${code.slice(2).toLowerCase()}, Go's reader as U+FFFD and Rust's not at all: write the character meant`
 }
 
-/** The regex literal comb emits for `pattern`, the constraint at `place`; an error naming why it cannot */
+/** The regex literal database emits for `pattern`, the constraint at `place`; an error naming why it cannot */
 function patternLiteral(pattern: string, place: string): string {
 	const parts = /^\/([\s\S]+)\/([a-z]*)$/.exec(pattern)
 	if (parts === null)

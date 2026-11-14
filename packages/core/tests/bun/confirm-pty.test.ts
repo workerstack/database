@@ -1,10 +1,10 @@
 /// <reference types="bun-types" />
 /**
- * comb-5d's review of the reader that replaced readline in processIo's questions: a person at a
- * real terminal, a pty Bun opens, answers comb's bin. The terminal is in its cooked mode, so it
+ * database-5d's review of the reader that replaced readline in processIo's questions: a person at a
+ * real terminal, a pty Bun opens, answers database's bin. The terminal is in its cooked mode, so it
  * echoes and edits the line, a Ctrl-D ends the input and a Ctrl-C is the kernel's SIGINT, which
- * comb's signal path takes: the held steps run, then the process ends by the signal. A pipe is no
- * terminal, so `yes | comb migrate apply` is asked nothing and refused, as in 0.20.1.
+ * database's signal path takes: the held steps run, then the process ends by the signal. A pipe is no
+ * terminal, so `yes | database migrate apply` is asked nothing and refused, as in 0.20.1.
  */
 import { Database } from "bun:sqlite"
 import { describe, expect, it } from "bun:test"
@@ -19,7 +19,7 @@ const PROMPT = "(y/N)"
 
 /** A bun:sqlite project with `t` and `u` applied and a pending file dropping each one named in `drops` */
 function project(drops: readonly string[]): { db: string; dir: string; tmp: string } {
-	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "comb-confirm-"))
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "database-confirm-"))
 	const tmp = path.join(dir, "tmp")
 	const migrations = path.join(dir, "m")
 	const db = path.join(dir, "local.db")
@@ -30,7 +30,7 @@ function project(drops: readonly string[]): { db: string; dir: string; tmp: stri
 		"CREATE TABLE t (id INTEGER PRIMARY KEY);\nCREATE TABLE u (id INTEGER PRIMARY KEY);\n",
 	)
 	fs.writeFileSync(
-		path.join(dir, "comb.migrate.config.ts"),
+		path.join(dir, "database.migrate.config.ts"),
 		`export default { databases: { core: { migrationsDir: "./m", environments: {
 	local: { name: "core", provider: { type: "bun-sqlite", path: ${JSON.stringify(db)} } },
 } } } }\n`,
@@ -97,9 +97,9 @@ async function typed(argv: readonly string[], keys: readonly string[], cwd: stri
 	return { code: proc.exitCode, screen, signal: proc.signalCode }
 }
 
-const scratches = (tmp: string) => fs.readdirSync(tmp).filter((name) => name.startsWith("comb-scratch-"))
+const scratches = (tmp: string) => fs.readdirSync(tmp).filter((name) => name.startsWith("database-scratch-"))
 
-/** `comb migrate apply` on a project dropping `drops`, answered by `keys` at a terminal */
+/** `database migrate apply` on a project dropping `drops`, answered by `keys` at a terminal */
 async function apply(drops: readonly string[], keys: readonly string[]) {
 	const { db, dir, tmp } = project(drops)
 	try {
@@ -110,7 +110,7 @@ async function apply(drops: readonly string[], keys: readonly string[]) {
 	}
 }
 
-describe("comb's question at a terminal (comb-5d's review of the reader that replaced readline)", () => {
+describe("database's question at a terminal (database-5d's review of the reader that replaced readline)", () => {
 	it("applies on y and Enter", async () => {
 		const run = await apply(["t"], ["y\r"])
 		expect({ asked: run.asked, code: run.code, tables: run.tables }).toEqual({ asked: 1, code: 0, tables: ["u"] })
@@ -157,7 +157,7 @@ describe("comb's question at a terminal (comb-5d's review of the reader that rep
 		})
 	}, 60_000)
 
-	it("asks nothing through a pipe, so `yes | comb migrate apply` is refused, as in 0.20.1", () => {
+	it("asks nothing through a pipe, so `yes | database migrate apply` is refused, as in 0.20.1", () => {
 		const { db, dir, tmp } = project(["t"])
 		try {
 			const piped = spawnSync(process.execPath, [BIN, "migrate", "apply", "core", "-e", "local"], {
@@ -175,7 +175,7 @@ describe("comb's question at a terminal (comb-5d's review of the reader that rep
 	}, 60_000)
 })
 
-describe("a Ctrl-C at the question takes comb's signal path", () => {
+describe("a Ctrl-C at the question takes database's signal path", () => {
 	/** A process that holds a cleanup step, as a run holds its scratch, and asks one question */
 	function asker(dir: string): string {
 		const script = path.join(dir, "ask.ts")
@@ -200,7 +200,7 @@ fs.writeSync(1, \`<<answer \${answer}>>\\n\`)
 	])(
 		"on %s",
 		async (_, key, expected) => {
-			const dir = fs.mkdtempSync(path.join(os.tmpdir(), "comb-confirm-"))
+			const dir = fs.mkdtempSync(path.join(os.tmpdir(), "database-confirm-"))
 			try {
 				const run = await typed([process.execPath, asker(dir)], [key], dir, dir)
 				const marks = [...run.screen.matchAll(/<<([^>]*)>>/g)].map((mark) => mark[1])

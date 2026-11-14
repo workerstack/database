@@ -8,7 +8,7 @@ import { drizzle as drizzleClient } from "drizzle-orm/libsql"
 import type { LibSQLDatabase } from "drizzle-orm/libsql"
 import { integer, sqliteTable } from "drizzle-orm/sqlite-core"
 import { afterEach, describe, expect, it } from "vitest"
-import { CombError } from "../../../src/error.ts"
+import { DatabaseError } from "../../../src/error.ts"
 import { encodeCursor, sortSignature } from "../../../src/query/cursor.ts"
 import { createCursor } from "../../../src/query/cursor-mint.ts"
 import { queryHelpers } from "../../../src/query/drizzle.ts"
@@ -113,8 +113,8 @@ describe("a sealed cursor holding values SQLite cannot compare (Q-M3)", () => {
 		expect(() => derivedWith(crafted([7], id))).toThrow(invalid)
 	})
 
-	it("is a CombError, not a driver's TypeError", () => {
-		expect(() => derivedWith(crafted([{ x: 1 }]))).toThrow(CombError)
+	it("is a DatabaseError, not a driver's TypeError", () => {
+		expect(() => derivedWith(crafted([{ x: 1 }]))).toThrow(DatabaseError)
 	})
 
 	it("accepts a numeric id, a string id, dates and null sort values", () => {
@@ -133,8 +133,8 @@ describe("paginate mints a cursor for every last row, whatever its id (Q-M6)", (
 	it("mints one when the last id is 0 or an empty string", () => {
 		for (const id of [0, ""]) {
 			const rows = [
-				{ _combId: id, created_at: 2, id },
-				{ _combId: "next", created_at: 1, id: "next" },
+				{ _cursorId: id, created_at: 2, id },
+				{ _cursorId: "next", created_at: 1, id: "next" },
 			]
 			const [, pagination] = queryHelpers.paginate(rows, pagedAs({ limit: 1, parsedSort: SORT }, SEALED))
 			expect(pagination.hasMore).toBe(true)
@@ -182,7 +182,7 @@ describe("pagination.count (Q-M5)", () => {
 	/* Q3 of r17: a count the builder selected and the rows lack is a wiring mistake, never a null count */
 	it("refuses an offset page whose rows lack the count, where it reported null", () => {
 		const built = buildListQuery({ ...SEALED, parsed: schema.parse({ limit: "2" }), table: post })
-		expect(() => queryHelpers.paginate([{ _combId: 1, _combTextKeys: "", id: 1 }], built)).toThrow(
+		expect(() => queryHelpers.paginate([{ _cursorId: 1, _cursorTextKeys: "", id: 1 }], built)).toThrow(
 			expect.objectContaining({
 				cause: expect.stringMatching(/^the rows carry no _total: /),
 				errorKey: "page_not_wired",
@@ -230,6 +230,6 @@ describe("queryHelpers.listOptions pages the relational API by cursor (Q-L4)", (
 			...schema.parse({ order: "created_at.desc" }),
 			cursor: encodeCursor({ i: 1, s: "id.asc.nullslast", v: [1] }, SEALED),
 		}
-		expect(() => queryHelpers.listOptions(parsed, SEALED)).toThrow(CombError)
+		expect(() => queryHelpers.listOptions(parsed, SEALED)).toThrow(DatabaseError)
 	})
 })

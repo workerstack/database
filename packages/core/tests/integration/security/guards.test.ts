@@ -1,5 +1,5 @@
 /**
- * The adversarial suite: one hostile input per comb guard, run on real engines. The mutation
+ * The adversarial suite: one hostile input per database guard, run on real engines. The mutation
  * harness (tests/structure/mutation-harness.ts) reruns this file with each guard disabled and
  * requires it to go red, so every case here is the reason its guard exists.
  */
@@ -12,7 +12,7 @@ import { d1Memory, type D1Harness } from "../support/d1.ts"
 import { libsqlMemory } from "../support/libsql.ts"
 import { SEALED } from "../../../src/query/__fixtures__/cursor-secret.ts"
 
-const mutant = guardNamed(process.env["COMB_MUTANT"])
+const mutant = guardNamed(process.env["DATABASE_MUTANT"])
 if (mutant !== undefined) {
 	vi.doMock(guardModule(mutant), async (importOriginal) => {
 		const original = await importOriginal<Record<string, unknown>>()

@@ -1,5 +1,5 @@
 /**
- * The command line: every option comb takes, declared once. The parser reads argv against these
+ * The command line: every option database takes, declared once. The parser reads argv against these
  * declarations and the help prints them, so the two cannot disagree.
  */
 import { CliError, ShowHelp } from "./output.ts"
@@ -30,13 +30,13 @@ export const OPTIONS: readonly OptionSpec[] = [
 	{
 		alone: true,
 		commands: ["codegen"],
-		description: "Analyze this tables file directly, no comb.config.ts",
+		description: "Analyze this tables file directly, no database.config.ts",
 		long: "--tables",
 		value: "path",
 	},
 	{
 		commands: ["migrate apply", "migrate baseline", "migrate check", "migrate diff", "migrate status"],
-		description: "Environment from comb.migrate.config.ts",
+		description: "Environment from database.migrate.config.ts",
 		long: "--env",
 		short: "-e",
 		value: "name",
@@ -161,7 +161,7 @@ export function parseArgs(argv: readonly string[], command: Command): ParsedArgs
 
 /** Refuses a word after `usage`, a form that reads none, with that usage */
 export function refuseFurther(rest: readonly string[], usage: string): void {
-	if (rest.length > 0) throw new CliError(`Usage: comb ${usage}`)
+	if (rest.length > 0) throw new CliError(`Usage: database ${usage}`)
 }
 
 /** The fewest and most positionals `command` reads, as its usage line declares them: any number for a list */
@@ -188,7 +188,7 @@ export function optionsHelp(): string[] {
 	return table([
 		...OPTIONS.map((option) => [label(option), `${option.description} [${option.commands.join(", ")}]`] as const),
 		HELP_ROW,
-		["--version", "Print comb's version"],
+		["--version", "Print database's version"],
 	])
 }
 
@@ -213,7 +213,7 @@ const brief = (option: OptionSpec) => `[${option.short ?? option.long}${option.v
 export function usageOf(command: Command, alone?: OptionSpec): string {
 	const takes = alone === undefined ? POSITIONALS[command] : `${alone.long} <${alone.value}>`
 	const others = optionsOf(command).filter((option) => option !== alone && (alone === undefined || !option.alone))
-	return ["Usage: comb", command, takes, ...others.map(brief)].filter((part) => part !== "").join(" ")
+	return ["Usage: database", command, takes, ...others.map(brief)].filter((part) => part !== "").join(" ")
 }
 
 /** `command`'s help: its usage, then each option it takes */

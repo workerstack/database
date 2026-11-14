@@ -10,8 +10,8 @@ import { ts } from "ts-morph"
 
 /**
  * The compiler options the tsconfig nearest `from` sets, as the consumer wrote them; none when
- * there is no tsconfig. What the consumer's TypeScript takes of comb's output is read from these,
- * never from the defaults comb reads files with
+ * there is no tsconfig. What the consumer's TypeScript takes of database's output is read from these,
+ * never from the defaults database reads files with
  * @param {string} from
  * @returns {import("ts-morph").ts.CompilerOptions}
  */
@@ -33,7 +33,7 @@ export function tsconfigOptions(from) {
 }
 
 /**
- * The compiler options of the tsconfig nearest `from`, over the bundler resolution comb reads
+ * The compiler options of the tsconfig nearest `from`, over the bundler resolution database reads
  * TypeScript files with; those defaults alone when there is no tsconfig
  * @param {string} from
  * @returns {import("ts-morph").ts.CompilerOptions}
@@ -131,7 +131,7 @@ function hasModuleSyntax(fileName, source) {
  * @param {string} source
  * @returns {boolean}
  */
-/* mirrors node (22.7 and later, comb's floor 22.12), which detects module syntax: the node hook's format */
+/* mirrors node (22.7 and later, database's floor 22.12), which detects module syntax: the node hook's format */
 export function runsAsCommonJs(file, source) {
 	if (/\.c[jt]s$/.test(file)) return true
 	if (/\.m[jt]s$/.test(file)) return false

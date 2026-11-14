@@ -1,5 +1,5 @@
 /**
- * Public keeps the shared atlas_schema_revisions as its own history, where comb 0.12 also
+ * Public keeps the shared atlas_schema_revisions as its own history, where database 0.12 also
  * recorded every other schema's files. A revision there that names no file of public's is another
  * schema's when the same version and hash sit in that schema's own history (apply and baseline
  * adopt them): public ignores it, saying so, and keeps its own order. Every other revision with no
@@ -9,7 +9,7 @@
  *
  * Listing the schemas costs Atlas a read of every table's metadata: `--exclude '*.*'` filters
  * after reading (about half a second per 3000 tables on Postgres 17), and `--include` is Atlas
- * Pro's. It runs only while public holds such a revision, the one-time state after 0.12; comb has
+ * Pro's. It runs only while public holds such a revision, the one-time state after 0.12; database has
  * no Postgres client of its own, and this is no reason for one.
  */
 import { readInspect } from "./atlas-clean.ts"
@@ -26,7 +26,7 @@ const OWN = "atlas_schema_revisions_"
 /**
  * What public's history holds of other schemas: each ignored version with its schema, or why they
  * could not be read; `elsewhere` when the database holds a schema but public, so a row no own
- * history matches may be one comb 0.12 recorded for it, not yet adopted
+ * history matches may be one database 0.12 recorded for it, not yet adopted
  */
 type Foreign = { elsewhere: boolean; ignored: Map<string, string>; unread: string | undefined }
 
@@ -73,7 +73,7 @@ async function foreignRows(options: AtlasCommand, copy: string, status: AtlasSta
 				own.set(`${revision.version} ${revision.hash}`, name.slice(OWN.length))
 		}
 	} catch (error) {
-		// reason: a history comb cannot read leaves its rows unmatched, refused as gone with the reason
+		// reason: a history database cannot read leaves its rows unmatched, refused as gone with the reason
 		return { ...none(), unread: (error as Error).message }
 	}
 	const ignored = fileless.flatMap((revision): Array<[string, string]> => {
@@ -84,7 +84,7 @@ async function foreignRows(options: AtlasCommand, copy: string, status: AtlasSta
 }
 
 /**
- * `status` as the target's own history, without `foreign`'s rows, ordered by name alone, as comb
+ * `status` as the target's own history, without `foreign`'s rows, ordered by name alone, as database
  * orders files on SQLite and Atlas runs them under `--exec-order non-linear`: pending is the file Atlas
  * ran halfway, then each file never applied that sorts after the last applied one, from the snapshot
  * `copy`. Atlas's linear order compares versions, so its status lists other files and calls a later
@@ -105,7 +105,7 @@ function ownHistory(status: AtlasStatus, { ignored }: Foreign, copy: string): At
 /** What public says of each row it ignores, the target's secrets masked where a schema's name holds one */
 const ignoredLines = ({ ignored }: Foreign, target: PgTarget): string[] =>
 	[...ignored].map(([version, schema]) => {
-		/* only the schema's name, a value the database holds, is masked: comb's words stay as written */
+		/* only the schema's name, a value the database holds, is masked: database's words stay as written */
 		const name = maskSecrets(schema, [target.url, target.devUrl])
 		return `${version} is schema ${name}'s, recorded in ${OWN}${name}; public ignores it`
 	})

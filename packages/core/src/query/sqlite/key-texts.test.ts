@@ -1,6 +1,6 @@
 /**
- * The extras a SQLite or Postgres list selects to carry its keys' stored texts: _combKeyTexts, the
- * text a read would round, and _combTextKeys, a SQLite key's stored value its mode reads as another.
+ * The extras a SQLite or Postgres list selects to carry its keys' stored texts: _cursorKeyTexts, the
+ * text a read would round, and _cursorTextKeys, a SQLite key's stored value its mode reads as another.
  */
 import { sql } from "drizzle-orm"
 import {

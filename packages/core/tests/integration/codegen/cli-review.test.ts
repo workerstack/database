@@ -32,7 +32,7 @@ export const users = pgTable("users", { id: c.id("usr"), age: c.integer("age").n
 describe("a database key that is no identifier (F1)", () => {
 	it("writes identifiers camel-cased from it, which typecheck", async () => {
 		const dir = project({
-			"comb.config.ts": `export default { databases: { "my-db": { tables: "./src/db/tables.ts", dialect: "sqlite", driver: "d1" } } }\n`,
+			"database.config.ts": `export default { databases: { "my-db": { tables: "./src/db/tables.ts", dialect: "sqlite", driver: "d1" } } }\n`,
 			"src/db/tables.ts": SQLITE,
 		})
 		await codegen(dir)
@@ -43,7 +43,7 @@ describe("a database key that is no identifier (F1)", () => {
 
 	it("fails, naming the key, when no identifier can be made of it", async () => {
 		const dir = project({
-			"comb.config.ts": `export default { databases: { "1db": { tables: "./src/db/tables.ts" } } }\n`,
+			"database.config.ts": `export default { databases: { "1db": { tables: "./src/db/tables.ts" } } }\n`,
 			"src/db/tables.ts": SQLITE,
 		})
 		const run = await runCodegen(dir)
@@ -56,7 +56,7 @@ describe("a database key that is no identifier (F1)", () => {
 describe("the neon ORM client under strict (F3)", () => {
 	it("types its isolate cache from the driver, so it typechecks", async () => {
 		const dir = project({
-			"comb.config.ts": `export default { databases: { core: { tables: "./src/db/db.core.tables.ts", dialect: "postgres", driver: "neon" } } }\n`,
+			"database.config.ts": `export default { databases: { core: { tables: "./src/db/db.core.tables.ts", dialect: "postgres", driver: "neon" } } }\n`,
 			"src/db/db.core.tables.ts": PG,
 			/* the package's types, as the review stubbed them: the cache's type must not depend on them */
 			"src/stub/neon.d.ts": `declare module "@neondatabase/serverless" {
@@ -82,7 +82,7 @@ describe("direct mode on tables a file re-exports (F9)", () => {
 		expect(dtos.map((file) => read(dir, file)).join("")).toContain(".max(2147483647)")
 	}, 120_000)
 
-	it("falls back to the comb columns a tables file imports when its builder is a wrapper", async () => {
+	it("falls back to the database columns a tables file imports when its builder is a wrapper", async () => {
 		const wrapped = `import { pgTable } from "drizzle-orm/pg-core"
 import { c } from "@workerstack/database/pg/columns"
 const createTable = pgTable
@@ -111,10 +111,10 @@ const config = (extra: string) =>
 
 describe("a run after the prefix or the output moved (F14)", () => {
 	it("removes the files the last run wrote under the old prefix", async () => {
-		const dir = project({ "comb.config.ts": config(""), "src/db/db.core.tables.ts": SQLITE })
+		const dir = project({ "database.config.ts": config(""), "src/db/db.core.tables.ts": SQLITE })
 		await codegen(dir)
 		expect(generatedFiles(dir).some((file) => path.basename(file).startsWith("db.core."))).toBe(true)
-		fs.writeFileSync(path.join(dir, "comb.config.ts"), config(', filePrefix: "app.core"'))
+		fs.writeFileSync(path.join(dir, "database.config.ts"), config(', filePrefix: "app.core"'))
 		await codegen(dir)
 		const left = generatedFiles(dir).filter((file) => path.basename(file).startsWith("db.core."))
 		expect(left).toEqual([])
@@ -122,9 +122,9 @@ describe("a run after the prefix or the output moved (F14)", () => {
 	}, 180_000)
 
 	it("removes the files the last run wrote under the old output root", async () => {
-		const dir = project({ "comb.config.ts": config(""), "src/db/db.core.tables.ts": SQLITE })
+		const dir = project({ "database.config.ts": config(""), "src/db/db.core.tables.ts": SQLITE })
 		await codegen(dir)
-		fs.writeFileSync(path.join(dir, "comb.config.ts"), config(', output: { default: "./src/gen" }'))
+		fs.writeFileSync(path.join(dir, "database.config.ts"), config(', output: { default: "./src/gen" }'))
 		await codegen(dir)
 		expect(generatedFiles(dir).filter((file) => file.startsWith("src/db/"))).toEqual([])
 		expect(generatedFiles(dir).some((file) => file.startsWith("src/gen/"))).toBe(true)
@@ -134,7 +134,7 @@ describe("a run after the prefix or the output moved (F14)", () => {
 describe("a run with one database that fails (F17)", () => {
 	it("writes nothing for any database, package.json included", async () => {
 		const dir = project({
-			"comb.config.ts": `export default { databases: {
+			"database.config.ts": `export default { databases: {
 	core: { tables: "./src/core/db.core.tables.ts" },
 	bad: { tables: "./src/bad/db.bad.tables.ts" },
 } }\n`,
@@ -156,7 +156,7 @@ throw new Error("not import-safe")
 describe("two generators writing one path (F21)", () => {
 	it("fails, naming both generators and the path, and writes nothing", async () => {
 		const dir = project({
-			"comb.config.ts": `export default { databases: { core: { tables: "./src/db/db.core.tables.ts", output: { rows: "./src/gen/db.gen.ts", constraints: "./src/gen/db.gen.ts" } } } }\n`,
+			"database.config.ts": `export default { databases: { core: { tables: "./src/db/db.core.tables.ts", output: { rows: "./src/gen/db.gen.ts", constraints: "./src/gen/db.gen.ts" } } } }\n`,
 			"src/db/db.core.tables.ts": SQLITE,
 		})
 		const run = await runCodegen(dir)
@@ -189,7 +189,7 @@ const extraction = () =>
 describe("a c.json schema whose input and output differ", () => {
 	it("writes create and update DTOs that typecheck", async () => {
 		const dir = project({
-			"comb.config.ts": `export default { databases: { core: { tables: "./src/db/db.core.tables.ts" } } }\n`,
+			"database.config.ts": `export default { databases: { core: { tables: "./src/db/db.core.tables.ts" } } }\n`,
 			"src/db/db.core.tables.ts": DEFAULTED_TABLES,
 			"src/db/schemas.ts": DEFAULTED_SCHEMAS,
 		})
@@ -199,7 +199,7 @@ describe("a c.json schema whose input and output differ", () => {
 
 	it("keeps the schema's defaults and the column's: optional on create, filled in its output", async () => {
 		const dir = project({
-			"comb.config.ts": `export default { databases: { core: { tables: "./src/db/db.core.tables.ts" } } }\n`,
+			"database.config.ts": `export default { databases: { core: { tables: "./src/db/db.core.tables.ts" } } }\n`,
 			"src/db/db.core.tables.ts": DEFAULTED_TABLES,
 			"src/db/schemas.ts": DEFAULTED_SCHEMAS,
 		})

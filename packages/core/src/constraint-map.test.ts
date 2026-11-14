@@ -9,7 +9,7 @@ import {
 	shown,
 	shownColumn,
 	type TableMap,
-	toCombError,
+	toDatabaseError,
 } from "./constraint-map.ts"
 import type { ConstraintMap } from "./types.ts"
 
@@ -49,23 +49,23 @@ describe("findNamed", () => {
 	})
 })
 
-describe("toCombError", () => {
+describe("toDatabaseError", () => {
 	it("uses the entry, its status, and keeps the source", () => {
 		const source = new Error("raw")
 		const entry = own(MAPS[1]?.b?.check, "b_n_check")
-		const error = toCombError({ column: "n", entry, fallback: FALLBACK, table: "b" }, source)
+		const error = toDatabaseError({ column: "n", entry, fallback: FALLBACK, table: "b" }, source)
 		expect(error).toMatchObject({ cause: "n", column: "n", errorKey: "b_n_invalid", status: 403, table: "b" })
 		expect(error.source).toBe(source)
 	})
 
 	it("defaults an entry's status to the kind's: bad_request stays, everything else is conflict", () => {
 		const entry = { cause: "c", errorKey: "k" }
-		expect(toCombError({ entry, fallback: FALLBACK }, null).status).toBe(409)
-		expect(toCombError({ entry, fallback: { ...FALLBACK, status: "bad_request" } }, null).status).toBe(400)
+		expect(toDatabaseError({ entry, fallback: FALLBACK }, null).status).toBe(409)
+		expect(toDatabaseError({ entry, fallback: { ...FALLBACK, status: "bad_request" } }, null).status).toBe(400)
 	})
 
 	it("falls back to the generic error without an entry", () => {
-		expect(toCombError({ entry: undefined, fallback: FALLBACK, table: "a" }, null)).toMatchObject({
+		expect(toDatabaseError({ entry: undefined, fallback: FALLBACK, table: "a" }, null)).toMatchObject({
 			cause: "generic",
 			errorKey: "constraint_violation",
 			status: 409,

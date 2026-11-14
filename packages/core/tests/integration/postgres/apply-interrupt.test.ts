@@ -1,6 +1,6 @@
 /**
- * PA4 of r22, PA3 of r23: a Postgres apply stopped by SIGHUP, SIGINT, SIGQUIT or SIGTERM to comb's pid
- * alone, as a dropped SSH session, a Ctrl-C, a supervisor, a container stop or a CI step timeout sends it, while Atlas applies. comb passes the signal to Atlas,
+ * PA4 of r22, PA3 of r23: a Postgres apply stopped by SIGHUP, SIGINT, SIGQUIT or SIGTERM to database's pid
+ * alone, as a dropped SSH session, a Ctrl-C, a supervisor, a container stop or a CI step timeout sends it, while Atlas applies. database passes the signal to Atlas,
  * waits for it to end, reads the history once and says what was applied and what was not, then ends
  * as the signal would: no Atlas left running, nothing after the stopped file recorded, and no
  * scratch left. The Atlas here is the real one behind a stand-in that holds the second apply call
@@ -29,7 +29,7 @@ import { query } from "../support/pg-roles.ts"
 
 let root = ""
 beforeEach(() => {
-	root = mkdtempSync(join(tmpdir(), "comb-apply-interrupt-"))
+	root = mkdtempSync(join(tmpdir(), "database-apply-interrupt-"))
 })
 afterEach(() => rmSync(root, { force: true, recursive: true }))
 
@@ -44,7 +44,7 @@ const STAND_IN = `#!${process.execPath}
 const { spawnSync } = require("node:child_process")
 const fs = require("node:fs")
 const args = process.argv.slice(2)
-const state = process.env.COMB_STAND_IN_STATE
+const state = process.env.DATABASE_STAND_IN_STATE
 const applies = args[0] === "migrate" && args[1] === "apply" && !args.includes("--dry-run")
 const call = applies ? Number(fs.existsSync(state) ? fs.readFileSync(state, "utf8") : "0") + 1 : 0
 if (applies) fs.writeFileSync(state, String(call))
@@ -52,7 +52,7 @@ if (call === 2) {
 	${recordWhole({ expression: 'state + ".pid"' }, "String(process.pid)")}
 	setInterval(() => {}, 1000)
 } else {
-	const real = spawnSync(process.env.COMB_REAL_ATLAS, args, { stdio: "inherit" })
+	const real = spawnSync(process.env.DATABASE_REAL_ATLAS, args, { stdio: "inherit" })
 	process.exit(real.status ?? 1)
 }
 `
@@ -65,7 +65,7 @@ const FILES = [
 const NAMES = ["20260101000000_a.sql", "20260101000001_b.sql"]
 
 /**
- * The apply of `dir` in a child under a shell that says how it ended; `comb` is the apply, seen as
+ * The apply of `dir` in a child under a shell that says how it ended; `database` is the apply, seen as
  * the shell's child as soon as it writes its pid, and `kill` signals it alone
  */
 function childApply(env: NodeJS.ProcessEnv, target: { devUrl: string; dir: string; url: string }) {
@@ -86,25 +86,30 @@ function childApply(env: NodeJS.ProcessEnv, target: { devUrl: string; dir: strin
 		},
 	)
 	let said = ""
-	let comb: Seen | undefined
+	let database: Seen | undefined
 	child.stdout.on("data", (chunk: Buffer) => {
 		said += chunk.toString()
 		/* read as the line comes, while the shell, which Node has not reaped, holds the apply as its child */
-		comb ??= see(Number(/^pid (\d+)$/m.exec(said)?.[1]), child.pid)
+		database ??= see(Number(/^pid (\d+)$/m.exec(said)?.[1]), child.pid)
 	})
 	const ended = new Promise<string[]>((done) => child.on("close", () => done(said.trim().split("\n"))))
 	const seen = (): Seen => {
-		if (comb === undefined) throw new Error(`the apply never wrote its pid as the shell's child: ${said}`)
-		return comb
+		if (database === undefined) throw new Error(`the apply never wrote its pid as the shell's child: ${said}`)
+		return database
 	}
-	return { comb: seen, ended, kill: (sent: NodeJS.Signals) => expect(send(seen(), sent)).toBe(true), said: () => said }
+	return {
+		database: seen,
+		ended,
+		kill: (sent: NodeJS.Signals) => expect(send(seen(), sent)).toBe(true),
+		said: () => said,
+	}
 }
 
-/* how long comb has to end once signalled, well under the case's timeout, so withScratchDb still drops its databases */
+/* how long database has to end once signalled, well under the case's timeout, so withScratchDb still drops its databases */
 const STOP_WITHIN_MS = 20_000
 
 /**
- * What comb said, once it ended after the signal; if it has not ended within STOP_WITHIN_MS, comb
+ * What database said, once it ended after the signal; if it has not ended within STOP_WITHIN_MS, database
  * and its Atlas child are killed and the case fails with their pids and state, so a red run leaves
  * nothing running and nothing on the server
  */
@@ -116,12 +121,12 @@ async function endedWithin(child: ReturnType<typeof childApply>, atlas: Seen): P
 	const end = await Promise.race([child.ended, late])
 	clearTimeout(timer)
 	if (end !== "late") return end
-	const comb = child.comb()
-	const state = { atlasRunning: runs(atlas), combRunning: runs(comb), said: child.said().trim().split("\n") }
-	for (const each of [comb, atlas]) send(each, "SIGKILL")
+	const database = child.database()
+	const state = { atlasRunning: runs(atlas), databaseRunning: runs(database), said: child.said().trim().split("\n") }
+	for (const each of [database, atlas]) send(each, "SIGKILL")
 	await child.ended
 	throw new Error(
-		`comb ${comb.pid} (Atlas ${atlas.pid}) had not ended ${STOP_WITHIN_MS} ms after the signal: ${JSON.stringify(state)}`,
+		`database ${database.pid} (Atlas ${atlas.pid}) had not ended ${STOP_WITHIN_MS} ms after the signal: ${JSON.stringify(state)}`,
 	)
 }
 
@@ -149,15 +154,15 @@ describe("a Postgres apply stopped by a signal while Atlas applies (PA4 of r22, 
 				withScratchDb(async (url) => {
 					const env = {
 						...process.env,
-						COMB_REAL_ATLAS: REAL_ATLAS,
-						COMB_STAND_IN_STATE: state,
+						DATABASE_REAL_ATLAS: REAL_ATLAS,
+						DATABASE_STAND_IN_STATE: state,
 						PATH: `${bin}:${process.env["PATH"] ?? ""}`,
 						TMPDIR: tmp,
 					}
 					const child = childApply(env, { devUrl, dir, url })
 					await until(() => existsSync(`${state}.pid`), "the held apply call")
-					/* the held Atlas call, seen as comb's child while it waits for the signal */
-					const atlas = running(Number(readFileSync(`${state}.pid`, "utf8")), child.comb().pid)
+					/* the held Atlas call, seen as database's child while it waits for the signal */
+					const atlas = running(Number(readFileSync(`${state}.pid`, "utf8")), child.database().pid)
 					child.kill(signal)
 					const said = await endedWithin(child, atlas)
 					const revisions = await query(
@@ -192,30 +197,30 @@ describe("a Postgres apply stopped by a signal while Atlas applies (PA4 of r22, 
 })
 
 /**
- * `comb migrate apply db --json --yes` in `project` as comb's own process, signalled alone with
+ * `database migrate apply db --json --yes` in `project` as database's own process, signalled alone with
  * `signal` once the held Atlas call (`<state>.pid`) waits; how it ended, its "Stopped by" lines and its
- * stdout as JSON lines. Past STOP_WITHIN_MS comb and its Atlas child are killed and the case fails.
+ * stdout as JSON lines. Past STOP_WITHIN_MS database and its Atlas child are killed and the case fails.
  */
-async function combJsonStopped(
+async function databaseJsonStopped(
 	{ env, project, state }: { env: NodeJS.ProcessEnv; project: string; state: string },
 	signal: NodeJS.Signals,
 ) {
-	const comb = spawn(
+	const database = spawn(
 		process.execPath,
 		[join(import.meta.dirname, "../../../src/bin.ts"), "migrate", "apply", "db", "--json", "--yes"],
 		{ cwd: project, env, stdio: ["ignore", "pipe", "pipe"] },
 	)
 	let [out, err] = ["", ""]
-	comb.stdout.on("data", (chunk: Buffer) => (out += chunk.toString()))
-	comb.stderr.on("data", (chunk: Buffer) => (err += chunk.toString()))
-	const ended = new Promise<NodeJS.Signals | null>((done) => comb.on("close", (_, by) => done(by)))
+	database.stdout.on("data", (chunk: Buffer) => (out += chunk.toString()))
+	database.stderr.on("data", (chunk: Buffer) => (err += chunk.toString()))
+	const ended = new Promise<NodeJS.Signals | null>((done) => database.on("close", (_, by) => done(by)))
 	await until(() => existsSync(`${state}.pid`), "the held apply call")
-	comb.kill(signal)
+	database.kill(signal)
 	const by = await Promise.race([ended, new Promise<"late">((done) => setTimeout(() => done("late"), STOP_WITHIN_MS))])
 	if (by === "late") {
-		comb.kill("SIGKILL")
-		send(running(Number(readFileSync(`${state}.pid`, "utf8")), comb.pid as number), "SIGKILL")
-		throw new Error(`comb had not ended ${STOP_WITHIN_MS} ms after ${signal}: ${JSON.stringify({ err, out })}`)
+		database.kill("SIGKILL")
+		send(running(Number(readFileSync(`${state}.pid`, "utf8")), database.pid as number), "SIGKILL")
+		throw new Error(`database had not ended ${STOP_WITHIN_MS} ms after ${signal}: ${JSON.stringify({ err, out })}`)
 	}
 	return {
 		by,
@@ -228,11 +233,11 @@ async function combJsonStopped(
 }
 
 /*
- * The same stop through the CLI, `comb migrate apply --json`, which printed no object when a signal
+ * The same stop through the CLI, `database migrate apply --json`, which printed no object when a signal
  * ended it (KC3 of r23). It prints the one object, naming the file that committed and the signal, and
  * still ends by the signal.
  */
-describe("comb migrate apply --json stopped by a signal while Atlas applies (KC3 of r23)", () => {
+describe("database migrate apply --json stopped by a signal while Atlas applies (KC3 of r23)", () => {
 	it.each(STOP_SIGNALS)(
 		"on %s prints the one JSON object naming the committed file, then ends by it",
 		async (signal) => {
@@ -245,8 +250,8 @@ describe("comb migrate apply --json stopped by a signal while Atlas applies (KC3
 			const state = join(root, "state")
 			const env = {
 				...process.env,
-				COMB_REAL_ATLAS: REAL_ATLAS,
-				COMB_STAND_IN_STATE: state,
+				DATABASE_REAL_ATLAS: REAL_ATLAS,
+				DATABASE_STAND_IN_STATE: state,
 				PATH: `${bin}:${process.env["PATH"] ?? ""}`,
 				TMPDIR: tmp,
 			}
@@ -254,11 +259,11 @@ describe("comb migrate apply --json stopped by a signal while Atlas applies (KC3
 				withScratchDb(async (url) => {
 					const provider = JSON.stringify({ devUrl, type: "postgres", url })
 					writeFileSync(
-						join(project, "comb.migrate.config.ts"),
+						join(project, "database.migrate.config.ts"),
 						`export default { databases: { db: { migrationsDir: ${JSON.stringify(dir)}, name: "db", provider: ${provider} } } }\n`,
 					)
 					const message = `Stopped by ${signal}: applied ${NAMES[0]}; not applied ${NAMES[1]}`
-					expect(await combJsonStopped({ env, project, state }, signal)).toEqual({
+					expect(await databaseJsonStopped({ env, project, state }, signal)).toEqual({
 						by: signal,
 						err: [message],
 						out: [

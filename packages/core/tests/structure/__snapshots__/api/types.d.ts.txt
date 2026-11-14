@@ -1,10 +1,10 @@
 // types.d.ts
 /** Database-relevant HTTP status keys */
 export type StatusKey = "bad_request" | "conflict" | "forbidden" | "internal_server_error" | "service_unavailable" | "unprocessable_entity";
-/** The HTTP status code for each status key, as `CombError.status` carries it */
+/** The HTTP status code for each status key, as `DatabaseError.status` carries it */
 export declare const statusKeyToCode: Record<StatusKey, number>;
 /** Database-related error key constants */
-export declare const combErrorKeys: {
+export declare const databaseErrorKeys: {
     readonly CHECK_CONSTRAINT_VIOLATION: "check_constraint_violation";
     readonly CONSTRAINT_VIOLATION: "constraint_violation";
     readonly CURSOR_NOT_WIRED: "cursor_not_wired";
@@ -31,23 +31,23 @@ export declare const combErrorKeys: {
     readonly UNIQUE_CONSTRAINT_VIOLATION: "unique_constraint_violation";
     readonly VALUE_TOO_LARGE: "value_too_large";
 };
-/** Lowercase error key values from combErrorKeys */
-export type CombErrorKey = (typeof combErrorKeys)[keyof typeof combErrorKeys];
+/** Lowercase error key values from databaseErrorKeys */
+export type DatabaseErrorKey = (typeof databaseErrorKeys)[keyof typeof databaseErrorKeys];
 /** A key a database error classifier answers with: classifyD1Error, classifySqliteError and classifyPgError alike */
-export type CombDatabaseErrorKey = (typeof combErrorKeys)["CHECK_CONSTRAINT_VIOLATION" | "CONSTRAINT_VIOLATION" | "DATABASE_IO_ERROR" | "DATABASE_READONLY" | "DATABASE_UNAVAILABLE" | "EXCLUSION_CONSTRAINT_VIOLATION" | "FOREIGN_KEY_VIOLATION" | "INVALID_VALUE" | "PRIMARY_KEY_VIOLATION" | "REQUIRED_FIELD_MISSING" | "STORAGE_LIMIT_REACHED" | "UNIQUE_CONSTRAINT_VIOLATION" | "VALUE_TOO_LARGE"];
+export type DatabaseDriverErrorKey = (typeof databaseErrorKeys)["CHECK_CONSTRAINT_VIOLATION" | "CONSTRAINT_VIOLATION" | "DATABASE_IO_ERROR" | "DATABASE_READONLY" | "DATABASE_UNAVAILABLE" | "EXCLUSION_CONSTRAINT_VIOLATION" | "FOREIGN_KEY_VIOLATION" | "INVALID_VALUE" | "PRIMARY_KEY_VIOLATION" | "REQUIRED_FIELD_MISSING" | "STORAGE_LIMIT_REACHED" | "UNIQUE_CONSTRAINT_VIOLATION" | "VALUE_TOO_LARGE"];
 /**
- * The keys comb's database error classifiers answer with: the subset of combErrorKeys a consumer's
+ * The keys database's database error classifiers answer with: the subset of databaseErrorKeys a consumer's
  * map of database errors (a translation, a status) iterates to cover each one. The query and router
  * keys are not among them.
  */
-export declare const combDatabaseErrorKeys: readonly CombDatabaseErrorKey[];
+export declare const databaseDriverErrorKeys: readonly DatabaseDriverErrorKey[];
 /** Constraint map entry for mapping DB constraint violations to domain errors */
 export type ConstraintMapEntry = {
-    /** The `CombError.cause` the violation answers with: a message safe to show the client */
+    /** The `DatabaseError.cause` the violation answers with: a message safe to show the client */
     cause: string;
-    /** The `CombError.errorKey` the violation answers with, your domain's key */
+    /** The `DatabaseError.errorKey` the violation answers with, your domain's key */
     errorKey: string;
-    /** The status the violation answers with; `bad_request` for a violation comb reports as one, such as a CHECK, and `conflict` otherwise */
+    /** The status the violation answers with; `bad_request` for a violation database reports as one, such as a CHECK, and `conflict` otherwise */
     statusKey?: "bad_request" | "conflict" | "forbidden" | undefined;
 };
 /** Per-table constraint violation mappings */
@@ -71,7 +71,7 @@ export type ConstraintMap = {
         /**
          * The partitions of this Postgres table, keyed as the map keys a table: Postgres reports a
          * violation on the partition, which is read as this table's, under its keys and its `private`
-         * list. Codegen writes it from comb.config.ts's `partitions`; a table no entry lists or keys
+         * list. Codegen writes it from database.config.ts's `partitions`; a table no entry lists or keys
          * names no column.
          */
         partitions?: readonly string[] | undefined;

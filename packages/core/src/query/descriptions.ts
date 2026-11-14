@@ -18,7 +18,7 @@ const CURSOR_DESCRIPTION =
 
 /** The OpenAPI description of the `page` param */
 const PAGE_DESCRIPTION =
-	"1-based page number for offset pagination, up to the endpoint's maxPage (x-comb); page further by cursor. A page that is no whole number from 1, in decimal digits, or zero-padded past maxPage's digits, is a 400 invalid_page, and one past maxPage a 400 page_too_deep, with or without a cursor. Ignored when cursor is present."
+	"1-based page number for offset pagination, up to the endpoint's maxPage (x-database); page further by cursor. A page that is no whole number from 1, in decimal digits, or zero-padded past maxPage's digits, is a 400 invalid_page, and one past maxPage a 400 page_too_deep, with or without a cursor. Ignored when cursor is present."
 /** The OpenAPI examples of the `page` param */
 const PAGE_EXAMPLES: number[] = [1, 2]
 

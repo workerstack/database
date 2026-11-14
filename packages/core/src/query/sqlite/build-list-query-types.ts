@@ -112,15 +112,15 @@ type BuildDerivedListQueryOpts<TSortField extends string = string> = {
 /* each key absent or set, never undefined, so the extras go on to drizzle's select as they are */
 type ListExtras = Partial<{
 	/** 1 when the cursor's anchor row is gone where no bound is safe, which paginate answers with a 400 invalid_cursor */
-	_combAnchorGone: SQL.Aliased<number>
+	_cursorAnchorGone: SQL.Aliased<number>
 	/** the value the list breaks ties on, which the next cursor resumes from; none when no cursor can */
-	_combId: SQL.Aliased<unknown>
+	_cursorId: SQL.Aliased<unknown>
 	/** the class of each sort key and the tiebreak, comma-joined, where the list binds them as read or one is an undeclared SQLite expression */
-	_combKeyTypes: SQL.Aliased<string>
+	_cursorKeyTypes: SQL.Aliased<string>
 	/** each sort key's stored time where the list binds it as read, comma-joined, empty for any other key: a Postgres time key's text, a SQLite REAL seconds */
-	_combKeyTexts: SQL.Aliased<string>
+	_cursorKeyTexts: SQL.Aliased<string>
 	/** each SQLite timestamp key's TEXT where the list reads it back and the row holds TEXT, a JSON array with null for any other key */
-	_combTextKeys: SQL.Aliased<string>
+	_cursorTextKeys: SQL.Aliased<string>
 	/** an offset page's count of every row the filter matches; a cursor page selects none */
 	_total: SQL.Aliased<number>
 }>

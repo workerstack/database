@@ -6,7 +6,7 @@
  */
 import { isMirror, seedMirrors } from "./proof-mirror.ts"
 import { type LocalDb, openScratch, type ScratchDb, type ScratchEngine } from "../drivers/local-db.ts"
-import type { Connection } from "../types.ts"
+import type { MigrateConnection } from "../types.ts"
 import { keyGroups, quote, seedTables } from "./proof-seed.ts"
 import { isVirtual, observable, shadowsOf, virtualOf } from "./proof-scope.ts"
 import { asciiFold } from "./sql-code.ts"
@@ -16,7 +16,7 @@ import { isVectorIndexSql, vectorShadows } from "./vector-index.ts"
 type LiveObject = { name: string; sql: string; table: string; type: string }
 
 /** The target's schema, read in one SELECT: SQLite's and D1's own objects left out */
-async function liveObjects(conn: Connection, engine: string): Promise<LiveObject[]> {
+async function liveObjects(conn: MigrateConnection, engine: string): Promise<LiveObject[]> {
 	const { columns, rows } = await conn.execute(
 		`SELECT type, name, sql, tbl_name FROM sqlite_master WHERE sql IS NOT NULL${engine} ORDER BY rowid`,
 	)
@@ -61,7 +61,7 @@ function uncreated(object: LiveObject, message: string): [table: string, why: st
 	if (object.type === "view") return undefined
 	if (object.type === "trigger")
 		return [asciiFold(object.table), `its trigger ${object.name} could not be created: ${message}`]
-	return [asciiFold(object.table), `comb could not create it in the copy: ${message}`]
+	return [asciiFold(object.table), `database could not create it in the copy: ${message}`]
 }
 
 /** How a copy is seeded: which seed, and the columns pending files read as JSON; none for a copy of the schema alone */
@@ -106,7 +106,7 @@ function buildCopy(db: LocalDb, objects: readonly LiveObject[], seed: Seed): Map
 	for (const object of tables.filter(
 		(each) => inScope(each) && isVirtual(each) && !seedable.includes(each) && !isMirror(each),
 	))
-		unproven.set(asciiFold(object.name), "a virtual table comb does not seed")
+		unproven.set(asciiFold(object.name), "a virtual table database does not seed")
 	const definitions = new Map(seedable.map((object) => [object.name, object.sql]))
 	for (const [table, why] of [
 		...seedTables(db, definitions, seed),
@@ -120,7 +120,7 @@ function buildCopy(db: LocalDb, objects: readonly LiveObject[], seed: Seed): Map
 	return unproven
 }
 
-/** One copy of the target: its database, and the tables comb could not seed in it, with why */
+/** One copy of the target: its database, and the tables database could not seed in it, with why */
 type Copy = { db: ScratchDb; unproven: Map<string, string> }
 
 /** A copy of `objects` on `engine`, seeded as `seed` */

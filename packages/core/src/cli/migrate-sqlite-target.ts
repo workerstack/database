@@ -1,5 +1,5 @@
 /**
- * The SQLite, libsql or Turso database comb.migrate.config.ts resolved, opened for a migrate command:
+ * The SQLite, libsql or Turso database that database.migrate.config.ts resolved, opened for a migrate command:
  * read-only for check and status, which refuse a missing database. An apply or baseline checks on a
  * read-only connection too, a missing database read as the empty one it is, and opens the writable
  * connection only to write, so a refused run creates no file and no Turso database, and mints no
@@ -15,7 +15,7 @@ import { DatabaseMissing } from "../migrate/drivers/missing.ts"
 import type { FileConnection } from "../migrate/core/apply.ts"
 import type { TargetKind } from "../migrate/core/classify-target.ts"
 import type { ScratchEngine } from "../migrate/drivers/local-db.ts"
-import type { Connection, ConnectionProviderConfig } from "../migrate/types.ts"
+import type { MigrateConnection, ConnectionProviderConfig } from "../migrate/types.ts"
 import type { ParsedArgs } from "./args.ts"
 import { type MigrateTarget, refuseBlank, refuseNoDir } from "./migrate-target.ts"
 import { CliError, type CliContext } from "./output.ts"
@@ -23,15 +23,15 @@ import { CliError, type CliContext } from "./output.ts"
 /** An open database to migrate: the connection its checks read, the one its writes go to, and how to name it */
 export type SqliteTarget = {
 	close(): Promise<void>
-	conn: Connection
+	conn: MigrateConnection
 	/** the SQLite its files apply on, which their proof copy and a baseline's replay run on */
 	engine: ScratchEngine
-	/** where the files apply: a SQLite file comb opens, or a libsql server */
+	/** where the files apply: a SQLite file database opens, or a libsql server */
 	kind: Exclude<TargetKind, "d1">
 	migrationsDir: string
 	name: string
-	/** the connection to write comb's history through, opened on first use */
-	write(): Promise<Connection>
+	/** the connection to write database's history through, opened on first use */
+	write(): Promise<MigrateConnection>
 	/** the connection one file applies on, which the caller closes: a new one on a file; the writer, which only the target closes, on an in-memory database or a server */
 	fresh(): Promise<FileConnection>
 }
@@ -39,7 +39,10 @@ export type SqliteTarget = {
 type OpenRequest = { args: ParsedArgs; io: CliContext; mode: string }
 
 /** The database read-only, or the empty database a missing one is */
-async function readOrAbsent(connect: (readonly: boolean) => Promise<Connection>, name: string): Promise<Connection> {
+async function readOrAbsent(
+	connect: (readonly: boolean) => Promise<MigrateConnection>,
+	name: string,
+): Promise<MigrateConnection> {
 	try {
 		return await connect(true)
 	} catch (error) {
@@ -48,7 +51,7 @@ async function readOrAbsent(connect: (readonly: boolean) => Promise<Connection>,
 	}
 }
 
-/** Where the database lives: `memory` in the one connection that opened it, a `file` comb opens, or a libsql `server` */
+/** Where the database lives: `memory` in the one connection that opened it, a `file` database opens, or a libsql `server` */
 type Place = { at: "file"; file: string } | { at: "memory" | "server" }
 
 async function placeOf(provider: ConnectionProviderConfig): Promise<Place> {
@@ -65,7 +68,7 @@ async function placeOf(provider: ConnectionProviderConfig): Promise<Place> {
 async function fileOpener(
 	provider: ConnectionProviderConfig,
 	file: string,
-	connect: (readonly: boolean) => Promise<Connection>,
+	connect: (readonly: boolean) => Promise<MigrateConnection>,
 ): Promise<() => Promise<FileConnection>> {
 	if (provider.type !== "libsql") return () => connect(false)
 	const { openLibsqlFile } = await import("../migrate/drivers/libsql-file.ts")
@@ -113,7 +116,7 @@ export async function openSqliteTarget(
 		}
 	}
 	const conn = await readOrAbsent(connect, target.label)
-	let writer: Connection | undefined
+	let writer: MigrateConnection | undefined
 	const write = async () => (writer ??= await connect(false))
 	return {
 		close: async () => {

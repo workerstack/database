@@ -34,7 +34,7 @@ type Built = Base | undefined
 function enumBase({ annotations, element, field, schemaType }: Build): Built {
 	if (field.enumValues === null) return undefined
 	/* the values are the rule, each one codegen checked against the format; the format is what they mean */
-	const keys = annotations.format === null ? {} : { "x-comb-format": annotations.format }
+	const keys = annotations.format === null ? {} : { "x-database-format": annotations.format }
 	const initial = field.states?.initial ?? null
 	if (schemaType === "create" && initial !== null && element !== true)
 		return plain(`z.literal(${JSON.stringify(initial)})`, keys)
@@ -52,7 +52,7 @@ const JSON_NUL_CHECK =
 
 /*
  * a c.json column is its schema, which the runtime reader found exported; a plain json column any
- * JSON value, comb.jsonValue read, and written as the shared schema that holds no null of its top, so null
+ * JSON value, database.jsonValue read, and written as the shared schema that holds no null of its top, so null
  * is the column's to take. A written JSON value is its refined schema behind z.lazy: meta
  * on the refined copy itself would publish the schema inline beside its $ref, while the lazy publishes
  * the $ref, or the schema where none is registered, with the refines' rules in x- keys beside it,
@@ -61,18 +61,18 @@ const JSON_NUL_CHECK =
  * the schema's output, which TypeScript refuses for a schema with a default or a transform
  */
 /** Whether a column holds JSON: a c.json column, or a drizzle one whose data type is JSON */
-const isJson = (field: FieldMeta): boolean => field.combKind === "json" || field.dataType === "object json"
+const isJson = (field: FieldMeta): boolean => field.databaseKind === "json" || field.dataType === "object json"
 
 function jsonBase({ annotations, field, schemaType }: Build): Built {
-	const declared = field.combKind === "json"
+	const declared = field.databaseKind === "json"
 	if (!isJson(field)) return undefined
-	/* comb's JSON value takes null itself, as a NOT NULL jsonb holds 'null'::jsonb, so a nullable one adds no
-	   second null; comb's, as a write's is, so a read publishes CombJsonValue too */
+	/* database's JSON value takes null itself, as a NOT NULL jsonb holds 'null'::jsonb, so a nullable one adds no
+	   second null; database's, as a write's is, so a read publishes DatabaseJsonValue too */
 	if (!isMutative(schemaType))
-		return declared ? plain(field.jsonSchemaName as string) : { ...plain("comb.jsonValue"), takesNull: true }
+		return declared ? plain(field.jsonSchemaName as string) : { ...plain("database.jsonValue"), takesNull: true }
 	const schema = declared ? field.jsonSchemaName : "jsonValueSchema"
 	const limit = annotations.maxBytes
-	const keys = { "x-comb-text": STORABLE_TEXT_RULE, ...(limit === null ? {} : { "x-comb-maxBytes": limit }) }
+	const keys = { "x-database-text": STORABLE_TEXT_RULE, ...(limit === null ? {} : { "x-database-maxBytes": limit }) }
 	/* keep the lazy: zod publishes .meta on a refine of a registered schema inline beside its $ref;
 	   the refine on the lazy, not inside it, where an app's getter-recursive schema converted after
 	   another DTO published a positional definition; a nullable column wraps it as every
@@ -108,7 +108,7 @@ function integerOf(annotations: FieldConstraints, range: Range, schemaType: Sche
 	const { max, min } = declaredBounds(annotations)
 	return plain(
 		`z.number().int().min(${boundCode(clamp(min, range.min, Math.max))}).max(${boundCode(clamp(max, range.max, Math.min))})`,
-		annotations.format === null ? {} : { "x-comb-format": annotations.format },
+		annotations.format === null ? {} : { "x-database-format": annotations.format },
 	)
 }
 
@@ -123,7 +123,7 @@ const readFloat = (keys: Record<string, unknown>): string =>
 function numberBase({ annotations, dialect, element, field, schemaType }: Build): Built {
 	if (!isNumeric(field)) return field.dataType === "boolean" ? plain("z.boolean()") : undefined
 	const { max, min } = annotations
-	const kind = field.combKind
+	const kind = field.databaseKind
 	if (kind === "createdAt" || kind === "updatedAt" || kind === "deletedAt")
 		return plain("timestampSchema", {}, ["timestampSchema"])
 	if (kind === "boolean") return plain("z.boolean()")
@@ -152,13 +152,13 @@ function numberBase({ annotations, dialect, element, field, schemaType }: Build)
  */
 function plainTypeBase({ dialect, field, schemaType }: Build): Built {
 	const rule =
-		field.combKind === null && isMutative(schemaType)
+		field.databaseKind === null && isMutative(schemaType)
 			? (dialect === "postgres" ? pgWriteRule : sqliteWriteRule)(field)
 			: undefined
 	return rule === undefined
 		? undefined
 		: rule === CIDR
-			? plain(rule, { "x-comb-cidr": true }, ["cidrSchema"])
+			? plain(rule, { "x-database-cidr": true }, ["cidrSchema"])
 			: plain(rule)
 }
 
@@ -168,7 +168,7 @@ const BUILDERS = [enumBase, jsonBase, plainTypeBase, numberBase]
 const isRowid = (field: FieldMeta, dialect: Build["dialect"]) =>
 	dialect === "sqlite" &&
 	field.isPrimaryKey &&
-	(field.combKind === "integer" || (field.combKind === null && field.columnType === "SQLiteInteger"))
+	(field.databaseKind === "integer" || (field.databaseKind === null && field.columnType === "SQLiteInteger"))
 
 /* by what fills the column, never by its name: a natural key named id is the caller's to give */
 function optionalOnCreate(field: FieldMeta, required: boolean, dialect: Build["dialect"]): boolean {
@@ -192,7 +192,7 @@ type FieldSchemaOptions = { dialect?: "postgres" | "sqlite" | undefined; imports
 /**
  * The Zod expression for `field` in a `schemaType` DTO and the shared schemas it names, or null
  * when the column has no place in it: a private column is never read back, a reference is never
- * updated, and what comb or the database generates is never written.
+ * updated, and what database or the database generates is never written.
  */
 export function fieldSchemaOf(
 	field: FieldMeta,
@@ -233,7 +233,7 @@ function baseOf(build: Build): Base {
 }
 
 /**
- * `base` piped into the schema a text or number column declares, after every rule of comb's, so
+ * `base` piped into the schema a text or number column declares, after every rule of database's, so
  * the schema reads the rewritten value and its issues reach the caller as it yields them; a read
  * never refuses a stored row, so it takes none. zod publishes a pipe's input side, the base, so the
  * schema's own input JSON Schema is published in an `allOf` after the chain's (`own`), which that
@@ -246,7 +246,7 @@ function piped(build: Build, base: Base, own: readonly unknown[]): Base {
 	const [ref] = field.schemaImports
 	if (!isMutative(schemaType) || field.schemaJson === null || ref === undefined) return base
 	const code = `${base.code}.pipe(${ref.name})${metaOf({ allOf: [...own, field.schemaJson] })}`
-	return { ...base, code, keys: { ...base.keys, "x-comb-schema": ref.imported } }
+	return { ...base, code, keys: { ...base.keys, "x-database-schema": ref.imported } }
 }
 
 /** What a written value of a column is held to: its bounds and the regexes it must match */
@@ -265,7 +265,7 @@ export function writeRules(field: FieldMeta, dialect: Build["dialect"]): WriteRu
 	const one = !field.dimensions ? field : { ...field, dimensions: 0, isNotNull: false }
 	if (one.enumValues !== null) return UNBOUNDED
 	if (isJson(one)) return { ...UNBOUNDED, maxBytes: one.constraints.maxBytes }
-	if (dialect === "postgres" && one.combKind === null && pgWriteRule(one) !== undefined) return UNBOUNDED
+	if (dialect === "postgres" && one.databaseKind === null && pgWriteRule(one) !== undefined) return UNBOUNDED
 	if (isNumeric(one)) return { ...UNBOUNDED, ...numberRules(one, dialect) }
 	if (one.dataType === "boolean") return UNBOUNDED
 	const { max, min, patterns } = textRules(one.constraints, one)

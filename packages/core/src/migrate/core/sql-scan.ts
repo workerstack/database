@@ -2,7 +2,7 @@
  * SQL split into statements, normalized and hashed, read through the quote-aware lexer
  * (sql-lexer.ts), so `;`, `--` and `/*` inside a string or identifier are always data.
  */
-import type { Dialect } from "../types.ts"
+import type { MigrateDialect } from "../types.ts"
 import { segments, WORD_CHAR } from "../../sql-lexer.ts"
 import { pgStatements } from "./pg-split.ts"
 
@@ -89,7 +89,7 @@ function finish(reading: Reading): string {
  * Postgres they are the statements Postgres's own parser splits it into, so `await
  * loadPostgresParser()` first: until then it throws. A stretch that holds only comments is not a statement.
  */
-function splitSqlStatements(sql: string, dialect: Dialect = "sqlite"): string[] {
+function splitSqlStatements(sql: string, dialect: MigrateDialect = "sqlite"): string[] {
 	if (dialect === "postgres") return pgStatements(sql)
 	const reading: Reading = { code: "", state: 0, text: "" }
 	const statements: string[] = []
@@ -112,7 +112,7 @@ const SQLITE_SPACE = /[\t\n\f\r ]+/g
  * `sql` with comments dropped and SQLite's whitespace collapsed outside strings and identifiers, those
  * verbatim: two migrations that differ only in layout or comments normalize alike, two that differ
  * in data or names never. A migration's hash is taken over this form, so it stays as recorded: a
- * word written against a quoted name stays against it. `foldAll` is the form comb 0.5.0 to 0.20
+ * word written against a quoted name stays against it. `foldAll` is the form database 0.5.0 to 0.20
  * hashed, which folded every Unicode space too, so `a b` and `a\u00a0b` (a column of type b, and a
  * column named a b) normalized alike.
  */

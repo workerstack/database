@@ -64,11 +64,11 @@ describe("create takes only a state column's initial (CD4; sibling: the update D
 			)
 		})
 
-		it("refuses a default function, which comb cannot hold to initial, naming the column", async () => {
+		it("refuses a default function, which database cannot hold to initial, naming the column", async () => {
 			await expect(
 				generatedDtos(`cd4-fn-${dialect}`, table(dialect, '.notNull().$defaultFn(() => "queued")'), { dialect }),
 			).rejects.toThrow(
-				'job.status: its default is no literal value, so comb cannot hold it to its state machine\'s initial "queued"; write .default("queued")',
+				'job.status: its default is no literal value, so database cannot hold it to its state machine\'s initial "queued"; write .default("queued")',
 			)
 		})
 	})

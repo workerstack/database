@@ -1,7 +1,7 @@
 /**
  * A table's names where a Postgres schema is set: two tables of one name in two schemas,
  * Supabase's auth.users beside the app's own users, are two tables, so each is named with its
- * schema wherever comb keys or publishes it, and plainly where none is set.
+ * schema wherever database keys or publishes it, and plainly where none is set.
  */
 import type { TableMeta } from "../analyzer-types.ts"
 import { sqlIdentifier } from "./case.ts"

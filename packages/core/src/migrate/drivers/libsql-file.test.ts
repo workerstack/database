@@ -23,7 +23,7 @@ describe("openLibsqlFile while a signal's stop runs", () => {
 
 /** A new database file's path */
 function dbFile(): string {
-	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "comb-libsql-file-"))
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "database-libsql-file-"))
 	dirs.push(dir)
 	return path.join(dir, "core.db")
 }
@@ -106,7 +106,7 @@ describe("openLibsqlFile on a failure (SL1 of r22)", () => {
 		const conn = await openLibsqlFile(file)
 		try {
 			await expect(conn.batch([{ sql: "CREATE TABLE a (x)" }, { params: [{}], sql: "SELECT ?" }])).rejects.toThrow(
-				"comb binds no object as a SQL literal",
+				"database binds no object as a SQL literal",
 			)
 			await expect(conn.batch([{ params: [Number.NaN], sql: "SELECT ?" }])).rejects.toThrow("binds no number")
 			await expect(conn.batch([{ params: [1, 2], sql: "SELECT ?" }])).rejects.toThrow(

@@ -1,5 +1,5 @@
 /**
- * The facts comb publishes about one entity, by each channel that publishes them: the stamp it
+ * The facts database publishes about one entity, by each channel that publishes them: the stamp it
  * emits on the generated read schema, the keys the generated create and update DTOs take, and the
  * manifest. meta-contract §8.2 holds them to one another field by field, so a test generates the
  * DTOs, reads the stamp off the read schema's published JSON Schema, as a consumer reads it, rather
@@ -9,7 +9,7 @@ import path from "node:path"
 import * as z from "zod"
 import { analyze } from "../../../src/codegen/analyzer.ts"
 import { buildManifest, type ManifestColumn } from "../../../src/codegen/generators/manifest.ts"
-import { type CombEntityMeta, readCombEntityMeta } from "../../../src/meta.ts"
+import { type EntityMeta, readEntityMeta } from "../../../src/meta.ts"
 import { type GenerateOptions, generatedDir, generatedDtos } from "./dtos.ts"
 
 export type EntityChannels = {
@@ -18,7 +18,7 @@ export type EntityChannels = {
 	/** the manifest's column of each field, by name */
 	manifest: Record<string, ManifestColumn>
 	/** the stamp on the generated read schema; null where it carries none, as for a composite key */
-	stamp: CombEntityMeta | null
+	stamp: EntityMeta | null
 	/** the keys the generated update DTO takes */
 	update: string[]
 }
@@ -36,7 +36,7 @@ export async function entityChannels(
 	const kebab = entity.replaceAll(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)
 	const module = dtos[kebab] as Record<string, unknown>
 	const published = z.toJSONSchema(module[`${entity}DtoReadSchema`] as z.ZodType, { unrepresentable: "any" })
-	const stamp = readCombEntityMeta(published)
+	const stamp = readEntityMeta(published)
 	const analysis = await analyze(path.join(generatedDir(name), "db.x.tables.ts"))
 	const manifest = buildManifest(analysis.tables, "x", options.dialect).entities.find((each) => each.varName === entity)
 	if (manifest === undefined) throw new Error(`the manifest holds no ${entity}`)

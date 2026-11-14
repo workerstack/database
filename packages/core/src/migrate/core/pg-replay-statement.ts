@@ -48,7 +48,7 @@ async function runSent(run: Run, { name, node, sent, type }: Sent, replay: Repla
 
 /* Why a replay stops on a role the history creates, which devUrl's role cannot, as NO_CREATEDB says of the database */
 const noCreaterole = (role: string) =>
-	`creates the role ${role}, which devUrl's server lacks, and devUrl's role cannot create a role (CREATEROLE), as comb replays the history in a database of its own on that server; grant the role CREATEROLE, or point devUrl at a server where it has it`
+	`creates the role ${role}, which devUrl's server lacks, and devUrl's role cannot create a role (CREATEROLE), as database replays the history in a database of its own on that server; grant the role CREATEROLE, or point devUrl at a server where it has it`
 
 /**
  * Whether `error` refused a history CREATE ROLE for want of CREATEROLE: permission denied (42501) to a
@@ -59,7 +59,7 @@ const cannotCreateRole = (run: Run, type: string, error: unknown) =>
 	type === "CreateRoleStmt" && codeOf(error) === "42501" && !run.superuser && !run.createrole
 
 /**
- * What a REINDEX or CLUSTER is, as comb's refusal names it, when Postgres refused it in the file's
+ * What a REINDEX or CLUSTER is, as database's refusal names it, when Postgres refused it in the file's
  * transaction (25001), which it does of a partitioned table or index alone: the history's text
  * cannot show what a DO block partitions, so a check's rating leaves it to the replay (pg-scope.ts)
  */
@@ -80,7 +80,7 @@ async function runStatement(run: Run, statement: Sent, replay: Replaying): Promi
 			throw new ReplayFailed(`${name} ${noCreaterole(String(statement.node["role"]))}; ${replay.stops}`, {
 				cause: error,
 			})
-		/* comb's words, which name the route, as a rating of the file refuses it; Postgres's error the cause */
+		/* database's words, which name the route, as a rating of the file refuses it; Postgres's error the cause */
 		const outside = partitionedOutside(statement, error)
 		if (outside !== undefined) throw new ReplayFailed(outsideRefusal(sent, outside), { cause: error })
 		throw replay.refused(`${name}: devUrl refused ${JSON.stringify(sent)} as ${replay.doing}`, error)

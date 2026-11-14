@@ -1,19 +1,19 @@
 /**
- * Every top-level statement kind of SQLite and Postgres, one sample each, with the rating comb gives
+ * Every top-level statement kind of SQLite and Postgres, one sample each, with the rating database gives
  * it on a history of one table (plan 12, 1.2). A kind the grammar does not list is unsafe; a new kind
  * lands here with its rating chosen, never by falling through to safe.
  */
 import { describe, expect, it } from "vitest"
 import type { MigrationSafety } from "../migration-types.ts"
-import type { Dialect } from "../types.ts"
+import type { MigrateDialect } from "../types.ts"
 import { classifyMigration } from "./classify.ts"
 import { extractSchema } from "./schema.ts"
 
-/* Postgres runs these only outside a transaction, and Atlas's transaction ends at a file's own BEGIN, COMMIT or ROLLBACK, so comb refuses them anywhere but a txmode none file, which is cautious at least (P8 of r19, PA2 of r22b) */
+/* Postgres runs these only outside a transaction, and Atlas's transaction ends at a file's own BEGIN, COMMIT or ROLLBACK, so database refuses them anywhere but a txmode none file, which is cautious at least (P8 of r19, PA2 of r22b) */
 const NO_TX = "-- atlas:txmode none\n\n"
 /* a block a txmode none file opens it also ends, as an open one is refused (AE7 of r22) */
 
-const KINDS: ReadonlyArray<[Dialect, string, MigrationSafety]> = [
+const KINDS: ReadonlyArray<[MigrateDialect, string, MigrationSafety]> = [
 	["postgres", NO_TX + "ABORT", "unsafe"],
 	["postgres", "ALTER AGGREGATE a(int) RENAME TO b", "unsafe"],
 	["postgres", "ALTER COLLATION c RENAME TO d", "unsafe"],
@@ -51,7 +51,7 @@ const KINDS: ReadonlyArray<[Dialect, string, MigrationSafety]> = [
 	["postgres", "ALTER VIEW v OWNER TO r", "cautious"],
 	["postgres", "ANALYZE post", "safe"],
 	["postgres", NO_TX + "BEGIN;\nCOMMIT", "cautious"],
-	/* a procedure's body is code comb does not read (pg-tree.ts) */
+	/* a procedure's body is code database does not read (pg-tree.ts) */
 	["postgres", "CALL p()", "unsafe"],
 	["postgres", "CHECKPOINT", "unsafe"],
 	["postgres", "CLOSE c", "unsafe"],

@@ -25,16 +25,16 @@ export const SQLD_ARCHIVE = {
 /** The sha256 of the `sqld` binary inside that archive, checked on every start */
 export const SQLD_SHA256 = "0863c3fbe68ac9714bca2cec1330def7a0ba5e4a29f199bf60ef46fa0c95b895"
 
-/** Where the binary lives: the archive unpacked under `~/.cache/comb-test/sqld/<version>/` */
+/** Where the binary lives: the archive unpacked under `~/.cache/database-test/sqld/<version>/` */
 export const SQLD_PATH = path.join(
 	os.homedir(),
-	".cache/comb-test/sqld",
+	".cache/database-test/sqld",
 	SQLD_VERSION,
 	"libsql-server-x86_64-unknown-linux-gnu/sqld",
 )
 
 /** How to put the pinned binary in place, which a failure names */
-const INSTALL = `mkdir -p ~/.cache/comb-test/sqld/${SQLD_VERSION} && cd ~/.cache/comb-test/sqld/${SQLD_VERSION} && curl -sSfL -o sqld.tar.xz ${SQLD_ARCHIVE.url} && echo "${SQLD_ARCHIVE.sha256}  sqld.tar.xz" | sha256sum -c - && tar -xJf sqld.tar.xz`
+const INSTALL = `mkdir -p ~/.cache/database-test/sqld/${SQLD_VERSION} && cd ~/.cache/database-test/sqld/${SQLD_VERSION} && curl -sSfL -o sqld.tar.xz ${SQLD_ARCHIVE.url} && echo "${SQLD_ARCHIVE.sha256}  sqld.tar.xz" | sha256sum -c - && tar -xJf sqld.tar.xz`
 
 /** The pinned binary's path, after checking it is there and is the pinned build; throws otherwise */
 export function requireSqld(file: string = SQLD_PATH): string {
@@ -62,7 +62,7 @@ export type Sqld = { http: string; proc: ChildProcess; stop(): Promise<void>; ws
 /** The pinned sqld started on a fresh database and a free port, answering its health check */
 export async function startSqld(): Promise<Sqld> {
 	const bin = requireSqld()
-	const dir = mkdtempSync(path.join(os.tmpdir(), "comb-sqld-"))
+	const dir = mkdtempSync(path.join(os.tmpdir(), "database-sqld-"))
 	const port = await freePort()
 	const proc = spawn(
 		bin,

@@ -2,13 +2,13 @@
  * The integration suites that reach the shared Postgres test server, which run in vitest.config.ts's
  * Postgres projects, under the run's lock (tests/integration/support/pg-run-lock.ts): every suite of
  * tests/integration/postgres, and each suite elsewhere that reaches the server through the Postgres
- * test helpers or COMB_TEST_PG_URL. tests/structure/workflows.test.ts finds them by their own text, so
+ * test helpers or DATABASE_TEST_PG_URL. tests/structure/workflows.test.ts finds them by their own text, so
  * a new one cannot run outside the lock.
  */
 
 /** What makes a suite outside tests/integration/postgres one of them */
 export const PG_REACH =
-	/support\/(?:pg|pg-check|pg-lock|pg-pause|pg-roles|pg-run-lock|pg-url|stale-replay)\.ts"|COMB_TEST_PG_URL/
+	/support\/(?:pg|pg-check|pg-lock|pg-pause|pg-roles|pg-run-lock|pg-url|stale-replay)\.ts"|DATABASE_TEST_PG_URL/
 
 /** The suites, by directory and by name */
 export const PG_INTEGRATION = [

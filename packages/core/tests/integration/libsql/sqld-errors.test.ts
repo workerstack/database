@@ -101,7 +101,7 @@ const remote: Record<string, Client> = {}
 
 beforeAll(async () => {
 	server = await startSqld()
-	dir = fs.mkdtempSync(path.join(os.tmpdir(), "comb-sqld-errors-"))
+	dir = fs.mkdtempSync(path.join(os.tmpdir(), "database-sqld-errors-"))
 	file = createClient({ url: `file:${path.join(dir, "file.db")}` })
 	await file.execute("PRAGMA foreign_keys = ON")
 	for (const sql of SCHEMA) await file.execute(sql)

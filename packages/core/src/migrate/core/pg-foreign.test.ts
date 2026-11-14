@@ -48,7 +48,7 @@ const HISTORY = [
 
 const VALIDATE = "ALTER TABLE audit VALIDATE CONSTRAINT pos;"
 
-/** What comb says the file holds when `first` runs before VALIDATE in it; "" when it warns of none */
+/** What database says the file holds when `first` runs before VALIDATE in it; "" when it warns of none */
 function holds(first: string): string {
 	const rated = classifyMigration(`${first}\n${VALIDATE}\n`, {
 		before: extractSchema(HISTORY, undefined, "postgres"),
@@ -58,15 +58,15 @@ function holds(first: string): string {
 	return warning?.match(/while this file holds (.*); those locks last to the file's COMMIT/)?.[1] ?? ""
 }
 
-/** What comb says the file holds of `named`, and of a DROP … CASCADE of `object`, whose dependents no fact shows */
+/** What database says the file holds of `named`, and of a DROP … CASCADE of `object`, whose dependents no fact shows */
 const cascading = (named: string, object: string): string =>
 	`${named}, and this file's DROP … CASCADE locks what depends on ${object}, which only check on a postgres:// devUrl names`
 
-/** What comb says the file holds of `named`, and of a dropped table's sequences, which no fact names */
+/** What database says the file holds of `named`, and of a dropped table's sequences, which no fact names */
 const owning = (named: string, table: string): string =>
 	`${named}, and this file locks the sequences ${table} owns, which only check on a postgres:// devUrl names`
 
-/* each statement before the VALIDATE, and what comb says the file then holds */
+/* each statement before the VALIDATE, and what database says the file then holds */
 const HOLDS: Array<[string, string]> = [
 	/* the names Postgres chose: the longer of table and columns cut first to 63 bytes, a character never split, a taken name numbered */
 	[

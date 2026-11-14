@@ -1,7 +1,7 @@
 /* The internal review labels a shipped comment must not cite: a finding's ID, as "KC2 of r22b",
- * "(AB3-5)", "B2-3 of area B" or "S6 of the 0.15.0 review". A consumer reads comb's src and its
+ * "(AB3-5)", "B2-3 of area B" or "S6 of the 0.15.0 review". A consumer reads database's src and its
  * generated files; the label means nothing there, so the comment says the reason and the commit
- * message keeps the label. Both comb/no-review-label and the codemod that stripped them read this. */
+ * message keeps the label. Both database/no-review-label and the codemod that stripped them read this. */
 
 /* the words between two of a label's, which a comment may wrap: a space, or a line end and the next
  * line's comment lead */

@@ -1,7 +1,7 @@
 /**
- * comb's rule of what a libsql server (sqld) runs is the pinned server's own (S1 of r22): this starts
+ * database's rule of what a libsql server (sqld) runs is the pinned server's own (S1 of r22): this starts
  * the pinned sqld (tests/support/sqld.ts), sends every name its `pragma_list` holds as a read and as a
- * set, quoted names, and the statement classes, and fails when the server's refusals and comb's
+ * set, quoted names, and the statement classes, and fails when the server's refusals and database's
  * differ. A missing binary or one that is not the pinned build fails it rather than skipping it.
  */
 import { createClient } from "@libsql/client"
@@ -13,8 +13,8 @@ import { refuseUnrunnable } from "../../src/migrate/core/classify-file.ts"
 import { codeOf } from "../../src/sql-lexer.ts"
 import { requireSqld, type Sqld, SQLD_PATH, SQLD_VERSION, startSqld } from "../support/sqld.ts"
 
-/** Whether comb refuses `stmt` on a sqld target as sqld's */
-function combRefuses(stmt: string): boolean {
+/** Whether database refuses `stmt` on a sqld target as sqld's */
+function databaseRefuses(stmt: string): boolean {
 	try {
 		refuseUnrunnable({ code: codeOf(stmt, "sqlite"), dialect: "sqlite", stmt }, stmt, "sqld")
 		return false
@@ -94,7 +94,7 @@ afterAll(async () => {
 	await server.stop()
 })
 
-describe(`comb's sqld rule against the pinned sqld ${SQLD_VERSION} (S1 of r22)`, () => {
+describe(`database's sqld rule against the pinned sqld ${SQLD_VERSION} (S1 of r22)`, () => {
 	it("refuses exactly the pragmas sqld refuses, every pragma_list name read and set", async () => {
 		const client = createClient({ url: server.http })
 		const names = (await client.execute("PRAGMA pragma_list")).rows.map((row) => String(row[0]))
@@ -103,12 +103,12 @@ describe(`comb's sqld rule against the pinned sqld ${SQLD_VERSION} (S1 of r22)`,
 		const differ: string[] = []
 		for (const name of names)
 			for (const stmt of [`PRAGMA ${name}`, `PRAGMA ${name} = 0`])
-				if ((await sqldRefuses(stmt)) !== combRefuses(stmt)) differ.push(stmt)
+				if ((await sqldRefuses(stmt)) !== databaseRefuses(stmt)) differ.push(stmt)
 		expect(differ).toEqual([])
 	}, 60_000)
 
 	it.each([...SPELLINGS, ...STATEMENTS])("refuses %j exactly when sqld does", async (stmt) => {
-		expect(combRefuses(stmt)).toBe(await sqldRefuses(stmt))
+		expect(databaseRefuses(stmt)).toBe(await sqldRefuses(stmt))
 	})
 })
 
@@ -118,7 +118,7 @@ describe("the pinned sqld", () => {
 	})
 
 	it("fails, never skips, when the binary is missing or is not the pinned build", () => {
-		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "comb-sqld-pin-"))
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "database-sqld-pin-"))
 		try {
 			expect(() => requireSqld(path.join(dir, "sqld"))).toThrow(/is not at .*required.*sha256sum -c/)
 			fs.writeFileSync(path.join(dir, "sqld"), "not sqld")

@@ -1,11 +1,6 @@
 /* C5 of the 0.14.1 review: the config types offer no key that no command reads */
 import { expectTypeOf } from "vitest"
-import {
-	type CombMigrateConfig,
-	type DatabaseConfig,
-	defineConfig,
-	type MigrationConfig,
-} from "../../src/migrate/index.ts"
+import { type MigrateConfig, type DatabaseConfig, defineConfig, type MigrationConfig } from "../../src/migrate/index.ts"
 
 export const promoted: DatabaseConfig = {
 	migrationsDir: "m",
@@ -31,7 +26,7 @@ const CORE = {
 	databases: { core: { migrationsDir: "m", name: "core", provider: { databaseName: "core", type: "d1" } } },
 } as const
 
-export const forms: [CombMigrateConfig, () => CombMigrateConfig, () => Promise<CombMigrateConfig>] = [
+export const forms: [MigrateConfig, () => MigrateConfig, () => Promise<MigrateConfig>] = [
 	defineConfig(CORE),
 	() => defineConfig(CORE),
 	async () => defineConfig(CORE),
@@ -39,7 +34,7 @@ export const forms: [CombMigrateConfig, () => CombMigrateConfig, () => Promise<C
 
 /* the README's own spelling: literals written inline, which no `as const` keeps narrow, so each form's `type` takes
    its contextual type from defineConfig */
-export const inline: [CombMigrateConfig, () => CombMigrateConfig, () => Promise<CombMigrateConfig>] = [
+export const inline: [MigrateConfig, () => MigrateConfig, () => Promise<MigrateConfig>] = [
 	defineConfig({
 		databases: { core: { migrationsDir: "m", name: "core", provider: { databaseName: "CORE", type: "d1" } } },
 	}),
@@ -56,8 +51,8 @@ export const inline: [CombMigrateConfig, () => CombMigrateConfig, () => Promise<
 ]
 
 /* it returns what it was given */
-declare const object: CombMigrateConfig
-expectTypeOf(defineConfig(object)).toEqualTypeOf<CombMigrateConfig>()
+declare const object: MigrateConfig
+expectTypeOf(defineConfig(object)).toEqualTypeOf<MigrateConfig>()
 
 /* 0.19's form, a function passed to defineConfig, is refused (TS2345); the rewrite moves the call inside it */
 // @ts-expect-error defineConfig takes no function

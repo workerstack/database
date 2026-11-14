@@ -13,7 +13,7 @@ import {
 	TEXT_FORMATS,
 	type TextFormat,
 } from "../formats/catalog.ts"
-import type { CombColumnKind } from "../meta/column.ts"
+import type { ColumnMetaKind } from "../meta/column.ts"
 import type { ConstantValue } from "./analyzer-types.ts"
 
 /* the transforms a text declares, each of which a format sets itself */
@@ -85,7 +85,7 @@ function refuseTextKeys(format: TextFormat, constraints: Readonly<Record<string,
  */
 export function formatOf(
 	constraints: Readonly<Record<string, ConstantValue>>,
-	{ helper, place, values }: { helper: CombColumnKind | null; place: string; values: readonly string[] | null },
+	{ helper, place, values }: { helper: ColumnMetaKind | null; place: string; values: readonly string[] | null },
 ): IntegerFormat | TextFormat | null {
 	const format = constraints["format"]
 	if (format === undefined) return null
@@ -94,7 +94,7 @@ export function formatOf(
 		const known = isOneOf(TEXT_FORMATS, format) || isOneOf(INTEGER_FORMATS, format)
 		const ids = integer ? `integer formats: ${INTEGER_FORMATS.join(", ")}` : `text formats: ${TEXT_FORMATS.join(", ")}`
 		throw new Error(
-			`${place}: ${known ? `c.${helper} takes no format` : "comb knows no format"} ${JSON.stringify(format)}; ${ids}`,
+			`${place}: ${known ? `c.${helper} takes no format` : "database knows no format"} ${JSON.stringify(format)}; ${ids}`,
 		)
 	}
 	if (isOneOf(INTEGER_FORMATS, format)) {

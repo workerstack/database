@@ -4,7 +4,7 @@
  */
 import * as z from "zod"
 import { afterAll, describe, expect, it } from "vitest"
-import { readCombEntityMeta } from "../../../src/meta.ts"
+import { readEntityMeta } from "../../../src/meta.ts"
 import { cleanGeneratedDtos, generatedDtos } from "../support/dtos.ts"
 
 afterAll(() => cleanGeneratedDtos())
@@ -17,7 +17,7 @@ describe("timestamps the shared spread would get wrong (F10)", () => {
 		)
 		const read = dtos["doc"]?.["docDtoReadSchema"] as z.ZodObject
 		expect(Object.keys(read.shape).sort()).toEqual(["createdAt", "id", "updatedAt"])
-		expect(readCombEntityMeta(z.toJSONSchema(read))?.softDelete).toBeNull()
+		expect(readEntityMeta(z.toJSONSchema(read))?.softDelete).toBeNull()
 	})
 
 	it("reads a plain nullable timestamp as its own nullable field", async () => {

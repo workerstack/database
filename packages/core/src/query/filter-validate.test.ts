@@ -68,7 +68,7 @@ describe("validateFilter — diagnostics", () => {
 		expect(errorsOf(result).join(" ")).toContain("Invalid operator")
 	})
 
-	it("rejects contains on every field type: comb runs no contains, its callers do", () => {
+	it("rejects contains on every field type: database runs no contains, its callers do", () => {
 		for (const type of ["boolean", "date", "enum", "number", "string"] as const) {
 			const result = validateFilter("tags.contains.red", { tags: type })
 			expect(result?.valid).toBe(false)

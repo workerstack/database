@@ -11,13 +11,13 @@
 import { randomUUID } from "node:crypto"
 import type pg from "pg"
 
-export const SCRATCH_PREFIX = "comb_scratch_"
+export const SCRATCH_PREFIX = "database_scratch_"
 
 /** How old a scratch database is before a later run reads it as one a killed run left: no test holds one this long */
 export const SCRATCH_STALE_MS: number = 60 * 60_000
 
 /* the stamp: the millisecond the database was made, then a random part; 59 bytes, within NAMEDATALEN */
-const STAMPED = /^comb_scratch_(\d{13})_[0-9a-f]{32}$/
+const STAMPED = /^database_scratch_(\d{13})_[0-9a-f]{32}$/
 
 /** A new scratch database's name, stamped with `madeAt` */
 export const scratchName = (madeAt: number = Date.now()): string =>
@@ -41,7 +41,7 @@ async function seen(admin: pg.Client): Promise<Seen[]> {
 	const { rows } = await admin.query<{ busy: boolean; name: string; oid: string; ours: boolean }>(
 		`SELECT d.oid::text AS oid, d.datname AS name, pg_get_userbyid(d.datdba) = current_user AS ours,
 			EXISTS (SELECT 1 FROM pg_stat_activity a WHERE a.datid = d.oid) AS busy
-		FROM pg_database d WHERE d.datname LIKE 'comb\\_scratch\\_%' ORDER BY d.datname`,
+		FROM pg_database d WHERE d.datname LIKE 'database\\_scratch\\_%' ORDER BY d.datname`,
 	)
 	const mtimes = new Map<string, number>()
 	const unstamped = rows.filter((row) => !STAMPED.test(row.name)).map((row) => row.oid)
@@ -75,16 +75,16 @@ export async function sweepScratchDbs(
 	for (const db of await seen(admin)) {
 		const why = kept(db, now)
 		if (why !== undefined) {
-			log(`[comb] scratch sweep keeps ${db.name}: ${why}`)
+			log(`[database] scratch sweep keeps ${db.name}: ${why}`)
 			continue
 		}
 		try {
 			await admin.query(`DROP DATABASE ${admin.escapeIdentifier(db.name)}`)
 			dropped.push(db.name)
 		} catch (error) {
-			log(`[comb] scratch sweep keeps ${db.name}: its drop failed, ${(error as Error).message}`)
+			log(`[database] scratch sweep keeps ${db.name}: its drop failed, ${(error as Error).message}`)
 		}
 	}
-	if (dropped.length > 0) log(`[comb] scratch sweep dropped ${dropped.length} scratch databases a killed run left`)
+	if (dropped.length > 0) log(`[database] scratch sweep dropped ${dropped.length} scratch databases a killed run left`)
 	return { dropped }
 }

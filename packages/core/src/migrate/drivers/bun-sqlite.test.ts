@@ -53,7 +53,7 @@ describe("createBunSqliteProvider", () => {
 
 describe("createBunSqliteProvider on a file whose folder is missing, or that cannot open (D6-7)", () => {
 	it("creates the folder on a writable connect, as it creates the file, and none on a read-only one", async () => {
-		const dir = mkdtempSync(join(tmpdir(), "comb-bun-vitest-"))
+		const dir = mkdtempSync(join(tmpdir(), "database-bun-vitest-"))
 		try {
 			const path = join(dir, "missing/sub/core.db")
 			const provider = createBunSqliteProvider({ path, type: "bun-sqlite" })
@@ -68,7 +68,7 @@ describe("createBunSqliteProvider on a file whose folder is missing, or that can
 	})
 
 	it("names the path it tried when the file cannot open, writable or read-only", async () => {
-		const dir = mkdtempSync(join(tmpdir(), "comb-bun-vitest-"))
+		const dir = mkdtempSync(join(tmpdir(), "database-bun-vitest-"))
 		try {
 			const path = join(dir, "core.db")
 			mkdirSync(path)
@@ -85,7 +85,7 @@ describe("createBunSqliteProvider on a file whose folder is missing, or that can
 
 describe("createBunSqliteProvider read-only, and the proof run's memory database, under the Node stand-in", () => {
 	it("refuses a missing file read-only, opens an existing one, and opens memory without it", async () => {
-		const dir = mkdtempSync(join(tmpdir(), "comb-bun-vitest-"))
+		const dir = mkdtempSync(join(tmpdir(), "database-bun-vitest-"))
 		try {
 			const path = join(dir, "core.db")
 			const provider = createBunSqliteProvider({ path, type: "bun-sqlite" })
@@ -106,7 +106,7 @@ describe("createBunSqliteProvider read-only, and the proof run's memory database
 
 	/* CI on 84332342: the lock probe (local-db.ts writeLocked) opens a file that is there, read-write, creating none */
 	it("opens an existing file read-write when asked not to create one", async () => {
-		const dir = mkdtempSync(join(tmpdir(), "comb-bun-vitest-"))
+		const dir = mkdtempSync(join(tmpdir(), "database-bun-vitest-"))
 		try {
 			const path = join(dir, "core.db")
 			const open = await bunLocal()

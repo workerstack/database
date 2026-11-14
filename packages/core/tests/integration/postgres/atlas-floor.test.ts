@@ -1,5 +1,5 @@
 /**
- * comb's migrate commands on the oldest Atlas `ATLAS_RANGE` admits (PA5 of r22): the CLI reads
+ * database's migrate commands on the oldest Atlas `ATLAS_RANGE` admits (PA5 of r22): the CLI reads
  * `atlas version` before it runs anything, so on v1.2.0 it must pass that check and then status,
  * check and apply each work, on Postgres and on a SQLite file alike.
  */
@@ -30,9 +30,9 @@ const FILES = {
 describe("the pinned Atlas floor", () => {
 	it("is the build on PATH for this file, and a missing or other binary fails the cell", () => {
 		expect(spawnSync("atlas", ["version"], { encoding: "utf8" }).stdout).toContain(`version v${ATLAS_FLOOR_VERSION}`)
-		const missing = path.join(os.tmpdir(), "comb-no-atlas-floor", "atlas")
+		const missing = path.join(os.tmpdir(), "database-no-atlas-floor", "atlas")
 		expect(() => requireAtlasFloor(missing)).toThrow(`atlas v${ATLAS_FLOOR_VERSION} is not at ${missing}`)
-		const other = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "comb-atlas-floor-")), "atlas")
+		const other = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "database-atlas-floor-")), "atlas")
 		fs.writeFileSync(other, "not atlas")
 		try {
 			expect(() => requireAtlasFloor(other)).toThrow(`not atlas v${ATLAS_FLOOR_VERSION}'s ${ATLAS_FLOOR_SHA256}`)
@@ -44,13 +44,13 @@ describe("the pinned Atlas floor", () => {
 
 /** A Postgres project in a directory of its own: `FILES` hashed in `m/`, its core database at `url` */
 function pgProject(url: string, devUrl: string): string {
-	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "comb-atlas-floor-pg-"))
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "database-atlas-floor-pg-"))
 	fs.mkdirSync(path.join(dir, "m"))
 	for (const [name, sql] of Object.entries(FILES)) fs.writeFileSync(path.join(dir, "m", name), sql)
 	spawnSync("atlas", ["migrate", "hash", "--dir", `file://${path.join(dir, "m")}`])
 	const provider = JSON.stringify({ devUrl, type: "postgres", url })
 	fs.writeFileSync(
-		path.join(dir, "comb.migrate.config.ts"),
+		path.join(dir, "database.migrate.config.ts"),
 		`export default { databases: { core: { migrationsDir: "./m", environments: { local: { provider: ${provider} } } } } }\n`,
 	)
 	return dir
@@ -80,7 +80,7 @@ async function cli(dir: string, args: readonly string[]) {
 	return { code, lines }
 }
 
-describe(`comb migrate on Atlas v${ATLAS_FLOOR_VERSION} (PA5)`, () => {
+describe(`database migrate on Atlas v${ATLAS_FLOOR_VERSION} (PA5)`, () => {
 	it("runs status, check and apply on Postgres", async () => {
 		await withScratchDb((devUrl) =>
 			withScratchDb(async (url) => {

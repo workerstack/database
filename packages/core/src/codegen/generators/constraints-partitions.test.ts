@@ -1,4 +1,4 @@
-/** comb.config.ts's partitions held to the analyzed tables (Q7 of r18) */
+/** database.config.ts's partitions held to the analyzed tables (Q7 of r18) */
 import fs from "node:fs"
 import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
@@ -13,7 +13,7 @@ afterEach(() => {
 
 /** The tables of `source`, analyzed */
 async function tablesOf(source: string) {
-	const dir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-partitions-"))
+	const dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-partitions-"))
 	made.push(dir)
 	const file = path.join(dir, "db.test.tables.ts")
 	fs.writeFileSync(file, source)

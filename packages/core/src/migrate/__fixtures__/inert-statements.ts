@@ -35,7 +35,7 @@ export const NODE_SAMPLES: Readonly<Record<string, string>> = {
 	LockStmt: "LOCK TABLE t IN SHARE MODE",
 	MergeStmt: "MERGE INTO t USING (SELECT 1 AS x) s ON false WHEN NOT MATCHED THEN INSERT (b, k) VALUES ('m', 2)",
 	RenameStmt: "ALTER TABLE t RENAME TO t2",
-	SelectStmt: "SELECT set_config('comb.gate', 'on', true)",
+	SelectStmt: "SELECT set_config('database.gate', 'on', true)",
 	TransactionStmt: "SAVEPOINT gate",
 	TruncateStmt: "TRUNCATE t CASCADE",
 	UpdateStmt: "UPDATE t SET a = NULL",

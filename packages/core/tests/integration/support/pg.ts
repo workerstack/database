@@ -1,5 +1,5 @@
 /**
- * A real Postgres server for the Postgres suites, at `COMB_TEST_PG_URL`. comb's Postgres
+ * A real Postgres server for the Postgres suites, at `DATABASE_TEST_PG_URL`. database's Postgres
  * defects live in driver error shapes, so these run on node-postgres and postgres.js against a
  * server, not an emulator. The suites are required, locally as in CI: an unset URL fails the run.
  *

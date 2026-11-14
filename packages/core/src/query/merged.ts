@@ -6,8 +6,8 @@
  * windows it as the request asks, counts what every shard counted, and mints the next cursor from
  * the page's last row, so the merged list pages as one database's would, by number or by cursor.
  */
-import { CombError } from "../error.ts"
-import { combErrorKeys } from "../types.ts"
+import { DatabaseError } from "../error.ts"
+import { databaseErrorKeys } from "../types.ts"
 import { effectiveNulls } from "./cursor.ts"
 import { refuseRoundedId } from "./cursor-refusals.ts"
 import { typedKeys } from "./list-extras.ts"
@@ -15,7 +15,7 @@ import { paginationIn, refuseGoneAnchor, refuseOverRead, refuseUnwired } from ".
 import { roundedKey } from "./rounded-key.ts"
 import {
 	applySelect,
-	COMB_ID,
+	DATABASE_ID,
 	type ListPagination,
 	type ListRow,
 	nextCursorOf,
@@ -97,9 +97,9 @@ function refuseUnmergeable(
 	for (const [shard, rows] of rowsPerShard.entries()) {
 		const at = rows.findIndex((row, i) => i > 0 && compare(rows[i - 1] as Record<string, unknown>, row) > 0)
 		if (at === -1) continue
-		throw new CombError({
+		throw new DatabaseError({
 			cause: `shard ${shard}'s rows came back out of the order paginateMerged merges by, at row ${at}: a merged list's sort keys must use SQLite's default BINARY collation`,
-			errorKey: combErrorKeys.SORT_NOT_WIRED,
+			errorKey: databaseErrorKeys.SORT_NOT_WIRED,
 			status: "internal_server_error",
 		})
 	}
@@ -115,9 +115,9 @@ function refuseRounded(rows: ReadonlyArray<Record<string, unknown>>, sort: reado
 		for (const { field } of sort) {
 			/* the merge orders by each sort field's value: a row without one would merge by id alone */
 			if (!Object.hasOwn(row, field)) {
-				throw new CombError({
+				throw new DatabaseError({
 					cause: `the rows carry no ${field}: a merged list orders by each sort field's value, so select it under its name`,
-					errorKey: combErrorKeys.SORT_NOT_WIRED,
+					errorKey: databaseErrorKeys.SORT_NOT_WIRED,
 					status: "internal_server_error",
 				})
 			}
@@ -140,9 +140,9 @@ function refuseSharedIds(rows: ReadonlyArray<Record<string, unknown>>, idField: 
 			seen.add(id)
 			continue
 		}
-		throw new CombError({
+		throw new DatabaseError({
 			cause: `two shards hold id ${JSON.stringify(id)}: a merged list's ids must be unique across its shards`,
-			errorKey: combErrorKeys.SORT_NOT_WIRED,
+			errorKey: databaseErrorKeys.SORT_NOT_WIRED,
 			status: "internal_server_error",
 		})
 	}
@@ -172,10 +172,10 @@ function pastCursor<T extends Record<string, unknown>>(
 	)
 	const kept = end === undefined ? past : past.filter((row) => compare(row, end) <= 0)
 	if (end !== undefined && kept.length === 0) {
-		throw new CombError({
+		throw new DatabaseError({
 			cause:
 				"a shard read its whole limit and every row it read was at or before the cursor: its read resumed before the cursor's row",
-			errorKey: combErrorKeys.SORT_NOT_WIRED,
+			errorKey: databaseErrorKeys.SORT_NOT_WIRED,
 			status: "internal_server_error",
 		})
 	}
@@ -186,7 +186,7 @@ function pastCursor<T extends Record<string, unknown>>(
 function anchorOf(cursor: string, pagination: ListPagination): Record<string, unknown> {
 	const { id, values } = pagination.read(cursor)
 	const keys = pagination.parsedSort.map(({ field }, i) => [field, values[i]])
-	return Object.fromEntries([...keys, [COMB_ID, id]])
+	return Object.fromEntries([...keys, [DATABASE_ID, id]])
 }
 
 /**
@@ -226,9 +226,9 @@ function paginateMerged<T extends object>(
 	const typed = new Map<object, Record<string, unknown>>(
 		merged.map((row) => [row, typedKeys(row, pagination.parsedSort)]),
 	)
-	refuseSharedIds([...typed.values()], COMB_ID)
+	refuseSharedIds([...typed.values()], DATABASE_ID)
 	refuseRounded(merged, pagination.parsedSort)
-	const compare = compareRows(pagination.parsedSort, COMB_ID, typed)
+	const compare = compareRows(pagination.parsedSort, DATABASE_ID, typed)
 	refuseUnmergeable(shards, compare)
 	merged.sort(compare)
 	const { cursor, limit } = pagination

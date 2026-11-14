@@ -2,7 +2,7 @@
  * What a Postgres history proves of a partition's rows before an ATTACH PARTITION:
  * Postgres 17 skips the scan of the partition when its validated CHECK constraints and NOT NULL
  * columns imply the partition constraint (PartConstraintImpliedByRelConstraint, which logs "partition
- * constraint for table … is implied by existing constraints" at DEBUG1). comb proves the implication
+ * constraint for table … is implied by existing constraints" at DEBUG1). database proves the implication
  * only where predtest proves it by equal clauses: a single-column RANGE or LIST key with no COLLATE or
  * operator class of its own, the key column NOT NULL, and a CHECK term that is the bound's own clause
  * (the key `>=` the lower bound and `<` the upper one, or `IN` values the list holds), each constant
@@ -130,10 +130,10 @@ function forget(facts: Facts, table: string): void {
 	for (const each of under(facts, table)) facts.proofs.delete(each)
 }
 
-// lookup-table: the partition strategies whose bounds comb proves, as a bound of each writes its own
+// lookup-table: the partition strategies whose bounds database proves, as a bound of each writes its own
 const STRATEGIES: Readonly<Record<string, "l" | "r">> = { PARTITION_STRATEGY_LIST: "l", PARTITION_STRATEGY_RANGE: "r" }
 
-/** A CREATE TABLE's partition key, when the bound of a partition attached to it is one comb proves */
+/** A CREATE TABLE's partition key, when the bound of a partition attached to it is one database proves */
 function partitionKey(node: Node, elements: Node[]): { column: string; strategy: "l" | "r" } | undefined {
 	const spec = node["partspec"] as Node | undefined
 	const params = ((spec?.["partParams"] as Node[] | undefined) ?? []).map((each) => each["PartitionElem"] as Node)
@@ -149,7 +149,7 @@ function partitionKey(node: Node, elements: Node[]): { column: string; strategy:
 	return plain && strategy !== undefined && typeof name === "string" ? { column: name, strategy } : undefined
 }
 
-/** A CREATE TABLE: its key, when the bound of a partition attached to it is one comb proves, and its constraints */
+/** A CREATE TABLE: its key, when the bound of a partition attached to it is one database proves, and its constraints */
 function made(facts: Facts, node: Node): void {
 	const table = tableOf(node["relation"], facts.schema).key
 	if (flag(node["if_not_exists"]) && facts.proofs.has(table)) return
@@ -229,7 +229,7 @@ function datum(node: unknown): string | undefined {
 	return word === "minvalue" || word === "maxvalue" ? word : constant(node)
 }
 
-// lookup-table: the key column types comb proves a bound on, and what a constant of each must be to read the same in every session
+// lookup-table: the key column types database proves a bound on, and what a constant of each must be to read the same in every session
 const SESSION_FREE: Readonly<Record<string, RegExp>> = {
 	date: /^s:\d{4}-\d{2}-\d{2}$/,
 	int2: /^i:-?\d+$/,

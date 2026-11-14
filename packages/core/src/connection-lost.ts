@@ -3,14 +3,14 @@
  * Postgres driver's and libsql's. The Postgres and
  * SQLite handlers answer it as the 503 a retry may fix.
  */
-import type { Fallback } from "./constraint-map.ts"
+import type { ConstraintFallback } from "./constraint-map.ts"
 import { causeChain } from "./error-chain.ts"
-import { combErrorKeys } from "./types.ts"
+import { databaseErrorKeys } from "./types.ts"
 
 /** What a lost connection is answered with, on every dialect */
-export const UNAVAILABLE: Fallback = {
+export const UNAVAILABLE: ConstraintFallback = {
 	cause: "Database is temporarily unavailable. Please retry shortly.",
-	errorKey: combErrorKeys.DATABASE_UNAVAILABLE,
+	errorKey: databaseErrorKeys.DATABASE_UNAVAILABLE,
 	status: "service_unavailable",
 }
 

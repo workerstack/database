@@ -77,7 +77,7 @@ describe("the statements a txmode none replay runs bare (P1 of r21)", () => {
 
 	it("changes no shared catalog row in any it runs bare, read as the replay reads them, as a superuser", async () => {
 		await withScratchDb(async (url) => {
-			/* the connections the replay opens, through comb's own load: one in the database, one beside it */
+			/* the connections the replay opens, through database's own load: one in the database, one beside it */
 			const connect = await loadPostgres("the test replays on Postgres")
 			const sql = connect({ ...postgresOptionsOf(url, "devUrl"), max: 1, onnotice: () => undefined })
 			const admin = connect({ ...postgresOptionsOf(url, "devUrl"), max: 1, onnotice: () => undefined })

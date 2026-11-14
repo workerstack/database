@@ -10,7 +10,7 @@ describe("updatePackageJson", () => {
 	let lines: string[]
 
 	beforeEach(() => {
-		dir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-pkg-exports-"))
+		dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-pkg-exports-"))
 		lines = []
 	})
 
@@ -64,7 +64,7 @@ describe("updatePackageJson", () => {
 describe("updatePackageJson: the subpaths codegen owns (F19)", () => {
 	let dir: string
 	beforeEach(() => {
-		dir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-pkg-owned-"))
+		dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-pkg-owned-"))
 	})
 	afterEach(() => fs.rmSync(dir, { force: true, recursive: true }))
 

@@ -13,7 +13,7 @@ afterEach(() => {
 
 /** The tables of `source`, analyzed */
 async function tablesOf(source: string) {
-	const dir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-constraint-map-"))
+	const dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-constraint-map-"))
 	made.push(dir)
 	const file = path.join(dir, "db.test.tables.ts")
 	fs.writeFileSync(file, source)
@@ -166,8 +166,8 @@ describe("buildConstraintMap: a CHECK name Postgres cuts (F21)", () => {
 	})
 })
 
-describe("buildConstraintMap: a CHECK's verdict (F27) and comb's own enum CHECKs (F28)", () => {
-	it("calls every CHECK but comb's own conventions a 400 'Check constraint violated', whatever its name holds", async () => {
+describe("buildConstraintMap: a CHECK's verdict (F27) and database's own enum CHECKs (F28)", () => {
+	it("calls every CHECK but database's own conventions a 400 'Check constraint violated', whatever its name holds", async () => {
 		const tables =
 			await tablesOf(`${SQLITE}export const t = sqliteTable("t", { id: text("id").primaryKey(), seats: integer("seats") }, (t) => [
 	check("seats_within_valid_range", sql\`\${t.seats} < 20\`),
@@ -218,14 +218,14 @@ describe("buildConstraintMap: a CHECK named after its table (F35)", () => {
 })
 
 /*
- * F47 of the 0.13.0 round: a declared CHECK under comb's enum CHECK name is comb's own, applied, and
+ * F47 of the 0.13.0 round: a declared CHECK under database's enum CHECK name is database's own, applied, and
  * maps once; two CHECKs of one name blame Postgres's cut only when the cut is what joins them.
  */
-describe("buildConstraintMap: comb's enum CHECK declared, and CHECKs of one name (F47)", () => {
+describe("buildConstraintMap: database's enum CHECK declared, and CHECKs of one name (F47)", () => {
 	const ENUM = `import { c } from "@workerstack/database/sqlite/columns"
 export const t = sqliteTable("t", { id: text("id").primaryKey(), status: c.enum("status", ["a", "it's"]) }, (t) => [`
 
-	it("maps comb's own enum CHECK once, as the enum's, when the table declares it", async () => {
+	it("maps database's own enum CHECK once, as the enum's, when the table declares it", async () => {
 		const tables = await tablesOf(`${SQLITE}${ENUM}check("t_status_enum", sql\`\${t.status} IN ('a', 'it''s')\`)])\n`)
 		expect(buildConstraintMap(tables)["t"]?.check).toEqual({
 			t_status_enum: expect.objectContaining({ errorKey: "t_status_enum_invalid" }),
@@ -238,10 +238,10 @@ export const t = pgTable("t", { id: text("id").primaryKey(), status: c.enum("sta
 		expect(Object.keys(buildConstraintMap(tables, "postgres")["t"]?.check ?? {})).toEqual(["t_status_enum"])
 	})
 
-	it("refuses a CHECK under comb's enum name that checks something else", async () => {
+	it("refuses a CHECK under database's enum name that checks something else", async () => {
 		const tables = await tablesOf(`${SQLITE}${ENUM}check("t_status_enum", sql\`\${t.status} IN ('a')\`)])\n`)
 		expect(() => buildConstraintMap(tables)).toThrow(
-			"t: the CHECK t_status_enum takes the name comb gives the enum CHECK of t.status, but checks something else; rename it",
+			"t: the CHECK t_status_enum takes the name database gives the enum CHECK of t.status, but checks something else; rename it",
 		)
 	})
 

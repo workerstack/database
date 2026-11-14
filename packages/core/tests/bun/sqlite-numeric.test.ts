@@ -22,8 +22,8 @@ function written(type: "create" | "update"): z.ZodType {
 		dialect: "sqlite",
 		imports: { enumImports: new Map(), identifiers: new Map(), jsonSchemaImports: new Set() },
 	}) as string
-	/* the generated file names comb's helpers under comb's namespace */
-	return new Function("z", "comb", `return ${code}`)(z, { isStorableText }) as z.ZodType
+	/* the generated file names database's helpers under database's namespace */
+	return new Function("z", "database", `return ${code}`)(z, { isStorableText }) as z.ZodType
 }
 
 /** A decimal's value as its digits, leading and trailing zeros dropped, and its power of ten */

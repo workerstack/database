@@ -1,7 +1,7 @@
 /**
  * Plan 15's 21 (P12, P15 of the 0.14.1 review): a target schema other than public. Atlas is scoped
  * to the schema on both URLs and inspects it before anything runs, so no migration can create it:
- * comb explains a target without it, and creates it on the scratch dev database itself.
+ * database explains a target without it, and creates it on the scratch dev database itself.
  */
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -25,7 +25,7 @@ beforeAll(loadPostgresParser)
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-pg-schema-"))
+	dir = mkdtempSync(join(tmpdir(), "database-pg-schema-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
@@ -35,7 +35,7 @@ async function migrations(files: Record<string, string>): Promise<void> {
 	await hashDir(run, dir)
 }
 
-/** comb's approval, never asking: the files here are safe */
+/** database's approval, never asking: the files here are safe */
 const approve = (m: ParsedMigration) => approveMigration(m, { target: "core", yes: false })
 
 /** applyWithAtlas's options for schema app of the database at `url` */

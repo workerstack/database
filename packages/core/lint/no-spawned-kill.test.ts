@@ -9,7 +9,7 @@ const FILE = "packages/core/tests/integration/d1/spawns.test.ts"
 
 const reports = (code: string) => reportsOf(rule, { [FILE]: code }).map((report) => report.message)
 
-describe("comb/no-spawned-kill", () => {
+describe("database/no-spawned-kill", () => {
 	it("rejects a kill, pkill or killall spawned, run by a path, or run through exec or a shell", () => {
 		const kills = [
 			'spawnSync("kill", ["-9", String(pid)])',

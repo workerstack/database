@@ -23,14 +23,14 @@ export async function scopeProject(
 	provider: "bun-sqlite" | "libsql",
 	files: Record<string, string>,
 ): Promise<ScopeProject> {
-	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "comb-pragma-scope-"))
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "database-pragma-scope-"))
 	const [db, m] = [path.join(dir, "core.db"), path.join(dir, "m")]
 	fs.mkdirSync(m)
 	/* an empty file is an empty database, which check reads; it creates none */
 	fs.writeFileSync(db, "")
 	const config = provider === "libsql" ? { type: "libsql", url: `file:${db}` } : { path: db, type: "bun-sqlite" }
 	fs.writeFileSync(
-		path.join(dir, "comb.migrate.config.ts"),
+		path.join(dir, "database.migrate.config.ts"),
 		`export default { databases: { core: { migrationsDir: "./m", name: "core", provider: ${JSON.stringify(config)} } } }\n`,
 	)
 	const write = async (more: Record<string, string>) => {
@@ -41,7 +41,7 @@ export async function scopeProject(
 	return { db, dir, remove: () => fs.rmSync(dir, { force: true, recursive: true }), write }
 }
 
-/** `comb migrate <mode> core --yes` in `dir`: its exit code, and what it printed */
+/** `database migrate <mode> core --yes` in `dir`: its exit code, and what it printed */
 export async function migrate(dir: string, mode: "apply" | "check"): Promise<{ code: number; text: string }> {
 	const lines: string[] = []
 	const code = await runCli(["migrate", mode, "core", "--yes"], {
@@ -57,7 +57,7 @@ export const KEEP = { "0000_keep.sql": "CREATE TABLE keep (x INTEGER);\n" }
 
 /** 0001: a table with a CHECK, and a backfill that breaks it under the pragma it approves */
 export const IGNORE_CHECKS =
-	"-- comb:allow-unsafe: legacy rows predate the check\nCREATE TABLE t (v INTEGER CHECK (v > 0));\nPRAGMA ignore_check_constraints = 1;\nINSERT INTO t (v) VALUES (-1);\n"
+	"-- database:allow-unsafe: legacy rows predate the check\nCREATE TABLE t (v INTEGER CHECK (v > 0));\nPRAGMA ignore_check_constraints = 1;\nINSERT INTO t (v) VALUES (-1);\n"
 
 /** 0002: a plain insert that breaks t's CHECK, which nothing approved */
 export const BREAKS_CHECK = "INSERT INTO t (v) VALUES (-5);\n"
@@ -90,7 +90,7 @@ export const SCOPED_PRAGMAS: readonly ScopedPragma[] = [
 /** Two files: the first approves and sets `pragma`, the second keeps what it reads in `seen` */
 export function setThenRead(pragma: ScopedPragma): Record<string, string> {
 	return {
-		"0001_set.sql": `-- comb:allow-unsafe: the file's own setting\nPRAGMA ${pragma.name} = ${pragma.set};\nCREATE TABLE marker (id INTEGER);\n`,
+		"0001_set.sql": `-- database:allow-unsafe: the file's own setting\nPRAGMA ${pragma.name} = ${pragma.set};\nCREATE TABLE marker (id INTEGER);\n`,
 		"0002_read.sql": `CREATE TABLE seen (v INTEGER);\nINSERT INTO seen (v) ${pragma.read};\n`,
 	}
 }

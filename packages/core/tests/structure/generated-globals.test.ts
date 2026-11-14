@@ -115,7 +115,7 @@ describe("generated code names every global through globalThis, and imports only
 	it.each(Object.entries(TABLES))(
 		"on %s, in every generated file",
 		async (_, tables) => {
-			const dir = project({ "comb.config.ts": CONFIG, "src/db/db.core.tables.ts": tables })
+			const dir = project({ "database.config.ts": CONFIG, "src/db/db.core.tables.ts": tables })
 			await codegen(dir)
 			const files = (fs.readdirSync(dir, { recursive: true }) as string[])
 				.filter((name) => name.endsWith(".gen.ts"))

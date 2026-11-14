@@ -1,5 +1,5 @@
 /**
- * The history replayed on devUrl's server, comb's objects and all, then read with the target's own
+ * The history replayed on devUrl's server, database's objects and all, then read with the target's own
  * catalog query: Postgres, not a model of it, decides what a cascade, a rename or a
  * move leaves, and the two sides compare as one read of two databases.
  *
@@ -11,14 +11,14 @@
  * database lent the history what it held. Committed, a statement whose scope is the server or
  * another database would outlive the replay on devUrl's server, the target's own when they share
  * one, so the replay runs none (pg-outside-transaction.ts) and says which it left out; a CREATE
- * ROLE runs bare, as a policy needs its role, and comb drops each role it made
+ * ROLE runs bare, as a policy needs its role, and database drops each role it made
  * (pg-replay-roles.ts).
  *
  * A DO block, a function, EXECUTE and CALL hide such a change from the parse tree, so Postgres
  * decides, twice (pg-server-writes.ts). A file in a transaction has its writes to the shared
  * catalogs counted before its COMMIT, and one that wrote past its database is refused
  * and rolled back, naming the file and the change, but for what the replay drops after it
- * (pg-replay-commit.ts): comb's own CREATE ROLE, a role such a statement adds, which the replay
+ * (pg-replay-commit.ts): database's own CREATE ROLE, a role such a statement adds, which the replay
  * adopts, a change to a role it made, and its own database. The counts are this backend's own, so
  * another session's work never trips them, and with `track_counts` off they read zero, so the
  * replay refuses a server that keeps none. And around every file and every statement a `txmode
@@ -30,12 +30,12 @@
  * block, and a change one makes past its database has committed when the read sees it: the refusal
  * names what devUrl's server keeps. The read is the server's, another session's work in it too, and
  * Postgres keeps no creator for a role or a database, so a change there is the file's only beside a
- * statement that can run code comb cannot read (pg-replay-hidden.ts), and only when it is to an
+ * statement that can run code database cannot read (pg-replay-hidden.ts), and only when it is to an
  * object the file names: a name it spells, unquoted and folded as Postgres folds it, quoted and
  * exact, or inside a string a DO body, dblink_exec or format() may run (namesIn in sql-code.ts).
  * That change is refused, naming it, and left, as another session may have made it; any other is
  * another session's and passes. A name the file builds at run time, by concatenation, from a query,
- * or in a function another file defines, is none it spells, so comb does not refuse that change. A
+ * or in a function another file defines, is none it spells, so database does not refuse that change. A
  * role's password reads from pg_authid alone, so a bare statement's is seen by a superuser's only.
  *
  * A SIGINT or a SIGTERM, a Ctrl-C or a cancelled CI job, skips a `finally`, so either runs the replay's
@@ -77,7 +77,7 @@ type CatalogReplay<T> = {
 	targetUser: string
 }
 
-/* why comb loads postgres.js here */
+/* why database loads postgres.js here */
 const REPLAYS = "replay the history on devUrl, and read what it leaves, in a baseline"
 
 /**
@@ -148,7 +148,7 @@ async function replayEach(
 
 /* why a replay stops on a devUrl role that cannot make the database it replays in */
 const NO_CREATEDB =
-	"devUrl's role cannot create a database (CREATEDB), and comb replays the history file by file, as Atlas applies it, in a database of its own on devUrl's server; grant the role CREATEDB, or point devUrl at a server where it has it"
+	"devUrl's role cannot create a database (CREATEDB), and database replays the history file by file, as Atlas applies it, in a database of its own on devUrl's server; grant the role CREATEDB, or point devUrl at a server where it has it"
 
 /**
  * The replay's database made ready: counted, holding devUrl's extensions the `files` do not make, and
@@ -164,7 +164,7 @@ async function prepare(
 		makes: extensionsOf(files.map(({ sql: text }) => text)),
 		refused: (name, error) =>
 			refused(
-				`devUrl's database holds the extension ${name}, which comb could not make in the database it replays the history in`,
+				`devUrl's database holds the extension ${name}, which database could not make in the database it replays the history in`,
 				error,
 			),
 	})
@@ -265,7 +265,7 @@ async function onDev<T>(
 		})
 	} catch (error) {
 		if (error instanceof ReplayFailed) throw error
-		throw new ReplayFailed(`comb could not replay the history on devUrl: ${failureOf(error, failed)}`, {
+		throw new ReplayFailed(`database could not replay the history on devUrl: ${failureOf(error, failed)}`, {
 			cause: error,
 		})
 	} finally {

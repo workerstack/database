@@ -14,7 +14,7 @@ describe("analyzer: table builders", () => {
 	let dir: string
 
 	beforeEach(() => {
-		dir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-analyzer-builders-"))
+		dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-analyzer-builders-"))
 	})
 
 	afterEach(() => {
@@ -33,7 +33,7 @@ describe("analyzer: table builders", () => {
 		["an aliased sqliteTable", 'import { sqliteTable as table, text } from "drizzle-orm/sqlite-core"', "table"],
 		["an aliased pgTable", 'import { pgTable as define, text } from "drizzle-orm/pg-core"', "define"],
 		[
-			"the createTable alias comb has always read",
+			"the createTable alias database has always read",
 			'import { sqliteTable as createTable, text } from "drizzle-orm/sqlite-core"',
 			"createTable",
 		],

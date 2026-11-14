@@ -52,7 +52,7 @@ describe("createBunSqliteProvider with foreign keys on, as the proof run rates a
 
 describe("createBunSqliteProvider read-only, as check and status open it (M10)", () => {
 	it("refuses a missing file without creating it, and refuses a write to an existing one", async () => {
-		const dir = mkdtempSync(join(tmpdir(), "comb-bun-ro-"))
+		const dir = mkdtempSync(join(tmpdir(), "database-bun-ro-"))
 		try {
 			const path = join(dir, "core.db")
 			const provider = createBunSqliteProvider({ path, type: "bun-sqlite" })

@@ -59,7 +59,7 @@ describe("classifyMigration on a write the G1 review found rated low", () => {
 		],
 		["CREATE RULE r AS ON INSERT TO t DO INSTEAD NOTHING;", "unsafe", "a rule that discards every insert (M9)"],
 		["ALTER TABLE t OWNER TO nobody;", "cautious", "a new owner, who bypasses row level security"],
-		["REASSIGN OWNED BY a TO b;", "unsafe", "reassigned ownership, no shape comb recognizes"],
+		["REASSIGN OWNED BY a TO b;", "unsafe", "reassigned ownership, no shape database recognizes"],
 		["COPY t FROM PROGRAM 'x';", "unsafe", "a COPY that runs a server program (PA15 of r22b)"],
 		["COPY t TO '/tmp/x';", "unsafe", "a COPY that writes a server file (PA15 of r22b)"],
 		[

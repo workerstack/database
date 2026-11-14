@@ -4,7 +4,7 @@ import { wranglerBin } from "../../cli/__fixtures__/d1.ts"
 import { libsqlConnection } from "../__fixtures__/libsql-connection.ts"
 import { enclosing, proveOnD1, refuseRewritten } from "./d1-engine.ts"
 import { notEngineTables } from "./engine-tables.ts"
-import { type Run, run } from "./process.ts"
+import { type MigrateRun, run } from "./process.ts"
 import { creatable, liveObjects } from "./proof-copy.ts"
 
 vi.mock("bun:sqlite", () => import("../__fixtures__/bun-sqlite-node.ts"))
@@ -14,7 +14,7 @@ const LIVE = "CREATE TABLE t (id INTEGER PRIMARY KEY, v REAL NOT NULL DEFAULT 1)
 /** `files` proven on the checked wrangler's D1, over a live database `schema` made (t by default); resolves to what it threw */
 async function proven(
 	files: Array<{ name: string; sql: string }>,
-	{ exec, schema = LIVE, table = "d1_migrations" }: { exec?: Run; schema?: string; table?: string } = {},
+	{ exec, schema = LIVE, table = "d1_migrations" }: { exec?: MigrateRun; schema?: string; table?: string } = {},
 ): Promise<unknown> {
 	const live = libsqlConnection()
 	try {
@@ -60,7 +60,7 @@ describe("proveOnD1 inside a Bun single-file executable", () => {
 	/* D4-5 of the area D round-four review: the child is handed a module the executable embeds, which node cannot read */
 	it("refuses inside a Bun single-file executable, saying why, and starts no child", async () => {
 		const calls: string[] = []
-		const exec: Run = async (cmd) => {
+		const exec: MigrateRun = async (cmd) => {
 			calls.push(cmd)
 			return { code: 0, stderr: "", stdout: "" }
 		}
@@ -74,7 +74,7 @@ describe("proveOnD1 inside a Bun single-file executable", () => {
 			}),
 		).rejects.toThrow(
 			new Error(
-				"check proves the pending files in a child on wrangler's runtime, which cannot read the modules a Bun single-file executable embeds: run comb migrate with bun or node, not from a compiled executable",
+				"check proves the pending files in a child on wrangler's runtime, which cannot read the modules a Bun single-file executable embeds: run database migrate with bun or node, not from a compiled executable",
 			),
 		)
 		expect(calls).toEqual([])
@@ -84,7 +84,7 @@ describe("proveOnD1 inside a Bun single-file executable", () => {
 describe("proveOnD1: each file on D1's own engine, in a child on wrangler's runtime (SD1 of r22)", () => {
 	it("passes files D1 runs, the child started on node through the runner", async () => {
 		const runtimes: string[] = []
-		const exec: Run = async (cmd, args, options) => {
+		const exec: MigrateRun = async (cmd, args, options) => {
 			runtimes.push(`${cmd} ${options?.peer}`)
 			return run(cmd, args, options)
 		}
@@ -120,8 +120,8 @@ describe("proveOnD1: each file on D1's own engine, in a child on wrangler's runt
 	})
 
 	it("answers each file the child could not prove, and why, for the caller to rate", async () => {
-		const unproven = [{ name: "1_a.sql", why: "comb's local D1 crashed" }]
-		const exec: Run = async (_, args) => {
+		const unproven = [{ name: "1_a.sql", why: "database's local D1 crashed" }]
+		const exec: MigrateRun = async (_, args) => {
 			writeFileSync(args.at(-1) as string, JSON.stringify({ unproven }))
 			return { code: 0, stderr: "", stdout: "" }
 		}

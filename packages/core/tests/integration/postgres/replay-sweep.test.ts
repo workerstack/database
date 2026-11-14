@@ -27,11 +27,11 @@ beforeAll(loadPostgresParser)
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-pg-replay-sweep-"))
+	dir = mkdtempSync(join(tmpdir(), "database-pg-replay-sweep-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
-const UNSAFE = "-- comb:allow-unsafe: the test's history\n"
+const UNSAFE = "-- database:allow-unsafe: the test's history\n"
 
 /* the go a paused history waits for */
 const pause = pauses()
@@ -78,7 +78,7 @@ const holds = async (name: string): Promise<boolean> =>
  * deleted" in a GRANT on it). `release` ends that backend, so the replay is over and a sweep takes both
  */
 async function plantHeld(clause = ""): Promise<{ name: string; owner: string; release(): Promise<void> }> {
-	const holder = new pg.Client({ application_name: "comb_t_hold", connectionString: pgUrl() })
+	const holder = new pg.Client({ application_name: "database_t_hold", connectionString: pgUrl() })
 	await holder.connect()
 	let ended: Promise<void> | undefined
 	const release = (): Promise<void> => (ended ??= holder.end())
@@ -87,7 +87,7 @@ async function plantHeld(clause = ""): Promise<{ name: string; owner: string; re
 			"SELECT pid, (extract(epoch FROM backend_start) * 1000000)::bigint::text AS start FROM pg_stat_activity WHERE pid = pg_backend_pid()",
 		)
 		const owner = `${rows[0].pid}_${rows[0].start}`
-		const name = `comb_replay_${owner}_${unique("held").slice(-8)}`
+		const name = `database_replay_${owner}_${unique("held").slice(-8)}`
 		await query(pgUrl(), `CREATE DATABASE ${name} ${clause}`)
 		return { name, owner, release }
 	} catch (error) {
@@ -123,8 +123,8 @@ describe("a check killed mid-replay", () => {
 	] as const)(
 		"by %s cleans up once and ends as the signal would, leaving nothing",
 		async (signal, code) => {
-			const [made] = testRoles("comb_t_killed")
-			const resume = unique("comb_t_resume")
+			const [made] = testRoles("database_t_killed")
+			const resume = unique("database_t_resume")
 			await withScratchDb((dev) =>
 				withScratchDb(async (url) => {
 					await write(paused(made, resume))
@@ -147,8 +147,8 @@ describe("a check killed by SIGKILL mid-replay", () => {
 	leavesStale()
 
 	it("is swept by the next check at once", async () => {
-		const [made] = testRoles("comb_t_killed")
-		const resume = unique("comb_t_resume")
+		const [made] = testRoles("database_t_killed")
+		const resume = unique("database_t_resume")
 		await withScratchDb((dev) =>
 			withScratchDb(async (url) => {
 				const left = await killedHard(dev, url, { made, resume })
@@ -159,8 +159,8 @@ describe("a check killed by SIGKILL mid-replay", () => {
 	}, 60_000)
 
 	it("is swept by an apply, whose CREATE ROLE of its role then passes", async () => {
-		const [made] = testRoles("comb_t_killed")
-		const resume = unique("comb_t_resume")
+		const [made] = testRoles("database_t_killed")
+		const resume = unique("database_t_resume")
 		await withScratchDb((dev) =>
 			withScratchDb(async (url) => {
 				const left = await killedHard(dev, url, { made, resume })
@@ -192,7 +192,7 @@ describe("a check killed by SIGKILL after a committing DO made its database a te
 
 	/* AE8 of r22: the sweep sent a plain DROP DATABASE, which Postgres refuses on a template */
 	it("is swept by the next check", async () => {
-		const resume = unique("comb_t_resume")
+		const resume = unique("database_t_resume")
 		await withScratchDb((dev) =>
 			withScratchDb(async (url) => {
 				await write([
@@ -267,7 +267,7 @@ describe("a check killed by SIGKILL mid-statement (P4 of r22)", () => {
 	it(
 		"leaves nothing that stops the next apply's CREATE ROLE of its role, which passes at once",
 		async () => {
-			const [made] = testRoles("comb_t_orphan")
+			const [made] = testRoles("database_t_orphan")
 			try {
 				await withScratchDb((dev) =>
 					withScratchDb(async (url) => {
@@ -328,13 +328,13 @@ describe("an apply whose devUrl does not answer (PR7 of r22b)", () => {
 describe("a superuser's sweep of a replay another role left (PR8 of r22b)", () => {
 	leavesStale()
 	it("drops that replay's database and role, so apply's CREATE ROLE of it passes", async () => {
-		const [made, other] = testRoles("comb_t_left", "comb_t_ci")
+		const [made, other] = testRoles("database_t_left", "database_t_ci")
 		await query(pgUrl(), `CREATE ROLE ${other} CREATEDB`)
 		const { name: left, owner, release } = await plantHeld(`OWNER ${other}`)
 		try {
 			await query(pgUrl(), `CREATE ROLE ${made} NOLOGIN`)
 			await query(pgUrl(), `GRANT CONNECT ON DATABASE ${left} TO ${made}`)
-			await query(pgUrl(), `COMMENT ON ROLE ${made} IS 'comb_replay ${owner}'`)
+			await query(pgUrl(), `COMMENT ON ROLE ${made} IS 'database_replay ${owner}'`)
 			await release()
 			await write([`${UNSAFE}CREATE ROLE ${made};\n`])
 			await withScratchDb((dev) => withScratchDb((target) => applyWithAtlas(options(dev, target))))
@@ -351,15 +351,15 @@ describe("a superuser's sweep of a replay another role left (PR8 of r22b)", () =
 describe("a sweep beside a live replay and a database someone is in", () => {
 	leavesStale()
 	it("leaves a live replay's database and role, which then passes", async () => {
-		const [made] = testRoles("comb_t_live")
-		const resume = unique("comb_t_resume")
+		const [made] = testRoles("database_t_live")
+		const resume = unique("database_t_resume")
 		await withScratchDb((dev) =>
 			withScratchDb(async (url) => {
 				await write(paused(made, resume))
 				const long = check(dev, url)
 				await untilRole(made)
 				const live = await replayDatabases(made)
-				const other = mkdtempSync(join(tmpdir(), "comb-pg-replay-sweep-b-"))
+				const other = mkdtempSync(join(tmpdir(), "database-pg-replay-sweep-b-"))
 				try {
 					await write(["CREATE TABLE u (id int PRIMARY KEY);\n"], other)
 					await applyWithAtlas({ ...options(dev, url), checkOnly: true, dir: other })
@@ -403,11 +403,11 @@ describe("a sweep beside a live replay and a database someone is in", () => {
 
 describe("two live replays under one role (P4 of r22)", () => {
 	it("leaves two live replays under one role each other's, and a third check's sweep leaves both, which then pass", async () => {
-		const [a, b] = testRoles("comb_t_live_a", "comb_t_live_b")
-		const [resumeA, resumeB] = [unique("comb_t_resume_a"), unique("comb_t_resume_b")]
+		const [a, b] = testRoles("database_t_live_a", "database_t_live_b")
+		const [resumeA, resumeB] = [unique("database_t_resume_a"), unique("database_t_resume_b")]
 		const [dirB, dirC] = [
-			mkdtempSync(join(tmpdir(), "comb-pg-replay-sweep-b-")),
-			mkdtempSync(join(tmpdir(), "comb-pg-replay-sweep-c-")),
+			mkdtempSync(join(tmpdir(), "database-pg-replay-sweep-b-")),
+			mkdtempSync(join(tmpdir(), "database-pg-replay-sweep-c-")),
 		]
 		try {
 			await withScratchDb((dev) =>
@@ -439,15 +439,15 @@ describe("two live replays under one role (P4 of r22)", () => {
 
 describe("a history's role the replay makes", () => {
 	it("cannot log in during the check, whatever the history says, and check names it once", async () => {
-		const [ops] = testRoles("comb_t_ops")
-		const resume = unique("comb_t_resume")
+		const [ops] = testRoles("database_t_ops")
+		const resume = unique("database_t_resume")
 		await withScratchDb((dev) =>
 			withScratchDb(async (url) => {
-				await write(paused(ops, resume, `CREATE ROLE ${ops} LOGIN SUPERUSER PASSWORD 'comb';`))
+				await write(paused(ops, resume, `CREATE ROLE ${ops} LOGIN SUPERUSER PASSWORD 'database';`))
 				const running = check(dev, url)
 				await untilRole(ops)
 				const login = new pg.Client({
-					connectionString: Object.assign(new URL(pgUrl()), { password: "comb", username: ops }).toString(),
+					connectionString: Object.assign(new URL(pgUrl()), { password: "database", username: ops }).toString(),
 				})
 				await expect(login.connect()).rejects.toThrow(/is not permitted to log in|password authentication failed/)
 				expect(await query(pgUrl(), `SELECT rolcanlogin, rolsuper FROM pg_roles WHERE rolname = '${ops}'`)).toEqual([
@@ -457,7 +457,7 @@ describe("a history's role the replay makes", () => {
 				const { out, refused } = await running
 				expect(refused).toBeUndefined()
 				expect(out.filter((line) => line.startsWith("Check made the role") && line.includes(ops))).toEqual([
-					`Check made the role of "CREATE ROLE ${ops} LOGIN SUPERUSER PASSWORD 'comb'" in 20260101000000_f0.sql NOLOGIN NOSUPERUSER NOREPLICATION NOBYPASSRLS, in no role the replay did not make, on devUrl: the replay needs only its name, so apply alone gives it the rest`,
+					`Check made the role of "CREATE ROLE ${ops} LOGIN SUPERUSER PASSWORD 'database'" in 20260101000000_f0.sql NOLOGIN NOSUPERUSER NOREPLICATION NOBYPASSRLS, in no role the replay did not make, on devUrl: the replay needs only its name, so apply alone gives it the rest`,
 				])
 			}),
 		)

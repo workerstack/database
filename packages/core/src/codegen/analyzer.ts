@@ -1,6 +1,6 @@
 /**
  * The analysis every generator consumes: the tables module loaded at runtime in codegen's own
- * child (runtime/load.ts), each table read as drizzle built it and as comb's `c` helpers recorded
+ * child (runtime/load.ts), each table read as drizzle built it and as database's `c` helpers recorded
  * it (runtime/read-tables.ts), then named as the generators ask (runtime/to-meta.ts). Generators
  * never load or read source themselves.
  */

@@ -1,6 +1,6 @@
 /**
- * The rows of a D1 database's history, as comb reads and writes them through wrangler: wrangler's
- * migrations table, comb's hash and intent tables and comb's pre-0.8 `__drizzle_migrations`, which
+ * The rows of a D1 database's history, as database reads and writes them through wrangler: wrangler's
+ * migrations table, database's hash and intent tables and database's pre-0.8 `__drizzle_migrations`, which
  * intents a read takes as hashes, and the statements that write them in the order the history's
  * invariant needs.
  */
@@ -23,12 +23,12 @@ const namesOf = (table: string): string => `SELECT name FROM ${quoteName(table)}
 /** One statement's rows, as executeAll answers them */
 type Rows = Array<Record<string, unknown>>
 
-/** A hash comb recorded for a file, and whether `hash_v` marks it as this comb's, the exact hash (parse.ts HASH_VERSION) */
+/** A hash database recorded for a file, and whether `hash_v` marks it as this database's, the exact hash (parse.ts HASH_VERSION) */
 type Recorded = { hash: string; marked: boolean }
 
 /**
- * What the history tables hold: wrangler's names, comb's hashes and intents, and comb's pre-0.8
- * record; the intents and that record undefined where their table is absent; `marks` unless comb's
+ * What the history tables hold: wrangler's names, database's hashes and intents, and database's pre-0.8
+ * record; the intents and that record undefined where their table is absent; `marks` unless database's
  * hash table is one 0.20 or earlier made, without `hash_v`, which the first write adds
  */
 type HistoryRead = {
@@ -39,7 +39,7 @@ type HistoryRead = {
 	recorded: Map<string, Recorded>
 }
 
-/** What a database comb never reached holds: no history at all */
+/** What a database that database never reached holds: no history at all */
 const noHistory = (): HistoryRead => ({
 	applied: new Set(),
 	drizzle: undefined,
@@ -53,7 +53,7 @@ const byName = (rows: Rows) => new Map(rows.map((row) => [String(row["name"]), S
 
 /**
  * The history in as few wrangler calls as it takes, each a process of its own: a listing says
- * which tables exist, and whether comb's hash table has `hash_v`, and one more call reads those. Nothing is made: apply and baseline write their
+ * which tables exist, and whether database's hash table has `hash_v`, and one more call reads those. Nothing is made: apply and baseline write their
  * tables only once every check has passed, and a local database wrangler
  * keeps nowhere yet holds no history, read without a call that would create it.
  */
@@ -93,22 +93,22 @@ async function readHistory(read: ReadConfig, target: D1Target, table: string): P
 }
 
 /**
- * Hashes to record, each `marked` when it is the exact hash of the text this comb checked, and
- * unmarked when copied from a record comb 0.20 or earlier made
+ * Hashes to record, each `marked` when it is the exact hash of the text this database checked, and
+ * unmarked when copied from a record database 0.20 or earlier made
  */
 type Hashed = ReadonlyArray<{ hash: string; marked: boolean; name: string }>
 
-/** comb's hash table, made with `hash_v`, which a table 0.20 or earlier made gains unless it `marks` already */
+/** database's hash table, made with `hash_v`, which a table 0.20 or earlier made gains unless it `marks` already */
 const hashTable = (marks: boolean): Array<{ sql: string }> => [
 	{ sql: `CREATE TABLE IF NOT EXISTS ${D1_HASH_TABLE} (name TEXT PRIMARY KEY, hash TEXT NOT NULL, hash_v INTEGER)` },
 	...(marks ? [] : [{ sql: `ALTER TABLE ${D1_HASH_TABLE} ADD COLUMN hash_v INTEGER` }]),
 ]
 
 /**
- * The statements that record the hash each of `files` was applied under, comb's table made first, or
+ * The statements that record the hash each of `files` was applied under, database's table made first, or
  * given `hash_v` where it lacks it (`marks`).
  * The invariant every writer keeps: a name is in wrangler's table only once its hash
- * or its intent is in comb's. A hash row is proof of what ran, so only a file wrangler's table names
+ * or its intent is in database's. A hash row is proof of what ran, so only a file wrangler's table names
  * gets one; a pending file gets an intent (intentStatements)
  */
 const hashStatements = (files: Hashed, marks: boolean): Array<{ sql: string }> => [
@@ -141,11 +141,11 @@ const settleStatements = (hashed: Hashed, intents: boolean, marks: boolean): Arr
 ]
 
 /**
- * The intents of applied files comb records no hash for, each its file's
+ * The intents of applied files database records no hash for, each its file's
  * current hash: a lost move left them, and each is the hash wrangler ran its file under. A history
  * read takes them as recorded and writes nothing; the next apply or baseline records them. An
  * intent that is not its file's current hash is not: that file was edited before wrangler ran it,
- * and is read as applied before comb recorded it
+ * and is read as applied before database recorded it
  */
 function settled(
 	files: ReturnType<typeof d1Files>,
@@ -172,9 +172,9 @@ async function moveIntents(conn: D1Target["conn"], moved: Hashed, marks: boolean
 }
 
 /**
- * Whether `recorded`, the hash comb holds for a file of text `sql`, is that text: its current hash;
- * on a record `hash_v` does not mark, which comb 0.20 or earlier wrote, its folded one (0.5.0 to
- * 0.20) or its pre-0.5.0 one where comb's pre-0.8 history (`drizzle`) still holds it, proof the
+ * Whether `recorded`, the hash database holds for a file of text `sql`, is that text: its current hash;
+ * on a record `hash_v` does not mark, which database 0.20 or earlier wrote, its folded one (0.5.0 to
+ * 0.20) or its pre-0.5.0 one where database's pre-0.8 history (`drizzle`) still holds it, proof the
  * record is from before 0.5.0, as a 0.13 baseline copied it
  */
 const vouched = (sql: string, { hash, marked }: Recorded, drizzle: ReadonlySet<string> | undefined): boolean =>

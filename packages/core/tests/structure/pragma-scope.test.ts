@@ -1,5 +1,5 @@
 /**
- * S1 of r21: comb opens a fresh connection for each migration file, so a file's connection
+ * S1 of r21: database opens a fresh connection for each migration file, so a file's connection
  * settings end with it. A pragma whose setting is the process's reaches every connection, other
  * databases' included, so no fresh connection ends it: classify-file.ts refuses each one. This
  * probe asks the running engines which those are: every pragma `pragma_list` names is set on one
@@ -16,7 +16,7 @@ import { PROCESS_PRAGMAS } from "../../src/migrate/core/classify-file.ts"
 /** Run `sql` on one connection: its first row's first value, undefined when it returns no row */
 type Query = (sql: string) => Promise<unknown>
 
-/** A fresh in-memory connection on an engine comb runs on */
+/** A fresh in-memory connection on an engine database runs on */
 type Engine = { name: string; open(): Query }
 
 const ENGINES: readonly Engine[] = [
@@ -99,7 +99,7 @@ async function processScoped(engine: Engine, dir: string): Promise<string[]> {
 
 describe("the pragmas classify-file.ts refuses as the process's are the ones SQLite keeps for the process (S1 of r21)", () => {
 	it.each(ENGINES)("on $name", async (engine) => {
-		const dir = mkdtempSync(path.join(os.tmpdir(), "comb-pragma-probe-"))
+		const dir = mkdtempSync(path.join(os.tmpdir(), "database-pragma-probe-"))
 		try {
 			expect(await processScoped(engine, dir)).toEqual([...PROCESS_PRAGMAS].sort())
 		} finally {

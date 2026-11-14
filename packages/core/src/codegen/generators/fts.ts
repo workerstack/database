@@ -1,5 +1,5 @@
 /**
- * FTS5 generator — produces SQL + TypeScript from comb.config.ts fts config.
+ * FTS5 generator — produces SQL + TypeScript from database.config.ts fts config.
  *
  * Outputs:
  * - db.{dbName}.fts.gen.sql  — CREATE VIRTUAL TABLE + trigger DDL
@@ -43,7 +43,7 @@ function generateFts(ctx: GeneratorContext, config: FtsGeneratorConfig): void {
 	const sql = ftsReferenceSql(tables, config.fts, ctx.warn)
 
 	const sqlPath = path.join(outputDir, `${filePrefix}.fts.gen.sql`)
-	writeGenFile(sqlPath, sql, { generator: "comb", staged: ctx.staged })
+	writeGenFile(sqlPath, sql, { generator: "database", staged: ctx.staged })
 	ctx.log(`  fts: ${sqlPath} (${entries.length} table${entries.length > 1 ? "s" : ""})`)
 
 	/* TypeScript file */
@@ -69,7 +69,7 @@ function generateFts(ctx: GeneratorContext, config: FtsGeneratorConfig): void {
 	tsLines.push("")
 
 	const tsPath = path.join(outputDir, `${filePrefix}.fts.gen.ts`)
-	writeGenFile(tsPath, tsLines.join("\n"), { generator: "comb", staged: ctx.staged })
+	writeGenFile(tsPath, tsLines.join("\n"), { generator: "database", staged: ctx.staged })
 	ctx.log(`  fts: ${tsPath}`)
 }
 

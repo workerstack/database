@@ -26,16 +26,16 @@ describe("guardRebuilds", () => {
 		expect(guardRebuilds(REBUILD, BEFORE, FTS)).toBe(`PRAGMA defer_foreign_keys = on;
 CREATE TABLE \`new_u\` (\`id\` integer NOT NULL, \`name\` text NOT NULL DEFAULT '', PRIMARY KEY (\`id\`));
 INSERT INTO \`new_u\` (\`id\`, \`name\`) SELECT \`id\`, IFNULL(\`name\`, '') AS \`name\` FROM \`u\`;
-CREATE TABLE \`_comb_keep_post\` AS SELECT \`id\`, \`author\`, \`title\` FROM \`post\`;
-CREATE TABLE \`_comb_keep_tag\` AS SELECT \`post\`, \`name\` FROM \`tag\`;
+CREATE TABLE \`_database_keep_post\` AS SELECT \`id\`, \`author\`, \`title\` FROM \`post\`;
+CREATE TABLE \`_database_keep_tag\` AS SELECT \`post\`, \`name\` FROM \`tag\`;
 DELETE FROM \`tag\`;
 DELETE FROM \`post\`;
 DROP TABLE \`u\`;
 ALTER TABLE \`new_u\` RENAME TO \`u\`;
-INSERT INTO \`post\` (\`id\`, \`author\`, \`title\`) SELECT \`id\`, \`author\`, \`title\` FROM \`_comb_keep_post\`;
-INSERT INTO \`tag\` (\`post\`, \`name\`) SELECT \`post\`, \`name\` FROM \`_comb_keep_tag\`;
-DROP TABLE \`_comb_keep_post\`;
-DROP TABLE \`_comb_keep_tag\`;
+INSERT INTO \`post\` (\`id\`, \`author\`, \`title\`) SELECT \`id\`, \`author\`, \`title\` FROM \`_database_keep_post\`;
+INSERT INTO \`tag\` (\`post\`, \`name\`) SELECT \`post\`, \`name\` FROM \`_database_keep_tag\`;
+DROP TABLE \`_database_keep_post\`;
+DROP TABLE \`_database_keep_tag\`;
 `)
 	})
 
@@ -62,7 +62,7 @@ DROP TABLE \`_comb_keep_tag\`;
 		const mixed = extractSchema(`CREATE TABLE \`Users\` (\`id\` integer PRIMARY KEY, \`name\` text);
 CREATE TABLE \`post\` (\`id\` integer PRIMARY KEY, \`author\` integer REFERENCES \`USERS\`(\`id\`) ON DELETE CASCADE, \`title\` text);`)
 		const rebuild = REBUILD.replaceAll("`u`", "`users`").replaceAll("new_u", "new_users")
-		expect(guardRebuilds(rebuild, mixed)).toContain("CREATE TABLE `_comb_keep_post` AS SELECT")
+		expect(guardRebuilds(rebuild, mixed)).toContain("CREATE TABLE `_database_keep_post` AS SELECT")
 		const triggered = extractSchema("CREATE TRIGGER audit AFTER DELETE ON POST BEGIN SELECT 1; END;", mixed)
 		expect(() => guardRebuilds(rebuild, triggered)).toThrow("which fires its trigger audit")
 	})
@@ -80,33 +80,36 @@ CREATE TABLE \`post\` (\`id\` integer PRIMARY KEY, \`author\` integer REFERENCES
 const classify = (sql: string) => classifyMigration(sql, { before: BEFORE, dialect: "sqlite" })
 
 describe("classifyMigration on a rebuild of a referenced table", () => {
-	it("calls comb's guarded rebuild cautious, and the same rebuild unguarded unsafe, naming what it reaches", () => {
+	it("calls database's guarded rebuild cautious, and the same rebuild unguarded unsafe, naming what it reaches", () => {
 		expect(classify(guardRebuilds(REBUILD, BEFORE, FTS))).toMatchObject({
-			cautiousStatements: ["DROP TABLE `u` (rebuilds u; comb keeps the rows of post, tag)"],
+			cautiousStatements: ["DROP TABLE `u` (rebuilds u; database keeps the rows of post, tag)"],
 			safety: "cautious",
 		})
 		expect(classify(REBUILD).unsafeStatements).toEqual([
-			"DROP TABLE `u` (rebuilds u unguarded: its drop deletes or orphans the rows of post, tag; let comb migrate diff write it)",
+			"DROP TABLE `u` (rebuilds u unguarded: its drop deletes or orphans the rows of post, tag; let database migrate diff write it)",
 		])
 	})
 
-	it("still calls a guard comb 0.8 wrote cautious: a rowid alias kept apart as `_comb_rowid`", () => {
+	it("still calls a guard database 0.8 wrote cautious: a rowid alias kept apart as `_database_rowid`", () => {
 		const legacy = guardRebuilds(REBUILD, BEFORE, FTS)
-			.replace("PRAGMA defer_foreign_keys = on;\nCREATE TABLE `_comb_keep_post`", "CREATE TABLE `_comb_keep_post`")
-			.replace("AS SELECT `id`, `author`", "AS SELECT rowid AS `_comb_rowid`, `id`, `author`")
+			.replace(
+				"PRAGMA defer_foreign_keys = on;\nCREATE TABLE `_database_keep_post`",
+				"CREATE TABLE `_database_keep_post`",
+			)
+			.replace("AS SELECT `id`, `author`", "AS SELECT rowid AS `_database_rowid`, `id`, `author`")
 			.replace(
 				"INSERT INTO `post` (`id`, `author`, `title`) SELECT `id`",
-				"INSERT INTO `post` (rowid, `id`, `author`, `title`) SELECT `_comb_rowid`, `id`",
+				"INSERT INTO `post` (rowid, `id`, `author`, `title`) SELECT `_database_rowid`, `id`",
 			)
-		expect(legacy).toContain("rowid AS `_comb_rowid`")
+		expect(legacy).toContain("rowid AS `_database_rowid`")
 		expect(classify(legacy)).toMatchObject({
-			cautiousStatements: ["DROP TABLE `u` (rebuilds u; comb keeps the rows of post, tag)"],
+			cautiousStatements: ["DROP TABLE `u` (rebuilds u; database keeps the rows of post, tag)"],
 			safety: "cautious",
 		})
 	})
 
 	/* M24 of the 0.13 review: a trigger a later file put on a table the guard empties fires as the guard keeps its rows */
-	it("calls comb's guard unsafe when the schema at it has a trigger on a table the guard empties", () => {
+	it("calls database's guard unsafe when the schema at it has a trigger on a table the guard empties", () => {
 		const later = extractSchema("CREATE TRIGGER tag_gone AFTER DELETE ON tag BEGIN SELECT 1; END;", BEFORE)
 		expect(
 			classifyMigration(guardRebuilds(REBUILD, BEFORE, FTS), { before: later, dialect: "sqlite" }).unsafeStatements,
@@ -198,12 +201,12 @@ CREATE TABLE \`bare\` (\`id\` text PRIMARY KEY, \`c1\` text) WITHOUT ROWID;`)
 	it("carries a text-keyed table's rowid through Atlas's copy, and its children's beside at most 99 columns", () => {
 		const sql = guardRebuilds(wideRebuild("t", 1), before)
 		expect(sql).toContain("INSERT INTO `new_t` (rowid, `id`, `c1`) SELECT rowid, `id`, `c1` FROM `t`;")
-		expect(sql).toContain("CREATE TABLE `_comb_keep_k99` AS SELECT rowid AS `_comb_rowid`, `id`, `t`, `c1`")
+		expect(sql).toContain("CREATE TABLE `_database_keep_k99` AS SELECT rowid AS `_database_rowid`, `id`, `t`, `c1`")
 		expect(sql).toContain("INSERT INTO `k99` (rowid, `id`, `t`, `c1`")
-		expect(sql).toContain("CREATE TABLE `_comb_keep_k100` AS SELECT `id`, `t`, `c1`")
+		expect(sql).toContain("CREATE TABLE `_database_keep_k100` AS SELECT `id`, `t`, `c1`")
 		expect(sql).toContain("INSERT INTO `k100` (`id`, `t`, `c1`")
 		expect(classifyOn(sql).cautiousStatements).toEqual([
-			"DROP TABLE `t` (rebuilds t; comb keeps the rows of k99, k100; k100 gets new rowids (100 columns, no INTEGER PRIMARY KEY))",
+			"DROP TABLE `t` (rebuilds t; database keeps the rows of k99, k100; k100 gets new rowids (100 columns, no INTEGER PRIMARY KEY))",
 		])
 	})
 
@@ -265,7 +268,7 @@ describe("a rebuild in a file that opts out of its transaction", () => {
 })
 
 /* M38 of the 0.13 review: a rebuild of a mixed-case table closes with its RENAME as any other */
-describe("classifyMigration on comb's guarded rebuild of a mixed-case table", () => {
+describe("classifyMigration on database's guarded rebuild of a mixed-case table", () => {
 	it("calls it cautious, as for a lower-case name", () => {
 		const before = extractSchema(
 			"CREATE TABLE `Parent` (`id` integer PRIMARY KEY, `name` text);\nCREATE TABLE `child` (`id` integer PRIMARY KEY, `p` integer REFERENCES `Parent`(`id`));",

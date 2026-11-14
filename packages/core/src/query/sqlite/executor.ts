@@ -5,8 +5,8 @@ import { and, getTableColumns, getTableName, or, type SQL, sql } from "drizzle-o
 import { alias, type SQLiteColumn, type SQLiteTable } from "drizzle-orm/sqlite-core"
 
 import { own } from "../../constraint-map.ts"
-import { CombError } from "../../error.ts"
-import { combErrorKeys } from "../../types.ts"
+import { DatabaseError } from "../../error.ts"
+import { databaseErrorKeys } from "../../types.ts"
 import type { ComputedFilterResolver, FilterAST, FilterCondition, FilterGroup } from "../types.ts"
 import { conditionToSQL } from "./condition.ts"
 import type { RelationConfig } from "./types.ts"
@@ -59,8 +59,8 @@ function relationFilterToSQL(
 ): SQL | null {
 	const targetFieldName = condition.field.slice(condition.field.lastIndexOf(".") + 1)
 	/* aliased, as a relation back to the main table would otherwise read its own key for the outer row's */
-	const target = aliasedColumns(relationConfig.target, "comb_rel_target")
-	const through = aliasedColumns(relationConfig.through, "comb_rel_through")
+	const target = aliasedColumns(relationConfig.target, "database_rel_target")
+	const through = aliasedColumns(relationConfig.through, "database_rel_through")
 	const targetColumns = target.columns
 	const targetColumn = own(targetColumns, targetFieldName)
 	if (!targetColumn) return null
@@ -107,9 +107,9 @@ function lowerCondition(condition: FilterCondition, config: FilterToSQLConfig): 
 function resolveCondition(condition: FilterCondition, config: FilterToSQLConfig): SQL {
 	const lowered = lowerCondition(condition, config)
 	if (lowered) return lowered
-	throw new CombError({
+	throw new DatabaseError({
 		cause: `Filter on '${condition.field}' (${condition.operator}) has no column, relation or resolver to run it`,
-		errorKey: combErrorKeys.FILTER_NOT_WIRED,
+		errorKey: databaseErrorKeys.FILTER_NOT_WIRED,
 		status: "internal_server_error",
 	})
 }

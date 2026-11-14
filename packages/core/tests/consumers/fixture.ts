@@ -1,4 +1,4 @@
-/** The consumer app the cells build: a Worker on comb's runtime subpaths, and a module that types every subpath. */
+/** The consumer app the cells build: a Worker on database's runtime subpaths, and a module that types every subpath. */
 import { SUBPATHS } from "./stage.ts"
 
 export const WORKER = `import { createListQuerySchema } from "@workerstack/database/query"
@@ -29,7 +29,7 @@ export default {
 `
 
 /**
- * Counts every Function made from a string. Imported first, so it is in place before comb's modules
+ * Counts every Function made from a string. Imported first, so it is in place before database's modules
  * build their schemas; on workerd the call then throws, as it refuses code from strings (4.18)
  */
 export const COUNT_EVAL = `const Real = globalThis.Function
@@ -40,7 +40,7 @@ globalThis.Function = new Proxy(Real, {
 })
 `
 
-/** A Worker that builds and parses comb's query schemas and says how many Functions that made */
+/** A Worker that builds and parses database's query schemas and says how many Functions that made */
 export const NO_EVAL_WORKER = `import { counter } from "./count-eval.ts"
 import { createListQuerySchema, createRetrieveQuerySchema, paginationResponseSchema } from "@workerstack/database/query"
 
@@ -93,7 +93,7 @@ console.log(lines.filter((line) => line.startsWith("export ")).length)
 
 /**
  * A module of the two checks a TypeScript below 5.7 dropped with no error under skipLibCheck (KT2
- * of r22b): each must stay an error at comb's floor, and below it the named imports fail instead
+ * of r22b): each must stay an error at database's floor, and below it the named imports fail instead
  */
 export const FLOOR = `import { createUlidFactory } from "@workerstack/database"
 import { defineStateMachine } from "@workerstack/database/states"
@@ -111,10 +111,10 @@ export const ids = createUlidFactory({ random: (bytes: string) => void bytes.toU
 `
 
 /**
- * A module that forwards values that may be unset into comb's option bags under
- * exactOptionalPropertyTypes (KT8 of r22b): comb reads an optional key set to undefined as the key
+ * A module that forwards values that may be unset into database's option bags under
+ * exactOptionalPropertyTypes (KT8 of r22b): database reads an optional key set to undefined as the key
  * left out, so each optional property it reads takes undefined, and 0.20.1 refused these with
- * TS2379; what comb hands back keeps each optional key absent, never undefined
+ * TS2379; what database hands back keeps each optional key absent, never undefined
  */
 export const UNSET = `import { createUlidFactory, LruCache } from "@workerstack/database"
 import { createListQuerySchema, createRetrieveQuerySchema, type DrizzleListOptions, validateFilter } from "@workerstack/database/query"
@@ -140,7 +140,7 @@ export const machine = () => defineStateMachine({ transitions: { draft: env.LIVE
 export const moves = () => c.enum("state", ["draft", "live"], { transitions: { draft: env.LIVE } })
 export const limited = () => createListQuerySchema({ limits: { maxFilterLength: env.MAX }, sort: ["id"] })
 export const filtered = () => validateFilter("id:eq:1", { id: "number" }, { maxConditions: env.MAX })
-/* what comb hands back keeps a key absent, never undefined, so it goes on to drizzle's select and findMany as it is */
+/* what database hands back keeps a key absent, never undefined, so it goes on to drizzle's select and findMany as it is */
 type Defined<T> = { [K in keyof T]?: Exclude<T[K], undefined> }
 declare const built: { extras: ListExtras; options: DrizzleListOptions }
 export const selected: Defined<ListExtras> = built.extras
@@ -170,7 +170,7 @@ const STRICT = {
 	types: ["@cloudflare/workers-types", "node"],
 }
 
-/** create-cloudflare 2.74.6's templates/hello-world/ts/tsconfig.json, verbatim: comb's main audience, no flag added (K1 of r20) */
+/** create-cloudflare 2.74.6's templates/hello-world/ts/tsconfig.json, verbatim: database's main audience, no flag added (K1 of r20) */
 export const CREATE_CLOUDFLARE_TSCONFIG = `{
 	"compilerOptions": {
 		/* Visit https://aka.ms/tsconfig.json to read more about this file */
@@ -215,7 +215,7 @@ export const CREATE_CLOUDFLARE_TSCONFIG = `{
 }
 `
 
-/* the flags a consumer might add to it, beyond `strict`: comb's surface must hold under all of them (meta-contract §10) */
+/* the flags a consumer might add to it, beyond `strict`: database's surface must hold under all of them (meta-contract §10) */
 const STRICT_UNION = {
 	allowUnreachableCode: false,
 	allowUnusedLabels: false,
@@ -233,7 +233,7 @@ const STRICT_UNION = {
 }
 
 /**
- * K3 of r21: comb's D1 modules in a Worker typed by `wrangler types` alone keep their types, the
+ * K3 of r21: database's D1 modules in a Worker typed by `wrangler types` alone keep their types, the
  * binding's own: a wrong argument and an unknown method are each refused, which an untyped module,
  * as 0.19's was there, would let through; and a shard's handle is the env's own binding (K2 of r22)
  */
@@ -285,13 +285,13 @@ export const APP: Record<string, string> = {
 	"src/count-eval.ts": COUNT_EVAL,
 	"src/floor.ts": FLOOR,
 	"src/no-eval.ts": NO_EVAL_WORKER,
-	"comb.migrate.config.ts": MIGRATE_CONFIG,
+	"database.migrate.config.ts": MIGRATE_CONFIG,
 	"src/schemas.ts": SCHEMAS,
 	"src/types.ts": ALL_TYPES,
 	"src/unset.ts": UNSET,
 	"src/worker-types.ts": WORKER_TYPES,
 	"src/worker.ts": WORKER,
-	/* a bundler project: comb's .ts source compiles as the app's own */
+	/* a bundler project: database's .ts source compiles as the app's own */
 	"tsconfig.bundler.json": JSON.stringify({
 		compilerOptions: {
 			...STRICT,
@@ -324,9 +324,9 @@ export const APP: Record<string, string> = {
 			noEmit: true,
 			types: ["node"],
 		},
-		include: ["comb.migrate.config.ts"],
+		include: ["database.migrate.config.ts"],
 	}),
-	/* declarations emitted for a module that exports comb's schemas: each type has a public name (K11 of r17) */
+	/* declarations emitted for a module that exports database's schemas: each type has a public name (K11 of r17) */
 	"tsconfig.declarations.json": JSON.stringify({
 		compilerOptions: {
 			...STRICT,
@@ -340,7 +340,7 @@ export const APP: Record<string, string> = {
 		},
 		include: ["src/schemas.ts"],
 	}),
-	/* declarations emitted for a module that re-exports every value comb exports: each type has a public name (KT4 of r22b) */
+	/* declarations emitted for a module that re-exports every value database exports: each type has a public name (KT4 of r22b) */
 	"tsconfig.reexport.json": JSON.stringify({
 		compilerOptions: {
 			...STRICT,
@@ -367,7 +367,7 @@ export const APP: Record<string, string> = {
 		},
 		include: ["src/worker-types.ts"],
 	}),
-	/* the Workers side of create-cloudflare's React Router template: lib ES2022, the floor comb's runtime subpaths keep to (K2 of r20) */
+	/* the Workers side of create-cloudflare's React Router template: lib ES2022, the floor database's runtime subpaths keep to (K2 of r20) */
 	"tsconfig.worker-es2022.json": JSON.stringify({
 		compilerOptions: {
 			...STRICT,

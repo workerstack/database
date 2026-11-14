@@ -2,7 +2,7 @@ import { builtinModules } from "node:module"
 import manifest from "../package.json" with { type: "json" }
 import { children, srcPath } from "./scope.js"
 
-/* comb ships TypeScript source, so every import in src/ is resolved by the consumer: a package
+/* database ships TypeScript source, so every import in src/ is resolved by the consumer: a package
  * must be one they install (a dependency or a peer), a builtin carries the node: prefix that Bun,
  * Node and workerd all accept, and the features keep the arrows that let each dialect ship alone. */
 

@@ -1,25 +1,25 @@
 /**
- * Reading comb's facts off a JSON Schema. Returns null, never throws: a refused or malformed
+ * Reading database's facts off a JSON Schema. Returns null, never throws: a refused or malformed
  * payload degrades to "no facts", never to a confident wrong answer. See docs/meta-contract.md §4.
  */
 import { isRecord, isStringArray, readPartialUniqueIndexes, readUniqueIndexes } from "./read-indexes.ts"
 import {
-	COMB_FILTER_GRAMMAR,
-	COMB_META_KEY,
-	COMB_META_VERSION,
-	type CombEntityMeta,
-	type CombFilterField,
-	type CombMeta,
-	type CombQueryMeta,
-	type CombStatesMeta,
+	FILTER_GRAMMAR,
+	DATABASE_META_KEY,
+	DATABASE_META_VERSION,
+	type EntityMeta,
+	type FilterFieldMeta,
+	type DatabaseMeta,
+	type QueryMeta,
+	type StatesMeta,
 } from "./contract.ts"
 
-/** How readCombMeta, readCombEntityMeta and readCombQueryMeta read a payload */
+/** How readDatabaseMeta, readEntityMeta and readQueryMeta read a payload */
 type ReadOptions = {
 	/**
 	 * Highest contract version this reader understands. A payload newer than
 	 * this is refused rather than partially read — see docs §4.2.
-	 * Defaults to the version of the comb build doing the reading.
+	 * Defaults to the version of the database build doing the reading.
 	 */
 	maxVersion?: number | undefined
 	/** Called instead of throwing when a payload is refused or malformed. */
@@ -27,7 +27,7 @@ type ReadOptions = {
 }
 
 /**
- * Read comb's facts off the ROOT of a JSON Schema.
+ * Read database's facts off the ROOT of a JSON Schema.
  *
  * Does not unwrap `items` for array schemas — the consumer that already
  * resolves which schema to read owns that step, so the two cannot disagree.
@@ -36,15 +36,15 @@ type ReadOptions = {
  * "no facts" (which downstream handles as a visible coverage gap), not to a
  * confident wrong answer.
  */
-function readCombMeta(jsonSchema: unknown, options: ReadOptions = {}): CombMeta | null {
-	const { maxVersion = COMB_META_VERSION, onDiagnostic } = options
+function readDatabaseMeta(jsonSchema: unknown, options: ReadOptions = {}): DatabaseMeta | null {
+	const { maxVersion = DATABASE_META_VERSION, onDiagnostic } = options
 
 	if (!isRecord(jsonSchema)) return null
-	const raw = jsonSchema[COMB_META_KEY]
+	const raw = jsonSchema[DATABASE_META_KEY]
 	if (raw === undefined) return null
 
 	const diagnose = (message: string): null => {
-		onDiagnostic?.(`${COMB_META_KEY}: ${message}`)
+		onDiagnostic?.(`${DATABASE_META_KEY}: ${message}`)
 		return null
 	}
 
@@ -64,7 +64,7 @@ function readCombMeta(jsonSchema: unknown, options: ReadOptions = {}): CombMeta 
 	return diagnose(`unknown kind ${JSON.stringify(kind)}`)
 }
 
-function readEntity(raw: Record<string, unknown>, v: number, diagnose: (m: string) => null): CombEntityMeta | null {
+function readEntity(raw: Record<string, unknown>, v: number, diagnose: (m: string) => null): EntityMeta | null {
 	const name = raw["name"]
 	const identity = raw["identity"]
 	if (typeof name !== "string" || typeof identity !== "string") {
@@ -112,11 +112,11 @@ function readEntity(raw: Record<string, unknown>, v: number, diagnose: (m: strin
 }
 
 /**
- * `states` arrived in a later comb than the contract's v1, so a payload without
+ * `states` arrived in a later database than the contract's v1, so a payload without
  * it is normal and reads as null — absence is not an error, only a malformed
  * value is.
  */
-function readStates(raw: unknown): CombStatesMeta | null | "invalid" {
+function readStates(raw: unknown): StatesMeta | null | "invalid" {
 	if (raw === undefined || raw === null) return null
 	if (!isRecord(raw)) return "invalid"
 
@@ -136,7 +136,7 @@ function readStates(raw: unknown): CombStatesMeta | null | "invalid" {
 
 type Diagnose = (m: string) => null
 type QueryRequired = Omit<
-	CombQueryMeta,
+	QueryMeta,
 	| "filterFields"
 	| "kind"
 	| "maxFilterConditions"
@@ -154,7 +154,7 @@ type QueryRequired = Omit<
 	| "v"
 >
 type QueryOptional = Pick<
-	CombQueryMeta,
+	QueryMeta,
 	| "filterFields"
 	| "maxFilterConditions"
 	| "maxFilterDepth"
@@ -186,9 +186,9 @@ function readQueryRequired(raw: Record<string, unknown>, diagnose: Diagnose): Qu
 	if (typeof defaultOrder !== "string" || typeof stableTiebreak !== "string" || typeof grammar !== "string") {
 		return diagnose("query payload needs string `defaultOrder`, `stableTiebreak`, `grammar`")
 	}
-	if (grammar !== COMB_FILTER_GRAMMAR) {
+	if (grammar !== FILTER_GRAMMAR) {
 		return diagnose(
-			`query payload \`grammar\` is ${JSON.stringify(grammar)}, this reader understands "${COMB_FILTER_GRAMMAR}"`,
+			`query payload \`grammar\` is ${JSON.stringify(grammar)}, this reader understands "${FILTER_GRAMMAR}"`,
 		)
 	}
 	return { defaultOrder, filterable, grammar, maxLimit, searchable, selectable, sortable, stableTiebreak }
@@ -208,7 +208,7 @@ function readQueryOptional(raw: Record<string, unknown>, diagnose: Diagnose): Qu
 		if (!Array.isArray(filterFields) || !filterFields.every(isFilterField)) {
 			return diagnose("query payload `filterFields` needs {field, type, ops: string[]}[]")
 		}
-		optional.filterFields = filterFields as CombFilterField[]
+		optional.filterFields = filterFields as FilterFieldMeta[]
 	}
 	if (nulls !== undefined) {
 		if (!isStringArray(nulls) || !nulls.every((n) => n === "first" || n === "last")) {
@@ -241,22 +241,22 @@ function readQueryOptional(raw: Record<string, unknown>, diagnose: Diagnose): Qu
 	return optional
 }
 
-function readQuery(raw: Record<string, unknown>, v: number, diagnose: Diagnose): CombQueryMeta | null {
+function readQuery(raw: Record<string, unknown>, v: number, diagnose: Diagnose): QueryMeta | null {
 	const required = readQueryRequired(raw, diagnose)
 	const optional = required === null ? null : readQueryOptional(raw, diagnose)
 	return required === null || optional === null ? null : { ...required, kind: "query", v, ...optional }
 }
 
 /** Narrowing convenience — null when absent, refused, or the other kind. */
-function readCombEntityMeta(jsonSchema: unknown, options?: ReadOptions): CombEntityMeta | null {
-	const meta = readCombMeta(jsonSchema, options)
+function readEntityMeta(jsonSchema: unknown, options?: ReadOptions): EntityMeta | null {
+	const meta = readDatabaseMeta(jsonSchema, options)
 	return meta?.kind === "entity" ? meta : null
 }
 
 /** Narrowing convenience — null when absent, refused, or the other kind. */
-function readCombQueryMeta(jsonSchema: unknown, options?: ReadOptions): CombQueryMeta | null {
-	const meta = readCombMeta(jsonSchema, options)
+function readQueryMeta(jsonSchema: unknown, options?: ReadOptions): QueryMeta | null {
+	const meta = readDatabaseMeta(jsonSchema, options)
 	return meta?.kind === "query" ? meta : null
 }
 
-export { isRecord, type ReadOptions, readCombEntityMeta, readCombMeta, readCombQueryMeta }
+export { isRecord, type ReadOptions, readEntityMeta, readDatabaseMeta, readQueryMeta }

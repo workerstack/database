@@ -1,7 +1,7 @@
 /**
  * The README's path on D1, end to end: codegen and `migrate diff`, then `migrate apply --local`,
  * which checks the file and hands it to the real `wrangler d1 migrations apply` on its local D1,
- * with no comb.migrate.config.ts: the database is the wrangler binding's.
+ * with no database.migrate.config.ts: the database is the wrangler binding's.
  */
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
@@ -22,15 +22,15 @@ let worker: App
 
 beforeAll(() => {
 	worker = app({ ...BLOG, "wrangler.toml": WRANGLER_TOML })
-	ok(worker.comb("codegen", "core"), "codegen")
-	ok(worker.comb("migrate", "init"), "migrate init")
-	ok(worker.comb("migrate", "diff", "core", "init"), "migrate diff")
+	ok(worker.database("codegen", "core"), "codegen")
+	ok(worker.database("migrate", "init"), "migrate init")
+	ok(worker.database("migrate", "diff", "core", "init"), "migrate diff")
 }, 180_000)
 
-describe("comb on D1 --local, from tables to a migrated database", () => {
+describe("database on D1 --local, from tables to a migrated database", () => {
 	it("applies the diffed migration through wrangler, records it in d1_migrations, and finds nothing pending after", () => {
-		expect(ok(worker.comb("migrate", "apply", "core", "--local"), "apply").stdout).toContain("1 applied")
-		expect(ok(worker.comb("migrate", "apply", "core", "--local"), "apply again").stdout).toContain(
+		expect(ok(worker.database("migrate", "apply", "core", "--local"), "apply").stdout).toContain("1 applied")
+		expect(ok(worker.database("migrate", "apply", "core", "--local"), "apply again").stdout).toContain(
 			"No migrations to apply",
 		)
 		const tables = ok(
@@ -65,7 +65,7 @@ describe("comb on D1 --local, from tables to a migrated database", () => {
 	}, 120_000)
 
 	it("diffs as in sync with --dry-run after the apply, and prints the drift of a changed table without writing it", () => {
-		expect(ok(worker.comb("migrate", "diff", "core", "--dry-run"), "dry run").stdout).toContain(
+		expect(ok(worker.database("migrate", "diff", "core", "--dry-run"), "dry run").stdout).toContain(
 			"Schema is already in sync",
 		)
 		const before = readdirSync(join(worker.dir, "atlas-migrations")).sort()
@@ -76,7 +76,7 @@ describe("comb on D1 --local, from tables to a migrated database", () => {
 				'deleted_at: c.deletedAt("deleted_at"),\n\t\tsummary: c.text("summary"),',
 			),
 		})
-		const drift = worker.comb("migrate", "diff", "core", "--dry-run")
+		const drift = worker.database("migrate", "diff", "core", "--dry-run")
 		expect(drift.status).toBe(1)
 		expect(drift.stdout).toContain("ADD COLUMN `summary` text")
 		expect(drift.stderr).toContain("core has drifted from its migrations")

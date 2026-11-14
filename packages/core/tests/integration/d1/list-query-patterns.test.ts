@@ -7,7 +7,7 @@ import { getTableColumns } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/d1"
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
 import { afterEach, describe, expect, it } from "vitest"
-import { CombError } from "../../../src/error.ts"
+import { DatabaseError } from "../../../src/error.ts"
 import { createListQuerySchema } from "../../../src/query/schema.ts"
 import { applyListQuery, buildListQuery } from "../../../src/query/sqlite/build-list-query.ts"
 import { likeSearch } from "../../../src/query/sqlite/search.ts"
@@ -97,7 +97,7 @@ describe("a pattern on D1 past its LIKE cap (U21)", () => {
 		})
 		const error = await ids({ filter: `title.like.how*${SLUG}` }, lenient.parse).catch((caught: unknown) => caught)
 		const classified = classifyD1Error(error, [])
-		expect(classified).toBeInstanceOf(CombError)
+		expect(classified).toBeInstanceOf(DatabaseError)
 		expect([classified?.status, classified?.errorKey]).toEqual([400, "invalid_value"])
 		expect(String(classified?.cause)).toContain("50 bytes")
 	})

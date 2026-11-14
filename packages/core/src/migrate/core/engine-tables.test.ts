@@ -14,7 +14,7 @@ CREATE TABLE "a'x\\b" (x);
 CREATE TABLE xlitestream_ (x);
 CREATE TABLE __drizzle_migrations (id INTEGER);
 CREATE TABLE d1_migrations (id INTEGER);
-CREATE TABLE _comb_migration_hashes (name TEXT);
+CREATE TABLE _database_migration_hashes (name TEXT);
 CREATE TABLE "it's" (x);`)
 })
 afterAll(() => db.close())
@@ -30,7 +30,7 @@ describe("notEngineTables", () => {
 		expect(kept(notEngineTables({}))).toEqual([
 			"__drizzle_migrations",
 			"_cf_KV",
-			"_comb_migration_hashes",
+			"_database_migration_hashes",
 			"a'%\\b",
 			"a'x\\b",
 			"d1_migrations",

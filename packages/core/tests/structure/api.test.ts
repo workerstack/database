@@ -22,7 +22,7 @@ const manifest = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as
 let out: string
 
 beforeAll(() => {
-	out = mkdtempSync(join(tmpdir(), "comb-api-"))
+	out = mkdtempSync(join(tmpdir(), "database-api-"))
 	const args = [
 		"-p",
 		join(ROOT, "tsconfig.strict.json"),

@@ -10,7 +10,7 @@ const temp = projects()
 const project = temp.make
 afterEach(temp.clean)
 
-/** A project with comb.migrate.config.ts over a libsql file at `db` in it, and these migrations in ./m */
+/** A project with database.migrate.config.ts over a libsql file at `db` in it, and these migrations in ./m */
 function configured(migrations: Record<string, string>, db = "core.db"): { dir: string; url: string } {
 	const dir = project()
 	const url = `file:${join(dir, db)}`
@@ -18,7 +18,7 @@ function configured(migrations: Record<string, string>, db = "core.db"): { dir: 
 	for (const [name, sql] of Object.entries(migrations)) writeFileSync(join(dir, "m", name), sql)
 	writeSum(join(dir, "m"))
 	writeFileSync(
-		join(dir, "comb.migrate.config.ts"),
+		join(dir, "database.migrate.config.ts"),
 		`export default { databases: { core: { migrationsDir: "./m", name: "core-dev", provider: { type: "libsql", url: ${JSON.stringify(url)} } } } }\n`,
 	)
 	return { dir, url }
@@ -52,17 +52,17 @@ describe("migrate apply: arguments", () => {
 		const usage = io(dir)
 		expect(await runCliWithFakes(["migrate", "apply"], usage)).toBe(1)
 		expect(usage.errors).toEqual([
-			"Usage: comb migrate apply <database> [-e <name>] [--dir <path>] [--file <path>] [-y] [--local] [--json]",
+			"Usage: database migrate apply <database> [-e <name>] [--dir <path>] [--file <path>] [-y] [--local] [--json]",
 		])
 		const baseline = io(dir)
 		expect(await runCliWithFakes(["migrate", "baseline"], baseline)).toBe(1)
 		expect(baseline.errors).toEqual([
-			"Usage: comb migrate baseline <database> [-e <name>] [--dir <path>] [--local] [--hashes]",
+			"Usage: database migrate baseline <database> [-e <name>] [--dir <path>] [--local] [--hashes]",
 		])
 		const check = io(dir)
 		expect(await runCliWithFakes(["migrate", "check"], check)).toBe(1)
 		expect(check.errors).toEqual([
-			"Usage: comb migrate check <database> [-e <name>] [--dir <path>] [-y] [--local] [--json]",
+			"Usage: database migrate check <database> [-e <name>] [--dir <path>] [-y] [--local] [--json]",
 		])
 		const extra = io(dir)
 		expect(await runCliWithFakes(["migrate", "apply", "core", "blog"], extra)).toBe(1)
@@ -78,7 +78,7 @@ describe("migrate apply: arguments", () => {
 	})
 })
 
-describe("migrate apply: through comb.migrate.config.ts", () => {
+describe("migrate apply: through database.migrate.config.ts", () => {
 	it("applies, then skips what it applied, and names the database it applied to", async () => {
 		const { dir, url } = configured({ "1_init.sql": "CREATE TABLE post (id TEXT);" })
 		const first = io(dir)
@@ -125,7 +125,7 @@ describe("migrate apply: through comb.migrate.config.ts", () => {
 		const { dir } = configured({})
 		const unknown = io(dir)
 		expect(await runCliWithFakes(["migrate", "apply", "blog"], unknown)).toBe(1)
-		expect(unknown.errors).toEqual(['comb.migrate.config.ts declares no database "blog". Available: core'])
+		expect(unknown.errors).toEqual(['database.migrate.config.ts declares no database "blog". Available: core'])
 		const local = io(dir)
 		expect(await runCliWithFakes(["migrate", "apply", "core", "--local"], local)).toBe(1)
 		expect(local.errors).toEqual(["--local is for a D1 database; set local: true on its d1 provider"])
@@ -165,7 +165,7 @@ describe("migrate on SQLite: a --file moved into the directory (M45)", () => {
 		writeFileSync(join(dir, "m", "2_hotfix.sql"), hotfix)
 		writeSum(join(dir, "m"))
 		const refusal =
-			"2_hotfix.sql has the text of ../hotfix.sql, applied with --file; run comb migrate baseline to record it, or remove it"
+			"2_hotfix.sql has the text of ../hotfix.sql, applied with --file; run database migrate baseline to record it, or remove it"
 		for (const mode of ["check", "apply"]) {
 			const run = io(dir)
 			expect(await runCliWithFakes(["migrate", mode, "core"], run), mode).toBe(1)
@@ -186,7 +186,7 @@ const rebuild = (copied: string) =>
 	`CREATE TABLE new_post (id TEXT, title TEXT);\nINSERT INTO new_post (${copied}) SELECT ${copied} FROM post;\nDROP TABLE post;\nALTER TABLE new_post RENAME TO post;`
 
 const UNSAFE_REFUSAL = (file: string, what: string) =>
-	`${file} is unsafe (${what}); confirm it on a terminal, or approve it in the file with a line "-- comb:allow-unsafe: <reason>"`
+	`${file} is unsafe (${what}); confirm it on a terminal, or approve it in the file with a line "-- database:allow-unsafe: <reason>"`
 
 describe("migrate apply: approving an unsafe migration", () => {
 	const DROP = { "1_init.sql": "CREATE TABLE post (id TEXT);", "2_drop.sql": "DROP TABLE post;" }
@@ -203,7 +203,7 @@ describe("migrate apply: approving an unsafe migration", () => {
 		const no = io(dir, async (q) => (asked.push(q), false))
 		expect(await runCliWithFakes(["migrate", "apply", "core", "--yes"], no)).toBe(1)
 		expect(asked[0]).toContain("This affects: core (core-dev)")
-		/* every pending file is approved before any applies, so the refusal left 1_init.sql unapplied, and comb's history unmade (S7) */
+		/* every pending file is approved before any applies, so the refusal left 1_init.sql unapplied, and database's history unmade (S7) */
 		expect(await tables(url)).toEqual(["keep"])
 		expect(
 			await runCliWithFakes(
@@ -217,7 +217,7 @@ describe("migrate apply: approving an unsafe migration", () => {
 	it("runs it without asking when the file approves it with a reason, and says so", async () => {
 		const { dir, url } = configured({
 			...DROP,
-			"2_drop.sql": "-- comb:allow-unsafe: post moved to the archive db\nDROP TABLE post;",
+			"2_drop.sql": "-- database:allow-unsafe: post moved to the archive db\nDROP TABLE post;",
 		})
 		await keepOnly(url)
 		const run = io(dir)
@@ -227,7 +227,7 @@ describe("migrate apply: approving an unsafe migration", () => {
 	})
 
 	it("takes no approval without a reason", async () => {
-		const { dir, url } = configured({ ...DROP, "2_drop.sql": "-- comb:allow-unsafe:\nDROP TABLE post;" })
+		const { dir, url } = configured({ ...DROP, "2_drop.sql": "-- database:allow-unsafe:\nDROP TABLE post;" })
 		await keepOnly(url)
 		const run = io(dir)
 		expect(await runCliWithFakes(["migrate", "apply", "core"], run)).toBe(1)
@@ -339,12 +339,12 @@ describe("migrate baseline", () => {
 		expect(drift.errors).toEqual([
 			"core (core-dev)'s schema is not the one its migrations leave, so baseline records nothing; the difference:\nCREATE TABLE `post` (`id` text NULL);",
 		])
-		/* a refused baseline writes nothing, comb's history included (S7 of the 0.14.1 review) */
+		/* a refused baseline writes nothing, database's history included (S7 of the 0.14.1 review) */
 		expect(await tables(url)).toEqual([])
 	})
 })
 
-describe("migrate status: comb's own history (M17)", () => {
+describe("migrate status: database's own history (M17)", () => {
 	it("lists the files the database records and the ones pending, reading only, and has its own usage", async () => {
 		const { dir, url } = configured({ "1_a.sql": "CREATE TABLE a (x);", "2_b.sql": "CREATE TABLE b (x);" })
 		await keepOnly(url)
@@ -365,7 +365,7 @@ describe("migrate status: comb's own history (M17)", () => {
 		const usage = io(dir)
 		expect(await runCliWithFakes(["migrate", "status"], usage)).toBe(1)
 		expect(usage.errors).toEqual([
-			"Usage: comb migrate status <database> [-e <name>] [--dir <path>] [--local] [--json]",
+			"Usage: database migrate status <database> [-e <name>] [--dir <path>] [--local] [--json]",
 		])
 	})
 })

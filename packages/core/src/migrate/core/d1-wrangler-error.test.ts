@@ -4,7 +4,7 @@ import { applyFailure, wranglerError } from "./d1-wrangler-error.ts"
 const BUSY =
 	"workerd/util/sqlite.c++:1733: failed: SQLite failed; dbErrorMessage(err, db) = database is locked: SQLITE_BUSY\n✘ [ERROR] internal error; reference = x1"
 const LOCKED =
-	"the local D1 database was locked by another process (wrangler dev, a wrangler command or a second comb migrate) while wrangler applied: let it finish and rerun"
+	"the local D1 database was locked by another process (wrangler dev, a wrangler command or a second database migrate) while wrangler applied: let it finish and rerun"
 
 describe("wranglerError", () => {
 	it("keeps wrangler's [ERROR] lines without their colors, or its whole output when it printed none", () => {

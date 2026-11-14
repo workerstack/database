@@ -1,7 +1,7 @@
 /**
  * drizzle-kit 1.0.0-rc.4 exports a SQLite primary key without NOT NULL, which Atlas reads as a
  * nullable column. On the real drizzle-kit and the real Atlas: a history that says NOT NULL diffs
- * as synced against the normalized export, and a history comb 0.7 wrote from the raw export
+ * as synced against the normalized export, and a history database 0.7 wrote from the raw export
  * (`text NULL`) rebuilds its key tables once, guarded where other tables reference them.
  */
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
@@ -45,7 +45,7 @@ beforeEach(() => {
 		join(work, "drizzle.config.ts"),
 		`export default { dialect: "sqlite", schema: "${join(work, "schema.ts")}" }\n`,
 	)
-	dir = mkdtempSync(join(tmpdir(), "comb-sqlite-normalize-"))
+	dir = mkdtempSync(join(tmpdir(), "database-sqlite-normalize-"))
 })
 afterEach(() => {
 	rmSync(work, { force: true, recursive: true })
@@ -74,7 +74,7 @@ describe("the normalized drizzle-kit SQLite export on Atlas v1.3.0", () => {
 		expect(await diff("again")).toEqual({ files: [], notices: [], synced: true })
 	}, 60_000)
 
-	it("rebuilds the text keys of a history comb 0.7 wrote from the raw export once, guarding a referenced one", async () => {
+	it("rebuilds the text keys of a history database 0.7 wrote from the raw export once, guarding a referenced one", async () => {
 		const raw = SYNCED.replace("`id` text NOT NULL, `email`", "`id` text NULL, `email`")
 		writeFileSync(join(dir, "20260101000000_init.sql"), raw)
 		await generateIncrementalMigration({
@@ -85,7 +85,7 @@ describe("the normalized drizzle-kit SQLite export on Atlas v1.3.0", () => {
 		})
 		const [file] = (await diff("not_null")).files
 		const sql = readFileSync(file as string, "utf8")
-		expect(sql).toContain("CREATE TABLE `_comb_keep_post` AS SELECT")
+		expect(sql).toContain("CREATE TABLE `_database_keep_post` AS SELECT")
 		expect(classifyMigration(sql, { before: extractSchema(raw), dialect: "sqlite" }).safety).toBe("cautious")
 		expect((await diff("after")).synced).toBe(true)
 	}, 60_000)

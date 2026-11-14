@@ -16,7 +16,7 @@ export { filterBySelect, parseSelect } from "./fields.ts";
 export { FILTER_LIMITS, FILTER_OPERATORS, type FilterField, type FilterFieldSpec, type FilterLimits, type FilterValidationResult, type LimitsGiven, OPERATORS_BY_TYPE, parseFilter, parseFilterNumber, parseOrder, validateFilter, } from "./filter.ts";
 export { escapeLike, globPattern, likePattern } from "./like.ts";
 export { IsoInstant } from "./iso-date.ts";
-export { COMB_FILTER_GRAMMAR, type CombFilterGrammar } from "../meta.ts";
+export { FILTER_GRAMMAR, type FilterGrammar } from "../meta.ts";
 export { createListQuerySchema, createRetrieveQuerySchema, type FieldsConfig, LIST_QUERY_LIMITS, type ListQueryConfig, type ListQueryLimits, type ListQueryOutput, type ListQuerySchema, PAGINATION_DEFAULTS, paginationResponseSchema, type RetrieveQueryConfig, type RetrieveQueryOutput, type RetrieveQuerySchema, } from "./schema.ts";
 export { CURSOR_DESCRIPTION, filterParamMeta, LANG_DESCRIPTION, LANG_EXAMPLES, limitParamMeta, orderParamMeta, PAGE_DESCRIPTION, PAGE_EXAMPLES, searchParamMeta, SELECT_DESCRIPTION, selectParamMeta, } from "./descriptions.ts";
 export { resolveTranslation, type TranslationResolverInput } from "./translation.ts";
@@ -49,7 +49,7 @@ import type { SortDirection, SortField, SortNulls } from "./types.ts";
  */
 declare const CURSOR_TIEBREAK_COLUMN = "id";
 /**
- * The longest cursor a list takes, and so the longest comb mints: it fits a URL. A cursor carries
+ * The longest cursor a list takes, and so the longest database mints: it fits a URL. A cursor carries
  * its sort values, so a long text key could mint one past it, which the next page would refuse.
  */
 declare const MAX_CURSOR_LENGTH = 8192;
@@ -112,7 +112,7 @@ declare function cursorBytes(record: Record<string, unknown>, parsedSort: readon
 declare function cursorProblem(cursor: string): string | null;
 /** The cursor sealed under `options`, opened and decoded; null when it was not, or it is no cursor */
 declare function openCursor(cursor: string, options: CursorOptions): OpenedCursor | null;
-/** The cursor as the keyset binds it, each key's stored value, for this sort; a 400 CombError as readCursor throws */
+/** The cursor as the keyset binds it, each key's stored value, for this sort; a 400 DatabaseError as readCursor throws */
 declare function readKeyset(cursor: string, parsedSort: readonly SortField[], options: CursorOptions): OpenedCursor;
 /**
  * The cursor as the merge compares rows with it: readKeyset's, a REAL's text as the number typedKeys
@@ -120,7 +120,7 @@ declare function readKeyset(cursor: string, parsedSort: readonly SortField[], op
  */
 declare function readCompared(cursor: string, parsedSort: readonly SortField[], options: CursorOptions): DecodedCursor;
 /**
- * Open a cursor under `options` and decode it for this sort, or throw a 400 CombError. Each key is
+ * Open a cursor under `options` and decode it for this sort, or throw a 400 DatabaseError. Each key is
  * as the cursor's row read it, where the list pages by another value: a time key is the Date the
  * driver read, an Invalid one included, and bytes are a Uint8Array. A value may be a CursorRef: a long sort value
  * carried by reference, its prefix and length, which a keyset of its own must read from the
@@ -142,7 +142,7 @@ export { CursorRef, CURSOR_TIEBREAK_COLUMN, MAX_CURSOR_LENGTH, cursorBytes, curs
 import { type DecodedCursor } from "./cursor.ts";
 import { type ColumnCheck, type KeysetKind } from "./cursor-mint.ts";
 import { type CursorOptions } from "./cursor-seal.ts";
-import { COMB_ID } from "./list-extras.ts";
+import { DATABASE_ID } from "./list-extras.ts";
 import type { paginationResponseSchema } from "./schema.ts";
 import type { ListQueryInput, ParsedFields, SortField } from "./types.ts";
 import type * as z from "zod";
@@ -150,7 +150,7 @@ import type * as z from "zod";
  * The name of one column a builder selects for `paginate` to read, which no row it returns keeps: the
  * tiebreak, the gone-anchor flag, the count, each sort key's storage class, or its stored text
  */
-type ListExtra = "_combAnchorGone" | "_combId" | "_combKeyTexts" | "_combKeyTypes" | "_combTextKeys" | "_total";
+type ListExtra = "_cursorAnchorGone" | "_cursorId" | "_cursorKeyTexts" | "_cursorKeyTypes" | "_cursorTextKeys" | "_total";
 /**
  * A row as paginate and paginateMerged return it, without the `ListExtra` columns. A union row type
  * loses them from each member, so narrowing on its discriminant still reaches each variant's fields
@@ -247,7 +247,7 @@ declare function paginate<T extends object>(items: readonly T[], built: {
         merged: false;
     };
 }): readonly [Array<ListRow<T>>, PaginationResponse];
-export { applySelect, COMB_ID, nextCursorOf, type ListExtra, type ListPagination, type ListRow, paginate, type PaginationFacts, type PaginationResponse, paginationOf, totalOf, };
+export { applySelect, DATABASE_ID, nextCursorOf, type ListExtra, type ListPagination, type ListRow, paginate, type PaginationFacts, type PaginationResponse, paginationOf, totalOf, };
 
 // query/cursor-mint.d.ts
 import { type CursorOptions } from "./cursor-seal.ts";
@@ -311,7 +311,7 @@ type CursorOptions = {
 };
 /** The shortest secret a cursor is sealed under, in UTF-8 bytes: the key's length */
 declare const MIN_CURSOR_SECRET_BYTES = 32;
-/** The 32-byte key HKDF-SHA256 derives from `secret`, with no salt and comb's info */
+/** The 32-byte key HKDF-SHA256 derives from `secret`, with no salt and database's info */
 declare function cursorKey(secret: string): Uint8Array;
 /** Throw the 500 sealing throws when `options` cannot seal a cursor */
 declare function assertCursorWired(options: CursorOptions): void;
@@ -358,14 +358,14 @@ type DrizzleListOptions = {
      */
     extras: {
         /** the row's `id`, which the next cursor resumes from */
-        _combId: (table: RelationalTable) => SQL;
+        _cursorId: (table: RelationalTable) => SQL;
     } & Partial<{
         /** on a cursor whose row may be gone: 1 when it is, which `paginate` answers with a 400 asking to start again */
-        _combAnchorGone: (table: RelationalTable) => SQL<number>;
+        _cursorAnchorGone: (table: RelationalTable) => SQL<number>;
         /** each sort key's stored text where reading it back rounds it; on every list with a sort */
-        _combKeyTexts: (table: RelationalTable) => SQL<string>;
+        _cursorKeyTexts: (table: RelationalTable) => SQL<string>;
         /** each SQLite timestamp sort key's stored TEXT, which the next cursor binds as stored; on every list with a sort */
-        _combTextKeys: (table: RelationalTable) => SQL<string>;
+        _cursorTextKeys: (table: RelationalTable) => SQL<string>;
         /** on a page read by number: every row the filter matches, which `paginate` reports as the count */
         _total: (table: RelationalTable) => SQL<number>;
     }>;
@@ -545,23 +545,23 @@ export { IsoInstant, isoInstant };
 
 // meta.d.ts
 /**
- * The comb meta contract — facts about tables and queries, stamped onto Zod
+ * The database meta contract — facts about tables and queries, stamped onto Zod
  * schemas so they survive the trip to JSON Schema and into an OpenAPI document.
  *
- * comb publishes facts in comb's vocabulary. Mapping them to a consumer's tag
+ * database publishes facts in database's vocabulary. Mapping them to a consumer's tag
  * names is the consumer's job. See docs/meta-contract.md.
  */
-import { COMB_FILTER_GRAMMAR, COMB_META_KEY, COMB_META_VERSION, type CombEntityMeta, type CombEntityMetaInput, type CombFilterField, type CombFilterGrammar, type CombMeta, type CombMetaInput, type CombMetaKind, type CombMetaStamp, type CombQueryMeta, type CombQueryMetaInput, type CombStatesMeta, type UniqueIndexMeta } from "./meta/contract.ts";
-import { readCombEntityMeta, readCombMeta, readCombQueryMeta } from "./meta/read.ts";
+import { FILTER_GRAMMAR, DATABASE_META_KEY, DATABASE_META_VERSION, type EntityMeta, type EntityMetaInput, type FilterFieldMeta, type FilterGrammar, type DatabaseMeta, type DatabaseMetaInput, type DatabaseMetaKind, type DatabaseMetaStamp, type QueryMeta, type QueryMetaInput, type StatesMeta, type UniqueIndexMeta } from "./meta/contract.ts";
+import { readEntityMeta, readDatabaseMeta, readQueryMeta } from "./meta/read.ts";
 /**
  * Build the stamp for a Zod `.meta()` call.
  *
  * Stamp the schema you RETURN, not the one you build from — a transform/pipe
  * does not forward the base's metadata to the output view. See docs §3.1.
  */
-declare function combMeta(meta: CombEntityMetaInput): CombMetaStamp<CombEntityMeta>;
+declare function databaseMeta(meta: EntityMetaInput): DatabaseMetaStamp<EntityMeta>;
 /** Build the stamp for a list query schema's `.meta()` call; `v` is stamped for you */
-declare function combMeta(meta: CombQueryMetaInput): CombMetaStamp<CombQueryMeta>;
+declare function databaseMeta(meta: QueryMetaInput): DatabaseMetaStamp<QueryMeta>;
 /** Minimal shape of a Zod schema, so this module needs no zod import. */
 export type MetaCarrier<T> = {
     /** Zod's `.meta()`: returns a copy of the schema carrying `m` */
@@ -574,8 +574,8 @@ export type MetaCarrier<T> = {
  * extends a generated read schema loses the entity facts with no diagnostic.
  * This is the recovery path.
  */
-declare function carryCombMeta<T>(from: unknown, to: MetaCarrier<T>): T | null;
-export { carryCombMeta, COMB_FILTER_GRAMMAR, COMB_META_KEY, COMB_META_VERSION, combMeta, type CombEntityMeta, type CombEntityMetaInput, type CombFilterGrammar, type CombMeta, type CombMetaInput, type CombMetaKind, type CombMetaStamp, type CombFilterField, type CombQueryMeta, type CombQueryMetaInput, type CombStatesMeta, type UniqueIndexMeta, readCombEntityMeta, readCombMeta, readCombQueryMeta, };
+declare function carryDatabaseMeta<T>(from: unknown, to: MetaCarrier<T>): T | null;
+export { carryDatabaseMeta, FILTER_GRAMMAR, DATABASE_META_KEY, DATABASE_META_VERSION, databaseMeta, type EntityMeta, type EntityMetaInput, type FilterGrammar, type DatabaseMeta, type DatabaseMetaInput, type DatabaseMetaKind, type DatabaseMetaStamp, type FilterFieldMeta, type QueryMeta, type QueryMetaInput, type StatesMeta, type UniqueIndexMeta, readEntityMeta, readDatabaseMeta, readQueryMeta, };
 export type { ReadOptions } from "./meta/read.ts";
 
 // query/schema.d.ts
@@ -621,7 +621,7 @@ import type { FieldType, FilterOperator } from "./types.ts";
 /** The OpenAPI description of the `cursor` param */
 declare const CURSOR_DESCRIPTION = "Opaque cursor for forward pagination. Pass the nextCursor from the previous response with the same order. Takes precedence over page when both are sent.";
 /** The OpenAPI description of the `page` param */
-declare const PAGE_DESCRIPTION = "1-based page number for offset pagination, up to the endpoint's maxPage (x-comb); page further by cursor. A page that is no whole number from 1, in decimal digits, or zero-padded past maxPage's digits, is a 400 invalid_page, and one past maxPage a 400 page_too_deep, with or without a cursor. Ignored when cursor is present.";
+declare const PAGE_DESCRIPTION = "1-based page number for offset pagination, up to the endpoint's maxPage (x-database); page further by cursor. A page that is no whole number from 1, in decimal digits, or zero-padded past maxPage's digits, is a 400 invalid_page, and one past maxPage a 400 page_too_deep, with or without a cursor. Ignored when cursor is present.";
 /** The OpenAPI examples of the `page` param */
 declare const PAGE_EXAMPLES: number[];
 /** The OpenAPI description of the `lang` param */
@@ -712,7 +712,7 @@ type ParsedFields = {
  * ignores ASCII case (both with `*` as the wildcard), and `is` takes `null`, `notnull`, `true` or `false`
  */
 type FilterOperator = "eq" | "ne" | "neq" | "gt" | "gte" | "lt" | "lte" | "in" | "nin" | "like" | "ilike" | "is"
-/** Parsed for callers that validate and run it themselves (JSON-array membership); comb's own validator and SQL take none */
+/** Parsed for callers that validate and run it themselves (JSON-array membership); database's own validator and SQL take none */
  | "contains";
 /** A filterable field's type, which decides the operators it takes and how its value is read: a `date` as epoch milliseconds unless its spec says `iso` */
 type FieldType = "string" | "number" | "boolean" | "date" | "enum";
@@ -1033,17 +1033,17 @@ export { carried, CursorRef, decodeId, decodeValue, encodeValue, RealText, realT
 // query/list-extras.d.ts
 import type { SortField } from "./types.ts";
 /** The column every built list selects its tiebreak as, which the next cursor's id is minted from */
-declare const COMB_ID: "_combId";
+declare const DATABASE_ID: "_cursorId";
 declare const INTEGER_TEXT: RegExp;
 /**
- * The class of a list's sort key or tiebreak, as `_combKeyTypes` carries it: SQLite's storage class,
+ * The class of a list's sort key or tiebreak, as `_cursorKeyTypes` carries it: SQLite's storage class,
  * or on Postgres its family (`float`, `fixed`, `time`, `other`), which no key's value is read by
  */
 type KeyClass = "+inf" | "-inf" | "blob" | "fixed" | "float" | "integer" | "null" | "other" | "real" | "text" | "time";
 /** `value` as a driver read an integer from 0: a number, a bigint, or a decimal string as its bigint */
 declare const unencoded: (value: unknown) => unknown;
 /**
- * The class of each of `sort`'s keys, then the tiebreak's, from the row's `_combKeyTypes`; none where
+ * The class of each of `sort`'s keys, then the tiebreak's, from the row's `_cursorKeyTypes`; none where
  * the builder selected none (a table list over columns, or a Postgres one)
  */
 declare function storedClasses(row: Record<string, unknown>): readonly KeyClass[] | undefined;
@@ -1053,36 +1053,36 @@ declare function storedClasses(row: Record<string, unknown>): readonly KeyClass[
  */
 declare function malformed(row: object, sort: readonly SortField[]): string | undefined;
 /**
- * A 500 naming the first of `sort`'s keys whose stored value the row's `_combKeyTexts` marks as none
+ * A 500 naming the first of `sort`'s keys whose stored value the row's `_cursorKeyTexts` marks as none
  * a list binding it as read places: a SQLite value of a class its mode reads as another, `!` and the
  * class (a timestamp's TEXT, a boolean's value but 0 or 1); and a Postgres float the session's extra_float_digits prints rounded on any list.
  * paginate asks it of every row it serves, so the refusal never hangs on which row ends a page
  */
 declare function refuseUnheld(row: Record<string, unknown>, sort: readonly SortField[]): void;
 /**
- * `row` with each sort key, and the tiebreak, as SQLite stored it, by the class `_combKeyTypes`
+ * `row` with each sort key, and the tiebreak, as SQLite stored it, by the class `_cursorKeyTypes`
  * carries: an integer the driver read as a decimal string as that integer, so a cursor
  * minted from it compares as one, a string binding as text, which SQLite orders after every
  * integer; a REAL ±Infinity D1's transport read as null as itself; a time key its
- * stored value `_combKeyTexts` carries, and a SQLite key holding a value of a class
- * its mode reads as another the value `_combTextKeys` carries: a timestamp's TEXT, a
+ * stored value `_cursorKeyTexts` carries, and a SQLite key holding a value of a class
+ * its mode reads as another the value `_cursorTextKeys` carries: a timestamp's TEXT, a
  * boolean's value but 0 or 1, a text's integer. A text key that looks like a number stays
  * text. The merge compares rows through it.
  */
 declare function typedKeys(row: Record<string, unknown>, sort: readonly SortField[]): Record<string, unknown>;
 /**
- * The sort fields whose value in `typedKeys(row, sort)` is the stored text `_combKeyTexts` or `_combTextKeys` carried in
+ * The sort fields whose value in `typedKeys(row, sort)` is the stored text `_cursorKeyTexts` or `_cursorTextKeys` carried in
  * place of the value as read, which a cursor binds as itself, past the
  * column's mapper; every other key binds through it, a text key that looks like a number included
  */
 declare function carriedTexts(row: Record<string, unknown>, sort: readonly SortField[]): Set<string>;
 /**
- * `typedKeys(row, sort)` as a cursor carries it: each SQLite REAL key's text, held (`_combTextKeys`)
- * or a timestamp's carried (`_combKeyTexts`), as its RealText, which the next page binds as the list
+ * `typedKeys(row, sort)` as a cursor carries it: each SQLite REAL key's text, held (`_cursorTextKeys`)
+ * or a timestamp's carried (`_cursorKeyTexts`), as its RealText, which the next page binds as the list
  * checked it; the merge compares typedKeys' numbers, the same parse of the same text
  */
 declare function cursorKeys(row: Record<string, unknown>, sort: readonly SortField[]): Record<string, unknown>;
-export { carriedTexts, cursorKeys, COMB_ID, INTEGER_TEXT, type KeyClass, malformed, refuseUnheld, storedClasses, typedKeys, unencoded, };
+export { carriedTexts, cursorKeys, DATABASE_ID, INTEGER_TEXT, type KeyClass, malformed, refuseUnheld, storedClasses, typedKeys, unencoded, };
 
 // query/filter-parse.d.ts
 /**
@@ -1213,30 +1213,30 @@ export { FILTER_LIMITS, limitsOver, OPERATORS_BY_TYPE, validateFilter, type Filt
 
 // meta/contract.d.ts
 /**
- * The comb meta contract — facts about tables and queries, stamped onto Zod
+ * The database meta contract — facts about tables and queries, stamped onto Zod
  * schemas so they survive the trip to JSON Schema and into an OpenAPI document.
  *
- * comb publishes facts in comb's vocabulary. Mapping them to a consumer's tag
+ * database publishes facts in database's vocabulary. Mapping them to a consumer's tag
  * names is the consumer's job. See docs/meta-contract.md.
  */
 import type { PartialUniqueIndexMeta, UniqueIndexMeta } from "../codegen/analyzer-types.ts";
 /** Reserved key. One collision surface, one version field. */
-declare const COMB_META_KEY = "x-comb";
+declare const DATABASE_META_KEY = "x-database";
 /**
  * Contract version. Bumped ONLY on a breaking change — a field removed, or a
  * field whose meaning changed. Adding a field never bumps it, which is what
- * lets comb and its consumers ship independently.
+ * lets database and its consumers ship independently.
  */
-declare const COMB_META_VERSION = 1;
+declare const DATABASE_META_VERSION = 1;
 /** Which payload a stamp carries: facts about a table (`entity`) or about a list query (`query`) */
-type CombMetaKind = "entity" | "query";
-/** Filter grammar comb's parser implements — `field.op.value`. */
-declare const COMB_FILTER_GRAMMAR = "postgrest";
+type DatabaseMetaKind = "entity" | "query";
+/** Filter grammar database's parser implements — `field.op.value`. */
+declare const FILTER_GRAMMAR = "postgrest";
 /** The filter grammar a query meta names, `postgrest`: `field.op.value` */
-type CombFilterGrammar = typeof COMB_FILTER_GRAMMAR;
+type FilterGrammar = typeof FILTER_GRAMMAR;
 /** Facts about an entity, derived from its table definition. */
-type CombEntityMeta = {
-    /** The contract version the payload was stamped with, `COMB_META_VERSION` */
+type EntityMeta = {
+    /** The contract version the payload was stamped with, `DATABASE_META_VERSION` */
     v: number;
     /** Always `entity` */
     kind: "entity";
@@ -1250,7 +1250,7 @@ type CombEntityMeta = {
     immutable: string[];
     /** Tombstone column, or null when the entity is hard-deleted */
     softDelete: string | null;
-    /** Column scoping rows to a tenant, or null when comb cannot know (see docs §6.3) */
+    /** Column scoping rows to a tenant, or null when database cannot know (see docs §6.3) */
     tenantColumn: string | null;
     /**
      * Lifecycle of the entity's state column, or null when none is declared.
@@ -1259,7 +1259,7 @@ type CombEntityMeta = {
      * publishing the graph would invite a consumer to drive state by walking it.
      * See docs/state-machines.md §5.
      */
-    states: CombStatesMeta | null;
+    states: StatesMeta | null;
     /**
      * The uniqueness that holds over every row: a `uniqueIndex()`, a `unique().on()`
      * constraint and a column's `.unique()`, in the order the analyzer extracted
@@ -1271,12 +1271,12 @@ type CombEntityMeta = {
      * Partial (`.where()`) unique indexes: their columns are unique only among the
      * rows `where` matches. Apart from `uniqueIndexes`, so a reader that knows no
      * predicate claims no uniqueness (docs §6.8). Added within v1, so a producer
-     * may leave it out; readCombEntityMeta reads its absence as [].
+     * may leave it out; readEntityMeta reads its absence as [].
      */
     partialUniqueIndexes?: PartialUniqueIndexMeta[] | undefined;
 };
 /** The published subset of a column state machine — describes a lifecycle, not how to drive it. */
-type CombStatesMeta = {
+type StatesMeta = {
     /** The column the machine governs */
     column: string;
     /** Every legal value, in declaration order */
@@ -1287,7 +1287,7 @@ type CombStatesMeta = {
     terminal: string[];
 };
 /** One filterable field with the operators its type accepts. */
-type CombFilterField = {
+type FilterFieldMeta = {
     /** The field's name, as a filter names it */
     field: string;
     /** The field's filter type: `string`, `number`, `boolean`, `date` or `enum` */
@@ -1300,15 +1300,15 @@ type CombFilterField = {
  * Fields marked optional were added after v1 shipped; a v1 reader built before
  * them ignores them, which is why adding them did not bump `v`.
  */
-type CombQueryMeta = {
-    /** The contract version the payload was stamped with, `COMB_META_VERSION` */
+type QueryMeta = {
+    /** The contract version the payload was stamped with, `DATABASE_META_VERSION` */
     v: number;
     /** Always `query` */
     kind: "query";
     /** The fields a `filter` may name */
     filterable: string[];
     /** `filterable` with types and operators */
-    filterFields?: CombFilterField[] | undefined;
+    filterFields?: FilterFieldMeta[] | undefined;
     /** The fields an `order` may name */
     sortable: string[];
     /** Null placements every sortable field accepts */
@@ -1329,7 +1329,7 @@ type CombQueryMeta = {
     maxPatternBytes?: number | undefined;
     /** Bytes one `filter` may take however a client encodes it, beside its character cap */
     maxFilterBytes?: number | undefined;
-    /** Bytes the whole query string comb accepts takes at most, however a client encodes it: 16 KB less a 2 KB path budget */
+    /** Bytes the whole query string database accepts takes at most, however a client encodes it: 16 KB less a 2 KB path budget */
     maxQueryBytes?: number | undefined;
     /** Whitespace-separated words one `q` may hold */
     maxSearchTerms?: number | undefined;
@@ -1350,42 +1350,42 @@ type CombQueryMeta = {
     /** Tiebreak column for keyset pagination */
     stableTiebreak: string;
     /** The filter grammar `filter` is parsed with */
-    grammar: CombFilterGrammar;
+    grammar: FilterGrammar;
 };
-/** A comb meta payload: an entity's or a list query's, told apart by `kind` */
-type CombMeta = CombEntityMeta | CombQueryMeta;
-/** Payload accepted by combMeta() — the version is stamped for you. */
-type CombEntityMetaInput = Omit<CombEntityMeta, "v">;
-/** A query payload as combMeta() takes it, without `v` */
-type CombQueryMetaInput = Omit<CombQueryMeta, "v">;
-/** A payload as combMeta() takes it, entity or query, without `v` */
-type CombMetaInput = CombEntityMetaInput | CombQueryMetaInput;
-/** The object combMeta() produces, ready for `.meta()`. */
-type CombMetaStamp<T extends CombMeta = CombMeta> = {
-    [COMB_META_KEY]: T;
+/** A database meta payload: an entity's or a list query's, told apart by `kind` */
+type DatabaseMeta = EntityMeta | QueryMeta;
+/** Payload accepted by databaseMeta() — the version is stamped for you. */
+type EntityMetaInput = Omit<EntityMeta, "v">;
+/** A query payload as databaseMeta() takes it, without `v` */
+type QueryMetaInput = Omit<QueryMeta, "v">;
+/** A payload as databaseMeta() takes it, entity or query, without `v` */
+type DatabaseMetaInput = EntityMetaInput | QueryMetaInput;
+/** The object databaseMeta() produces, ready for `.meta()`. */
+type DatabaseMetaStamp<T extends DatabaseMeta = DatabaseMeta> = {
+    [DATABASE_META_KEY]: T;
 };
-export { COMB_FILTER_GRAMMAR, COMB_META_KEY, COMB_META_VERSION, type CombEntityMeta, type CombEntityMetaInput, type CombFilterField, type CombFilterGrammar, type CombMeta, type CombMetaInput, type CombMetaKind, type CombMetaStamp, type CombQueryMeta, type CombQueryMetaInput, type CombStatesMeta, type PartialUniqueIndexMeta, type UniqueIndexMeta, };
+export { FILTER_GRAMMAR, DATABASE_META_KEY, DATABASE_META_VERSION, type EntityMeta, type EntityMetaInput, type FilterFieldMeta, type FilterGrammar, type DatabaseMeta, type DatabaseMetaInput, type DatabaseMetaKind, type DatabaseMetaStamp, type QueryMeta, type QueryMetaInput, type StatesMeta, type PartialUniqueIndexMeta, type UniqueIndexMeta, };
 
 // meta/read.d.ts
 /**
- * Reading comb's facts off a JSON Schema. Returns null, never throws: a refused or malformed
+ * Reading database's facts off a JSON Schema. Returns null, never throws: a refused or malformed
  * payload degrades to "no facts", never to a confident wrong answer. See docs/meta-contract.md §4.
  */
 import { isRecord } from "./read-indexes.ts";
-import { type CombEntityMeta, type CombMeta, type CombQueryMeta } from "./contract.ts";
-/** How readCombMeta, readCombEntityMeta and readCombQueryMeta read a payload */
+import { type EntityMeta, type DatabaseMeta, type QueryMeta } from "./contract.ts";
+/** How readDatabaseMeta, readEntityMeta and readQueryMeta read a payload */
 type ReadOptions = {
     /**
      * Highest contract version this reader understands. A payload newer than
      * this is refused rather than partially read — see docs §4.2.
-     * Defaults to the version of the comb build doing the reading.
+     * Defaults to the version of the database build doing the reading.
      */
     maxVersion?: number | undefined;
     /** Called instead of throwing when a payload is refused or malformed. */
     onDiagnostic?: ((message: string) => void) | undefined;
 };
 /**
- * Read comb's facts off the ROOT of a JSON Schema.
+ * Read database's facts off the ROOT of a JSON Schema.
  *
  * Does not unwrap `items` for array schemas — the consumer that already
  * resolves which schema to read owns that step, so the two cannot disagree.
@@ -1394,12 +1394,12 @@ type ReadOptions = {
  * "no facts" (which downstream handles as a visible coverage gap), not to a
  * confident wrong answer.
  */
-declare function readCombMeta(jsonSchema: unknown, options?: ReadOptions): CombMeta | null;
+declare function readDatabaseMeta(jsonSchema: unknown, options?: ReadOptions): DatabaseMeta | null;
 /** Narrowing convenience — null when absent, refused, or the other kind. */
-declare function readCombEntityMeta(jsonSchema: unknown, options?: ReadOptions): CombEntityMeta | null;
+declare function readEntityMeta(jsonSchema: unknown, options?: ReadOptions): EntityMeta | null;
 /** Narrowing convenience — null when absent, refused, or the other kind. */
-declare function readCombQueryMeta(jsonSchema: unknown, options?: ReadOptions): CombQueryMeta | null;
-export { isRecord, type ReadOptions, readCombEntityMeta, readCombMeta, readCombQueryMeta };
+declare function readQueryMeta(jsonSchema: unknown, options?: ReadOptions): QueryMeta | null;
+export { isRecord, type ReadOptions, readEntityMeta, readDatabaseMeta, readQueryMeta };
 
 // query/schema-limits.d.ts
 import type { ListQueryLimits } from "./schema-types.ts";
@@ -1477,14 +1477,14 @@ export { assertNotReserved, baseListQueryShape, filterAstSchema, langQueryField,
 
 // codegen/analyzer-types.d.ts
 import type { IntegerFormat, TextFormat } from "../formats/catalog.ts";
-import type { CombColumnKind } from "../meta/column.ts";
+import type { ColumnMetaKind } from "../meta/column.ts";
 /**
  * TableMeta — serializable intermediate format produced by TableAnalyzer.
  * No ts-morph or Drizzle dependencies. All generators consume this.
  */
 /** Constraint annotations parsed from field type arguments */
 type FieldConstraintsMeta = {
-    /** comb or the database fills the column, so the generated create and update DTOs leave it out; on by default for a `c.createdAt`, `c.updatedAt` or `c.deletedAt` column, and for any `createdAt`, `updatedAt` or `deletedAt` column a default or update hook fills */
+    /** database or the database fills the column, so the generated create and update DTOs leave it out; on by default for a `c.createdAt`, `c.updatedAt` or `c.deletedAt` column, and for any `createdAt`, `updatedAt` or `deletedAt` column a default or update hook fills */
     autogenerate: boolean;
     /** the generated DTOs take only an email address */
     email: boolean;
@@ -1572,8 +1572,8 @@ type FieldMeta = {
     /** drizzle's column class: `SQLiteText`, `PgVarchar` */
     columnType: string;
     /** the `c` helper that built the column; null for a plain drizzle column */
-    combKind: CombColumnKind | null;
-    /** the constraints the `c` helper declared, with comb's defaults applied; for a plain drizzle column, every flag off but `private` on a name starting with `_` and `autogenerate` on a filled timestamp key */
+    databaseKind: ColumnMetaKind | null;
+    /** the constraints the `c` helper declared, with database's defaults applied; for a plain drizzle column, every flag off but `private` on a name starting with `_` and `autogenerate` on a filled timestamp key */
     constraints: FieldConstraintsMeta;
     /** drizzle's data type: `string`, `number int53`, `object json` */
     dataType: string;
@@ -1652,9 +1652,9 @@ type CheckConstraintMeta = {
 };
 /** Timestamp tracking for a table */
 type TimestampsMeta = {
-    /** the creation time is comb's c.createdAt(), read back and NOT NULL, so the generated schemas use comb's shared timestamp fields for it */
+    /** the creation time is database's c.createdAt(), read back and NOT NULL, so the generated schemas use database's shared timestamp fields for it */
     createdAt: boolean;
-    /** the soft-delete time is comb's c.deletedAt(), read back and nullable, so the generated schemas use comb's shared timestamp fields for it */
+    /** the soft-delete time is database's c.deletedAt(), read back and nullable, so the generated schemas use database's shared timestamp fields for it */
     deletedAt: boolean;
     /** the property name of each epoch-millisecond column named createdAt, updatedAt or deletedAt in either casing; null when the table has none */
     names: {
@@ -1667,7 +1667,7 @@ type TimestampsMeta = {
     };
     /** the casing every timestamp shares; mixed when they differ, which no shared spread fits */
     style: "camelCase" | "mixed" | "snake_case";
-    /** the update time is comb's c.updatedAt(), read back and NOT NULL, so the generated schemas use comb's shared timestamp fields for it */
+    /** the update time is database's c.updatedAt(), read back and NOT NULL, so the generated schemas use database's shared timestamp fields for it */
     updatedAt: boolean;
 };
 /** Complete metadata for a single table */
@@ -1722,12 +1722,12 @@ type AnalysisResult = {
 export type { ConstantValue, ExpressionIndexMeta, ImportRef, AnalysisResult, CheckConstraintMeta, FieldConstraintsMeta, FieldMeta, ForeignKeyRef, ImportsMeta, StateMachineMeta, TableMeta, TimestampsMeta, PartialUniqueIndexMeta, UniqueIndexMeta, };
 
 // meta/read-indexes.d.ts
-/** The unique indexes an entity payload publishes, read as readCombEntityMeta reads them: absent, none; malformed, refused */
+/** The unique indexes an entity payload publishes, read as readEntityMeta reads them: absent, none; malformed, refused */
 import type { PartialUniqueIndexMeta, UniqueIndexMeta } from "./contract.ts";
 declare const isRecord: (value: unknown) => value is Record<string, unknown>;
 declare const isStringArray: (value: unknown) => value is string[];
 /**
- * `uniqueIndexes` arrived in a later comb than the contract's v1, so a payload
+ * `uniqueIndexes` arrived in a later database than the contract's v1, so a payload
  * without it is normal and reads as [] — absence is not an error, only a
  * malformed value is.
  */
@@ -1795,25 +1795,25 @@ export {};
 /**
  * What a `c` helper records on the column it builds, for codegen to read at runtime: the helper's
  * kind and the very values it was given. Kept under a registered symbol on drizzle's builder
- * config, which the built column keeps, so a second copy of comb reads what the first wrote.
+ * config, which the built column keeps, so a second copy of database reads what the first wrote.
  */
 /** The `c` helpers, by name */
-type CombColumnKind = "boolean" | "createdAt" | "deletedAt" | "enum" | "id" | "integer" | "json" | "real" | "ref" | "serialId" | "text" | "timestamp" | "updatedAt";
-/** A column's comb metadata: its helper, and the constraints, enum values, states, schema or prefix it took */
-type CombColumnMeta = {
+type ColumnMetaKind = "boolean" | "createdAt" | "deletedAt" | "enum" | "id" | "integer" | "json" | "real" | "ref" | "serialId" | "text" | "timestamp" | "updatedAt";
+/** A column's database metadata: its helper, and the constraints, enum values, states, schema or prefix it took */
+type ColumnMeta = {
     constraints?: Readonly<Record<string, unknown>> | undefined;
-    kind: CombColumnKind;
+    kind: ColumnMetaKind;
     prefix?: string | undefined;
     schema?: unknown;
     states?: unknown;
     values?: readonly string[] | undefined;
 };
 /** `builder` with `meta` recorded on its config; the options a helper was not given are left out */
-declare function withCombColumn<B>(builder: B, meta: {
-    [K in keyof CombColumnMeta]: CombColumnMeta[K] | undefined;
+declare function withColumn<B>(builder: B, meta: {
+    [K in keyof ColumnMeta]: ColumnMeta[K] | undefined;
 }): B;
-/** The comb metadata a built column (or its builder) carries; undefined for a column no `c` helper built */
-declare function combColumnMeta(column: unknown): CombColumnMeta | undefined;
+/** The database metadata a built column (or its builder) carries; undefined for a column no `c` helper built */
+declare function columnMeta(column: unknown): ColumnMeta | undefined;
 /**
  * A c.enum's options as its column's record: its constraints (the flags, its `format`, and a `schema`
  * a JavaScript caller passes, kept for codegen to refuse by name), the rest its state machine, none
@@ -1826,6 +1826,6 @@ declare function enumMeta(values: readonly string[], options?: {
     schema?: unknown;
     tenant?: boolean | undefined;
 }): {
-    [K in keyof CombColumnMeta]: CombColumnMeta[K] | undefined;
+    [K in keyof ColumnMeta]: ColumnMeta[K] | undefined;
 };
-export { combColumnMeta, enumMeta, withCombColumn, type CombColumnKind, type CombColumnMeta };
+export { columnMeta, enumMeta, withColumn, type ColumnMetaKind, type ColumnMeta };

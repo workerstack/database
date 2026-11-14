@@ -16,7 +16,7 @@ const sortedBy = (field: string, direction: "asc" | "desc") => ({
 })
 
 /* B2-3, AB4-2 of area B: listOptions selects each SQLite key's stored value its mode reads as another, which paginate needs and strips */
-describe("queryHelpers.listOptions' _combTextKeys (B2-3 of area B; sibling: _combKeyTexts on every sort)", () => {
+describe("queryHelpers.listOptions' _cursorTextKeys (B2-3 of area B; sibling: _cursorKeyTexts on every sort)", () => {
 	const stamped = sqliteTable("stamped", {
 		at: integer("at", { mode: "timestamp" }),
 		id: integer("id").primaryKey(),
@@ -31,19 +31,19 @@ describe("queryHelpers.listOptions' _combTextKeys (B2-3 of area B; sibling: _com
 			{ limit: 1, validated: true, parsedSort: [...byAt.parsedSort, { direction: "asc", field: "n" }] },
 			SEALED,
 		)
-		expect(options.pagination.expects).toContain("_combTextKeys")
-		const texts = options.extras["_combTextKeys"]!
+		expect(options.pagination.expects).toContain("_cursorTextKeys")
+		const texts = options.extras["_cursorTextKeys"]!
 		expect(dialect.sqlToQuery(texts(getTableColumns(stamped))).sql).toMatch(
 			/^json_array\(case when .* then json_array\('text', "stamped"."at"\) .*, case when \(typeof\("stamped"."n"\) in \('null', 'integer', 'real'\)\) then null /,
 		)
 		const byData = queryHelpers.listOptions({ limit: 1, ...sortedBy("data", "asc") }, SEALED)
-		expect(dialect.sqlToQuery(byData.extras["_combTextKeys"]!(getTableColumns(stamped))).sql).toBe("''")
+		expect(dialect.sqlToQuery(byData.extras["_cursorTextKeys"]!(getTableColumns(stamped))).sql).toBe("''")
 	})
 
 	it("renders an empty text on Postgres, no json_array, a timestamp key included", () => {
 		const db = pgDrizzle.mock({ relations: defineRelations({ pgStamped }) })
 		const rendered = db.query.pgStamped.findMany(queryHelpers.listOptions(byAt, SEALED) as never).toSQL().sql
-		expect(rendered).toContain(`('') as "_combTextKeys"`)
+		expect(rendered).toContain(`('') as "_cursorTextKeys"`)
 		expect(rendered).not.toContain("json_array")
 	})
 
@@ -52,26 +52,26 @@ describe("queryHelpers.listOptions' _combTextKeys (B2-3 of area B; sibling: _com
 		const options = queryHelpers.listOptions(byAt, SEALED)
 		const db = pgDrizzle.mock({ relations: defineRelations({ pgStamped }) })
 		expect(db.query.pgStamped.findMany(options as never).toSQL().sql).toContain(
-			`(coalesce((to_json("d0"."at") #>> '{}'), '')) as "_combKeyTexts"`,
+			`(coalesce((to_json("d0"."at") #>> '{}'), '')) as "_cursorKeyTexts"`,
 		)
-		expect(dialect.sqlToQuery(options.extras["_combKeyTexts"]!(getTableColumns(stamped))).sql).toBe("''")
+		expect(dialect.sqlToQuery(options.extras["_cursorKeyTexts"]!(getTableColumns(stamped))).sql).toBe("''")
 	})
 
 	it("is stripped from the served rows, and a page whose rows lack it is a 500 page_not_wired naming it", () => {
 		const options = queryHelpers.listOptions(byAt, SEALED)
 		const row = {
-			_combId: 1,
-			_combKeyTexts: "",
-			_combTextKeys: '[["text","now"]]',
+			_cursorId: 1,
+			_cursorKeyTexts: "",
+			_cursorTextKeys: '[["text","now"]]',
 			_total: 1,
 			at: new Date(Number.NaN),
 			id: 1,
 		}
 		const [items] = queryHelpers.paginate([row], options)
 		expect(items).toEqual([{ at: row.at, id: 1 }])
-		const { _combTextKeys: _, ...lacking } = row
+		const { _cursorTextKeys: _, ...lacking } = row
 		expect(() => queryHelpers.paginate([lacking], options)).toThrow(
-			expect.objectContaining({ cause: expect.stringContaining("_combTextKeys"), errorKey: "page_not_wired" }),
+			expect.objectContaining({ cause: expect.stringContaining("_cursorTextKeys"), errorKey: "page_not_wired" }),
 		)
 	})
 })

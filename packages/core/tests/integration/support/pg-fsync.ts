@@ -13,5 +13,5 @@ export async function fsyncWarning(admin: {
 	const { rows } = await admin.query("SHOW fsync")
 	return rows[0]?.fsync === "off"
 		? undefined
-		: "[comb] the test server runs with fsync on: each DROP DATABASE waits on a checkpoint's fsync, and the Postgres suites run several times slower; set fsync = off (ALTER SYSTEM SET fsync = off; SELECT pg_reload_conf())"
+		: "[database] the test server runs with fsync on: each DROP DATABASE waits on a checkpoint's fsync, and the Postgres suites run several times slower; set fsync = off (ALTER SYSTEM SET fsync = off; SELECT pg_reload_conf())"
 }

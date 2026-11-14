@@ -8,13 +8,13 @@ const levels = (code: string, at: Parameters<typeof alterTableFindings>[1] = ctx
 
 /* SQLite's ALTER TABLE, read from its text; Postgres's is pg-ddl.ts's, from its parse tree (M70) */
 describe("alterTableFindings", () => {
-	/* SQLite refuses each at prepare; comb rates what it cannot read unsafe, never by the rules for other statements */
+	/* SQLite refuses each at prepare; database rates what it cannot read unsafe, never by the rules for other statements */
 	it.each(["ALTER TABLE users", "ALTER TABLE", "ALTER TABLE users*"])(
 		"rates %j, which it cannot read, unsafe",
 		(sql) => {
 			const rated = classifyMigration(`${sql};`, {})
 			expect(rated.unsafeStatements).toEqual([
-				`${sql} (comb does not recognize this ALTER TABLE; approve it in the file)`,
+				`${sql} (database does not recognize this ALTER TABLE; approve it in the file)`,
 			])
 		},
 	)
@@ -60,7 +60,7 @@ describe("classifyMigration on row level security (M15)", () => {
 		expect(classifyMigration(sql, { dialect: "postgres" }).safety).toBe("cautious")
 	})
 
-	/* a policy decides which rows the deployed code reads, and destroys none: comb does not read its predicate (M16) */
+	/* a policy decides which rows the deployed code reads, and destroys none: database does not read its predicate (M16) */
 	it.each(["CREATE POLICY p ON post USING (true)", "CREATE POLICY p ON post AS RESTRICTIVE USING (false)"])(
 		"rates %j cautious: what the deployed code reads changes",
 		(sql) => {
@@ -68,10 +68,10 @@ describe("classifyMigration on row level security (M15)", () => {
 		},
 	)
 
-	it("rates an ALTER TABLE action comb does not know unsafe, and names it", () => {
+	it("rates an ALTER TABLE action database does not know unsafe, and names it", () => {
 		const rated = classifyMigration("ALTER TABLE post INHERIT base", { dialect: "postgres" })
 		expect(rated.unsafeStatements).toEqual([
-			"ALTER TABLE post INHERIT base (comb does not recognize ALTER TABLE … INHERIT; approve it in the file)",
+			"ALTER TABLE post INHERIT base (database does not recognize ALTER TABLE … INHERIT; approve it in the file)",
 		])
 	})
 })

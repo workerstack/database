@@ -8,7 +8,7 @@ import { install, load, loadSync, resolve, resolveSync } from "./node-hooks.mjs"
 let dir: string
 
 beforeEach(() => {
-	dir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-node-hooks-"))
+	dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-node-hooks-"))
 	fs.mkdirSync(path.join(dir, "src/lib"), { recursive: true })
 	fs.writeFileSync(path.join(dir, "src/lib/enums.ts"), "export const STATES = ['a'] as const\n")
 	fs.writeFileSync(
@@ -96,7 +96,7 @@ describe("install", () => {
 })
 
 describe("loadSync: a TypeScript URL with a query", () => {
-	it("transpiles it as the file it names, as comb imports comb.config.ts with ?mtime=", () => {
+	it("transpiles it as the file it names, as database imports database.config.ts with ?mtime=", () => {
 		const url = `${pathToFileURL(path.join(dir, "src/lib/enums.ts")).href}?mtime=1`
 		const loaded = loadSync(url, {}, () => {
 			throw new Error("not called")

@@ -14,7 +14,7 @@ export const user = createTable("user", { id: c.id() })
 let tmpDir: string
 
 beforeEach(() => {
-	tmpDir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-gen-relations-"))
+	tmpDir = fs.mkdtempSync(path.join(fixtureRoot(), "database-gen-relations-"))
 })
 
 afterEach(() => {

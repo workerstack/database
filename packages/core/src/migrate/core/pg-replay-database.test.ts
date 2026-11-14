@@ -4,9 +4,9 @@ import { claim, copyExtensions, makeDatabase, replayUrl } from "./pg-replay-data
 
 describe("claim", () => {
 	it.each([
-		[130000, { application_name: "comb_replay 41_1793680844883080" }],
-		[140000, { application_name: "comb_replay 41_1793680844883080", client_connection_check_interval: "1s" }],
-		[170000, { application_name: "comb_replay 41_1793680844883080", client_connection_check_interval: "1s" }],
+		[130000, { application_name: "database_replay 41_1793680844883080" }],
+		[140000, { application_name: "database_replay 41_1793680844883080", client_connection_check_interval: "1s" }],
+		[170000, { application_name: "database_replay 41_1793680844883080", client_connection_check_interval: "1s" }],
 	])(
 		"names the backend by its pid and its start, and on server_version_num %i tags it with %j",
 		async (version, settings) => {
@@ -37,7 +37,7 @@ describe("makeDatabase", () => {
 	it("makes a database named for the backend that owns it, from template0 at the locale given", async () => {
 		const admin = fake()
 		const name = await makeDatabase(admin.sql, "41_1234", refusals)
-		expect(name).toMatch(/^comb_replay_41_1234_[0-9a-f]{8}$/)
+		expect(name).toMatch(/^database_replay_41_1234_[0-9a-f]{8}$/)
 		expect(admin.sent).toEqual([`CREATE DATABASE ${name} TEMPLATE template0 ${LOCALE}`])
 	})
 
@@ -142,12 +142,12 @@ describe("copyExtensions beside an extension the history makes", () => {
 
 describe("replayUrl", () => {
 	it("names the replay's database in the path, drops a dbname key, and keeps the scheme, authority and query", () => {
-		expect(replayUrl("postgresql://u:p%40@db:5433/app?sslmode=disable", "comb_replay_1")).toBe(
-			"postgresql://u:p%40@db:5433/comb_replay_1?sslmode=disable",
+		expect(replayUrl("postgresql://u:p%40@db:5433/app?sslmode=disable", "database_replay_1")).toBe(
+			"postgresql://u:p%40@db:5433/database_replay_1?sslmode=disable",
 		)
-		expect(replayUrl("postgres://u@%2Fsock?dbname=app&a=1", "comb_replay_1")).toBe(
-			"postgres://u@%2Fsock/comb_replay_1?a=1",
+		expect(replayUrl("postgres://u@%2Fsock?dbname=app&a=1", "database_replay_1")).toBe(
+			"postgres://u@%2Fsock/database_replay_1?a=1",
 		)
-		expect(replayUrl("postgres://db", "comb_replay_1")).toBe("postgres://db/comb_replay_1")
+		expect(replayUrl("postgres://db", "database_replay_1")).toBe("postgres://db/database_replay_1")
 	})
 })

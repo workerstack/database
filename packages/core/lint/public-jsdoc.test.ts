@@ -1,5 +1,5 @@
 /**
- * comb/public-jsdoc: every declaration a package's `exports` reach, and every member a consumer can see on it, carries
+ * database/public-jsdoc: every declaration a package's `exports` reach, and every member a consumer can see on it, carries
  * written JSDoc. In process over a package written to disk, because the rule reads the rest of the package from there,
  * and once through the real oxlint binary.
  */
@@ -30,14 +30,14 @@ function messages(code: string, extra: Record<string, string> = {}): string[] {
 	return reports({ "package.json": MANIFEST, "src/index.ts": code, ...extra }).map((report) => report.message)
 }
 
-describe("comb/public-jsdoc: through oxlint", () => {
-	it("reports an undocumented export function through the comb plugin", () => {
+describe("database/public-jsdoc: through oxlint", () => {
+	it("reports an undocumented export function through the database plugin", () => {
 		const fixture = { "package.json": MANIFEST, "src/index.ts": "export function f(): void {}\n" }
 		expect(oxlintReports("public-jsdoc", fixture)).toEqual([{ file: "src/index.ts", message: missing("f") }])
 	})
 })
 
-describe("comb/public-jsdoc: what needs a doc", () => {
+describe("database/public-jsdoc: what needs a doc", () => {
 	it.each([
 		["a function", "export function f(): void {}\n", ["f"]],
 		["a class", "export class C {}\n", ["C"]],
@@ -97,7 +97,7 @@ describe("comb/public-jsdoc: what needs a doc", () => {
 	})
 })
 
-describe("comb/public-jsdoc: where a report lands", () => {
+describe("database/public-jsdoc: where a report lands", () => {
 	it("finds a re-exported declaration and an unexported reachable type where they are defined", () => {
 		const fixture = {
 			"package.json": MANIFEST,
@@ -120,7 +120,7 @@ describe("comb/public-jsdoc: where a report lands", () => {
 	})
 })
 
-describe("comb/public-jsdoc: what passes", () => {
+describe("database/public-jsdoc: what passes", () => {
 	it.each([
 		["a documented function", "/** Runs it. */\nexport function f(): void {}\n"],
 		["a documented constant", "/** How many fit. */\nexport const c = 1\n"],
@@ -171,7 +171,7 @@ describe("comb/public-jsdoc: what passes", () => {
 	})
 })
 
-describe("comb/public-jsdoc: what it stays out of", () => {
+describe("database/public-jsdoc: what it stays out of", () => {
 	it.each([
 		["a plain string export", '{"exports":{".":"./src/index.ts"}}'],
 		["a default outside ./src/", '{"exports":{".":{"default":"./dist/index.js"}}}'],
@@ -185,7 +185,7 @@ describe("comb/public-jsdoc: what it stays out of", () => {
 	})
 })
 
-describe("comb/public-jsdoc: docs that say nothing", () => {
+describe("database/public-jsdoc: docs that say nothing", () => {
 	it("rejects an empty doc", () => {
 		expect(messages("/** */\nexport const size = 1\n")).toEqual([empty("size")])
 	})
@@ -225,7 +225,7 @@ describe("comb/public-jsdoc: docs that say nothing", () => {
 	})
 })
 
-describe("comb/public-jsdoc: internal references", () => {
+describe("database/public-jsdoc: internal references", () => {
 	it.each([
 		["a review round", "/** The size, fixed in r22. */\nexport const size = 1\n"],
 		["a lettered review round", "/** The size r22b settled. */\nexport const size = 1\n"],
@@ -257,7 +257,7 @@ describe("comb/public-jsdoc: internal references", () => {
 		["a numbered round", "/** The size, settled in round 4. */\nexport const size = 1\n"],
 		["an area's review", "/** The size the area D review asked for. */\nexport const size = 1\n"],
 		["an area", "/** The size area B chose. */\nexport const size = 1\n"],
-		["a session", "/** The size comb-9d ruled on. */\nexport const size = 1\n"],
+		["a session", "/** The size database-9d ruled on. */\nexport const size = 1\n"],
 		["a scratch log", "/** The size, probed in .tmp/grunt/size.log. */\nexport const size = 1\n"],
 	])("rejects %s", (_, code) => {
 		expect(messages(code)).toEqual([internal("size")])
@@ -279,13 +279,13 @@ describe("comb/public-jsdoc: internal references", () => {
 		["an id-shaped name in a code span", "/** The size `pa1` holds. */\nexport const size = 1\n"],
 		["an id-shaped path segment", "/** The size sl3/probe.ts and qe8-shape.ts read. */\nexport const size = 1\n"],
 		["a round trip", "/** The size, kept over a round trip, round to 4 places. */\nexport const size = 1\n"],
-		["a key named after comb", "/** The size `x-comb-text` and x-comb-text name. */\nexport const size = 1\n"],
+		["a database key", "/** The size `x-database-text` and x-database-text name. */\nexport const size = 1\n"],
 	])("accepts %s", (_, code) => {
 		expect(messages(code)).toEqual([])
 	})
 })
 
-describe("comb/public-jsdoc: inferred shapes", () => {
+describe("database/public-jsdoc: inferred shapes", () => {
 	it.each([
 		["a function's return", "/** Runs. */\nexport function f() { return { a: 1 } }\n", "f"],
 		[
@@ -329,14 +329,14 @@ describe("comb/public-jsdoc: inferred shapes", () => {
 	})
 })
 
-describe("comb/public-jsdoc: failing closed", () => {
+describe("database/public-jsdoc: failing closed", () => {
 	it("reports a form the surface cannot follow, on the file that has it", () => {
 		const fixture = { "package.json": MANIFEST, "src/index.ts": "export namespace N { export const a = 1 }\n" }
 		expect(reports(fixture)).toEqual([
 			{
 				file: "src/index.ts",
 				message:
-					"comb/public-jsdoc cannot follow TSModuleDeclaration here, so what it exposes goes unchecked: write it as a plain export",
+					"database/public-jsdoc cannot follow TSModuleDeclaration here, so what it exposes goes unchecked: write it as a plain export",
 			},
 		])
 	})
@@ -385,12 +385,12 @@ describe("comb/public-jsdoc: failing closed", () => {
 			{ file: "src/a.ts", form: "./m.ts" },
 		],
 	])("reports %s, once, on the file that has it", (_, files, { file, form }) => {
-		const message = `comb/public-jsdoc cannot follow ${form} here, so what it exposes goes unchecked: write it as a plain export`
+		const message = `database/public-jsdoc cannot follow ${form} here, so what it exposes goes unchecked: write it as a plain export`
 		expect(reports({ "package.json": MANIFEST, ...files })).toEqual([{ file, message }])
 	})
 })
 
-describe("comb/public-jsdoc: the entries it checks", () => {
+describe("database/public-jsdoc: the entries it checks", () => {
 	const TWO = JSON.stringify({
 		exports: {
 			".": { "types@>=5.7": "./types/index.d.ts", default: "./src/index.ts" },

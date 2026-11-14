@@ -1,6 +1,6 @@
 /**
- * The bin peers comb spawns, wrangler and drizzle-kit, in a Bun workspace from the packed tarball:
- * comb checks, reads and runs the one package the project holds, from the working folder up, on the
+ * The bin peers database spawns, wrangler and drizzle-kit, in a Bun workspace from the packed tarball:
+ * database checks, reads and runs the one package the project holds, from the working folder up, on the
  * runtime it keeps for each, and never one on PATH (K1 and K3 of r22).
  */
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
@@ -16,19 +16,19 @@ beforeAll(() => {
 afterAll(() => rmSync(dirname(tarball), { force: true, recursive: true }))
 
 /*
- * K1 of r22: 0.20.1 checked the wrangler comb's own import resolved and spawned the one on PATH, so
- * in a workspace the check spoke for another package than the one that ran. Bun workspaces, comb
+ * K1 of r22: 0.20.1 checked the wrangler database's own import resolved and spawned the one on PATH, so
+ * in a workspace the check spoke for another package than the one that ran. Bun workspaces, database
  * hoisted to the root, each bin peer at one version in the root and another in the workspace `db`.
  * Every peer is a fake whose bin logs its version, the runtime it runs on and its argv as JSON (one line a
  * call, though a --command holds several statements a line each), and exits 1;
  * wrangler's module logs the config read, and the platform proxy the D1 proof starts, which fails,
  * with the runtime that starts it (bun says process.release.name is node)
  */
-describe("comb runs the bin it checked (K1; sibling: drizzle-kit's resolution)", () => {
+describe("database runs the bin it checked (K1; sibling: drizzle-kit's resolution)", () => {
 	const IN = { "drizzle-kit": "1.0.0-rc.5", wrangler: "4.150.0" } as const
 	const OUT = { "drizzle-kit": "0.31.0", wrangler: "3.99.0" } as const
 	type BinPeer = keyof typeof IN
-	/** A fake `peer` at `version`, its bin where its package.json says, not where comb would guess */
+	/** A fake `peer` at `version`, its bin where its package.json says, not where database would guess */
 	const fake = (peer: BinPeer, version: string): Record<string, string> => {
 		const log = `require("node:fs").appendFileSync(process.cwd() + "/ran.log", ${JSON.stringify(`${peer} ${version} `)} + `
 		return {
@@ -51,7 +51,7 @@ exports.getPlatformProxy = async () => {
 	}
 	const DB = {
 		/* local: the same database as wrangler keeps it locally, where none is yet: apply reads no history and goes to the proof */
-		"comb.migrate.config.ts": `export default { databases: { core: { migrationsDir: "m", name: "core", provider: { type: "d1", databaseName: "core" } }, local: { migrationsDir: "m", name: "local", provider: { type: "d1", databaseName: "core", local: true } } } }\n`,
+		"database.migrate.config.ts": `export default { databases: { core: { migrationsDir: "m", name: "core", provider: { type: "d1", databaseName: "core" } }, local: { migrationsDir: "m", name: "local", provider: { type: "d1", databaseName: "core", local: true } } } }\n`,
 		"drizzle.config.ts": `export default { dialect: "sqlite", out: "./m", schema: "./post.tables.ts" }\n`,
 		"m/20260101000000_init.sql": "CREATE TABLE a (id integer);\n",
 		/* the sum atlas migrate hash writes for it, which apply checks before the proof */
@@ -74,15 +74,15 @@ export const post = sqliteTable("post", { id: c.id("id", { prefix: "post" }) })
 			name: "w",
 		}),
 	}
-	const COMB = join("..", ["node_", "modules"].join(""), "@workerstack/database/src/bin.ts")
-	/* each command under bun (comb's own shebang) and under node (through tsx), as a package script runs it */
+	const DATABASE = join("..", ["node_", "modules"].join(""), "@workerstack/database/src/bin.ts")
+	/* each command under bun (database's own shebang) and under node (through tsx), as a package script runs it */
 	const SCRIPTS = {
-		"apply:bun": "comb migrate apply local --yes",
-		"apply:node": `tsx ${COMB} migrate apply local --yes`,
-		"diff:bun": "comb migrate diff core --dry-run",
-		"diff:node": `tsx ${COMB} migrate diff core --dry-run`,
-		"status:bun": "comb migrate status core",
-		"status:node": `tsx ${COMB} migrate status core`,
+		"apply:bun": "database migrate apply local --yes",
+		"apply:node": `tsx ${DATABASE} migrate apply local --yes`,
+		"diff:bun": "database migrate diff core --dry-run",
+		"diff:node": `tsx ${DATABASE} migrate diff core --dry-run`,
+		"status:bun": "database migrate status core",
+		"status:node": `tsx ${DATABASE} migrate status core`,
 	}
 	const dirs: string[] = []
 	afterAll(() => {
@@ -98,7 +98,7 @@ export const post = sqliteTable("post", { id: c.id("id", { prefix: "post" }) })
 
 	/** A workspace root with `root`'s peers and a workspace `db` with `db`'s, each a fake; none when undefined */
 	const workspace = (root: Record<string, string> | undefined, db: Record<string, string> | undefined): string => {
-		const dir = mkdtempSync(join(tmpdir(), "comb-consumer-bins-"))
+		const dir = mkdtempSync(join(tmpdir(), "database-consumer-bins-"))
 		dirs.push(dir)
 		const deps = (peers: Record<string, string> | undefined, at: string) =>
 			Object.fromEntries(
@@ -140,11 +140,11 @@ export const post = sqliteTable("post", { id: c.id("id", { prefix: "post" }) })
 		return { ran, result }
 	}
 
-	/* the peer each command spawns, and the runtime it keeps from 0.20.1: wrangler node whatever runs comb, and
-	   drizzle-kit the runtime running comb, as `bun drizzle-kit` followed its node shebang there (AD5 of the area D review) */
-	const SPAWNS = (["bun", "node"] as const).flatMap((comb) => [
-		{ comb, command: "status", peer: "wrangler", runtime: "node" } as const,
-		{ comb, command: "diff", peer: "drizzle-kit", runtime: comb } as const,
+	/* the peer each command spawns, and the runtime it keeps from 0.20.1: wrangler node whatever runs database, and
+	   drizzle-kit the runtime running database, as `bun drizzle-kit` followed its node shebang there (AD5 of the area D review) */
+	const SPAWNS = (["bun", "node"] as const).flatMap((database) => [
+		{ database, command: "status", peer: "wrangler", runtime: "node" } as const,
+		{ database, command: "diff", peer: "drizzle-kit", runtime: database } as const,
 	])
 
 	describe("the workspace's own peer in range, the root's out of it", () => {
@@ -154,11 +154,11 @@ export const post = sqliteTable("post", { id: c.id("id", { prefix: "post" }) })
 		})
 
 		it.each(SPAWNS)(
-			"a check that passes runs the $peer it checked on $runtime ($command, comb on $comb)",
-			({ comb, command, peer, runtime }) => {
-				const { ran, result } = script(db, `${command}:${comb}`)
+			"a check that passes runs the $peer it checked on $runtime ($command, database on $database)",
+			({ database, command, peer, runtime }) => {
+				const { ran, result } = script(db, `${command}:${database}`)
 				expect(result.output).toContain(`fake ${peer} ${IN[peer]}`)
-				expect(result.output).not.toContain("comb needs")
+				expect(result.output).not.toContain("database needs")
 				expect(ran.length).toBeGreaterThan(0)
 				for (const line of ran) expect(line.startsWith(`${peer} ${IN[peer]} `), line).toBe(true)
 				const spawned = ran.filter((line) => !line.endsWith(" readConfig"))
@@ -170,7 +170,7 @@ export const post = sqliteTable("post", { id: c.id("id", { prefix: "post" }) })
 
 	/*
 	 * AD6 of the area D review: the D1 proof starts the platform proxy of the wrangler the command
-	 * checked, the third use of the one package K1 names, never the one comb's own import resolves
+	 * checked, the third use of the one package K1 names, never the one database's own import resolves
 	 */
 	describe("the D1 proof's wrangler (AD6)", () => {
 		let db: string
@@ -178,16 +178,19 @@ export const post = sqliteTable("post", { id: c.id("id", { prefix: "post" }) })
 			db = workspace(OUT, IN)
 		})
 
-		it.each(["bun", "node"] as const)("starts the proxy of the wrangler it checked, on node (comb on %s)", (comb) => {
-			const { ran, result } = script(db, `apply:${comb}`)
-			/* the version on each line, and node starting the proxy under either comb: SD1r of r22 proves in a node child, as
+		it.each(["bun", "node"] as const)(
+			"starts the proxy of the wrangler it checked, on node (database on %s)",
+			(database) => {
+				const { ran, result } = script(db, `apply:${database}`)
+				/* the version on each line, and node starting the proxy under either database: SD1r of r22 proves in a node child, as
 			   wrangler's apply runs Miniflare on node */
-			expect(result.status).not.toBe(0)
-			const proxies = ran.filter((line) => line.includes(" getPlatformProxy "))
-			expect(proxies, `${result.output}\n${ran.join("\n")}`).toHaveLength(1)
-			expect(proxies[0]?.split(" ").at(-1)).toBe("node")
-			for (const line of ran) expect(line.startsWith(`wrangler ${IN.wrangler} `), line).toBe(true)
-		})
+				expect(result.status).not.toBe(0)
+				const proxies = ran.filter((line) => line.includes(" getPlatformProxy "))
+				expect(proxies, `${result.output}\n${ran.join("\n")}`).toHaveLength(1)
+				expect(proxies[0]?.split(" ").at(-1)).toBe("node")
+				for (const line of ran) expect(line.startsWith(`wrangler ${IN.wrangler} `), line).toBe(true)
+			},
+		)
 	})
 
 	describe("the root's peer in range, the workspace's own out of it", () => {
@@ -196,15 +199,18 @@ export const post = sqliteTable("post", { id: c.id("id", { prefix: "post" }) })
 			db = workspace(IN, OUT)
 		})
 
-		it.each(SPAWNS)("a refusal names the $peer comb would run ($command, comb on $comb)", ({ comb, command, peer }) => {
-			const { ran, result } = script(db, `${command}:${comb}`)
-			expect(result.status).not.toBe(0)
-			expect(result.output).toContain(`comb needs ${peer} (${peerRange(peer)}, found ${OUT[peer]}) to `)
-			expect(ran).toEqual([])
-		})
+		it.each(SPAWNS)(
+			"a refusal names the $peer database would run ($command, database on $database)",
+			({ database, command, peer }) => {
+				const { ran, result } = script(db, `${command}:${database}`)
+				expect(result.status).not.toBe(0)
+				expect(result.output).toContain(`database needs ${peer} (${peerRange(peer)}, found ${OUT[peer]}) to `)
+				expect(ran).toEqual([])
+			},
+		)
 	})
 
-	/* K3 of r22: comb reads no PATH, so the refusal sends no one to put node_modules/.bin on it */
+	/* K3 of r22: database reads no PATH, so the refusal sends no one to put node_modules/.bin on it */
 	it("refuses a wrangler only on PATH with the range and the install alone (K3)", () => {
 		const db = workspace(undefined, undefined)
 		const bin = join(db, "global-bin")
@@ -213,7 +219,7 @@ export const post = sqliteTable("post", { id: c.id("id", { prefix: "post" }) })
 		const { ran, result } = script(db, "status:bun", bin)
 		expect(result.status).not.toBe(0)
 		expect(result.output).toContain(
-			`comb needs wrangler (${peerRange("wrangler")}) to migrate a D1 database; install "wrangler@${peerRange("wrangler")}"`,
+			`database needs wrangler (${peerRange("wrangler")}) to migrate a D1 database; install "wrangler@${peerRange("wrangler")}"`,
 		)
 		expect(result.output).not.toContain("PATH")
 		expect(ran).toEqual([])

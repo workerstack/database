@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { generateOrm } from "./orm.ts"
 import { testContext } from "./__fixtures__/context.ts"
 
-/* Generated clients must compile against the drizzle-orm comb ships with — a
+/* Generated clients must compile against the drizzle-orm database ships with — a
    string assertion can't catch a config key drizzle dropped. The scratch dir
    sits inside the package so drizzle-orm and @libsql/client resolve. One
    program covers every driver; a program per driver is several seconds on CI. */

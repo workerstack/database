@@ -3,11 +3,11 @@
  * word: the functions, triggers, views, sequences, policies, types, rules,
  * collations, extensions and row level security of the target schema, read from the catalog by one
  * query, readCatalog, on the target and on the history's replay on dev (pg-replay.ts), and
- * set against each other. Their bodies are compared by neither: Atlas OSS cannot load them, and comb
+ * set against each other. Their bodies are compared by neither: Atlas OSS cannot load them, and database
  * does not read them.
  *
- * comb has no Postgres client of its own; these reads take postgres.js, an optional peer, loaded
- * only here. Its specifier is a variable, so a project without it still compiles comb's source.
+ * database has no Postgres client of its own; these reads take postgres.js, an optional peer, loaded
+ * only here. Its specifier is a variable, so a project without it still compiles database's source.
  */
 import { systemCas } from "./pg-system-ca.ts"
 import { postgresOptionsOf, queryParams } from "./pg-url.ts"
@@ -17,14 +17,14 @@ import type { LiveObjects, LiveTarget } from "./pg-live-types.ts"
 import { pastStop } from "./cleanup.ts"
 import { optionalPeer } from "./optional-peer.ts"
 
-/** The postgres.js client, as far as comb uses it */
+/** The postgres.js client, as far as database uses it */
 type Sql = {
 	end(options?: { timeout?: number | undefined }): Promise<void>
 	unsafe(query: string, params: unknown[]): Promise<Array<Record<string, unknown>>>
 }
 type Connect = (options: Record<string, unknown>) => Sql
 
-/* the optional peer, named by a string so a consumer without it still type-checks comb */
+/* the optional peer, named by a string so a consumer without it still type-checks database */
 const PEER: string = "postgres"
 
 // lookup-table: the codes Node gives a server certificate no trusted CA vouches for
@@ -36,14 +36,14 @@ const UNVERIFIED: ReadonlySet<unknown> = /* @__PURE__ */ new Set([
 	"UNABLE_TO_VERIFY_LEAF_SIGNATURE",
 ])
 
-/** Where a postgres.js failure came from: the field whose URL comb connected to, and every URL whose secrets it may hold */
+/** Where a postgres.js failure came from: the field whose URL database connected to, and every URL whose secrets it may hold */
 type FailedAt = { field: "devUrl" | "url"; url: string; urls: readonly string[] }
 
 /**
  * What a postgres.js failure on `at.field` says: its message, or, for the AggregateError it throws
  * with none when every address refuses, each address's answer joined, each
- * secret of `at.urls` masked; for a server sslrootcert=system cannot verify, where comb's CAs came from.
- * comb's own words follow the mask, so a password that is one of them stays out of them
+ * secret of `at.urls` masked; for a server sslrootcert=system cannot verify, where database's CAs came from.
+ * database's own words follow the mask, so a password that is one of them stays out of them
  */
 function failureOf(error: unknown, at: FailedAt): string {
 	const { code, errors, message } = error as { code?: unknown; errors?: unknown; message?: unknown }
@@ -55,10 +55,10 @@ function failureOf(error: unknown, at: FailedAt): string {
 				: ""
 	const said = maskSecrets(raw, at.urls)
 	if (UNVERIFIED.has(code) && queryParams(at.url).get("sslrootcert") === "system")
-		return `${said}; comb verified the server against ${systemCas().source}`
-	/* A server without TLS ends the handshake comb's require starts */
+		return `${said}; database verified the server against ${systemCas().source}`
+	/* A server without TLS ends the handshake database's require starts */
 	if (!raw.includes("before secure TLS connection was established")) return said
-	return `${said}: the server takes no TLS, which comb and Atlas require where ${at.field} names no sslmode; set sslmode=disable on ${at.field} for a server without TLS`
+	return `${said}: the server takes no TLS, which database and Atlas require where ${at.field} names no sslmode; set sslmode=disable on ${at.field} for a server without TLS`
 }
 
 /**
@@ -79,7 +79,7 @@ function pastStops(connect: Connect): Connect {
 	}
 }
 
-/** postgres.js, every query past a stop (pastStops), or the refusal naming it, its range and `why` comb needs it here */
+/** postgres.js, every query past a stop (pastStops), or the refusal naming it, its range and `why` database needs it here */
 async function loadPostgres(why: string): Promise<Connect> {
 	return pastStops(
 		(await optionalPeer({ peer: "postgres", why }, async () => (await import(PEER)) as { default: Connect })).default,
@@ -157,7 +157,7 @@ async function readLiveObjects(
 		return await readCatalog(sql, target.schema)
 	} catch (error) {
 		throw new Error(
-			`comb could not read the database's ${COMPARED}: ${failureOf(error, { field: "url", url: target.url, urls: [target.url] })}`,
+			`database could not read the database's ${COMPARED}: ${failureOf(error, { field: "url", url: target.url, urls: [target.url] })}`,
 			{
 				cause: error,
 			},
@@ -184,7 +184,7 @@ function fires({ enabled, type }: { enabled: boolean; type: number }): string {
 
 /**
  * Each trigger's label, by name, table and how it fires; each view, sequence, policy, type, rule and
- * table's row level security, by what it is, its name, and its settings where comb compares them
+ * table's row level security, by what it is, its name, and its settings where database compares them
  */
 function labels(live: LiveObjects): { objects: Set<string>; triggers: Set<string> } {
 	const out = { objects: new Set<string>(), triggers: new Set<string>() }

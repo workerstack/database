@@ -5,7 +5,7 @@ import type { SchemaType, SharedName } from "./dto-types.ts"
 
 /**
  * A builder's answer: the Zod base, whether it takes null itself (a read float, a written c.json's
- * union), so a nullable column adds no second null, the field's `x-comb-*` keys, which finish
+ * union), so a nullable column adds no second null, the field's `x-database-*` keys, which finish
  * writes on the property's own schema, beside the anyOf of a nullable one, the
  * shared schemas its code names, which the entity file imports, and the keys a nullable
  * states beside its anyOf alone, its member stating them otherwise: a nullable array's element keys

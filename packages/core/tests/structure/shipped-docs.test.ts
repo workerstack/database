@@ -1,5 +1,5 @@
 /**
- * C4 of r22: a rule comb removed is gone from every text the package ships, the dated upgrade notes
+ * C4 of r22: a rule database removed is gone from every text the package ships, the dated upgrade notes
  * aside, which record it as history. 0.20.0 held a password column to its hash and dropped the
  * plaintext rule (8 to 72 printable ASCII characters, bcrypt's limit), yet meta-contract §8 still
  * described the manifest that rule wrote.

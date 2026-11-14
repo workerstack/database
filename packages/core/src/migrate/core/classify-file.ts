@@ -4,7 +4,7 @@
  * file creates again and rebuilds is known to lose nothing when it is dropped, and an FTS5 command
  * that removes indexed rows is unsafe.
  */
-import type { Dialect } from "../types.ts"
+import type { MigrateDialect } from "../types.ts"
 import type { Finding } from "./classify-alter.ts"
 import { INSERT_INTO } from "./classify-sqlite-write.ts"
 import { atlasHeader, outsideTransaction } from "./atlas-header.ts"
@@ -36,7 +36,7 @@ const KEEPS_ROWS =
 
 /**
  * An FTS5 command, an insert into the table's own hidden column, that removes indexed rows
- * ('delete', 'delete-all') or whose command comb cannot read is unsafe. SQLite runs it as an
+ * ('delete', 'delete-all') or whose command database cannot read is unsafe. SQLite runs it as an
  * insert, so the proof's engine pass sees no deletion; the command is its value.
  */
 function ftsCommandFindings(stmt: string): Finding[] {
@@ -45,7 +45,7 @@ function ftsCommandFindings(stmt: string): Finding[] {
 	if (into === undefined || nameKey(into, "sqlite") !== nameKey(column as string, "sqlite") || KEEPS_ROWS.test(sql))
 		return []
 	return [
-		{ level: "unsafe", note: `runs an FTS5 command on ${into} that removes indexed rows, or one comb cannot read` },
+		{ level: "unsafe", note: `runs an FTS5 command on ${into} that removes indexed rows, or one database cannot read` },
 	]
 }
 
@@ -86,12 +86,12 @@ type ReadStatement = {
 	code: string
 	/** on Postgres, the BEGIN, COMMIT, ROLLBACK or PREPARE TRANSACTION the statement is */
 	control?: string | undefined
-	dialect: Dialect
+	dialect: MigrateDialect
 	inside?: string | undefined
 	/** on Postgres, the line, from 1, the statement starts on in its file */
 	line?: number | undefined
 	outside?: string | undefined
-	/** on Postgres, why Postgres refuses the statement in any file, with comb's route */
+	/** on Postgres, why Postgres refuses the statement in any file, with database's route */
 	refused?: string | undefined
 	stmt: string
 	tree?: unknown
@@ -101,29 +101,29 @@ type ReadStatement = {
 const SQLITE_TRANSACTION = /^(?:BEGIN|COMMIT|END|START TRANSACTION)\b|^ROLLBACK(?: TRANSACTION)?$/i
 
 /**
- * The pragmas SQLite refuses inside the transaction comb runs each file in, on every SQLite target
+ * The pragmas SQLite refuses inside the transaction database runs each file in, on every SQLite target
  * (bun:sqlite and libsql): which forms, and why
  */
 const IN_TRANSACTION: Readonly<Record<string, { refuses: (pragma: Pragma) => boolean; why: string }>> = {
 	journal_mode: {
 		refuses: () => true,
-		why: "journal_mode is the database's setting, and SQLite will not change it inside the transaction comb runs each file in; set it outside the migrations",
+		why: "journal_mode is the database's setting, and SQLite will not change it inside the transaction database runs each file in; set it outside the migrations",
 	},
 	locking_mode: {
 		refuses: ({ value }) => value !== undefined,
-		why: "locking_mode EXCLUSIVE keeps the connection's lock on the database past the COMMIT of the transaction comb runs each file in, so the next file, comb's history and every other connection are locked out, and NORMAL changes nothing until then; leave it out of the migrations",
+		why: "locking_mode EXCLUSIVE keeps the connection's lock on the database past the COMMIT of the transaction database runs each file in, so the next file, database's history and every other connection are locked out, and NORMAL changes nothing until then; leave it out of the migrations",
 	},
 	query_only: {
 		refuses: ({ value }) => value !== undefined,
-		why: "query_only on makes the database read-only inside the transaction comb runs each file in, so the rest of the file and its history row fail, and off does nothing on a connection comb opens; leave it out of the migrations",
+		why: "query_only on makes the database read-only inside the transaction database runs each file in, so the rest of the file and its history row fail, and off does nothing on a connection database opens; leave it out of the migrations",
 	},
 	synchronous: {
 		refuses: ({ value }) => value !== undefined,
-		why: "SQLite will not change the safety level inside the transaction comb runs each file in; set synchronous on the connection",
+		why: "SQLite will not change the safety level inside the transaction database runs each file in; set synchronous on the connection",
 	},
 	wal_checkpoint: {
 		refuses: () => true,
-		why: "a checkpoint cannot run inside the transaction comb runs each file in (libsql refuses it as locked); run it outside the migrations",
+		why: "a checkpoint cannot run inside the transaction database runs each file in (libsql refuses it as locked); run it outside the migrations",
 	},
 }
 
@@ -153,7 +153,7 @@ function pragmaRefusal(pragma: Pragma): string | undefined {
 }
 
 /**
- * Refuses a statement that cannot run in its file `sql` on its target, of `kind`: no `-- comb:allow-unsafe:`
+ * Refuses a statement that cannot run in its file `sql` on its target, of `kind`: no `-- database:allow-unsafe:`
  * overrides this
  */
 function refuseUnrunnable(
@@ -175,7 +175,7 @@ function refuseUnrunnable(
 	   later failure leaves what ran before it committed with no history row, to run again */
 	if (dialect === "sqlite" && SQLITE_TRANSACTION.test(code)) {
 		throw new Error(
-			`${preview(stmt)}: comb runs each file in a transaction of its own; remove the file's BEGIN, COMMIT, END and ROLLBACK (a SAVEPOINT nests inside it)`,
+			`${preview(stmt)}: database runs each file in a transaction of its own; remove the file's BEGIN, COMMIT, END and ROLLBACK (a SAVEPOINT nests inside it)`,
 		)
 	}
 	refuseOutOfScope({ control, inside, outside, refused, stmt }, outsideTransaction(sql))
@@ -252,9 +252,9 @@ function refuseOpenBlock(reads: readonly ReadStatement[], sql: string): void {
 
 /**
  * Refuses a Postgres file whose header's txmode Atlas refuses, quoting Atlas: apply
- * would stop at it before it runs a statement; no `-- comb:allow-unsafe:` overrides this
+ * would stop at it before it runs a statement; no `-- database:allow-unsafe:` overrides this
  */
-function refuseHeader(sql: string, dialect: Dialect): void {
+function refuseHeader(sql: string, dialect: MigrateDialect): void {
 	const { txmode } = atlasHeader(sql)
 	if (dialect !== "postgres" || typeof txmode === "string") return
 	throw new Error(

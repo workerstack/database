@@ -237,6 +237,6 @@ export function generateOrm(ctx: GeneratorContext, config: OrmConfig): void {
 		schemaImport: `${dbIdentifiers(dbName).camel}DbSchema`,
 		tablesImport,
 	}
-	writeGenFile(outputPath, render(names), { generator: "comb", staged: ctx.staged })
+	writeGenFile(outputPath, render(names), { generator: "database", staged: ctx.staged })
 	ctx.log(`Generated ORM client: ${outputPath}`)
 }

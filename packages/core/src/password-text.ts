@@ -41,9 +41,9 @@ function refuseBound(name: "max" | "min", bound: number, floor: number): void {
 /**
  * The schema of a password of `min` (0 for none) to `max` characters, under `hash`. zod counts a
  * length by code point and runs the NFC overwrite before its checks, so its own min and max bind the
- * NFC form, give the too_small and too_big issues every comb length gives, and publish themselves;
- * the rewrite is published as the `nfc` transform, and bcrypt's bytes as `x-comb-maxUtf8Bytes`, the
- * string's own bytes, never `x-comb-maxBytes`, which bounds a value's JSON text
+ * NFC form, give the too_small and too_big issues every database length gives, and publish themselves;
+ * the rewrite is published as the `nfc` transform, and bcrypt's bytes as `x-database-maxUtf8Bytes`, the
+ * string's own bytes, never `x-database-maxBytes`, which bounds a value's JSON text
  */
 function password(min: number, max: number, hash: PasswordHash | undefined): z.ZodString {
 	const bcrypt = hash === "bcrypt"
@@ -65,9 +65,9 @@ function password(min: number, max: number, hash: PasswordHash | undefined): z.Z
 			})
 		: schema
 	return bounded.meta({
-		"x-comb-text": STORABLE_TEXT_RULE,
-		"x-comb-transform": ["nfc"],
-		...(bcrypt ? { "x-comb-maxUtf8Bytes": BCRYPT_BYTES } : {}),
+		"x-database-text": STORABLE_TEXT_RULE,
+		"x-database-transform": ["nfc"],
+		...(bcrypt ? { "x-database-maxUtf8Bytes": BCRYPT_BYTES } : {}),
 	})
 }
 

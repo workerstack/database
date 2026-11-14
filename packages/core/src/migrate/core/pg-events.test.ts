@@ -96,7 +96,7 @@ describe("eventFindings: the event triggers a statement fires", () => {
 		expect(findings(SQL_DROP, "DROP EVENT TRIGGER x")).toEqual([])
 	})
 
-	it("fires a tag-filtered trigger on DDL comb cannot tag, and nothing on an empty statement", () => {
+	it("fires a tag-filtered trigger on DDL database cannot tag, and nothing on an empty statement", () => {
 		const tagged = "CREATE EVENT TRIGGER e ON ddl_command_end WHEN TAG IN ('CREATE TABLE') EXECUTE FUNCTION f();"
 		expect(findings(tagged, "CREATE PUBLICATION p FOR ALL TABLES")).toHaveLength(1)
 		expect(findings(tagged, "-- nothing")).toEqual([])
@@ -107,7 +107,7 @@ describe("eventFindings: the event triggers a statement fires", () => {
 	it("ignores an ALTER or a rename of a trigger the history never made", () => {
 		const history = `${SQL_DROP} ALTER EVENT TRIGGER x DISABLE; ALTER EVENT TRIGGER x RENAME TO y;`
 		expect(findings(history, "DROP TABLE t")).toEqual([
-			{ level: "unsafe", note: "runs event trigger e, whose function comb does not read" },
+			{ level: "unsafe", note: "runs event trigger e, whose function database does not read" },
 		])
 	})
 })

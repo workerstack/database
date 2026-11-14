@@ -111,7 +111,7 @@ describe("control characters in user text (S-M9)", () => {
 	})
 })
 
-/* a table whose key is a text id, as comb's c.id() makes it, joined to another, and indexed by rowid */
+/* a table whose key is a text id, as database's c.id() makes it, joined to another, and indexed by rowid */
 const note = sqliteTable("note", { author: text("author"), id: text("id").primaryKey(), title: text("title") })
 const author = sqliteTable("author", { id: text("id").primaryKey(), name: text("name") })
 

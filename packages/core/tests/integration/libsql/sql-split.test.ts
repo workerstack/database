@@ -1,5 +1,5 @@
 /**
- * SL2 of r22: comb's split of a SQLite file, applied through each driver, leaves what SQLite leaves
+ * SL2 of r22: database's split of a SQLite file, applied through each driver, leaves what SQLite leaves
  * when it runs the file whole. bun:sqlite's statement (Node's here) and libsql's client run the
  * first statement of a string alone, so a statement folded into a trigger's is lost there, and a
  * trigger cut in two fails everywhere; libsql's file apply runs a string whole.
@@ -16,7 +16,7 @@ import { createBunSqliteProvider, createLibsqlProvider } from "../../../src/migr
 
 vi.mock("bun:sqlite", () => import("../../../src/migrate/__fixtures__/bun-sqlite-node.ts"))
 
-const DIR = fs.mkdtempSync(path.join(os.tmpdir(), "comb-sql-split-"))
+const DIR = fs.mkdtempSync(path.join(os.tmpdir(), "database-sql-split-"))
 afterAll(() => fs.rmSync(DIR, { force: true, recursive: true }))
 
 /** How each driver applies a file's statements to the database at `file`, in one transaction */

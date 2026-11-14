@@ -1,5 +1,5 @@
 /**
- * The types of a migration file as comb reads it: the schema its history leaves, and what its
+ * The types of a migration file as database reads it: the schema its history leaves, and what its
  * statements risk. Declarations only.
  */
 
@@ -46,7 +46,7 @@ export type TriggerEvent = "delete" | "insert" | "update"
 
 /**
  * The schema a migration history leaves, followed statement by statement. A name is bare when its
- * object is in the schema comb migrates, else `schema.name`
+ * object is in the schema database migrates, else `schema.name`
  */
 export type ExtractedSchema = {
 	/** each table left, by name, with its column names */
@@ -59,7 +59,7 @@ export type ExtractedSchema = {
 	foreignKeys: ForeignKey[]
 	/**
 	 * each trigger left, by its table, with the writes that fire it; `ftsSync` when its body only
-	 * writes into an external-content FTS5 table (the sync triggers comb writes)
+	 * writes into an external-content FTS5 table (the sync triggers database writes)
 	 */
 	triggers: Array<{
 		/** the writes to `table` that fire it */

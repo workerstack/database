@@ -1,8 +1,8 @@
 /**
- * Which retypes Postgres 17 does in place, held to comb's rating of each (PA11 of r22b, the class of
+ * Which retypes Postgres 17 does in place, held to database's rating of each (PA11 of r22b, the class of
  * P12 of the 0.15.0 review). Each case runs an ALTER COLUMN … TYPE in a transaction rolled back after,
  * and reads the filenodes of the table and of each index on it, by name, before and after: a new one
- * for the table is a rewrite, and a new one for an index alone is a rebuild of it. comb rates a rewrite
+ * for the table is a rewrite, and a new one for an index alone is a rebuild of it. database rates a rewrite
  * unsafe with the rewrite warning, a rebuild unsafe with the index warning, and a retype in place safe.
  */
 import pg from "pg"
@@ -99,8 +99,8 @@ async function postgresDoes(statement: string): Promise<Outcome> {
 	})
 }
 
-/** What comb says `statement` does after HISTORY */
-function combSays(statement: string): Outcome {
+/** What database says `statement` does after HISTORY */
+function databaseSays(statement: string): Outcome {
 	const rated = classifyMigration(`${statement}\n`, {
 		before: extractSchema(HISTORY, undefined, "postgres"),
 		dialect: "postgres",
@@ -216,9 +216,9 @@ const CASES: ReadonlyArray<readonly [string, Outcome]> = [
 	['ALTER TABLE t ALTER COLUMN sc TYPE text COLLATE "C";', "in place"],
 ]
 
-describe("which retypes Postgres 17 does in place, and comb's rating of each (PA11)", () => {
+describe("which retypes Postgres 17 does in place, and database's rating of each (PA11)", () => {
 	it.each(CASES)("%s %s", async (statement, outcome) => {
 		expect(await postgresDoes(statement)).toBe(outcome)
-		expect(combSays(statement)).toBe(outcome)
+		expect(databaseSays(statement)).toBe(outcome)
 	})
 })

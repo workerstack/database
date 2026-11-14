@@ -220,7 +220,7 @@ export function generateRelations(ctx: GeneratorContext, config: RelationsConfig
 		...define,
 		"",
 	]
-	writeGenFile(outputPath, lines.join("\n"), { generator: "comb", staged: ctx.staged })
+	writeGenFile(outputPath, lines.join("\n"), { generator: "database", staged: ctx.staged })
 
 	ctx.log(`Generated relations: ${outputPath}`)
 	ctx.log(`Tables: ${sortedTableNames.length}, r.one: ${count(graph.ones)}, r.many: ${count(graph.manys)}`)

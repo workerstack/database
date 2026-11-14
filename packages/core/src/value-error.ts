@@ -6,8 +6,8 @@
  * the caller's.
  */
 import { own } from "./constraint-map.ts"
-import { CombError } from "./error.ts"
-import { combErrorKeys } from "./types.ts"
+import { DatabaseError } from "./error.ts"
+import { databaseErrorKeys } from "./types.ts"
 
 type ValueProblem = "invalid" | "too_large"
 /** A code that is a value's problem only when the engine's message says so */
@@ -33,7 +33,7 @@ const VALUE_ERRORS: Record<string, ValueRule> = {
 	SQLITE_CONSTRAINT_DATATYPE: "invalid",
 	SQLITE_MISMATCH: "invalid",
 	/* a string or blob past the engine's limit (D1's is 2 MB); SQLITE_TOOBIG is also a statement past
-	 * its length limit, which the server built, since comb binds every value */
+	 * its length limit, which the server built, since database binds every value */
 	SQLITE_TOOBIG: { message: /\bstring or blob too big\b/i, problem: "too_large" },
 }
 
@@ -51,14 +51,14 @@ function problemOf({ code, message }: ValueRead): ValueProblem | undefined {
 }
 
 /** The 400 for a value `read` says the column cannot hold, or undefined when it is not one */
-function valueError(read: ValueRead, { column, table }: ValueAt, source: unknown): CombError | undefined {
+function valueError(read: ValueRead, { column, table }: ValueAt, source: unknown): DatabaseError | undefined {
 	const problem = problemOf(read)
 	if (problem === undefined) return undefined
 	const [what, errorKey] =
 		problem === "invalid"
-			? ["Invalid value", combErrorKeys.INVALID_VALUE]
-			: ["Value too large", combErrorKeys.VALUE_TOO_LARGE]
-	return new CombError({
+			? ["Invalid value", databaseErrorKeys.INVALID_VALUE]
+			: ["Value too large", databaseErrorKeys.VALUE_TOO_LARGE]
+	return new DatabaseError({
 		cause: column === undefined ? what : `${what} for ${column}`,
 		column,
 		errorKey,

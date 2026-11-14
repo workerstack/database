@@ -20,8 +20,10 @@ export function stored(value: unknown): string {
 export const read = <T extends { id: unknown }>(rows: readonly T[], total: number | null = rows.length, sort = ["k"]) =>
 	rows.map((row) => ({
 		...row,
-		_combId: row.id,
-		...(sort.length === 0 ? {} : { _combKeyTexts: sort.map(() => "").join(",") }),
-		_combKeyTypes: [...sort.map((field) => stored((row as Record<string, unknown>)[field])), stored(row.id)].join(","),
+		_cursorId: row.id,
+		...(sort.length === 0 ? {} : { _cursorKeyTexts: sort.map(() => "").join(",") }),
+		_cursorKeyTypes: [...sort.map((field) => stored((row as Record<string, unknown>)[field])), stored(row.id)].join(
+			",",
+		),
 		...(total === null ? {} : { _total: total }),
 	}))

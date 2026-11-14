@@ -1,5 +1,5 @@
 /**
- * A consumer's compiler reads comb's declarations, emitted from this source (release-manifest.test.ts
+ * A consumer's compiler reads database's declarations, emitted from this source (release-manifest.test.ts
  * checks them), and the source itself where they were never emitted. A triple-slash reference to a
  * types package makes every consumer install that package, used or not: bun-types for a Node
  * project, say. Runtime-specific types come from imports inside the module that needs them.

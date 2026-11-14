@@ -1,20 +1,20 @@
 /**
- * The one place comb starts a process. Everything that shells out (atlas, wrangler,
+ * The one place database starts a process. Everything that shells out (atlas, wrangler,
  * drizzle-kit) takes a `Run`, so tests pass a fake and the real one is tested here. A process runs
- * asynchronously under comb's one cleanup rule (cleanup.ts): SIGINT or SIGTERM to comb
- * goes on to the child, comb waits for its end, and its caller never goes on to the next step. On
+ * asynchronously under database's one cleanup rule (cleanup.ts): SIGINT or SIGTERM to database
+ * goes on to the child, database waits for its end, and its caller never goes on to the next step. On
  * POSIX the child leads a process group of its own, so a stop reaches what it started too, and one
  * that outlives the stop by killAfterMs is killed with SIGKILL.
  */
 import { type ChildProcess, spawn } from "node:child_process"
 import { constants, devNull } from "node:os"
 import { hold, pastStop } from "./cleanup.ts"
-/** An optional peer comb spawns rather than imports */
+/** An optional peer database spawns rather than imports */
 export type BinPeer = "drizzle-kit" | "wrangler"
 
 /**
  * A bin peer as the project holds it: its package.json, the bin file it names for the peer, and the
- * runtime that runs it, `node` or the executable running comb (process.execPath)
+ * runtime that runs it, `node` or the executable running database (process.execPath)
  */
 export type ProjectBin = { bin: string; manifest: string; peer: BinPeer; runtime: string }
 
@@ -24,14 +24,14 @@ export type RunResult = {
 	code: number
 	/** Everything the process wrote to stdout, as UTF-8 */
 	stdout: string
-	/** Everything the process wrote to stderr, as UTF-8; on a failure comb made or saw, such as a timeout or a signal, it says what happened */
+	/** Everything the process wrote to stderr, as UTF-8; on a failure database made or saw, such as a timeout or a signal, it says what happened */
 	stderr: string
 }
 
 /**
- * The Atlas releases comb runs on, which comb reads from `atlas version` before a command's first
- * I/O and refuses outside it: the floor is the oldest release comb's integration suite
- * passes on, and the next major may change what comb reads from Atlas
+ * The Atlas releases database runs on, which database reads from `atlas version` before a command's first
+ * I/O and refuses outside it: the floor is the oldest release database's integration suite
+ * passes on, and the next major may change what database reads from Atlas
  */
 export const ATLAS_RANGE = ">=1.2.0 <2"
 
@@ -52,7 +52,7 @@ export type RunOptions = {
 	peer?: BinPeer | undefined
 	/** Milliseconds before the process is stopped, which answers 124 as timeout(1) does; default none */
 	timeoutMs?: number | undefined
-	/** Milliseconds a process comb stopped gets to end before SIGKILL, as timeout(1)'s -k gives it; default 10 s */
+	/** Milliseconds a process database stopped gets to end before SIGKILL, as timeout(1)'s -k gives it; default 10 s */
 	killAfterMs?: number | undefined
 } & (
 	| {
@@ -65,30 +65,30 @@ export type RunOptions = {
 			/** No `input` with a lifeline: the child's stdin is never written */
 			input?: undefined
 			/**
-			 * The child's stdin left open and never written while comb runs, so its end tells the child
-			 * comb is gone, however comb ended, a SIGKILL included
+			 * The child's stdin left open and never written while database runs, so its end tells the child
+			 * database is gone, however database ended, a SIGKILL included
 			 */
 			lifeline: true
 	  }
 )
 
 /**
- * How comb starts a process (atlas, wrangler, drizzle-kit): `cmd` with `args`, no shell. It resolves
+ * How database starts a process (atlas, wrangler, drizzle-kit): `cmd` with `args`, no shell. It resolves
  * with the process's end, a failed or unstartable command among them, and never rejects for one.
  */
-export type Run = (cmd: string, args: readonly string[], options?: RunOptions) => Promise<RunResult>
+export type MigrateRun = (cmd: string, args: readonly string[], options?: RunOptions) => Promise<RunResult>
 
 /* `wrangler d1 execute --json` on a large SELECT or `drizzle-kit export` of a big schema
  * passes Node's 1 MiB default */
 const DEFAULT_MAX_BUFFER = 256 * 1024 * 1024
 
-/* a child that traps SIGTERM would hold comb past any stop: this long, then SIGKILL */
+/* a child that traps SIGTERM would hold database past any stop: this long, then SIGKILL */
 const DEFAULT_KILL_AFTER_MS = 10_000
 
 /*
  * On POSIX a child is the leader of a process group of its own, which every stop signals whole: wrangler
  * starts workerd and drizzle-kit esbuild, which a signal to the child alone would leave running. The
- * group gets no terminal's Ctrl-C, so comb's forward is its only signal. Windows has no groups to name.
+ * group gets no terminal's Ctrl-C, so database's forward is its only signal. Windows has no groups to name.
  */
 const GROUPS = process.platform !== "win32"
 
@@ -111,11 +111,11 @@ function signalTree(child: ChildProcess, signal: NodeJS.Signals): void {
 
 /**
  * The child's environment: the parent's without any PG* variable, so libpq-style defaults a shell
- * happens to export (PGSSLMODE=disable, PGPASSWORD) never change a connection comb configured, and
+ * happens to export (PGSSLMODE=disable, PGPASSWORD) never change a connection database configured, and
  * PGPASSFILE pointed at nothing, so libpq's driver reads no ~/.pgpass the config does not name, as
- * comb's own reads read none; then `env` over it. No
+ * database's own reads read none; then `env` over it. No
  * PGSERVICEFILE: lib/pq in Atlas before v1.2.0 panics on any, and a service file is read only for a
- * URL naming a service, which comb refuses.
+ * URL naming a service, which database refuses.
  */
 function childEnv(env: RunOptions["env"]): NodeJS.ProcessEnv {
 	const out: NodeJS.ProcessEnv = { PGPASSFILE: devNull }
@@ -128,14 +128,14 @@ function childEnv(env: RunOptions["env"]): NodeJS.ProcessEnv {
 	return out
 }
 
-// lookup-table: each runtime a bin peer is spawned on by name, and where it is installed from; comb's own is its path
+// lookup-table: each runtime a bin peer is spawned on by name, and where it is installed from; database's own is its path
 const RUNTIMES: Readonly<Record<string, string>> = { node: "Node.js (https://nodejs.org)" }
 
 /** What to do when `cmd` cannot start: Atlas, or a bin peer's runtime, install it; "" for any other command */
 function installHint(cmd: string, peer: BinPeer | undefined): string {
 	if (cmd === "atlas") return `; install atlas (${ATLAS_RANGE}) from ${ATLAS_INSTALL}`
 	if (peer === undefined || !Object.hasOwn(RUNTIMES, cmd)) return ""
-	return `; comb runs ${peer} on ${cmd}, and finds no ${cmd} on PATH: install ${RUNTIMES[cmd]}`
+	return `; database runs ${peer} on ${cmd}, and finds no ${cmd} on PATH: install ${RUNTIMES[cmd]}`
 }
 
 /** How a process the OS could not start is reported: POSIX shell codes where they exist. */
@@ -157,12 +157,12 @@ function collect(stream: NodeJS.ReadableStream, limit: number, over: () => void)
 	return () => Buffer.concat(chunks).toString("utf8")
 }
 
-/** How the child ended: its code, or 128 + the signal that stopped it, or the stop comb made (124 past timeoutMs, 1 past maxBuffer) */
+/** How the child ended: its code, or 128 + the signal that stopped it, or the stop database made (124 past timeoutMs, 1 past maxBuffer) */
 type Ending = { code: number | null; signal: NodeJS.Signals | null; stopped?: RunResult | undefined }
 
 /**
  * The stops of `child`, which runs `name`: each signals its group, and the first holds its end to
- * killAfterMs, past which SIGKILL ends it; `ended` clears that and says what comb did when it came
+ * killAfterMs, past which SIGKILL ends it; `ended` clears that and says what database did when it came
  */
 function stopsOf(child: ChildProcess, name: string, killAfterMs: number) {
 	let first: { signal: NodeJS.Signals; timer: NodeJS.Timeout } | undefined
@@ -171,7 +171,7 @@ function stopsOf(child: ChildProcess, name: string, killAfterMs: number) {
 		ended(): string | undefined {
 			clearTimeout(first?.timer)
 			return killed && first !== undefined
-				? `${name} did not end ${killAfterMs} ms after ${first.signal}: comb killed it with SIGKILL`
+				? `${name} did not end ${killAfterMs} ms after ${first.signal}: database killed it with SIGKILL`
 				: undefined
 		},
 		stop(signal: NodeJS.Signals): void {
@@ -188,7 +188,7 @@ function stopsOf(child: ChildProcess, name: string, killAfterMs: number) {
 }
 
 /**
- * `cmd` started, and the result of its end; the child is held so a signal to comb stops it first.
+ * `cmd` started, and the result of its end; the child is held so a signal to database stops it first.
  * A stop names the peer `cmd` runs, the process the user knows, or else `cmd`.
  */
 function started(cmd: string, args: readonly string[], options: RunOptions): Promise<RunResult> {
@@ -217,12 +217,12 @@ function started(cmd: string, args: readonly string[], options: RunOptions): Pro
 	const ended = new Promise<Ending | NodeJS.ErrnoException>((resolve) => {
 		child.on("error", resolve)
 		child.on("close", (code, signal) => {
-			/* a lifeline's pipe goes with the child, so it holds no handle of comb's past it */
+			/* a lifeline's pipe goes with the child, so it holds no handle of database's past it */
 			child.stdin.destroy()
 			resolve({ code, signal, stopped })
 		})
 	})
-	/* a signal to comb goes on to the child, and comb waits for its end before it ends itself */
+	/* a signal to database goes on to the child, and database waits for its end before it ends itself */
 	let forwarded = false
 	const release = hold(async (signal) => {
 		forwarded = true
@@ -240,7 +240,7 @@ function started(cmd: string, args: readonly string[], options: RunOptions): Pro
 		}
 		if (end instanceof Error) return startFailure(cmd, end, options.peer)
 		const result = resultOf(name, end, { stderr: stderr(), stdout: stdout() })
-		/* a killed child's stderr is never empty: it is the stop comb made, or it names the signal that ended it */
+		/* a killed child's stderr is never empty: it is the stop database made, or it names the signal that ended it */
 		return killed === undefined ? result : { ...result, stderr: `${result.stderr}; ${killed}` }
 	})
 }
@@ -254,23 +254,23 @@ function resultOf(name: string, end: Ending, said: { stderr: string; stdout: str
 	return { code: end.code ?? signal, stderr, stdout: said.stdout }
 }
 
-/** Runs `cmd` and reports how it ended; it never rejects for a failed command. Started while a signal stops comb, it waits with the rest. */
-export const run: Run = async (cmd, args, options = {}) => {
+/** Runs `cmd` and reports how it ended; it never rejects for a failed command. Started while a signal stops database, it waits with the rest. */
+export const run: MigrateRun = async (cmd, args, options = {}) => {
 	await pastStop()
 	return started(cmd, args, options)
 }
 
 /**
  * What runs `bin`'s peer through `exec`: its runtime on the bin file of the package the project
- * holds, the one comb checked, never a name looked up on PATH
+ * holds, the one database checked, never a name looked up on PATH
  */
 export const runPeer =
-	(exec: Run, bin: ProjectBin) =>
+	(exec: MigrateRun, bin: ProjectBin) =>
 	(args: readonly string[], options: RunOptions = {}): Promise<RunResult> =>
 		exec(bin.runtime, [bin.bin, ...args], { ...asBun(bin, options), peer: bin.peer })
 
 /**
- * `options` for a peer on comb's own Bun, run as bun: in a Bun single-file executable
+ * `options` for a peer on database's own Bun, run as bun: in a Bun single-file executable
  * `process.execPath` is the app, which runs its own entry unless `BUN_BE_BUN` is set;
  * plain bun and node ignore it
  */

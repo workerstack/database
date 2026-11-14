@@ -1,5 +1,5 @@
 /**
- * Whole projects for `comb codegen`: written inside the package, so their imports of comb and
+ * Whole projects for `database codegen`: written inside the package, so their imports of database and
  * drizzle resolve as an installed app's would, run through the real CLI, and typechecked under the
  * strict flags a consumer may set.
  */
@@ -32,7 +32,7 @@ export function project(files: Record<string, string>): string {
 	return dir
 }
 
-/** `comb codegen` in `dir` with `args`: its exit code and what it wrote to stderr */
+/** `database codegen` in `dir` with `args`: its exit code and what it wrote to stderr */
 export async function runCodegen(dir: string, args: readonly string[] = []): Promise<{ code: number; err: string }> {
 	const errors: string[] = []
 	const io = { cwd: dir, err: (line: string) => errors.push(line), out: () => undefined }
@@ -40,7 +40,7 @@ export async function runCodegen(dir: string, args: readonly string[] = []): Pro
 	return { code, err: errors.join("\n") }
 }
 
-/** `comb codegen` in `dir`, which must succeed */
+/** `database codegen` in `dir`, which must succeed */
 export async function codegen(dir: string, args: readonly string[] = []): Promise<void> {
 	const { code, err } = await runCodegen(dir, args)
 	expect(code, err).toBe(0)

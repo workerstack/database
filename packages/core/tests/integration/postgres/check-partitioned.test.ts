@@ -1,8 +1,8 @@
 /**
  * Check's refusal of a REINDEX or CLUSTER Postgres runs only outside a transaction block on a
- * partitioned table or index (P9 of r21), decided by the replay on a postgres:// devUrl: comb's
+ * partitioned table or index (P9 of r21), decided by the replay on a postgres:// devUrl: database's
  * rating reads partitioning from the history's text, which a DO block hides, so on a replayed check
- * Postgres decides, and check refuses in comb's words, which name the route, with Postgres's error
+ * Postgres decides, and check refuses in database's words, which name the route, with Postgres's error
  * as the cause. Replayed or not, check refuses each of the partitioned refusal cases alike.
  */
 import { describe, expect, it } from "vitest"
@@ -44,7 +44,7 @@ describe("check's partitioned refusals, decided by the replay", () => {
 
 	const HIDDEN = "DO $$BEGIN EXECUTE 'CREATE TABLE p (id int, at date) PARTITION BY RANGE (at)'; END$$;\n"
 
-	it("refuses a REINDEX of a table a DO block made partitioned, in comb's words", async () => {
+	it("refuses a REINDEX of a table a DO block made partitioned, in database's words", async () => {
 		expect(await refusalOf(HIDDEN, "REINDEX TABLE p", false)).toBeUndefined()
 		const replayed = await refusalOf(HIDDEN, "REINDEX TABLE p", true)
 		expect(replayed?.message).toBe((await refusalOf(P, "REINDEX TABLE p", false))?.message)

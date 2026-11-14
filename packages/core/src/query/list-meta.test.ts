@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { COMB_META_KEY } from "../meta.ts"
+import { DATABASE_META_KEY } from "../meta.ts"
 import { buildDefaultOrder, listQueryStamp, selectableFrom } from "./list-meta.ts"
 import { createListQuerySchema } from "./list-schema.ts"
 import { LIST_QUERY_LIMITS } from "./schema-limits.ts"
@@ -23,7 +23,7 @@ describe("listQueryStamp", () => {
 		const stamp = listQueryStamp(
 			{ filter: { title: "string" }, pagination: { maxLimit: 50 }, search: ["title"], sort: ["created_at"] },
 			LIST_QUERY_LIMITS,
-		)[COMB_META_KEY]
+		)[DATABASE_META_KEY]
 		expect(stamp).toMatchObject({
 			defaultOrder: "created_at.desc",
 			filterable: ["title"],
@@ -39,7 +39,7 @@ describe("listQueryStamp", () => {
 	})
 
 	it("publishes no filter or search, and the default max limit, when the config declares none", () => {
-		expect(listQueryStamp({ sort: [] }, LIST_QUERY_LIMITS)[COMB_META_KEY]).toMatchObject({
+		expect(listQueryStamp({ sort: [] }, LIST_QUERY_LIMITS)[DATABASE_META_KEY]).toMatchObject({
 			defaultOrder: "",
 			filterFields: [],
 			filterable: [],
@@ -53,7 +53,7 @@ describe("listQueryStamp", () => {
 describe("listQueryStamp: the request byte caps", () => {
 	it("stamps the filter's and the search's encoded byte caps", () => {
 		const stamp = listQueryStamp({ search: ["title"], sort: ["id"] }, LIST_QUERY_LIMITS)
-		expect(stamp[COMB_META_KEY]).toMatchObject({ maxFilterBytes: 4608, maxQueryBytes: 14_336, maxSearchBytes: 600 })
+		expect(stamp[DATABASE_META_KEY]).toMatchObject({ maxFilterBytes: 4608, maxQueryBytes: 14_336, maxSearchBytes: 600 })
 	})
 })
 
@@ -61,7 +61,7 @@ describe("listQueryStamp: the request byte caps", () => {
 /** The stableTiebreak a list schema built with `config` publishes */
 function tiebreakOf(config: { tiebreak?: string | undefined }): unknown {
 	const meta: Record<string, unknown> = createListQuerySchema({ ...config, sort: ["created_at"] }).meta() ?? {}
-	return (meta[COMB_META_KEY] as { stableTiebreak?: unknown } | undefined)?.stableTiebreak
+	return (meta[DATABASE_META_KEY] as { stableTiebreak?: unknown } | undefined)?.stableTiebreak
 }
 
 describe("the published stableTiebreak is the list's own (QL10 of r22b; sibling: the default)", () => {

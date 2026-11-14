@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest"
-import { COMB_FILTER_GRAMMAR, COMB_META_KEY, type CombEntityMetaInput, type CombQueryMetaInput } from "./contract.ts"
-import { readCombMeta } from "./read.ts"
+import { FILTER_GRAMMAR, DATABASE_META_KEY, type EntityMetaInput, type QueryMetaInput } from "./contract.ts"
+import { readDatabaseMeta } from "./read.ts"
 
-const ENTITY: CombEntityMetaInput = {
+const ENTITY: EntityMetaInput = {
 	generated: ["id"],
 	identity: "id",
 	immutable: ["id"],
@@ -14,10 +14,10 @@ const ENTITY: CombEntityMetaInput = {
 	uniqueIndexes: [{ columns: ["slug"], name: "post_slug" }],
 }
 
-const QUERY: CombQueryMetaInput = {
+const QUERY: QueryMetaInput = {
 	defaultOrder: "id.asc",
 	filterable: ["status"],
-	grammar: COMB_FILTER_GRAMMAR,
+	grammar: FILTER_GRAMMAR,
 	kind: "query",
 	maxLimit: 100,
 	searchable: null,
@@ -29,7 +29,7 @@ const QUERY: CombQueryMetaInput = {
 function read(payload: unknown, maxVersion?: number) {
 	const said: string[] = []
 	const options = { onDiagnostic: (m: string) => said.push(m), ...(maxVersion === undefined ? {} : { maxVersion }) }
-	return { meta: readCombMeta({ [COMB_META_KEY]: payload }, options), said }
+	return { meta: readDatabaseMeta({ [DATABASE_META_KEY]: payload }, options), said }
 }
 
 const ENTITY_REFUSALS: Array<[string, unknown, string]> = [
@@ -80,9 +80,9 @@ const ENTITY_REFUSALS: Array<[string, unknown, string]> = [
 	],
 ]
 
-describe("readCombMeta: entity payloads", () => {
+describe("readDatabaseMeta: entity payloads", () => {
 	it.each(ENTITY_REFUSALS)("refuses %s", (_name, payload, message) => {
-		expect(read({ ...(payload as object), v: 1 })).toEqual({ meta: null, said: [`${COMB_META_KEY}: ${message}`] })
+		expect(read({ ...(payload as object), v: 1 })).toEqual({ meta: null, said: [`${DATABASE_META_KEY}: ${message}`] })
 	})
 
 	it("reads absent states and indexes as none, and a missing initial as null", () => {
@@ -94,7 +94,7 @@ describe("readCombMeta: entity payloads", () => {
 	})
 })
 
-describe("readCombMeta: query payloads", () => {
+describe("readDatabaseMeta: query payloads", () => {
 	it.each([
 		[
 			"a non-list filterable",
@@ -131,7 +131,7 @@ describe("readCombMeta: query payloads", () => {
 		],
 		["a zero maxPage", { ...QUERY, maxPage: 0 }, "query payload `maxPage` needs a positive integer"],
 	])("refuses %s", (_name, payload, message) => {
-		expect(read({ ...payload, v: 1 })).toEqual({ meta: null, said: [`${COMB_META_KEY}: ${message}`] })
+		expect(read({ ...payload, v: 1 })).toEqual({ meta: null, said: [`${DATABASE_META_KEY}: ${message}`] })
 	})
 
 	it("reads the optional fields it knows", () => {

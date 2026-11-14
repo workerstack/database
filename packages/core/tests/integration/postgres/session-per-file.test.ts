@@ -1,7 +1,7 @@
 /**
  * PA1 of r22b: Atlas applied every pending file on one session, so a plain SET in one file, which
  * outlives its COMMIT, changed what every later file of the run wrote, and a `SET lock_timeout = 0`
- * lifted the configured lockTimeout for the rest. comb gives each file an Atlas call of its own, so
+ * lifted the configured lockTimeout for the rest. database gives each file an Atlas call of its own, so
  * each starts on a session of its own, as r21 S1 did for SQLite; the check replay opens one per
  * file (session-leaks.test.ts holds the shapes a file's code carried its session by).
  */
@@ -23,7 +23,7 @@ beforeAll(loadPostgresParser)
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-pg-session-per-file-"))
+	dir = mkdtempSync(join(tmpdir(), "database-pg-session-per-file-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
@@ -42,7 +42,7 @@ const options = (devUrl: string, url: string, checkOnly = false) => ({
 	target: { devUrl, lockTimeout: "5s", schema: "public", url },
 })
 
-/* r22b's x-set-leaks-data.ts: a SET comb rates safe, the later file that writes under it, and its read back */
+/* r22b's x-set-leaks-data.ts: a SET database rates safe, the later file that writes under it, and its read back */
 const SETS: ReadonlyArray<[string, string, string]> = [
 	[
 		"SET standard_conforming_strings = off;",
@@ -115,7 +115,7 @@ describe("a session SET in one file never reaches the next (PA1; sibling: r21 S1
 	it("checks a file after one that sets statement_timeout as apply runs it, on a session of its own", async () => {
 		await write([
 			"SET statement_timeout = 50;\n",
-			"-- comb:allow-unsafe: the test sleeps past the earlier timeout\nSELECT pg_sleep(0.3);\n",
+			"-- database:allow-unsafe: the test sleeps past the earlier timeout\nSELECT pg_sleep(0.3);\n",
 		])
 		await withScratchDb((dev) =>
 			withScratchDb(async (url) => {
@@ -126,7 +126,7 @@ describe("a session SET in one file never reaches the next (PA1; sibling: r21 S1
 	}, 60_000)
 })
 
-const UNSAFE = "-- comb:allow-unsafe: the test reads the session\n"
+const UNSAFE = "-- database:allow-unsafe: the test reads the session\n"
 
 /** The amount of each Atlas apply an apply of `files` runs, the dry run left out, and what `read` reads after */
 async function amounts(files: readonly string[], read: string): Promise<[string[], unknown]> {

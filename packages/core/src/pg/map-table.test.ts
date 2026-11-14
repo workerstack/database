@@ -28,7 +28,7 @@ describe("mapTable: the map key of a violated Postgres table (F51)", () => {
 	it("takes schema.table first, and the bare table for a schema no qualified entry names", () => {
 		expect(mapTable(MAPS, { schema: "auth", table: "users" })).toBe("auth.users")
 		expect(mapTable(MAPS, { schema: "public", table: "users" })).toBe("users")
-		/* an unqualified table lives in the configured schema (search_path), comb's own app among them */
+		/* an unqualified table lives in the configured schema (search_path), database's own app among them */
 		expect(mapTable(BARE, { schema: "app", table: "users" })).toBe("users")
 		expect(mapTable(MAPS, { schema: "x", table: "users" })).toBe("users")
 		expect(mapTable(MAPS, { schema: undefined, table: "users" })).toBe("users")

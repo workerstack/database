@@ -1,7 +1,7 @@
 /**
  * 27.6 of plan 15 (P11 of the 0.14.1 review), on real Atlas: a file Atlas ran halfway outside a
  * transaction, with a late file added before it. Atlas's status names the late file only in its
- * out-of-order error, never in what it lists, so comb names that file, not the unchanged half-run one.
+ * out-of-order error, never in what it lists, so database names that file, not the unchanged half-run one.
  * The unit test's status is shaped as this run shows it; this case keeps the two from drifting apart.
  */
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
@@ -21,7 +21,7 @@ beforeAll(loadPostgresParser)
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-pg-half-run-"))
+	dir = mkdtempSync(join(tmpdir(), "database-pg-half-run-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
@@ -37,7 +37,7 @@ const approve = (m: ParsedMigration) => approveMigration(m, { target: "core", ye
 /** The options applyWithAtlas takes for the database at `url`, every file approved */
 function command(url: string) {
 	const out: string[] = []
-	const target = { devUrl: "postgres://comb-no-dev.invalid/dev", lockTimeout: "5s", schema: "public", url }
+	const target = { devUrl: "postgres://database-no-dev.invalid/dev", lockTimeout: "5s", schema: "public", url }
 	return { approve, dir, out, print: (line: string) => out.push(line), target }
 }
 

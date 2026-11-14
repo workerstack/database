@@ -22,7 +22,7 @@ import { query, testRoles } from "../support/pg-roles.ts"
 const { checked, devUrl, files, options, targetUrl } = pgCheck()
 
 /* the pending file's own approval, so a case's unsafe statement passes and its warnings print */
-const ALLOW = "-- comb:allow-unsafe: the test's pending file\n"
+const ALLOW = "-- database:allow-unsafe: the test's pending file\n"
 const WARNING = "Lock warning in 20260102000000_two.sql: "
 
 /* what the replay says of a sequence it names: the tables whose default calls it, which the map does not read */
@@ -40,7 +40,7 @@ const heldOf = (out: readonly string[], validate: string, said: "as said" | "bar
  * dropped, and the rest the replay measures, a dropped table's sequences, a type's tables; then
  * what a DROP or REASSIGN OWNED's roles own, which the replay leaves out
  */
-const OWNERS = /(?:^|, and )this file (?:also )?locks (everything .*), which comb cannot name$/
+const OWNERS = /(?:^|, and )this file (?:also )?locks (everything .*), which database cannot name$/
 const UNNAMED =
 	/(?:^|, and )(?:this file's DROP … CASCADE locks what depends on (.*?)(?:, and this file also locks (.*))?|this file locks (.*)), which only check on a postgres:\/\/ devUrl names$/
 
@@ -215,9 +215,9 @@ describe("check's held warnings of a lock no CASE takes, measured on devUrl (Are
 	})
 
 	it.each(OWNING)(
-		"after %s on a role, warns of what the role owns, which the replay leaves out and comb cannot name",
+		"after %s on a role, warns of what the role owns, which the replay leaves out and database cannot name",
 		async (statement) => {
-			const [role] = testRoles("comb_t_own")
+			const [role] = testRoles("database_t_own")
 			await query(pgUrl(), `CREATE ROLE ${role}`)
 			const one = `${NOT_VALID}${owning(role).history}\n`
 			const two = `${ALLOW}${statement(role)}\n${VALIDATE_T}\n`

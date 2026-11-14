@@ -1,7 +1,7 @@
 /**
  * Which dialect a derived list is built for (Q1 of r21): the columns its id, anchor and keys hold decide,
  * wherever drizzle's SQL hides them, and a list that holds none states `dialect`. Postgres reads a key's
- * type from its operand, so its list selects no `_combKeyTypes`; SQLite's selects `typeof()` of each key.
+ * type from its operand, so its list selects no `_cursorKeyTypes`; SQLite's selects `typeof()` of each key.
  * 0.19.0 looked at the top-level option alone and sent SQLite's typeof() to Postgres for every shape here
  * whose column is not the option itself (`.tmp/grunt/r21-premise/q1-shapes.log`).
  */
@@ -85,7 +85,7 @@ const build = (
 
 /** Whether the built list selects SQLite's typeof(), compiled on `dialect`: Postgres's pg_typeof() is not it (Q2 of r21) */
 const sendsTypeof = (built: ReturnType<typeof build>, dialect: Dialect): boolean => {
-	const types = (built.extras as Record<string, { sql: SQL } | undefined>)["_combKeyTypes"]
+	const types = (built.extras as Record<string, { sql: SQL } | undefined>)["_cursorKeyTypes"]
 	return types !== undefined && /(?<!pg_)typeof\(/.test(sides[dialect].compile.sqlToQuery(types.sql).sql)
 }
 

@@ -27,17 +27,17 @@ function fake(answer: (query: string) => Array<Record<string, unknown>> | Error 
 const found = (description: string | null) => [{ description }]
 
 describe("createRole", () => {
-	const made = { database: "comb_replay_7_9_x", owner: "7_9", role: "r", sent: "CREATE ROLE r" }
+	const made = { database: "database_replay_7_9_x", owner: "7_9", role: "r", sent: "CREATE ROLE r" }
 
 	it("makes, tags and holds a role that does not exist, in a savepoint, and owns it", async () => {
 		const sql = fake()
 		expect(await createRole(sql.sql, made)).toBe(true)
 		expect(sql.sent.slice(1)).toEqual([
-			"SAVEPOINT comb_role",
+			"SAVEPOINT database_role",
 			"CREATE ROLE r",
-			`COMMENT ON ROLE "r" IS 'comb_replay 7_9'`,
-			'GRANT CONNECT ON DATABASE comb_replay_7_9_x TO "r"',
-			"RELEASE SAVEPOINT comb_role",
+			`COMMENT ON ROLE "r" IS 'database_replay 7_9'`,
+			'GRANT CONNECT ON DATABASE database_replay_7_9_x TO "r"',
+			"RELEASE SAVEPOINT database_role",
 		])
 	})
 
@@ -45,17 +45,17 @@ describe("createRole", () => {
 		const untagged = fake((query) => (query.startsWith("SELECT") ? found(null) : []))
 		expect(await createRole(untagged.sql, made)).toBe(false)
 		expect(untagged.sent.slice(1)).toEqual([
-			"SAVEPOINT comb_role",
-			'GRANT CONNECT ON DATABASE comb_replay_7_9_x TO "r"',
-			"RELEASE SAVEPOINT comb_role",
+			"SAVEPOINT database_role",
+			'GRANT CONNECT ON DATABASE database_replay_7_9_x TO "r"',
+			"RELEASE SAVEPOINT database_role",
 		])
-		const tagged = fake((query) => (query.startsWith("SELECT") ? found("comb_replay 3_4") : []))
+		const tagged = fake((query) => (query.startsWith("SELECT") ? found("database_replay 3_4") : []))
 		expect(await createRole(tagged.sql, made)).toBe(true)
 	})
 
 	it("reads the role again when another replay made it or dropped it since the read", async () => {
 		/* made by another (42710), then dropped (42704), then made in the catalog's race (23505), then free */
-		const reads = [[], found("comb_replay 3_4"), [], []]
+		const reads = [[], found("database_replay 3_4"), [], []]
 		const [raced, dropped] = [["42710", "23505"], ["42704"]]
 		const sql = fake((query) => {
 			if (query.startsWith("SELECT")) return reads.shift() ?? []

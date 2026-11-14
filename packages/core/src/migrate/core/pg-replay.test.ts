@@ -16,7 +16,7 @@ const UNREAD = { inspect: async (): Promise<undefined> => undefined, print: QUIE
 const TARGET = { devUrl: "postgres://dev/dev", lockTimeout: "5s", schema: "public", url: "postgres://app/app" }
 
 /* the replay's database, named for the backend that made it and a random suffix */
-const DATABASE = /comb_replay_\d+_\d+_[0-9a-f]{8}/g
+const DATABASE = /database_replay_\d+_\d+_[0-9a-f]{8}/g
 
 /* the target database's locale, which the replay's database is made at */
 const LIBC = { collate: "C", ctype: "C", encoding: "UTF8", locale: null, provider: "c", rules: null }
@@ -30,9 +30,9 @@ const COUNTED = expect.stringMatching(/^SELECT current_setting\('track_counts'\)
 
 /** What a replayed transaction of `statements` sends: its counts read at BEGIN and again before COMMIT */
 /* the server's shared catalogs read as committed, around every file and bare statement (P1 and P2 of r22) */
-const SNAPSHOT = "EXECUTE comb_snapshot"
+const SNAPSHOT = "EXECUTE database_snapshot"
 /* the read prepared on the connection that makes it, once */
-const PREPARE = expect.stringMatching(/^PREPARE comb_snapshot AS SELECT 'membership' AS noun, .* UNION ALL /)
+const PREPARE = expect.stringMatching(/^PREPARE database_snapshot AS SELECT 'membership' AS noun, .* UNION ALL /)
 const inTransaction = (...statements: unknown[]) => ["BEGIN", COUNTED, ...statements, COUNTED, SNAPSHOT, "COMMIT"]
 
 /** A postgres.js stand-in on every connection: each query it was sent, the replay's database as <db>, answering `rows` to the catalog read */
@@ -160,10 +160,10 @@ describe("replayCatalog", () => {
 		]
 		expect([admin.max, admin.onnotice(), admin.database]).toEqual([1, undefined, "dev"])
 		expect([url.max, url.onnotice(), url.database]).toEqual([1, undefined, "app"])
-		expect(replay.database).toMatch(/^comb_replay_7_9_[0-9a-f]{8}$/)
+		expect(replay.database).toMatch(/^database_replay_7_9_[0-9a-f]{8}$/)
 		/* the replay's connection names its owner, by which a sweep finds the statement a killed run left (P4 of r22) */
 		expect(replay.connection).toMatchObject({
-			application_name: "comb_replay 7_9",
+			application_name: "database_replay 7_9",
 			client_connection_check_interval: "1s",
 		})
 		/* the prepare's session, then one for each file, as apply gives each an Atlas call (PA1 of r22b), each searching the schema and reading dates month first from its start, as Atlas's session does (PR3 of r22b) */
@@ -213,7 +213,7 @@ describe("replayCatalog on what dev refuses", () => {
 		expect(dev.sent.at(-1)?.[0]).toBe(DROPPED)
 	})
 
-	it("sends a statement comb's parser cannot read as written, for dev to refuse", async () => {
+	it("sends a statement database's parser cannot read as written, for dev to refuse", async () => {
 		const dev = fake([], (query) =>
 			query.startsWith("SELEC ") ? new Error('syntax error at or near "SELEC"') : undefined,
 		)
@@ -245,39 +245,39 @@ describe("replayCatalog on a dev that fails past a refusal", () => {
 		)
 		expect(dev.queries().slice(-4)).toEqual([
 			DROPPED,
-			expect.stringMatching(/^SELECT 1 FROM pg_roles r JOIN pg_shdescription .* LIKE 'comb\\_replay %'$/),
+			expect.stringMatching(/^SELECT 1 FROM pg_roles r JOIN pg_shdescription .* LIKE 'database\\_replay %'$/),
 			'DROP ROLE IF EXISTS "r"',
 			"SELECT 1 FROM pg_roles WHERE rolname = $1",
 		])
 		const left =
 			"which a replay left on devUrl's server: database is being accessed by other users; the next check or apply that reaches that server drops it"
 		/* the role reads as gone after its drop failed, so as dropped */
-		expect(said).toEqual([`comb could not drop database <db>, ${left}`])
+		expect(said).toEqual([`database could not drop database <db>, ${left}`])
 	})
 
-	it("says comb could not replay when dev itself fails, never naming its password", async () => {
+	it("says database could not replay when dev itself fails, never naming its password", async () => {
 		const dev = fake([], (query) =>
 			query === "BEGIN" ? new Error("password authentication failed for postgres://u:hunter2@dev/dev") : undefined,
 		)
 		const secret = { ...TARGET, devUrl: "postgres://u:hunter2@dev/dev" }
 		const replay = replayCatalog(secret, { files: file("SELECT 1;"), ...UNREAD, targetUser: "u" }, dev.load)
-		await expect(replay).rejects.toThrow(/^comb could not replay the history on devUrl: /)
+		await expect(replay).rejects.toThrow(/^database could not replay the history on devUrl: /)
 		await expect(replay).rejects.not.toThrow(/hunter2/)
 	})
 })
 
-/* P5 of r20: a password that is a word of comb's own hint masks the driver's text only */
-describe("replayCatalog on a devUrl password comb's hint also says", () => {
-	it("masks a password in what dev said, never in comb's own words", async () => {
-		const tls = "Client network socket disconnected before secure TLS connection was established for comb@dev"
+/* P5 of r20: a password that is a word of database's own hint masks the driver's text only */
+describe("replayCatalog on a devUrl password database's hint also says", () => {
+	it("masks a password in what dev said, never in database's own words", async () => {
+		const tls = "Client network socket disconnected before secure TLS connection was established for database@dev"
 		const hint =
-			"the server takes no TLS, which comb and Atlas require where devUrl names no sslmode; set sslmode=disable on devUrl for a server without TLS"
-		const secret = { ...TARGET, devUrl: "postgres://u:comb@dev/dev" }
+			"the server takes no TLS, which database and Atlas require where devUrl names no sslmode; set sslmode=disable on devUrl for a server without TLS"
+		const secret = { ...TARGET, devUrl: "postgres://u:database@dev/dev" }
 		const failing = (at: string) => fake([], (query) => (query.startsWith(at) ? new Error(tls) : undefined)).load
 		await expect(
 			replayCatalog(secret, { files: file("SELECT 1;"), ...UNREAD, targetUser: "u" }, failing("SELECT datname")),
 		).rejects.toThrow(
-			`comb could not replay the history on devUrl: Client network socket disconnected before secure TLS connection was established for ***@dev: ${hint}`,
+			`database could not replay the history on devUrl: Client network socket disconnected before secure TLS connection was established for ***@dev: ${hint}`,
 		)
 		await expect(
 			replayCatalog(
@@ -290,7 +290,7 @@ describe("replayCatalog on a devUrl password comb's hint also says", () => {
 })
 
 /* P2 of r19, the replay's sibling: a devUrl pgUrlProblems refuses never reaches a connection */
-describe("replayCatalog on a devUrl comb refuses", () => {
+describe("replayCatalog on a devUrl database refuses", () => {
 	it.each([
 		[TARGET.url, "url and devUrl are the same database; Atlas empties the dev database, so give it its own"],
 		[

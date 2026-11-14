@@ -1,16 +1,16 @@
 /**
  * The CAs `sslrootcert=system` verifies a server against. libpq reads OpenSSL's
  * default store, and Atlas's driver Go's system pool. On Linux both read the same CA files, which
- * comb reads as Go does: SSL_CERT_FILE, else the first of Go's bundle files that reads, and every
+ * database reads as Go does: SSL_CERT_FILE, else the first of Go's bundle files that reads, and every
  * file of SSL_CERT_DIR, else of Go's CA directories. Elsewhere Go asks the platform's verifier, which
- * comb reaches only through Node's own system store (tls.getCACertificates, Node 22.15 and later,
- * which Bun lacks); without it comb falls back to Node's bundled CAs, and its failure says so.
+ * database reaches only through Node's own system store (tls.getCACertificates, Node 22.15 and later,
+ * which Bun lacks); without it database falls back to Node's bundled CAs, and its failure says so.
  */
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import tls from "node:tls"
 
-/** Where comb's system CAs come from, said in a verification failure, and the CAs themselves; none means the runtime's bundled list */
+/** Where database's system CAs come from, said in a verification failure, and the CAs themselves; none means the runtime's bundled list */
 type SystemCas = { cas: string[] | undefined; source: string }
 
 // lookup-table: Go's CA bundle files on Linux, in its order (crypto/x509 root_linux.go)
@@ -32,7 +32,7 @@ function certsIn(file: string): string[] {
 	try {
 		return readFileSync(file, "utf8").match(PEM) ?? []
 	} catch {
-		// reason: Go skips a file it cannot read, as comb does
+		// reason: Go skips a file it cannot read, as database does
 		return []
 	}
 }
@@ -42,7 +42,7 @@ function certsInDir(dir: string): string[] {
 	try {
 		return readdirSync(dir).flatMap((name) => certsIn(join(dir, name)))
 	} catch {
-		// reason: Go skips a directory it cannot read, as comb does
+		// reason: Go skips a directory it cannot read, as database does
 		return []
 	}
 }

@@ -17,7 +17,7 @@ import { withScratchDb } from "../support/pg.ts"
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-pg-history-"))
+	dir = mkdtempSync(join(tmpdir(), "database-pg-history-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
@@ -27,14 +27,14 @@ async function migrations(files: Record<string, string>): Promise<void> {
 	await hashDir(run, dir)
 }
 
-/** comb's approval, never asking: every file here is safe */
+/** database's approval, never asking: every file here is safe */
 const approve = (m: ParsedMigration) => approveMigration(m, { target: "core", yes: false })
 
 /** The options applyWithAtlas takes for the database at `url`, collecting what it prints */
 function command(url: string) {
 	const out: string[] = []
 	/* apply and status never use the dev database */
-	const target = { devUrl: "postgres://comb-no-dev.invalid/dev", lockTimeout: "5s", schema: "public", url }
+	const target = { devUrl: "postgres://database-no-dev.invalid/dev", lockTimeout: "5s", schema: "public", url }
 	return { approve, dir, out, print: (line: string) => out.push(line), target }
 }
 

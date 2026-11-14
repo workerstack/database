@@ -2,14 +2,14 @@
  * What each kind of SQLite target runs, which check holds a file to before anything applies:
  * a local SQLite file runs what SQLite does, and a libsql server (sqld) what its parser and
  * authorizer let through. A D1 database runs what its own engine does, which check asks it (d1-engine.ts),
- * so no list here. No `-- comb:allow-unsafe:` clears a refusal here: the target would fail
+ * so no list here. No `-- database:allow-unsafe:` clears a refusal here: the target would fail
  * the file at apply.
  */
 import type { Pragma } from "./sql-code.ts"
 
 /**
  * Where a SQLite-family file applies, which the CLI reads from its provider: `local` a SQLite file
- * comb opens itself (bun:sqlite, a libsql `file:` or `:memory:`), `sqld` a libsql server (a libsql URL of any other
+ * database opens itself (bun:sqlite, a libsql `file:` or `:memory:`), `sqld` a libsql server (a libsql URL of any other
  * scheme, and Turso, which runs one), `d1` a D1 database through wrangler. Each kind has its own rule of
  * what it runs, so a statement one refuses is refused before anything applies
  */

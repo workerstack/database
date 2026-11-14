@@ -18,7 +18,7 @@ import { Stopped } from "./stopped.ts"
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-d1-stopped-"))
+	dir = mkdtempSync(join(tmpdir(), "database-d1-stopped-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 

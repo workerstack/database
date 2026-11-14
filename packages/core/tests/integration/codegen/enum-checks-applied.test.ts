@@ -1,7 +1,7 @@
 /**
  * F47 of the 0.13.0 round, through the real CLI: once a table spreads the enum CHECKs codegen
- * generates, the reader sees comb's own CHECK as declared. Codegen maps it once, as comb's, and
- * runs again; a hand CHECK under comb's name that checks something else fails, saying so.
+ * generates, the reader sees database's own CHECK as declared. Codegen maps it once, as database's, and
+ * runs again; a hand CHECK under database's name that checks something else fails, saying so.
  */
 import fs from "node:fs"
 import path from "node:path"
@@ -21,8 +21,8 @@ const TABLES = "src/db/db.core.tables.ts"
 type Checks = Record<string, { check?: Record<string, { errorKey: string }> }>
 
 describe("the enum CHECKs codegen generates, once applied (F47)", () => {
-	it("maps comb's CHECK once, as its own, and codegen runs again", async () => {
-		const dir = project({ "comb.config.ts": CONFIG, [TABLES]: tables("", "") })
+	it("maps database's CHECK once, as its own, and codegen runs again", async () => {
+		const dir = project({ "database.config.ts": CONFIG, [TABLES]: tables("", "") })
 		await codegen(dir)
 		fs.writeFileSync(
 			path.join(dir, TABLES),
@@ -37,16 +37,16 @@ describe("the enum CHECKs codegen generates, once applied (F47)", () => {
 		})
 	}, 120_000)
 
-	it("refuses a hand CHECK under comb's name that checks something else", async () => {
+	it("refuses a hand CHECK under database's name that checks something else", async () => {
 		const head = `import { sql } from "drizzle-orm"\nimport { check } from "drizzle-orm/sqlite-core"`
 		const dir = project({
-			"comb.config.ts": CONFIG,
+			"database.config.ts": CONFIG,
 			[TABLES]: tables(head, `, (t) => [check("item_status_enum", sql\`\${t.status} <> 'open'\`)]`),
 		})
 		const run = await runCodegen(dir)
 		expect(run.code).not.toBe(0)
 		expect(run.err).toContain(
-			"item: the CHECK item_status_enum takes the name comb gives the enum CHECK of item.status, but checks something else; rename it",
+			"item: the CHECK item_status_enum takes the name database gives the enum CHECK of item.status, but checks something else; rename it",
 		)
 		expect(run.err).not.toContain("63 bytes")
 	}, 120_000)

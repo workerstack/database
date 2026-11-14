@@ -1,7 +1,7 @@
 /**
- * Postgres tables as comb follows them around Atlas's statements: which tables those create,
+ * Postgres tables as database follows them around Atlas's statements: which tables those create,
  * alter and drop, and each table's row level security. Atlas OSS drops `ALTER TABLE … ENABLE ROW
- * LEVEL SECURITY` without a word, so a policy would never be enforced; comb owns each table's two
+ * LEVEL SECURITY` without a word, so a policy would never be enforced; database owns each table's two
  * flags (ENABLE/DISABLE and FORCE/NO FORCE) the way it owns policies (pg-objects.ts): it takes
  * the statements out of the history and the target, follows the flags per table, and writes the
  * delta after Atlas's statements.
@@ -65,10 +65,10 @@ const RLS_COMMANDS: Readonly<Record<string, Partial<Pick<Rls, "enabled" | "force
 }
 
 /**
- * Whether a statement changes row level security, which comb owns, following each table's flags: read
+ * Whether a statement changes row level security, which database owns, following each table's flags: read
  * from its parse tree, so any number of the commands, among others, set them. It is
- * comb's whole, out of Atlas's history, only when every command is one; a statement that does more
- * stays in it, where Atlas runs it and leaves the flags to comb
+ * database's whole, out of Atlas's history, only when every command is one; a statement that does more
+ * stays in it, where Atlas runs it and leaves the flags to database
  */
 function followRls({ code, sql }: Statement, rls: Map<string, Rls>): boolean {
 	const [, table] = ALTERED.exec(code) ?? []

@@ -9,7 +9,7 @@
 import * as z from "zod"
 
 // A refine, never a pattern
-/** The `x-comb-text` value a storable text schema publishes in JSON Schema, which names the rule a pattern cannot express */
+/** The `x-database-text` value a storable text schema publishes in JSON Schema, which names the rule a pattern cannot express */
 export const STORABLE_TEXT_RULE = "no U+0000 or unpaired surrogate"
 
 /** Whether every engine stores `value` as sent: it holds no U+0000 and no lone surrogate */
@@ -22,9 +22,9 @@ export function isStorableText(value: string): boolean {
 	return true
 }
 
-/** A string schema that refuses what `isStorableText` refuses, publishing the rule as `x-comb-text` */
+/** A string schema that refuses what `isStorableText` refuses, publishing the rule as `x-database-text` */
 export const storableText = (): z.ZodString =>
 	z
 		.string()
 		.refine(isStorableText, { message: "Must not contain U+0000 or an unpaired surrogate" })
-		.meta({ "x-comb-text": STORABLE_TEXT_RULE })
+		.meta({ "x-database-text": STORABLE_TEXT_RULE })

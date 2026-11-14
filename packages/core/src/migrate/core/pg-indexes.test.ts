@@ -9,7 +9,7 @@ const P = [
 	"",
 ].join("\n")
 
-/** Every index comb follows through the history `sql`, rendered as the oracle renders Postgres's catalog */
+/** Every index database follows through the history `sql`, rendered as the oracle renders Postgres's catalog */
 function indexes(sql: string): string[] {
 	const facts = historyFacts(extractSchema(sql, undefined, "postgres"), "public")
 	return [...facts.indexes]
@@ -26,7 +26,7 @@ describe("followIndexes", () => {
 		expect(indexes(history)).toEqual(expected)
 	})
 
-	/* an index the history cannot read (made by a DO block) is not one comb knows to attach */
+	/* an index the history cannot read (made by a DO block) is not one database knows to attach */
 	it("leaves an attach of an index the history never made to Postgres", () => {
 		const made = "DO $$ BEGIN EXECUTE 'CREATE INDEX p1_at ON p1 (at)'; END $$;"
 		const history = `${P}CREATE INDEX p_at ON ONLY p (at);\n${made}\nALTER INDEX p_at ATTACH PARTITION p1_at;`

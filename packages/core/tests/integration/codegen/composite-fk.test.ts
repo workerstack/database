@@ -21,7 +21,7 @@ export const grant = sqliteTable("grant", { id: c.id("grt"), orgId: c.text("org_
 describe("a composite foreign key (F46)", () => {
 	it("serves the row both columns reference through with:, maps each column's key, and updates neither", async () => {
 		const dir = project({
-			"comb.config.ts": `export default { databases: { core: { tables: "./src/db/db.core.tables.ts" } } }\n`,
+			"database.config.ts": `export default { databases: { core: { tables: "./src/db/db.core.tables.ts" } } }\n`,
 			"src/db/db.core.tables.ts": TABLES,
 		})
 		await codegen(dir)

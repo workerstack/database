@@ -1,5 +1,5 @@
 /**
- * What `comb migrate check` answers on a local D1 for a file that leaves a view or a trigger unable to run, through
+ * What `database migrate check` answers on a local D1 for a file that leaves a view or a trigger unable to run, through
  * the real wrangler --local. SQLite's DROP TABLE and DROP VIEW check no view or trigger that names what they drop, and
  * D1 resolves those names only when a statement runs, so such a file applies cleanly and then fails every read of the
  * view, or every write the trigger fires on (SD1 of r23). A view written through INSTEAD OF triggers for some events
@@ -34,10 +34,10 @@ const ON_V = {
 	insert: "CREATE TRIGGER v_ins INSTEAD OF INSERT ON v BEGIN INSERT INTO t (a) VALUES (new.a); END;\n",
 	update: "CREATE TRIGGER v_upd INSTEAD OF UPDATE ON v BEGIN UPDATE t SET a = new.a WHERE id = old.id; END;\n",
 }
-const APPROVED = "-- comb:allow-unsafe: the schema's own change\n"
+const APPROVED = "-- database:allow-unsafe: the schema's own change\n"
 
 /* SD1 of r23 */
-describe("comb migrate check on D1 --local refuses a file that leaves a view or trigger unable to run", () => {
+describe("database migrate check on D1 --local refuses a file that leaves a view or trigger unable to run", () => {
 	it.each([
 		{
 			base: `${T}CREATE TABLE log (id INTEGER PRIMARY KEY, a TEXT);\nCREATE TRIGGER t_ai AFTER INSERT ON t BEGIN INSERT INTO log (a) VALUES (new.a); END;\n`,
@@ -83,7 +83,7 @@ describe("comb migrate check on D1 --local refuses a file that leaves a view or 
 })
 
 /* SD2 of r23 */
-describe("comb migrate check on D1 --local passes a view written through INSTEAD OF triggers for some events", () => {
+describe("database migrate check on D1 --local passes a view written through INSTEAD OF triggers for some events", () => {
 	it.each([
 		{ label: "INSERT only", next: ON_V.insert },
 		{ label: "UPDATE only", next: ON_V.update },

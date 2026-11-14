@@ -1,8 +1,8 @@
 /**
- * Plan 13's 4.6: `comb codegen` run in a consumer installed from the packed tarball, under bun and
- * under each node of COMB_CODEGEN_NODES (colon-separated paths; `node` on PATH when unset), writes
+ * Plan 13's 4.6: `database codegen` run in a consumer installed from the packed tarball, under bun and
+ * under each node of DATABASE_CODEGEN_NODES (colon-separated paths; `node` on PATH when unset), writes
  * the same bytes everywhere. Codegen loads the tables module at runtime, so each runtime's module
- * loading (bun natively, node through comb's hooks) must read the tables alike.
+ * loading (bun natively, node through database's hooks) must read the tables alike.
  */
 import { readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { join, relative } from "node:path"
@@ -40,7 +40,7 @@ export const ticket = pgTable("ticket", { id: c.integer("id").primaryKey().gener
 `
 
 const FILES = {
-	"comb.config.ts": `export default { databases: {
+	"database.config.ts": `export default { databases: {
 	core: { tables: "./src/db/db.core.tables.ts" },
 	support: { tables: "./src/pg/db.support.tables.ts", dialect: "postgres" },
 } }\n`,
@@ -51,8 +51,8 @@ const FILES = {
 	"tsconfig.json": JSON.stringify({ compilerOptions: { paths: { "@app/*": ["./src/lib/*"] } } }),
 }
 
-/** The nodes to run codegen under: COMB_CODEGEN_NODES, else the `node` on PATH */
-const NODES = (process.env["COMB_CODEGEN_NODES"] ?? "node").split(":").filter(Boolean)
+/** The nodes to run codegen under: DATABASE_CODEGEN_NODES, else the `node` on PATH */
+const NODES = (process.env["DATABASE_CODEGEN_NODES"] ?? "node").split(":").filter(Boolean)
 
 let app: Stage
 let manifest: string
@@ -75,7 +75,7 @@ function written(): Record<string, string> {
 	return out
 }
 
-/** `comb codegen` under node `bin`: comb's own hooks load its TypeScript, as they load the child's */
+/** `database codegen` under node `bin`: database's own hooks load its TypeScript, as they load the child's */
 function underNode(bin: string): string {
 	const core = join(app.dir, "node_modules/@workerstack/database/src")
 	const hooks = pathToFileURL(join(core, "codegen/runtime/node-hooks.mjs")).href
@@ -95,9 +95,9 @@ function underNode(bin: string): string {
 	)
 }
 
-describe("comb codegen in a consumer, on every runtime (4.6)", () => {
+describe("database codegen in a consumer, on every runtime (4.6)", () => {
 	it("writes the same bytes under bun and every node", () => {
-		ok(run(app.dir, "bun", ["node_modules/.bin/comb", "codegen"]), "codegen under bun")
+		ok(run(app.dir, "bun", ["node_modules/.bin/database", "codegen"]), "codegen under bun")
 		const bun = written()
 		expect(Object.keys(bun)).toEqual(
 			expect.arrayContaining(["src/db/dtos/user/db.core.user.gen.ts", "src/pg/dtos/ticket/db.support.ticket.gen.ts"]),

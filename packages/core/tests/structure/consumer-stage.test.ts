@@ -13,7 +13,7 @@ const TYPES = "@cloudflare/workers-types"
 const newest = admittedOf("wrangler").at(-1) as string
 const floor = floorOf(REGISTRY.wrangler.range)
 
-/* the consumer stage installs the newest wrangler comb admits beside the tools; npm refuses a workers-types outside its peer range (ERESOLVE) */
+/* the consumer stage installs the newest wrangler database admits beside the tools; npm refuses a workers-types outside its peer range (ERESOLVE) */
 describe("the consumer stage's tools", () => {
 	it("install a workers-types the newest wrangler's peer range admits", () => {
 		const range = REGISTRY.wrangler.newestPeers[TYPES] as string

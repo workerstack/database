@@ -6,7 +6,7 @@ const rule = plugin.rules["no-module-state"]
 const MESSAGE =
 	"module-scope state needs `// <reason>: <why>` on its line or the line above, with reason lookup-table, lru-cache or per-process-constant"
 
-describe("comb/no-module-state", () => {
+describe("database/no-module-state", () => {
 	it("rejects module-scope let, var and constructed state", () => {
 		const fixture = {
 			"packages/core/src/a.ts": "let count = 0\nexport function bump() {\n\treturn ++count\n}\n",
@@ -49,7 +49,7 @@ describe("comb/no-module-state", () => {
 	})
 })
 
-describe("comb/no-module-state: scope", () => {
+describe("database/no-module-state: scope", () => {
 	it("allows constants, function-scope state, tests and code outside src", () => {
 		const fixture = {
 			"packages/core/src/a.ts":
@@ -60,7 +60,7 @@ describe("comb/no-module-state: scope", () => {
 		expect(reportsOf(rule, fixture)).toEqual([])
 	})
 
-	it("fails oxlint through the comb plugin entry", () => {
+	it("fails oxlint through the database plugin entry", () => {
 		const fixture = {
 			"packages/core/src/a.ts": "let n = 0\nexport const get = () => n\n",
 			"packages/core/src/b.ts":

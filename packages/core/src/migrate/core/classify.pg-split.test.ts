@@ -33,7 +33,7 @@ describe("a history statement Postgres runs whole (M75)", () => {
 
 	it("fails the classification on a history statement the parser cannot read, naming it", () => {
 		expect(() => classify("CREATE TABLE b (id int) GO;", "INSERT INTO a VALUES (1);")).toThrow(
-			/comb could not read the history: "CREATE TABLE b \(id int\) GO" \(syntax error at or near "GO"\)/,
+			/database could not read the history: "CREATE TABLE b \(id int\) GO" \(syntax error at or near "GO"\)/,
 		)
 	})
 })

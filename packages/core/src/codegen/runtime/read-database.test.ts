@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm"
 import { describe, expect, it } from "vitest"
 import * as z from "zod"
-import { constraintsOf, refuseJsonDocument, statesOf, STRING_LIST } from "./read-comb.ts"
+import { constraintsOf, refuseJsonDocument, statesOf, STRING_LIST } from "./read-database.ts"
 
 describe("STRING_LIST", () => {
 	it("holds an array of strings alone", () => {
@@ -36,7 +36,7 @@ describe("constraintsOf", () => {
 
 	it("refuses any other value, naming the column and the constraint", () => {
 		expect(() => constraintsOf({ max: {} }, "t.c")).toThrow(
-			"t.c: the constraint max is a object; comb reads a boolean, a number or a string",
+			"t.c: the constraint max is a object; database reads a boolean, a number or a string",
 		)
 	})
 })
@@ -132,7 +132,7 @@ describe("refuseJsonDocument: a schema whose output its input refuses, or a NOT 
 /* CD4 of r22b: a state column's fill is its machine's initial */
 const MACHINE = { initial: "a", terminal: ["b"] }
 const NO_LITERAL =
-	't.s: its default is no literal value, so comb cannot hold it to its state machine\'s initial "a"; write .default("a")'
+	't.s: its default is no literal value, so database cannot hold it to its state machine\'s initial "a"; write .default("a")'
 
 describe("statesOf: a state column's default is its initial", () => {
 	it("keeps any fill on a machine that declares no initial (sibling)", () => {
@@ -155,7 +155,7 @@ describe("statesOf: a state column's default is its initial", () => {
 		["a default function", { defaultFn: () => "a" }],
 		["an update function", { onUpdateFn: () => "a" }],
 		["an SQL default", { default: sql`'a'` }],
-	])("refuses %s, which comb cannot read as a value", (_, fill) => {
+	])("refuses %s, which database cannot read as a value", (_, fill) => {
 		expect(() => statesOf(MACHINE, "t.s", fill)).toThrow(NO_LITERAL)
 	})
 })

@@ -1,5 +1,5 @@
 /**
- * Another process's write lock on a local D1 file, as comb meets it through wrangler: the D1 driver waits a command
+ * Another process's write lock on a local D1 file, as database meets it through wrangler: the D1 driver waits a command
  * out, and a failed apply names it.
  */
 
@@ -12,8 +12,8 @@ export const LOCAL_LOCK_MS = 5000
  */
 export const LOCAL_BUSY: RegExp = /database is locked: SQLITE_BUSY(?!\w)/
 
-/** who holds a local D1 file's write lock when comb meets it */
-export const LOCKER = "another process (wrangler dev, a wrangler command or a second comb migrate)"
+/** who holds a local D1 file's write lock when database meets it */
+export const LOCKER = "another process (wrangler dev, a wrangler command or a second database migrate)"
 
 /**
  * Whether a failed --local run met another process's write lock on the file: workerd's SQLITE_BUSY in its output, or

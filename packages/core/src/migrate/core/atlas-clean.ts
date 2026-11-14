@@ -1,12 +1,12 @@
 /**
- * Whether a Postgres database is one Atlas would call clean: comb's check refuses what Atlas's
- * apply refuses, without the dry run, which writes Atlas's revisions schema. comb binds every Atlas
+ * Whether a Postgres database is one Atlas would call clean: database's check refuses what Atlas's
+ * apply refuses, without the dry run, which writes Atlas's revisions schema. database binds every Atlas
  * URL to the target's schema (`search_path`), and Atlas calls a bound target clean while its schema
  * holds no table. Atlas OSS inspects no view or function, so those do not count.
  */
 import { explainAtlasFailure, NOT_CLEAN } from "./atlas-failure.ts"
 import { type PgTarget, withAtlasEnv } from "./atlas-target.ts"
-import type { Run } from "./process.ts"
+import type { MigrateRun } from "./process.ts"
 
 /** The schemas `atlas schema inspect` reports, by name, with their tables */
 type Inspected = { schemas?: Array<{ name?: string | undefined; tables?: unknown[] | undefined }> | undefined }
@@ -14,7 +14,7 @@ type Inspected = { schemas?: Array<{ name?: string | undefined; tables?: unknown
 /**
  * Atlas's inspect JSON `stdout`, parsed as Atlas wrote it and never scrubbed: its names are
  * the database's, used as they are, and a caller masks a value only where it prints it, since a
- * secret that spells a name or a key would otherwise change what comb reads
+ * secret that spells a name or a key would otherwise change what database reads
  */
 function readInspect(stdout: string): Inspected {
 	try {
@@ -26,7 +26,7 @@ function readInspect(stdout: string): Inspected {
 }
 
 /** Refuses, with apply's baseline message, a database Atlas would call not clean; reads only */
-async function refuseUnclean(options: { exec: Run; target: PgTarget }): Promise<void> {
+async function refuseUnclean(options: { exec: MigrateRun; target: PgTarget }): Promise<void> {
 	const { schemas = [] } = await withAtlasEnv(options.target, { url: true }, async (env) => {
 		const args = ["schema", "inspect", "--url", "env://url", "--format", "{{ json . }}", ...env.args]
 		const result = await options.exec("atlas", args, { env: env.env })

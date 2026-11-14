@@ -57,11 +57,11 @@ declare function canTransition<T extends string>(machine: StateMachine<T>, from:
 /**
  * Throw unless `from → to` is legal.
  *
- * Raises `CombError` with `invalid_state_transition` at 422, the same shape
- * every other comb-detected violation takes, so an HTTP layer needs no special
+ * Raises `DatabaseError` with `invalid_state_transition` at 422, the same shape
+ * every other database-detected violation takes, so an HTTP layer needs no special
  * case for it.
  *
- * Deliberately explicit rather than an ORM hook: comb does not own the write
+ * Deliberately explicit rather than an ORM hook: database does not own the write
  * path, and a backfill or a correction may legitimately need to move a row in a
  * way the product rules forbid. A rule you cannot see at the call site and
  * cannot opt out of is worse than one you must remember to call.

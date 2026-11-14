@@ -1,6 +1,6 @@
 /**
  * P8 of the 0.15.0 review: Postgres rewrites the table for an added column whose default is
- * volatile, which every function is unless it says otherwise. comb warned only for eight named
+ * volatile, which every function is unless it says otherwise. database warned only for eight named
  * built-ins, so a history function and an unlisted built-in such as random_normal() rewrote the
  * table with no warning (probed on Postgres 17 by d6-volatile-default-rewrite.ts: filenode changed).
  * A default that calls a function is a rewrite unless the function is known not to be volatile.
@@ -69,7 +69,7 @@ describe("an added column's default that calls a function", () => {
 		expect(warnings(renamed, "ALTER TABLE t ADD COLUMN a int DEFAULT code();")).toEqual([])
 	})
 
-	it("warns when any overload of the history function is volatile, as comb cannot tell which the call takes", () => {
+	it("warns when any overload of the history function is volatile, as database cannot tell which the call takes", () => {
 		const overloads = `${fn("IMMUTABLE")} CREATE FUNCTION next_code(n int) RETURNS int LANGUAGE sql AS 'SELECT n';`
 		expect(warnings(overloads, "ALTER TABLE t ADD COLUMN a int DEFAULT next_code();")).toEqual([
 			`ALTER TABLE t ADD COLUMN a int DEFAULT next_code() ${REWRITE}`,

@@ -1,6 +1,6 @@
 /**
- * comb's guards around a rebuild, read back at check time (rebuild-guard.ts writes them at diff
- * time): which statements of a file are a guard exactly as comb writes it, the rows each keeps,
+ * database's guards around a rebuild, read back at check time (rebuild-guard.ts writes them at diff
+ * time): which statements of a file are a guard exactly as database writes it, the rows each keeps,
  * the tables each leaves under new rowids, a referenced rebuild left unguarded, and a guard that
  * would fire a trigger a later file put on a table it empties.
  */
@@ -38,8 +38,8 @@ type Guards = {
 }
 
 /**
- * The statements of a file that are the guards comb wrote, each exactly as comb writes it (or as
- * comb 0.8 wrote it), the tables each guarded rebuild keeps the rows of, the tables each rebuild
+ * The statements of a file that are the guards database wrote, each exactly as database writes it (or as
+ * database 0.8 wrote it), the tables each guarded rebuild keeps the rows of, the tables each rebuild
  * leaves under new rowids, and the rebuilt tables of referenced rebuilds left unguarded, with the
  * tables their drop reaches. A guard written before a later file put a trigger on a table it
  * empties fires that trigger: the rebuild is named in `fired`, as diff would have refused it.

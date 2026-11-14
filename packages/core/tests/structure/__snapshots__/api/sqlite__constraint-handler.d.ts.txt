@@ -1,27 +1,27 @@
 // sqlite/constraint-handler.d.ts
-import { CombError } from "../error.ts";
+import { DatabaseError } from "../error.ts";
 import { type ConstraintMap } from "../types.ts";
 import { resourceOutcome } from "./resource-outcome.ts";
 /**
- * The CombError for an SQLite constraint violation inside `error`, or for a value its column
+ * The DatabaseError for an SQLite constraint violation inside `error`, or for a value its column
  * cannot hold (value-error.ts); null when it is neither.
  */
-declare function constraintError(error: unknown, given: readonly ConstraintMap[]): CombError | null;
+declare function constraintError(error: unknown, given: readonly ConstraintMap[]): DatabaseError | null;
 /**
- * Throws the mapped CombError when `error` is an SQLite constraint violation; otherwise returns.
+ * Throws the mapped DatabaseError when `error` is an SQLite constraint violation; otherwise returns.
  * `error` is the thrown error, wrapper and all, or an engine message given as text.
  */
 declare function handleConstraintViolation(error: unknown, maps: readonly ConstraintMap[]): void;
 /**
- * The CombError a libsql, Turso or bun:sqlite error is: a constraint violation, a resource error,
+ * The DatabaseError a libsql, Turso or bun:sqlite error is: a constraint violation, a resource error,
  * or a lost connection, as on D1 and Postgres; undefined for any other. It throws nothing, so a
  * caller can ask what an error is.
  */
-declare function classifySqliteError(error: unknown, maps: readonly ConstraintMap[]): CombError | undefined;
+declare function classifySqliteError(error: unknown, maps: readonly ConstraintMap[]): DatabaseError | undefined;
 /** The error handler for libsql, Turso and bun:sqlite: throws what classifySqliteError finds; any other error is left for the caller */
 declare function sqliteErrorHandler(error: unknown, maps: readonly ConstraintMap[]): void;
 export { classifySqliteError, constraintError, handleConstraintViolation, resourceOutcome, sqliteErrorHandler };
-export type { Fallback } from "../constraint-map.ts";
+export type { ConstraintFallback } from "../constraint-map.ts";
 
 // error.d.ts
 import type { StatusKey } from "./types.ts";
@@ -30,12 +30,12 @@ import type { StatusKey } from "./types.ts";
  * column it concerns. Its message is `errorKey`; `toJSON()` gives the body a client may see, and the
  * original error stays on `source`, never serialized.
  */
-export declare class CombError extends Error {
+export declare class DatabaseError extends Error {
     /** A message safe to show the client. The original error is on `source`. */
     readonly cause?: string | undefined;
     /** The SQL name of the column the error concerns; unset when it is private or unknown */
     readonly column?: string | undefined;
-    /** What went wrong, as a stable key, one of `combErrorKeys` or a constraint map's own */
+    /** What went wrong, as a stable key, one of `databaseErrorKeys` or a constraint map's own */
     readonly errorKey: string;
     /** The HTTP status code for `statusKey`, such as 409 for `conflict` */
     readonly status: number;
@@ -78,10 +78,10 @@ export declare class CombError extends Error {
 // types.d.ts
 /** Database-relevant HTTP status keys */
 export type StatusKey = "bad_request" | "conflict" | "forbidden" | "internal_server_error" | "service_unavailable" | "unprocessable_entity";
-/** The HTTP status code for each status key, as `CombError.status` carries it */
+/** The HTTP status code for each status key, as `DatabaseError.status` carries it */
 export declare const statusKeyToCode: Record<StatusKey, number>;
 /** Database-related error key constants */
-export declare const combErrorKeys: {
+export declare const databaseErrorKeys: {
     readonly CHECK_CONSTRAINT_VIOLATION: "check_constraint_violation";
     readonly CONSTRAINT_VIOLATION: "constraint_violation";
     readonly CURSOR_NOT_WIRED: "cursor_not_wired";
@@ -108,23 +108,23 @@ export declare const combErrorKeys: {
     readonly UNIQUE_CONSTRAINT_VIOLATION: "unique_constraint_violation";
     readonly VALUE_TOO_LARGE: "value_too_large";
 };
-/** Lowercase error key values from combErrorKeys */
-export type CombErrorKey = (typeof combErrorKeys)[keyof typeof combErrorKeys];
+/** Lowercase error key values from databaseErrorKeys */
+export type DatabaseErrorKey = (typeof databaseErrorKeys)[keyof typeof databaseErrorKeys];
 /** A key a database error classifier answers with: classifyD1Error, classifySqliteError and classifyPgError alike */
-export type CombDatabaseErrorKey = (typeof combErrorKeys)["CHECK_CONSTRAINT_VIOLATION" | "CONSTRAINT_VIOLATION" | "DATABASE_IO_ERROR" | "DATABASE_READONLY" | "DATABASE_UNAVAILABLE" | "EXCLUSION_CONSTRAINT_VIOLATION" | "FOREIGN_KEY_VIOLATION" | "INVALID_VALUE" | "PRIMARY_KEY_VIOLATION" | "REQUIRED_FIELD_MISSING" | "STORAGE_LIMIT_REACHED" | "UNIQUE_CONSTRAINT_VIOLATION" | "VALUE_TOO_LARGE"];
+export type DatabaseDriverErrorKey = (typeof databaseErrorKeys)["CHECK_CONSTRAINT_VIOLATION" | "CONSTRAINT_VIOLATION" | "DATABASE_IO_ERROR" | "DATABASE_READONLY" | "DATABASE_UNAVAILABLE" | "EXCLUSION_CONSTRAINT_VIOLATION" | "FOREIGN_KEY_VIOLATION" | "INVALID_VALUE" | "PRIMARY_KEY_VIOLATION" | "REQUIRED_FIELD_MISSING" | "STORAGE_LIMIT_REACHED" | "UNIQUE_CONSTRAINT_VIOLATION" | "VALUE_TOO_LARGE"];
 /**
- * The keys comb's database error classifiers answer with: the subset of combErrorKeys a consumer's
+ * The keys database's database error classifiers answer with: the subset of databaseErrorKeys a consumer's
  * map of database errors (a translation, a status) iterates to cover each one. The query and router
  * keys are not among them.
  */
-export declare const combDatabaseErrorKeys: readonly CombDatabaseErrorKey[];
+export declare const databaseDriverErrorKeys: readonly DatabaseDriverErrorKey[];
 /** Constraint map entry for mapping DB constraint violations to domain errors */
 export type ConstraintMapEntry = {
-    /** The `CombError.cause` the violation answers with: a message safe to show the client */
+    /** The `DatabaseError.cause` the violation answers with: a message safe to show the client */
     cause: string;
-    /** The `CombError.errorKey` the violation answers with, your domain's key */
+    /** The `DatabaseError.errorKey` the violation answers with, your domain's key */
     errorKey: string;
-    /** The status the violation answers with; `bad_request` for a violation comb reports as one, such as a CHECK, and `conflict` otherwise */
+    /** The status the violation answers with; `bad_request` for a violation database reports as one, such as a CHECK, and `conflict` otherwise */
     statusKey?: "bad_request" | "conflict" | "forbidden" | undefined;
 };
 /** Per-table constraint violation mappings */
@@ -148,7 +148,7 @@ export type ConstraintMap = {
         /**
          * The partitions of this Postgres table, keyed as the map keys a table: Postgres reports a
          * violation on the partition, which is read as this table's, under its keys and its `private`
-         * list. Codegen writes it from comb.config.ts's `partitions`; a table no entry lists or keys
+         * list. Codegen writes it from database.config.ts's `partitions`; a table no entry lists or keys
          * names no column.
          */
         partitions?: readonly string[] | undefined;
@@ -177,25 +177,25 @@ export type DatabaseErrorHandler = (error: unknown, constraintMaps: readonly Con
  * The SQLite engine's resource codes, which a retry or a bigger plan can fix, as the libsql,
  * bun:sqlite and D1 handlers answer them.
  */
-import { type Fallback } from "../constraint-map.ts";
+import { type ConstraintFallback } from "../constraint-map.ts";
 /** The outcome of an engine resource code, its extended form read as its primary; undefined for any other */
-export declare const resourceOutcome: (code: string | undefined) => Fallback | undefined;
+export declare const resourceOutcome: (code: string | undefined) => ConstraintFallback | undefined;
 
 // constraint-map.d.ts
 /**
  * Looking a constraint violation up in the app's ConstraintMaps, shared by the SQLite and the
  * Postgres handlers: each dialect finds the table, column or constraint name its own way, and
- * both turn what they found into the same CombError.
+ * both turn what they found into the same DatabaseError.
  */
-import { CombError } from "./error.ts";
-import type { CombDatabaseErrorKey, ConstraintMap, ConstraintMapEntry, StatusKey } from "./types.ts";
+import { DatabaseError } from "./error.ts";
+import type { DatabaseDriverErrorKey, ConstraintMap, ConstraintMapEntry, StatusKey } from "./types.ts";
 export type TableMap = NonNullable<ConstraintMap[string]>;
 /** The generic error for a kind of violation, used when no map entry matches. */
-export type Fallback = {
-    /** the message safe to show the client, which the CombError carries as its `cause` */
+export type ConstraintFallback = {
+    /** the message safe to show the client, which the DatabaseError carries as its `cause` */
     cause: string;
     /** the key a client branches on */
-    errorKey: CombDatabaseErrorKey;
+    errorKey: DatabaseDriverErrorKey;
     /** the HTTP status the error answers with, by key: `conflict` is 409, `service_unavailable` 503 */
     status: StatusKey;
 };
@@ -203,7 +203,7 @@ export type Fallback = {
 export type Found = {
     column?: string | undefined;
     entry: ConstraintMapEntry | undefined;
-    fallback: Fallback;
+    fallback: ConstraintFallback;
     table?: string | undefined;
 };
 /** `record[key]` when `key` is the record's own (never an inherited name such as `constructor`). */
@@ -241,5 +241,5 @@ export declare function findNamed(maps: readonly ConstraintMap[], kind: "check" 
     entry: ConstraintMapEntry;
     table: string;
 } | undefined;
-/** The CombError for what a handler found; `source` is the original error, kept for logs. */
-export declare function toCombError({ column, entry, fallback, table }: Found, source: unknown): CombError;
+/** The DatabaseError for what a handler found; `source` is the original error, kept for logs. */
+export declare function toDatabaseError({ column, entry, fallback, table }: Found, source: unknown): DatabaseError;

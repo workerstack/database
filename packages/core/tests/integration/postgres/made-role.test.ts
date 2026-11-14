@@ -15,10 +15,10 @@ import { pgUrl } from "../support/pg.ts"
 const { checked, checkThenApply, devUrl } = pgCheck()
 
 /** A history file's text, its change approved */
-const approved = (sql: string) => `-- comb:allow-unsafe: the test's change\n${sql}`
+const approved = (sql: string) => `-- database:allow-unsafe: the test's change\n${sql}`
 
-describe("a role a DO block adds is adopted as the replay's own (P5; sibling: a CREATE ROLE comb tags)", () => {
-	const reader = unique("comb_t_reader")
+describe("a role a DO block adds is adopted as the replay's own (P5; sibling: a CREATE ROLE database tags)", () => {
+	const reader = unique("database_t_reader")
 	afterEach(() => dropRoles(reader))
 	const idiom = `DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${reader}') THEN CREATE ROLE ${reader}; END IF; END $$;\nGRANT SELECT ON t TO ${reader};\n`
 
@@ -47,14 +47,14 @@ describe("a role a DO block adds is adopted as the replay's own (P5; sibling: a 
 		)
 		/* the next file sees the role as the replay committed it; apply runs in no replay database, so it raises nothing there */
 		const bare = approved(
-			`DO $$ BEGIN IF current_database() LIKE 'comb\\_replay\\_%' AND (SELECT rolcanlogin OR rolsuper OR rolreplication OR rolbypassrls OR rolpassword IS NOT NULL FROM pg_authid WHERE rolname = '${reader}') THEN RAISE EXCEPTION 'not bare'; END IF; END $$;\nGRANT SELECT ON t TO ${reader};\n`,
+			`DO $$ BEGIN IF current_database() LIKE 'database\\_replay\\_%' AND (SELECT rolcanlogin OR rolsuper OR rolreplication OR rolbypassrls OR rolpassword IS NOT NULL FROM pg_authid WHERE rolname = '${reader}') THEN RAISE EXCEPTION 'not bare'; END IF; END $$;\nGRANT SELECT ON t TO ${reader};\n`,
 		)
 		expect(await checkThenApply(made, bare)).toEqual({ apply: undefined, check: undefined })
 	}, 60_000)
 })
 
 describe("a change only to a role the replay made is the replay's own (PR6; sibling: P3's own database)", () => {
-	const app = unique("comb_t_app")
+	const app = unique("database_t_app")
 	afterEach(() => dropRoles(app))
 	const one = `CREATE ROLE ${app};\nCREATE TABLE t (id int);\n`
 
@@ -89,7 +89,7 @@ describe("a change only to a role the replay made is the replay's own (PR6; sibl
 })
 
 describe("a change past what the replay drops stays refused (P5's limits; sibling: P2's second connection)", () => {
-	const [pre, made, mgr] = [unique("comb_t_pre"), unique("comb_t_made"), unique("comb_t_mgr")]
+	const [pre, made, mgr] = [unique("database_t_pre"), unique("database_t_made"), unique("database_t_mgr")]
 	afterEach(() => dropRoles(made, pre, mgr))
 
 	it("refuses a DO that adds a role and changes an existing one, adopting neither, with the corrected advice", async () => {
@@ -122,7 +122,7 @@ describe("a change past what the replay drops stays refused (P5's limits; siblin
 			approved(`DO $$ BEGIN PERFORM dblink_exec(${LOOPBACK}, 'CREATE ROLE ${made}'); END $$;\n`),
 		)
 		expect(refused).toContain(
-			`comb leaves role ${made} added on devUrl's server, as another session may have made that change`,
+			`database leaves role ${made} added on devUrl's server, as another session may have made that change`,
 		)
 		expect(await roleOf(made)).toEqual([{ rolconnlimit: -1, rolname: made }])
 	}, 60_000)

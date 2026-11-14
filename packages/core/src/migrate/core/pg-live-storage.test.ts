@@ -55,7 +55,9 @@ describe("readPlaced", () => {
 	it("refuses, the password masked, when the read fails", async () => {
 		const { load, seen } = fakeConnect([], new Error("password authentication failed for App-Secret-0451"))
 		const refused = readPlaced(target, load)
-		await expect(refused).rejects.toThrow(/^comb could not read where url keeps its relations: password authentication/)
+		await expect(refused).rejects.toThrow(
+			/^database could not read where url keeps its relations: password authentication/,
+		)
 		await expect(refused).rejects.not.toThrow("App-Secret-0451")
 		expect(seen.ended).toBe(true)
 	})

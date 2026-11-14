@@ -46,9 +46,9 @@ const SESSIONS = [
 	{ datname: "dev", pid: 5, start: "222" },
 	{ datname: "dev", pid: 6, start: null },
 	{ datname: "dev", pid: 7, start: "999" },
-	{ app: "psql", datname: "comb_replay_9_555_eeeeeeee", pid: 8, start: "1" },
-	{ app: "comb_replay 9_666", datname: "comb_replay_9_666_ffffffff", pid: 10, start: "1" },
-	{ app: "comb_replay 9_666", datname: "comb_replay_9_777_abababab", pid: 11, start: "1" },
+	{ app: "psql", datname: "database_replay_9_555_eeeeeeee", pid: 8, start: "1" },
+	{ app: "database_replay 9_666", datname: "database_replay_9_666_ffffffff", pid: 10, start: "1" },
+	{ app: "database_replay 9_666", datname: "database_replay_9_777_abababab", pid: 11, start: "1" },
 ]
 
 /* the sweep's now, one of 0.19's runs just past an hour before it, and one just within */
@@ -62,24 +62,24 @@ async function swept(fail: (query: string) => boolean = () => false) {
 		if (query.startsWith("SELECT pid")) return SESSIONS
 		if (query.startsWith("SELECT datname"))
 			return [
-				`comb_replay_${old}_00000000`,
-				`comb_replay_${young}_00000000`,
-				"comb_replay_other",
-				"comb_replay_9_111_aaaaaaaa",
-				"comb_replay_5_222_bbbbbbbb",
-				"comb_replay_6_333_cccccccc",
-				"comb_replay_7_444_dddddddd",
-				"comb_replay_9_555_eeeeeeee",
-				"comb_replay_9_666_ffffffff",
-				"comb_replay_9_777_abababab",
+				`database_replay_${old}_00000000`,
+				`database_replay_${young}_00000000`,
+				"database_replay_other",
+				"database_replay_9_111_aaaaaaaa",
+				"database_replay_5_222_bbbbbbbb",
+				"database_replay_6_333_cccccccc",
+				"database_replay_7_444_dddddddd",
+				"database_replay_9_555_eeeeeeee",
+				"database_replay_9_666_ffffffff",
+				"database_replay_9_777_abababab",
 			].map((datname) => ({ datname }))
 		if (query.startsWith("SELECT r.rolname"))
 			return [
-				{ description: `comb_replay ${old}`, rolname: "stale" },
-				{ description: `comb_replay ${young}`, rolname: "fresh" },
-				{ description: "comb_replay by hand", rolname: "kept" },
-				{ description: "comb_replay 9_111", rolname: "dead" },
-				{ description: "comb_replay 5_222", rolname: "live" },
+				{ description: `database_replay ${old}`, rolname: "stale" },
+				{ description: `database_replay ${young}`, rolname: "fresh" },
+				{ description: "database_replay by hand", rolname: "kept" },
+				{ description: "database_replay 9_111", rolname: "dead" },
+				{ description: "database_replay 5_222", rolname: "live" },
 			]
 		if (fail(query)) return new Error("database is being accessed by other users")
 		return []
@@ -97,7 +97,7 @@ async function swept(fail: (query: string) => boolean = () => false) {
 
 /** What cleanUp says of `what`, a drop dev refused as in use, which the next sweep takes */
 const unsaid = (what: string): string =>
-	`comb could not drop ${what}, which a replay left on devUrl's server: in use; the next check or apply that reaches that server drops it`
+	`database could not drop ${what}, which a replay left on devUrl's server: in use; the next check or apply that reaches that server drops it`
 
 describe("cleanUp", () => {
 	it("says each drop it could not make, and drops the next, which the next sweep takes", async () => {
@@ -113,26 +113,28 @@ describe("cleanUp", () => {
 		const run = {
 			admin: admin.sql,
 			created: ["made"],
-			database: "comb_replay_db",
+			database: "database_replay_db",
 			sql: fake().sql,
 		}
 		await cleanUp(run as unknown as Parameters<typeof cleanUp>[0], {
 			into: () => fake().sql,
 			leave: leaving((line) => said.push(line), failed),
 		})
-		expect(said).toEqual([unsaid("database comb_replay_db"), unsaid("role made")])
+		expect(said).toEqual([unsaid("database database_replay_db"), unsaid("role made")])
 	})
 })
 
 describe("sweep", () => {
 	it("drops what a replay whose backend is gone made, and what 0.19 made over an hour ago, and keeps the rest", async () => {
 		expect(await swept()).toEqual({
+			/* 10 and 11 first, the dead replay 9_666's backends wherever they are */
 			dropped: [
-				`DROP DATABASE IF EXISTS "comb_replay_${old}_00000000"`,
-				'DROP DATABASE IF EXISTS "comb_replay_9_111_aaaaaaaa"',
-				'DROP DATABASE IF EXISTS "comb_replay_7_444_dddddddd"',
 				"SELECT pg_terminate_backend($1)",
-				'DROP DATABASE IF EXISTS "comb_replay_9_666_ffffffff"',
+				"SELECT pg_terminate_backend($1)",
+				`DROP DATABASE IF EXISTS "database_replay_${old}_00000000"`,
+				'DROP DATABASE IF EXISTS "database_replay_9_111_aaaaaaaa"',
+				'DROP DATABASE IF EXISTS "database_replay_7_444_dddddddd"',
+				'DROP DATABASE IF EXISTS "database_replay_9_666_ffffffff"',
 				'DROP ROLE IF EXISTS "stale"',
 				'DROP ROLE IF EXISTS "dead"',
 			],
@@ -142,9 +144,9 @@ describe("sweep", () => {
 
 	it("goes on past a drop that fails, saying it, which the next run takes", async () => {
 		const { dropped, said } = await swept((query) => query.includes("9_111"))
-		expect(dropped).toContain('DROP DATABASE IF EXISTS "comb_replay_7_444_dddddddd"')
+		expect(dropped).toContain('DROP DATABASE IF EXISTS "database_replay_7_444_dddddddd"')
 		expect(dropped).toContain('DROP ROLE IF EXISTS "dead"')
-		expect(said).toEqual(["database comb_replay_9_111_aaaaaaaa: database is being accessed by other users"])
+		expect(said).toEqual(["database database_replay_9_111_aaaaaaaa: database is being accessed by other users"])
 	})
 })
 
@@ -154,18 +156,44 @@ describe("sweep of a replay killed mid-statement", () => {
 	it("ends a dead replay's own backends before it drops their database, of every role it may drop, but one with any other session", async () => {
 		const admin = fake((query) =>
 			query.startsWith("SELECT pid")
-				? [{ app: "comb_replay 9_666", datname: "comb_replay_9_666_ffffffff", pid: 10, start: "1" }]
+				? [{ app: "database_replay 9_666", datname: "database_replay_9_666_ffffffff", pid: 10, start: "1" }]
 				: query.startsWith("SELECT datname")
-					? [{ datname: "comb_replay_9_666_ffffffff" }]
+					? [{ datname: "database_replay_9_666_ffffffff" }]
 					: [],
 		)
 		await sweep(admin.sql, 10 * STALE_MS, { into: () => fake().sql, leave: () => undefined })
-		expect(admin.sent[1]).toMatch(/AND pg_has_role\(datdba, 'USAGE'\)$/)
-		expect(admin.sent[1]).not.toContain("current_user")
-		expect(admin.sent.filter((query) => !EMPTIES.test(query)).slice(3, 5)).toEqual([
+		const sent = admin.sent.filter((query) => !EMPTIES.test(query))
+		const databases = sent.find((query) => query.startsWith("SELECT datname")) ?? ""
+		expect(databases).toMatch(/AND pg_has_role\(datdba, 'USAGE'\)$/)
+		expect(databases).not.toContain("current_user")
+		expect(sent.filter((query) => /^(?:SELECT pg_terminate_backend|DROP)/.test(query))).toEqual([
 			"SELECT pg_terminate_backend($1)",
-			'DROP DATABASE IF EXISTS "comb_replay_9_666_ffffffff"',
+			'DROP DATABASE IF EXISTS "database_replay_9_666_ffffffff"',
 		])
+	})
+})
+
+/* plan 50: a replay killed mid-CREATE ROLE commits the role as its backend ends, after a sweep that read the roles first */
+describe("sweep of a replay killed while it makes a role", () => {
+	it("ends the dead replay's backends and waits until they are gone before it reads the roles it drops", async () => {
+		let polls = 0
+		let gone = false
+		const admin = fake((query) => {
+			if (query.startsWith("SELECT pid"))
+				return gone
+					? []
+					: [{ app: "database_replay 9_666", datname: "database_replay_9_666_ffffffff", pid: 10, start: "1" }]
+			if (query.startsWith("SELECT 1 FROM pg_stat_activity")) {
+				/* the backend outlives its termination by one look, then commits its role as it ends */
+				gone = ++polls > 1
+				return gone ? [] : [{ "?column?": 1 }]
+			}
+			if (query.startsWith("SELECT r.rolname"))
+				return gone ? [{ description: "database_replay 9_666", rolname: "made" }] : []
+			return []
+		})
+		await sweep(admin.sql, 10 * STALE_MS, { into: () => fake().sql, leave: () => undefined })
+		expect(admin.sent).toContain('DROP ROLE IF EXISTS "made"')
 	})
 })
 
@@ -173,12 +201,12 @@ describe("sweep of a replay killed mid-statement", () => {
 describe("sweep of a replay whose database is a template", () => {
 	it("makes it no template, then drops it", async () => {
 		const admin = fake((query) =>
-			query.startsWith("SELECT datname") ? [{ datistemplate: true, datname: "comb_replay_9_666_ffffffff" }] : [],
+			query.startsWith("SELECT datname") ? [{ datistemplate: true, datname: "database_replay_9_666_ffffffff" }] : [],
 		)
 		await sweep(admin.sql, 10 * STALE_MS, { into: () => fake().sql, leave: () => undefined })
 		expect(admin.sent.filter((query) => !EMPTIES.test(query)).slice(3, 5)).toEqual([
-			'ALTER DATABASE "comb_replay_9_666_ffffffff" IS_TEMPLATE false',
-			'DROP DATABASE IF EXISTS "comb_replay_9_666_ffffffff"',
+			'ALTER DATABASE "database_replay_9_666_ffffffff" IS_TEMPLATE false',
+			'DROP DATABASE IF EXISTS "database_replay_9_666_ffffffff"',
 		])
 	})
 })
@@ -188,7 +216,7 @@ function servers(left: boolean, dev: ReturnType<typeof fake> = fake()) {
 	const given: Array<Record<string, unknown>> = []
 	let ended = 0
 	const target = fake((query) =>
-		left && query.startsWith("SELECT r.rolname") ? [{ description: "comb_replay 9_111", rolname: "dead" }] : [],
+		left && query.startsWith("SELECT r.rolname") ? [{ description: "database_replay 9_111", rolname: "dead" }] : [],
 	)
 	const load = async () => (options: Record<string, unknown>) => {
 		given.push(options)
@@ -209,9 +237,9 @@ describe("sweepDev, before an apply", () => {
 		/* a live replay's, or one another role's database holds, is no sweep's */
 		const live = fake((query) =>
 			query.startsWith("SELECT pid")
-				? [{ app: "", datname: "comb_replay_9_111_aaaaaaaa", pid: 3, start: "1" }]
+				? [{ app: "", datname: "database_replay_9_111_aaaaaaaa", pid: 3, start: "1" }]
 				: query.startsWith("SELECT datname")
-					? [{ datname: "comb_replay_9_111_aaaaaaaa" }, { datname: "comb_replay_3_1_bbbbbbbb" }]
+					? [{ datname: "database_replay_9_111_aaaaaaaa" }, { datname: "database_replay_3_1_bbbbbbbb" }]
 					: [],
 		)
 		const dev: Array<Record<string, unknown>> = []
@@ -240,7 +268,7 @@ describe("sweepDev, before an apply", () => {
 			for (const options of at.given) {
 				expect(options["onnotice"]).toBeTypeOf("function")
 				;(options["onnotice"] as (notice: unknown) => void)({
-					message: 'role "comb_replay_1" does not exist, skipping',
+					message: 'role "database_replay_1" does not exist, skipping',
 				})
 			}
 			expect(log).not.toHaveBeenCalled()
@@ -254,7 +282,7 @@ describe("sweepDev of a database that holds a subscription", () => {
 	it("drops a dead replay database's subscription from a session in it, waiting 5 s for it, and closes it", async () => {
 		const dev = fake((query) =>
 			query.startsWith("SELECT datname")
-				? [{ datname: "comb_replay_9_111_aaaaaaaa" }]
+				? [{ datname: "database_replay_9_111_aaaaaaaa" }]
 				: EMPTIES.test(query)
 					? [{ slots: [], subscriptions: ["s"] }]
 					: [],
@@ -263,7 +291,7 @@ describe("sweepDev of a database that holds a subscription", () => {
 		await sweepDev(TARGET, print, at.load)
 		const into = at.given[2] ?? {}
 		expect([into["database"], into["max"], into["connect_timeout"], at.ended()]).toEqual([
-			"comb_replay_9_111_aaaaaaaa",
+			"database_replay_9_111_aaaaaaaa",
 			1,
 			5,
 			3,
@@ -283,7 +311,7 @@ describe("sweepDev that cannot sweep", () => {
 		expect(loaded).toBe(0)
 		await expect(
 			sweepDev(TARGET, print, async () => {
-				throw new Error("comb needs postgres")
+				throw new Error("database needs postgres")
 			}),
 		).resolves.toBeUndefined()
 		const said: string[] = []
@@ -344,17 +372,17 @@ const SUBSCRIPTION_DROP = [
 
 describe("the drops of a database that holds a subscription or a logical slot, which Postgres drops no database holding", () => {
 	it("cleanUp drops the replay database's own, the subscription from a session in it, before the database", async () => {
-		const at = holding("comb_replay_db")
+		const at = holding("database_replay_db")
 		const run = {
 			admin: at.admin.sql,
 			created: [],
-			database: "comb_replay_db",
+			database: "database_replay_db",
 			sql: fake().sql,
 		}
 		await cleanUp(run as unknown as Parameters<typeof cleanUp>[0], at.drops)
 		expect({ inside: at.inside.sent, opened: at.opened, said: at.said }).toEqual({
 			inside: SUBSCRIPTION_DROP,
-			opened: ["comb_replay_db"],
+			opened: ["database_replay_db"],
 			said: [],
 		})
 		const sent = at.admin.sent
@@ -366,24 +394,24 @@ describe("the drops of a database that holds a subscription or a logical slot, w
 	})
 
 	it("the sweep drops a dead replay database's, and asks of no other database", async () => {
-		const at = holding("comb_replay_9_111_aaaaaaaa")
+		const at = holding("database_replay_9_111_aaaaaaaa")
 		await sweep(at.admin.sql, now, at.drops)
 		expect({ inside: at.inside.sent, opened: at.opened }).toEqual({
 			inside: SUBSCRIPTION_DROP,
-			opened: ["comb_replay_9_111_aaaaaaaa"],
+			opened: ["database_replay_9_111_aaaaaaaa"],
 		})
-		expect(at.admin.sent.at(-1)).toBe('DROP DATABASE IF EXISTS "comb_replay_9_111_aaaaaaaa"')
+		expect(at.admin.sent.at(-1)).toBe('DROP DATABASE IF EXISTS "database_replay_9_111_aaaaaaaa"')
 	})
 
 	it("says each drop that fails, which the next sweep takes, and opens no session where no subscription is", async () => {
 		const at = holding(
-			"comb_replay_9_111_aaaaaaaa",
+			"database_replay_9_111_aaaaaaaa",
 			(query) => query.startsWith("DROP SUBSCRIPTION") || query.startsWith("SELECT pg_drop"),
 		)
 		await sweep(at.admin.sql, now, at.drops)
 		expect(at.said).toEqual(["subscription s: in use", "replication slot l: in use"])
 		const none = fake((query) =>
-			query.startsWith("SELECT datname") ? [{ datname: "comb_replay_9_111_aaaaaaaa" }] : [],
+			query.startsWith("SELECT datname") ? [{ datname: "database_replay_9_111_aaaaaaaa" }] : [],
 		)
 		const opened: string[] = []
 		await sweep(none.sql, now, { into: (into) => (opened.push(into), fake().sql), leave: () => undefined })

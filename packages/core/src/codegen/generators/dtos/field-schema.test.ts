@@ -16,8 +16,8 @@ const ID_RULE = `.regex(new RegExp("${ID_SOURCE}", "u")).meta({ pattern: "${ID_S
 
 /* every written text and JSON field ends with the F11 rule; the tests below read the other rules, and
  * "the rule no engine stores" reads this one */
-const TEXT_RULE = '.refine(comb.isStorableText, { message: "Must not contain U+0000 or an unpaired surrogate" })'
-const TEXT_KEY = '"x-comb-text":"no U+0000 or unpaired surrogate"'
+const TEXT_RULE = '.refine(database.isStorableText, { message: "Must not contain U+0000 or an unpaired surrogate" })'
+const TEXT_KEY = '"x-database-text":"no U+0000 or unpaired surrogate"'
 const JSON_RULE =
 	'.refine((val) => !/\\\\u(?:0000|d[89a-f])/i.test(globalThis.JSON.stringify(val ?? null).replace(/\\\\\\\\/g, "")), { message: "Must not contain U+0000 or an unpaired surrogate" })'
 const generateFieldSchema = (...args: Parameters<typeof generated>) =>
@@ -93,7 +93,7 @@ describe("generateFieldSchema: what each schema type includes", () => {
 		)
 		expect(schema("owner_id", 'c.ref("owner_id")', "create")).toBe(`z.string()${ID_RULE}.nullable().optional()`)
 		expect(schema("owner_id", 'c.ref("owner_id")', "read")).toBe(
-			'z.string().meta({"x-comb-maxLength":48,"x-comb-minLength":1}).nullable().meta({"x-comb-maxLength":48,"x-comb-minLength":1})',
+			'z.string().meta({"x-database-maxLength":48,"x-database-minLength":1}).nullable().meta({"x-database-maxLength":48,"x-database-minLength":1})',
 		)
 	})
 })
@@ -117,7 +117,7 @@ describe("generateFieldSchema: optionality", () => {
 		)
 	})
 
-	it("leaves what comb or the database generates out of create and update (D9)", () => {
+	it("leaves what database or the database generates out of create and update (D9)", () => {
 		const id = fieldOf("id", 'c.id("usr")', { isPrimaryKey: true })
 		const serial = fieldOf("id", "c.serialId()", { isPrimaryKey: true })
 		for (const type of ["create", "update"] as const) {
@@ -167,35 +167,35 @@ describe("generateFieldSchema: JSON", () => {
 		/* a password column holds the hash, so it takes a required text's own rule (C1 of r21) */
 		expect(schema("pw", 'c.text("pw", { password: true }).notNull()', "create")).toBe("z.string().min(1)")
 		expect(schema("e", 'c.text("e", { email: true, min: 3, max: 50 }).notNull()', "create")).toBe(
-			'z.string().trim().toLowerCase().check(z.email()).min(6).max(50).meta({ format: void 0 }).meta(_m.email).meta({"x-comb-transform":["trim","lowercase"]})',
+			'z.string().trim().toLowerCase().check(z.email()).min(6).max(50).meta({ format: void 0 }).meta(_m.email).meta({"x-database-transform":["trim","lowercase"]})',
 		)
 		expect(
 			generateFieldSchema(fieldOf("e", 'c.text("e", { email: true }, 80).notNull()', { length: 80 }), "read", {
 				imports: imports(),
 			}),
-		).toBe('z.string().meta(_m.email).meta({"x-comb-maxLength":80})')
+		).toBe('z.string().meta(_m.email).meta({"x-database-maxLength":80})')
 		expect(schema("u", 'c.text("u", { url: true }).notNull()', "create")).toBe(
-			'z.string().trim().overwrite((value) => value.replace(/[\\t\\n\\r]/g, "")).check(z.url()).min(9).regex(/^https:\\/\\//u, { message: "Must be an HTTPS URL" }).meta(_m.url).meta({"x-comb-transform":["trim","strip-tab-newline"],"x-comb-url":"whatwg"})',
+			'z.string().trim().overwrite((value) => value.replace(/[\\t\\n\\r]/g, "")).check(z.url()).min(9).regex(/^https:\\/\\//u, { message: "Must be an HTTPS URL" }).meta(_m.url).meta({"x-database-transform":["trim","strip-tab-newline"],"x-database-url":"whatwg"})',
 		)
 		expect(schema("n", 'c.text("n", { trim: true, lowercase: true, max: 20 }).notNull()', "update")).toBe(
-			'z.string().trim().toLowerCase().min(1).max(20).meta(_m.string).meta({"x-comb-transform":["trim","lowercase"]}).optional()',
+			'z.string().trim().toLowerCase().min(1).max(20).meta(_m.string).meta({"x-database-transform":["trim","lowercase"]}).optional()',
 		)
 		expect(schema("n", 'c.text("n", { uppercase: true, pattern: "/^[A-Z]+$/" }).notNull()', "create")).toBe(
 			/* a pattern decides what the value looks like, so it gets no example (F18) */
-			'z.string().toUpperCase().min(1).regex(/^[A-Z]+$/u).meta({"x-comb-transform":["uppercase"]})',
+			'z.string().toUpperCase().min(1).regex(/^[A-Z]+$/u).meta({"x-database-transform":["uppercase"]})',
 		)
 		expect(
 			generateFieldSchema(fieldOf("n", 'c.text("n", { min: 2 }, 10).notNull()', { length: 10 }), "read", {
 				imports: imports(),
 			}),
-		).toBe('z.string().meta(_m.string).meta({"x-comb-maxLength":10,"x-comb-minLength":2})')
+		).toBe('z.string().meta(_m.string).meta({"x-database-maxLength":10,"x-database-minLength":2})')
 	})
 })
 
 describe("generateFieldSchema: ids, typed text and numbers", () => {
 	it("bounds an id-like text column, by helper and never by name", () => {
-		/* read, comb's id length is stated: an imported or older id may not keep to it (F65) */
-		expect(schema("id", 'c.id("usr")', "read")).toContain('.meta({"x-comb-maxLength":48,"x-comb-minLength":1})')
+		/* read, database's id length is stated: an imported or older id may not keep to it (F65) */
+		expect(schema("id", 'c.id("usr")', "read")).toContain('.meta({"x-database-maxLength":48,"x-database-minLength":1})')
 		/* a text column named orgId is text (F10) */
 		expect(schema("orgId", 'c.text("orgId").notNull()', "create")).toBe("z.string().min(1).meta(_m.string)")
 	})
@@ -219,11 +219,11 @@ describe("generateFieldSchema: ids, typed text and numbers", () => {
 			'z.union([z.number(), z.literal([globalThis.Infinity, -globalThis.Infinity, null]).meta({ enum: void 0, type: "null" })]).meta(_m.real)',
 		)
 		/* a plain drizzle column is typed from its data type: a JSON blob takes any JSON value */
-		expect(schema("x", 'blob("x")', "read")).toBe("comb.jsonValue")
+		expect(schema("x", 'blob("x")', "read")).toBe("database.jsonValue")
 		/* written, it takes the refine behind z.lazy, nullable as any field is, its rule as meta (F63, C5 of r19, C2 of r21, C2a) */
 		expect(schema("x", 'blob("x")', "create")).toBe("z.lazy(() => jsonValueSchema).nullable().optional()")
 		expect(() => schema("x", 'blob("x", { mode: "buffer" })', "read")).toThrow(
-			"fixture.x: comb has no rule for a SQLiteBlobBuffer column (object buffer)",
+			"fixture.x: database has no rule for a SQLiteBlobBuffer column (object buffer)",
 		)
 	})
 
@@ -232,7 +232,7 @@ describe("generateFieldSchema: ids, typed text and numbers", () => {
 			/^z\.number\(\)\.int\(\)\.min\(-40\)\.max\(60\)/,
 		)
 		expect(schema("t", 'c.integer("t", { min: -40, max: 60 }).notNull()', "read")).toMatch(
-			/^z\.number\(\)\.int\(\)\.min\(globalThis\.Number\.MIN_SAFE_INTEGER\)\.max\(globalThis\.Number\.MAX_SAFE_INTEGER\).*\.meta\(\{"x-comb-maximum":60,"x-comb-minimum":-40\}\)/,
+			/^z\.number\(\)\.int\(\)\.min\(globalThis\.Number\.MIN_SAFE_INTEGER\)\.max\(globalThis\.Number\.MAX_SAFE_INTEGER\).*\.meta\(\{"x-database-maximum":60,"x-database-minimum":-40\}\)/,
 		)
 		expect(schema("c", 'c.integer("c", { max: 9 }).notNull()', "create")).toMatch(
 			/^z\.number\(\)\.int\(\)\.min\(globalThis\.Number\.MIN_SAFE_INTEGER\)\.max\(9\)/,
@@ -244,7 +244,7 @@ describe("generateFieldSchema: ids, typed text and numbers", () => {
 			/^z\.number\(\)\.min\(-0\.25\)\.meta/,
 		)
 		expect(schema("r", 'c.real("r", { max: 1.5 }).notNull()', "read")).toMatch(
-			/^z\.union\(\[z\.number\(\)\.meta\(\{"x-comb-maximum":1\.5\}\), z\.literal\(\[globalThis\.Infinity, -globalThis\.Infinity, null\]\)\.meta\(\{ enum: void 0, type: "null" \}\)\]\).*\.meta\(\{"x-comb-maximum":1\.5\}\)/,
+			/^z\.union\(\[z\.number\(\)\.meta\(\{"x-database-maximum":1\.5\}\), z\.literal\(\[globalThis\.Infinity, -globalThis\.Infinity, null\]\)\.meta\(\{ enum: void 0, type: "null" \}\)\]\).*\.meta\(\{"x-database-maximum":1\.5\}\)/,
 		)
 	})
 })
@@ -262,7 +262,7 @@ describe("generateFieldSchema: what the 0.8.0 codegen review found (F1, F2, F15,
 
 	it("normalizes an email before validating it, on create and update (F15)", () => {
 		expect(schema("e", 'c.text("e", { email: true }).notNull()', "update")).toBe(
-			'z.string().trim().toLowerCase().check(z.email()).min(6).meta({ format: void 0 }).meta(_m.email).meta({"x-comb-transform":["trim","lowercase"]}).optional()',
+			'z.string().trim().toLowerCase().check(z.email()).min(6).meta({ format: void 0 }).meta(_m.email).meta({"x-database-transform":["trim","lowercase"]}).optional()',
 		)
 	})
 
@@ -271,7 +271,7 @@ describe("generateFieldSchema: what the 0.8.0 codegen review found (F1, F2, F15,
 			'z.string().min(10).meta({ examples: ["a1b2c3d4e5"] }).nullable().optional()',
 		)
 		expect(schema("externalId", 'c.text("external_id", { max: 60 })', "read")).toBe(
-			'z.string().meta(_m.string).meta({"x-comb-maxLength":60}).nullable().meta({"x-comb-maxLength":60})',
+			'z.string().meta(_m.string).meta({"x-database-maxLength":60}).nullable().meta({"x-database-maxLength":60})',
 		)
 	})
 })
@@ -324,7 +324,7 @@ describe("generateFieldSchema: a JSON column's rules, published (F26)", () => {
 	it("names the byte limit and the U+0000 and surrogate rule in x- keys of the field's meta, on either dialect", () => {
 		const blob = fieldOf("b", 'c.json("b", blobSchema, { maxBytes: 20 })', { jsonSchemaName: "blobSchema" })
 		const pg = generateFieldSchema(blob, "create", { dialect: "postgres", imports: imports() })
-		expect(pg).toContain(`.meta({${TEXT_KEY},"x-comb-maxBytes":20})`)
+		expect(pg).toContain(`.meta({${TEXT_KEY},"x-database-maxBytes":20})`)
 		const plain = fieldOf("b", 'c.json("b", blobSchema)', { jsonSchemaName: "blobSchema" })
 		expect(generated(plain, "create", { dialect: "postgres", imports: imports() })).toContain(`.meta({${TEXT_KEY}})`)
 		/* on SQLite too, which stores neither as sent (F11); the refined schema behind z.lazy, so it
@@ -369,7 +369,7 @@ describe("generateFieldSchema: what a reference, a password and an email declare
 		const country =
 			'c.ref("country_code", { max: 64, pattern: "/^[A-Z-]+$/" }).notNull().references(() => country.code)'
 		expect(of("countryCode", country, "create")).toBe("z.string().min(1).max(64).regex(/^[A-Z-]+$/u)")
-		expect(of("countryCode", country, "read")).toBe('z.string().meta({"x-comb-maxLength":64})')
+		expect(of("countryCode", country, "read")).toBe('z.string().meta({"x-database-maxLength":64})')
 		expect(of("ownerId", 'c.ref("owner_id").notNull().references(() => user.id)', "create")).toBe(
 			`z.string()${ID_RULE}`,
 		)
@@ -380,7 +380,7 @@ describe("generateFieldSchema: what a reference, a password and an email declare
 		const write = of("userId", 'c.ref("user_id").notNull()', "create")
 		expect(write).toBe(`z.string()${ID_RULE}`)
 		expect(of("userId", 'c.ref("user_id").notNull()', "read")).toBe(
-			'z.string().meta({"x-comb-maxLength":48,"x-comb-minLength":1})',
+			'z.string().meta({"x-database-maxLength":48,"x-database-minLength":1})',
 		)
 		const parse = new Function("z", `return ${write}`)(z) as z.ZodString
 		expect(parse.safeParse("u".repeat(48)).success).toBe(true)
@@ -388,7 +388,7 @@ describe("generateFieldSchema: what a reference, a password and an email declare
 		expect(parse.safeParse("usr 01").success).toBe(false)
 		expect(of("userId", 'c.ref("user_id", { max: 20 }).notNull()', "create")).toBe("z.string().min(1).max(20)")
 		expect(of("userId", 'c.ref("user_id", { max: 20 }).notNull()', "read")).toBe(
-			'z.string().meta({"x-comb-maxLength":20})',
+			'z.string().meta({"x-database-maxLength":20})',
 		)
 	})
 
@@ -401,7 +401,7 @@ describe("generateFieldSchema: what a reference, a password and an email declare
 		expect(generated(field, "create", { dialect: "postgres", imports: imports() })).toContain(TEXT_RULE)
 	})
 
-	it("applies a password hash's declared bounds and pattern, with no rule of comb's, and an email's pattern after the format", () => {
+	it("applies a password hash's declared bounds and pattern, with no rule of database's, and an email's pattern after the format", () => {
 		expect(of("pw", 'c.text("pw", { password: true, min: 12, pattern: "/[0-9]/" }).notNull()', "create")).toBe(
 			"z.string().min(12).regex(/[0-9]/u)",
 		)
@@ -410,7 +410,7 @@ describe("generateFieldSchema: what a reference, a password and an email declare
 		)
 		expect(of("m", 'c.text("m", { email: true, pattern: "/@corp\\\\.io$/" }).notNull()', "create")).toBe(
 			/* a pattern decides what the value looks like, so it gets no example (F18) */
-			'z.string().trim().toLowerCase().check(z.email()).min(6).regex(/@corp\\.io$/u).meta({ format: void 0 }).meta({"x-comb-transform":["trim","lowercase"]})',
+			'z.string().trim().toLowerCase().check(z.email()).min(6).regex(/@corp\\.io$/u).meta({ format: void 0 }).meta({"x-database-transform":["trim","lowercase"]})',
 		)
 		expect(of("m", 'c.text("m", { email: true, pattern: "/@corp\\\\.io$/" }).notNull()', "read")).toBe("z.string()")
 	})

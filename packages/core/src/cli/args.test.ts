@@ -20,7 +20,7 @@ describe("parseArgs", () => {
 		})
 		expect(parseArgs(["core", "-g", "dtos"], "codegen").positionals).toEqual(["core"])
 		expect(() => parseArgs(["core", "--tables=t.ts"], "codegen")).toThrow(
-			new CliError("Usage: comb codegen --tables <path> [-g <name>]"),
+			new CliError("Usage: database codegen --tables <path> [-g <name>]"),
 		)
 	})
 
@@ -63,7 +63,7 @@ describe("optionsHelp", () => {
 		expect(lines.find((line) => line.includes("--dir"))).toMatch(migrating)
 		expect(lines.slice(-2)).toEqual([
 			expect.stringMatching(/^ {2}-h, --help +Show this help$/),
-			expect.stringMatching(/^ {2}--version +Print comb's version$/),
+			expect.stringMatching(/^ {2}--version +Print database's version$/),
 		])
 	})
 })
@@ -87,11 +87,11 @@ describe("parseArgs: -h and --help", () => {
 
 	it("builds a command's usage and options from what it takes", () => {
 		expect(usageOf("migrate status")).toBe(
-			"Usage: comb migrate status <database> [-e <name>] [--dir <path>] [--local] [--json]",
+			"Usage: database migrate status <database> [-e <name>] [--dir <path>] [--local] [--json]",
 		)
-		expect(usageOf("migrate diff")).toBe("Usage: comb migrate diff <database> [name] [-e <name>] [--dry-run]")
+		expect(usageOf("migrate diff")).toBe("Usage: database migrate diff <database> [name] [-e <name>] [--dry-run]")
 		expect(commandHelp("migrate init").split("\n")).toEqual([
-			"Usage: comb migrate init [--dialect <name>]",
+			"Usage: database migrate init [--dialect <name>]",
 			"",
 			"Options:",
 			"  --dialect <name>  The project's dialect: sqlite (default) or postgres",
@@ -103,9 +103,9 @@ describe("parseArgs: -h and --help", () => {
 /* r18 P17: a positional a command does not read is refused with its usage, never dropped */
 describe("parseArgs: positionals past what a command reads", () => {
 	it.each([
-		[["postgres"], "migrate init" as const, "Usage: comb migrate init"],
-		[["core", "add", "users"], "migrate diff" as const, "Usage: comb migrate diff <database> [name]"],
-		[["core", "prod"], "migrate status" as const, "Usage: comb migrate status <database>"],
+		[["postgres"], "migrate init" as const, "Usage: database migrate init"],
+		[["core", "add", "users"], "migrate diff" as const, "Usage: database migrate diff <database> [name]"],
+		[["core", "prod"], "migrate status" as const, "Usage: database migrate status <database>"],
 	])("refuses %j on %s", (argv, command, usage) => {
 		expect(() => parseArgs(argv, command)).toThrow(usage)
 	})
@@ -116,23 +116,23 @@ describe("parseArgs: positionals past what a command reads", () => {
 	})
 })
 
-/* KC2 of r22b: a bare migrate diff ignored comb.migrate.config.ts and wrote the whole schema into a new ./atlas-migrations */
+/* KC2 of r22b: a bare migrate diff ignored database.migrate.config.ts and wrote the whole schema into a new ./atlas-migrations */
 describe("required positionals are enforced for every command (KC2; sibling: the `[…]` maximum)", () => {
 	it.each([
-		["migrate apply" as const, "Usage: comb migrate apply <database>"],
-		["migrate baseline" as const, "Usage: comb migrate baseline <database>"],
-		["migrate check" as const, "Usage: comb migrate check <database>"],
-		["migrate diff" as const, "Usage: comb migrate diff <database> [name]"],
-		["migrate status" as const, "Usage: comb migrate status <database>"],
+		["migrate apply" as const, "Usage: database migrate apply <database>"],
+		["migrate baseline" as const, "Usage: database migrate baseline <database>"],
+		["migrate check" as const, "Usage: database migrate check <database>"],
+		["migrate diff" as const, "Usage: database migrate diff <database> [name]"],
+		["migrate status" as const, "Usage: database migrate status <database>"],
 	])("refuses %s with no database, with its usage", (command, usage) => {
 		expect(() => parseArgs([], command)).toThrow(usage)
 	})
 
-	/* KC8 of r22b: `comb migrate status ""` looked up a database named nothing */
+	/* KC8 of r22b: `database migrate status ""` looked up a database named nothing */
 	it.each([
-		[["core", ""], "migrate diff" as const, "Usage: comb migrate diff <database> [name]"],
-		[[""], "migrate status" as const, "Usage: comb migrate status <database>"],
-		[[""], "codegen" as const, "Usage: comb codegen [database...]"],
+		[["core", ""], "migrate diff" as const, "Usage: database migrate diff <database> [name]"],
+		[[""], "migrate status" as const, "Usage: database migrate status <database>"],
+		[[""], "codegen" as const, "Usage: database codegen [database...]"],
 	])("refuses an empty positional, %j on %s, with its usage", (argv, command, usage) => {
 		expect(() => parseArgs(argv, command)).toThrow(usage)
 	})

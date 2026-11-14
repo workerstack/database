@@ -5,7 +5,7 @@
  * directly against the analyzer's view of a table, rather than by grepping
  * generated text. See docs/meta-contract.md.
  */
-import type { CombEntityMetaInput } from "../meta.ts"
+import type { EntityMetaInput } from "../meta.ts"
 import { isReference } from "./analyze-field.ts"
 import type { FieldMeta, PartialUniqueIndexMeta, TableMeta, UniqueIndexMeta } from "./analyzer-types.ts"
 import { qualifiedName } from "./utils/table-name.ts"
@@ -28,7 +28,7 @@ const isSetOnce = (field: FieldMeta): boolean =>
 type Writes = { create: boolean; update: boolean }
 
 /**
- * Which write bodies take `field`: what comb or the database fills neither, what a body sets once
+ * Which write bodies take `field`: what database or the database fills neither, what a body sets once
  * the create body alone. The one rule the DTO generator, the stamp's `generated` and `immutable`
  * and the manifest's flags all read, a private column's included, so no channel can state a fact
  * another contradicts (meta-contract §8.2)
@@ -46,7 +46,7 @@ function isExcludedFromUpdate(field: FieldMeta): boolean {
 /**
  * The column a table declares as its tenant scope, or null.
  *
- * Only an explicit `{ tenant: true }` counts. comb can see that a column is a
+ * Only an explicit `{ tenant: true }` counts. database can see that a column is a
  * foreign key but not that the table it references is the tenant; inferring it
  * from a name would reproduce a consumer's own fallback heuristic one layer
  * earlier and dress a guess up as a declaration. A wrong tenant boundary makes
@@ -71,7 +71,7 @@ function tenantColumnOf(table: TableMeta): string | null {
  * consumer can read without branching is worth more than completeness here.
  * See docs/state-machines.md §5.
  */
-function statesOf(table: TableMeta): CombEntityMetaInput["states"] {
+function statesOf(table: TableMeta): EntityMetaInput["states"] {
 	const field = table.fields.find((f) => f.states !== null && f.enumValues !== null && !f.constraints.private)
 	if (!field?.states || !field.enumValues) return null
 
@@ -103,7 +103,7 @@ function publishedUniqueIndexes(table: TableMeta): TableMeta["uniqueIndexes"] {
 
 /**
  * The partial unique indexes a table publishes: none over a private column, nor whose predicate,
- * SQL comb rendered, names one by its quoted SQL name
+ * SQL database rendered, names one by its quoted SQL name
  */
 function publishedPartialUniqueIndexes(table: TableMeta): PartialUniqueIndexMeta[] {
 	const hidden = hiddenOf(table)
@@ -116,13 +116,14 @@ function publishedPartialUniqueIndexes(table: TableMeta): PartialUniqueIndexMeta
 }
 
 /**
- * Whether comb or the database fills `field`: an `autogenerate` column, a generated or identity
+ * Whether database or the database fills `field`: an `autogenerate` column, a generated or identity
  * column, or a key that c.id, c.serialId, AUTOINCREMENT or a default fills; a natural key the
  * caller supplies is not generated
  */
 function isGenerated(field: FieldMeta): boolean {
 	if (field.constraints.autogenerate || field.generated || field.identity) return true
-	const filledKey = field.combKind === "id" || field.combKind === "serialId" || field.autoIncrement || field.hasDefault
+	const filledKey =
+		field.databaseKind === "id" || field.databaseKind === "serialId" || field.autoIncrement || field.hasDefault
 	return field.isPrimaryKey && filledKey
 }
 
@@ -133,7 +134,7 @@ function isGenerated(field: FieldMeta): boolean {
  * a guess — the downstream item-route checks do not apply to such an entity
  * anyway. Omitting is the honest outcome; see docs §6.4.
  */
-function deriveEntityMeta(table: TableMeta): CombEntityMetaInput | null {
+function deriveEntityMeta(table: TableMeta): EntityMetaInput | null {
 	if (table.hasCompositePrimaryKey) return null
 
 	const primaryKey = table.fields.find((f) => f.isPrimaryKey)

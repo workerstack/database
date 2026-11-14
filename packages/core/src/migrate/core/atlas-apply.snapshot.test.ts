@@ -14,17 +14,17 @@ import { applyWithAtlas, type ApplyOptions, baselineWithAtlas, statusWithAtlas }
 import { sumHashes } from "./atlas-dir.ts"
 import type { ObjectsCompare } from "./baseline-compare.ts"
 import type { LiveRead } from "./pg-live-types.ts"
-import type { Run } from "./process.ts"
+import type { MigrateRun } from "./process.ts"
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-atlas-apply-snapshot-"))
+	dir = mkdtempSync(join(tmpdir(), "database-atlas-apply-snapshot-"))
 	writeFileSync(join(dir, "1_a.sql"), 'CREATE TABLE "a" ("id" int);\n')
 	writeFileSync(join(dir, "atlas.sum"), "h1:x=\n1_a.sql h1:7=\n")
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
-/** A database that holds nothing comb compares */
+/** A database that holds nothing database compares */
 const readLive: LiveRead = async () => ({
 	...noLive(),
 	policies: new Map(),
@@ -33,8 +33,8 @@ const readLive: LiveRead = async () => ({
 	triggers: new Map(),
 })
 
-/** A run's options on `exec`, against a database that holds nothing comb compares */
-function options(exec: Run): ApplyOptions & Pick<ObjectsCompare, "readLive" | "readReplay"> {
+/** A run's options on `exec`, against a database that holds nothing database compares */
+function options(exec: MigrateRun): ApplyOptions & Pick<ObjectsCompare, "readLive" | "readReplay"> {
 	return {
 		approve: async () => ({ ok: true }),
 		dir,
@@ -52,7 +52,7 @@ describe("a snapshot's hold, once the run that made it ends", () => {
 	/* the worker's own SIGINT listeners, read as the file is collected, before any run holds a step */
 	const worker = process.listeners("SIGINT")
 
-	/** What SIGINT, with only comb's listener and process.kill stubbed, asks fs.rmSync to remove */
+	/** What SIGINT, with only database's listener and process.kill stubbed, asks fs.rmSync to remove */
 	async function removedBySignal(): Promise<string[]> {
 		const others = worker
 		for (const listener of others) process.off("SIGINT", listener)
@@ -63,7 +63,7 @@ describe("a snapshot's hold, once the run that made it ends", () => {
 			await new Promise((resolve) => setImmediate(resolve))
 			return rm.mock.calls
 				.map(([target]) => String(target))
-				.filter((target) => target.includes("comb-migrate-snapshot-"))
+				.filter((target) => target.includes("database-migrate-snapshot-"))
 		} finally {
 			await stopsEnded()
 			rm.mockRestore()
@@ -72,10 +72,10 @@ describe("a snapshot's hold, once the run that made it ends", () => {
 		}
 	}
 
-	it.each<[string, (exec: Run) => Promise<unknown>]>([
-		["apply", (exec: Run) => applyWithAtlas(options(exec))],
-		["status", async (exec: Run) => statusWithAtlas(options(exec))],
-		["baseline", (exec: Run) => baselineWithAtlas(options(exec))],
+	it.each<[string, (exec: MigrateRun) => Promise<unknown>]>([
+		["apply", (exec: MigrateRun) => applyWithAtlas(options(exec))],
+		["status", async (exec: MigrateRun) => statusWithAtlas(options(exec))],
+		["baseline", (exec: MigrateRun) => baselineWithAtlas(options(exec))],
 	])("is let go after %s, so a later signal removes nothing of it", async (_, body) => {
 		const done = status({ applied: [revision("1", { hash: sumHashes(dir).get("1_a.sql") })], status: "OK" })
 		await body(fakeAtlas({ status: done })).catch(() => undefined)

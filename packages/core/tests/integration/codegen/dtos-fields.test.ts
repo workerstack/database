@@ -4,7 +4,7 @@
  */
 import * as z from "zod"
 import { afterAll, describe, expect, it } from "vitest"
-import { readCombEntityMeta } from "../../../src/meta.ts"
+import { readEntityMeta } from "../../../src/meta.ts"
 import fs from "node:fs"
 import path from "node:path"
 import { cleanGeneratedDtos, type GeneratedEntity, generatedDir, generatedDtos } from "../support/dtos.ts"
@@ -32,7 +32,7 @@ export const wallet = sqliteTable("wallet", {
 		wallet = (await generatedDtos("private", `import * as z from "zod"\n${tables}`)).wallet as GeneratedEntity
 		expect(keys(wallet.walletDtoReadSchema)).toEqual(["id", "is_flagged"])
 		expect(keys(wallet.walletDtoReadPartialSchema)).toEqual(["id", "is_flagged"])
-		const stamp = readCombEntityMeta(z.toJSONSchema(wallet.walletDtoReadSchema as z.ZodObject))
+		const stamp = readEntityMeta(z.toJSONSchema(wallet.walletDtoReadSchema as z.ZodObject))
 		expect(stamp?.immutable).not.toContain("owner_id")
 		expect(JSON.stringify(stamp)).not.toMatch(/owner_id|risk_score|secret_tier|_internal_count|hidden_kind|settings/)
 	})
@@ -72,7 +72,7 @@ describe("enum columns (M-H3, M-H4)", () => {
 		const read = (await generatedDtos("enum-stamp", tables)).delivery?.deliveryDtoReadSchema as z.ZodObject
 		const json = z.toJSONSchema(read) as { properties: Record<string, { enum?: string[] }> }
 		expect(json.properties.status?.enum).toEqual(["queued", "sending", "sent"])
-		expect(readCombEntityMeta(json)?.states?.values).toEqual(["queued", "sending", "sent"])
+		expect(readEntityMeta(json)?.states?.values).toEqual(["queued", "sending", "sent"])
 	})
 
 	it("share one inline enum across tables without referencing anything undefined", async () => {
@@ -159,9 +159,7 @@ export const memo = sqliteTable("memo", { id: c.id("mem"), ...sharedCols })`
 	deletedAt: c.deletedAt("deleted_at"),
 })`
 		const account = (await generatedDtos("soft-delete", tables)).account as GeneratedEntity
-		expect(readCombEntityMeta(z.toJSONSchema(account.accountDtoReadSchema as z.ZodObject))?.softDelete).toBe(
-			"deletedAt",
-		)
+		expect(readEntityMeta(z.toJSONSchema(account.accountDtoReadSchema as z.ZodObject))?.softDelete).toBe("deletedAt")
 	})
 })
 

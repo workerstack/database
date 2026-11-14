@@ -1,6 +1,6 @@
 /**
  * The cascade-rebuild scenario (support/rebuild-guard.ts) on a local D1, where foreign keys are
- * always on: each migration applies through `wrangler d1 migrations apply --local`, as comb
+ * always on: each migration applies through `wrangler d1 migrations apply --local`, as database
  * applies D1 migrations, and the rows are read from the local database file between runs.
  */
 import { spawnSync } from "node:child_process"
@@ -22,7 +22,7 @@ const WRANGLER = path.join(
 
 /** A wrangler project with one D1 database whose migrations directory is `migrations` */
 function project(): string {
-	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "comb-d1-rebuild-"))
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "database-d1-rebuild-"))
 	fs.writeFileSync(
 		path.join(dir, "wrangler.toml"),
 		'name = "probe"\ncompatibility_date = "2026-10-01"\n\n[[d1_databases]]\nbinding = "CORE"\ndatabase_name = "core"\ndatabase_id = "00000000-0000-0000-0000-000000000000"\nmigrations_dir = "migrations"\n',

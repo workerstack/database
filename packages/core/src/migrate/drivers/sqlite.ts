@@ -5,7 +5,7 @@
 import * as z from "zod"
 import { chainText } from "../../error-chain.ts"
 import type {
-	Connection,
+	MigrateConnection,
 	ConnectionProvider,
 	LibsqlProviderConfig,
 	QueryResult,
@@ -95,7 +95,7 @@ async function createTursoDatabase(
 const reaching = (call: typeof fetch, name: string): typeof fetch =>
 	((...args: Parameters<typeof fetch>) =>
 		call(...args).catch((error: unknown) => {
-			throw new Error(`comb could not reach the Turso API for "${name}": ${chainText(error)}`, { cause: error })
+			throw new Error(`database could not reach the Turso API for "${name}": ${chainText(error)}`, { cause: error })
 		})) as typeof fetch
 
 /**
@@ -138,7 +138,7 @@ export async function getTursoCredentials(request: TursoCredentialsRequest): Pro
    LIBSQL CONNECTION WRAPPER
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function createLibsqlConnection(client: Client): Connection {
+function createLibsqlConnection(client: Client): MigrateConnection {
 	return {
 		async batch(statements: Array<{ sql: string; params?: unknown[] | undefined }>): Promise<void> {
 			const batch = statements.map(({ params, sql }) => ({ args: (params ?? []) as InValue[], sql }))
@@ -184,7 +184,7 @@ export function createTursoProvider(config: TursoProviderConfig, deps: TursoDeps
 		return known
 	}
 	return {
-		async connect(dbConfig: ResolvedDatabaseConfig): Promise<Connection> {
+		async connect(dbConfig: ResolvedDatabaseConfig): Promise<MigrateConnection> {
 			await pastStop()
 			/* the client first: a project without it is refused before Turso creates a database or mints a token */
 			const { createClient } = await libsql()
@@ -223,7 +223,7 @@ export function libsqlFile(url: string): string | undefined {
  */
 export function createLibsqlProvider(config: LibsqlProviderConfig): ConnectionProvider {
 	return {
-		async connect(dbConfig?: ResolvedDatabaseConfig): Promise<Connection> {
+		async connect(dbConfig?: ResolvedDatabaseConfig): Promise<MigrateConnection> {
 			await pastStop()
 			const file = libsqlFile(config.url)
 			const { createClient } = await libsql()

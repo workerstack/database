@@ -24,7 +24,7 @@ describe("needsOf: a diff that declares FTS (KC3; sibling: drizzle-kit's row)", 
 		expect(peersOf(needsOf("diff", "d1", true))).toEqual(["drizzle-kit", "ts-morph", "atlas"])
 		expect(needsOf("diff", "libsql", false)).toBe(PEERS.libsql.diff)
 		expect(needsOf("check", "turso", true)).toBe(PEERS.turso.check)
-		/* Postgres has no FTS of comb's */
+		/* Postgres has no FTS of database's */
 		expect(needsOf("diff", "postgres", true)).toEqual([PARSE, DIFF, ATLAS])
 	})
 

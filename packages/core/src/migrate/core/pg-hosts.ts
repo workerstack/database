@@ -2,7 +2,7 @@
  * Where a Postgres URL's hosts lead, for the checks before Atlas runs: the warnings for a password
  * that may cross the network unprotected or a pooler, read with any loopback address as local,
  * and whether the URL lists several hosts, which libpq and Atlas's driver try in turn
- * and comb never migrates.
+ * and database never migrates.
  */
 import { isIPv4 } from "node:net"
 import { type LibpqUrl, sslmodeOf } from "./pg-url.ts"
@@ -37,9 +37,9 @@ function namesSeveralHosts(raw: string): boolean {
 /** Warnings for a target that may send its password unprotected, or that goes through a pooler; a socket crosses no network */
 function hostWarnings(url: LibpqUrl): string[] {
 	const warnings: string[] = []
-	/* the sslmode comb and Atlas connect with, require where none is named */
+	/* the sslmode database and Atlas connect with, require where none is named */
 	const sslmode = sslmodeOf(url)
-	/* the password goes where comb and Atlas connect: hostaddr when given, which a socket never is */
+	/* the password goes where database and Atlas connect: hostaddr when given, which a socket never is */
 	const reached = url.hostaddr ?? url.host
 	const local = url.hostaddr === undefined ? url.socket || isLoopback(url.host) : isLoopback(url.hostaddr)
 	if (!local && !VERIFIED_SSL.has(sslmode)) {

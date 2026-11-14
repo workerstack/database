@@ -2,7 +2,7 @@
  * CS8, CS9 of r22b: a write rule zod holds in a refine is a rule the published document states, so
  * a client that validates from the spec sends nothing the server refuses. int64's range and real's
  * underflow are standard JSON Schema; a cidr's host bits, a multidimensional array's shape and a
- * url's WHATWG parse are `x-comb-cidr`, `x-comb-rectangular` and `x-comb-url` (meta-contract §2.1),
+ * url's WHATWG parse are `x-database-cidr`, `x-database-rectangular` and `x-database-url` (meta-contract §2.1),
  * which the contract reader applies.
  * And a written plain JSON value publishes its recursive definition once.
  */
@@ -35,7 +35,7 @@ const create = async (): Promise<z.ZodObject> =>
 type Node = Record<string, unknown>
 
 /**
- * What a reader of the published field takes: the standard schema, then the `x-comb-*` keys where
+ * What a reader of the published field takes: the standard schema, then the `x-database-*` keys where
  * §2.1 puts them, on the property's own schema and an element's on the array's `items`, with no `anyOf` walk for a key
  * (AA3 of area A's review: a nullable field's keys sat in its member alone)
  */
@@ -92,7 +92,7 @@ const EDGES: Record<string, unknown[]> = {
 	gridn: [null, [[1, 2], [3]], [[1], [2]]],
 	netn: [null, "10.0.0.0/8", "10.0.0.1/8", "fe80::1/10"],
 	nets: [null, ["10.0.0.0/8"], ["10.0.0.1/8"], ["10.0.0.0/8", "192.168.1.1/24"]],
-	/* A3-3 of r23: a written url's WHATWG parse, as x-comb-url states it; https:a.co parses, and the pattern refuses it */
+	/* A3-3 of r23: a written url's WHATWG parse, as x-database-url states it; https:a.co parses, and the pattern refuses it */
 	site: [
 		"https://ex.co/a",
 		"https://ex.co:99999",
@@ -113,7 +113,7 @@ const EDGES: Record<string, unknown[]> = {
 	ratio: [0, 1.5, -1.5, 1e-50, -1e-50, 7.006492321624085e-46, 7.1e-46, -7.1e-46, 1e-45, 3.4028235e38, 3.5e38],
 }
 
-describe("the rules comb's refines hold, as the published document states them (CS8, AA3; siblings: int64, real, cidr, a rectangular array, url, nullable)", () => {
+describe("the rules database's refines hold, as the published document states them (CS8, AA3; siblings: int64, real, cidr, a rectangular array, url, nullable)", () => {
 	it.each(Object.keys(EDGES))(
 		"%s: a reader of the published field reaches zod's verdict on every edge",
 		async (key) => {
@@ -127,11 +127,11 @@ describe("the rules comb's refines hold, as the published document states them (
 	)
 })
 
-/* A3-3 of r23: the WHATWG parser's own rewrite is a transform the url publishes, which a reader applies before x-comb-url */
+/* A3-3 of r23: the WHATWG parser's own rewrite is a transform the url publishes, which a reader applies before x-database-url */
 describe("a written url's published rewrites", () => {
 	it.each(["site", "siten"])("%s publishes trim, then strip-tab-newline", async (key) => {
 		const field = (z.toJSONSchema(await create(), { io: "input" }).properties as Record<string, Node>)[key] as Node
-		expect(field["x-comb-transform"]).toEqual(["trim", "strip-tab-newline"])
+		expect(field["x-database-transform"]).toEqual(["trim", "strip-tab-newline"])
 	})
 })
 
@@ -151,7 +151,7 @@ describe("a written plain JSON value (CS9)", () => {
 		{ label: "beside a recursive c.json before it", tree: TREE, ...WRITE },
 		{ label: "alone, on a read", tree: "", ...READ },
 		{ label: "on a read, beside a recursive c.json before it", tree: TREE, ...READ },
-	])("names it CombJsonValue $label", async ({ dto, io, label, tree }) => {
+	])("names it DatabaseJsonValue $label", async ({ dto, io, label, tree }) => {
 		const tables = `import { jsonb } from "drizzle-orm/pg-core"
 import * as z from "zod"
 export const treeSchema = z.object({ name: z.string(), get kids() { return z.array(treeSchema) } })
@@ -162,13 +162,13 @@ export const row = pgTable("row", {
 		const dtos = await generatedDtos(`published-json-${label.length}`, tables, { dialect: "postgres" })
 		const published = z.toJSONSchema(dtos["row"]?.[dto] as z.ZodObject, { io }) as Node
 		const raw = JSON.stringify((published["properties"] as Node)["raw"])
-		expect(raw.match(/#\/\$defs\/([^"]+)/)?.[1]).toBe("CombJsonValue")
-		expect(Object.keys(published["$defs"] as Node)).toContain("CombJsonValue")
+		expect(raw.match(/#\/\$defs\/([^"]+)/)?.[1]).toBe("DatabaseJsonValue")
+		expect(Object.keys(published["$defs"] as Node)).toContain("DatabaseJsonValue")
 	})
 })
 
 /* A3-4 of r23: an app's recursive schema under its own id, in a written c.json, publishes one document
-   per DTO, whatever the process converted before it: comb's refine sits outside the lazy */
+   per DTO, whatever the process converted before it: database's refine sits outside the lazy */
 describe("a written c.json of a getter-recursive schema under its own id", () => {
 	const TABLES = `import * as z from "zod"
 export type Tree = { name: string; kids: Tree[] }

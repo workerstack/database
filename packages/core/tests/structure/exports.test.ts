@@ -1,7 +1,7 @@
 /**
  * The package a consumer installs: every subpath it can import exists and ships, tests and
  * fixtures stay out of the tarball, installing it runs nothing, and each peer's floor is the
- * version comb is tested against, so no range claims a version the suite never ran.
+ * version database is tested against, so no range claims a version the suite never ran.
  */
 import { spawnSync } from "node:child_process"
 import { existsSync, readFileSync } from "node:fs"
@@ -55,7 +55,7 @@ describe("package exports", () => {
 	})
 
 	it("the bin is a bun script", () => {
-		const bin = strip(manifest().bin.comb ?? "")
+		const bin = strip(manifest().bin.database ?? "")
 		expect(readFileSync(join(CORE, bin), "utf8").split("\n")[0]).toBe("#!/usr/bin/env bun")
 	})
 
@@ -72,7 +72,7 @@ describe("package exports", () => {
 	it("floors every peer at the version the suite runs", () => {
 		const { devDependencies, peerDependencies } = manifest()
 		const pins = catalog()
-		/* the compiler the repo runs is the catalog's; the consumer floor cell type-checks comb on typescript's floor (KT2 of r22b) */
+		/* the compiler the repo runs is the catalog's; the consumer floor cell type-checks database on typescript's floor (KT2 of r22b) */
 		const atFloorInConsumers = ["typescript"]
 		const drift = Object.entries(peerDependencies)
 			.filter(([name]) => !atFloorInConsumers.includes(name))
@@ -100,7 +100,7 @@ describe("public entry points", () => {
 		"listQueryBaseSchema",
 	]
 
-	it("export none of comb's internals", async () => {
+	it("export none of database's internals", async () => {
 		const { exports } = manifest()
 		const leaked: string[] = []
 		for (const [subpath, target] of Object.entries(exports)) {

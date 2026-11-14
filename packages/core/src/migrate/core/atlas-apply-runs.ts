@@ -1,5 +1,5 @@
 /**
- * The apply itself, once comb approved the pending files: one Atlas call per file, so
+ * The apply itself, once database approved the pending files: one Atlas call per file, so
  * each file runs on a session of its own, as it would alone, as on SQLite and on D1. No
  * reading of a file proves what it leaves on its session: a trigger, a default, a DO block's EXECUTE
  * or code the target holds can each run a SET that outlives its COMMIT.
@@ -44,9 +44,9 @@ const found =
 	}
 
 /**
- * The pending files of `status`, which comb approved, applied one Atlas call each: Atlas runs a
+ * The pending files of `status`, which database approved, applied one Atlas call each: Atlas runs a
  * call's files on one session, where a SET one file makes outlives its COMMIT and reaches the next,
- * a lifted lock_timeout among them, while comb rates each file alone. Each later call reads the
+ * a lifted lock_timeout among them, while database rates each file alone. Each later call reads the
  * status and checks the history again first, the guard against another apply between calls, and
  * runs the first file still pending; each runs an approved file not yet run, so the calls are at
  * most the approved files

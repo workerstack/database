@@ -1,5 +1,5 @@
 /**
- * The packed comb in a fresh project, twice: with its required peers only and with every peer.
+ * The packed database in a fresh project, twice: with its required peers only and with every peer.
  * Each subpath imports under bun and under tsx (plain Node does not run TypeScript from
  * node_modules); a Vite build and a wrangler bundle carry no tooling; tsc compiles every subpath
  * under strict flags in a bundler project and in a nodenext project.
@@ -35,8 +35,8 @@ beforeAll(() => {
 	tarball = pack()
 })
 
-/** comb's files in a `tsc --listFiles` run: its declarations, and any of its source tsc loaded */
-function combFiles(output: string): { declarations: string[]; source: string[] } {
+/** database's files in a `tsc --listFiles` run: its declarations, and any of its source tsc loaded */
+function databaseFiles(output: string): { declarations: string[]; source: string[] } {
 	const files = output.split("\n").filter((line) => line.includes("node_modules/@workerstack/database/"))
 	return {
 		declarations: files.filter((file) => file.endsWith(".d.ts")),
@@ -71,7 +71,7 @@ describe.each([
 		const files = readdirSync(join(app.dir, "dist-vite")).filter((file) => file.endsWith(".js"))
 		expect(files.length).toBeGreaterThan(0)
 		const bundle = files.map((file) => readFileSync(join(app.dir, "dist-vite", file), "utf8")).join("\n")
-		/* comb's own code is in it, not left external */
+		/* database's own code is in it, not left external */
 		expect(bundle).toContain("invalid_cursor")
 		expect(bundle).not.toMatch(/ts-morph|child_process|node:fs/)
 	})
@@ -82,7 +82,7 @@ describe.each([
 		).toContain("--dry-run: exiting now.")
 	})
 
-	/* 4.18: workerd refuses code from strings, so no comb schema may build any, nor bundle zod's compiler */
+	/* 4.18: workerd refuses code from strings, so no database schema may build any, nor bundle zod's compiler */
 	it.runIf(peers === "required")(
 		"runs on workerd, its schemas built and parsed with no code from a string",
 		async () => {
@@ -107,7 +107,7 @@ describe.each([
 				scriptPath,
 			})
 			try {
-				const response = await worker.dispatchFetch("http://comb.test/")
+				const response = await worker.dispatchFetch("http://database.test/")
 				expect(await response.json()).toEqual({ made: 0, parsed: [true, true, true] })
 			} finally {
 				await worker.dispose()
@@ -123,19 +123,19 @@ describe.each([
 	})
 
 	/*
-	 * K1 of r20: 0.18.0 gave 218 TS5097 here, one per `./x.ts` specifier of comb's source the Worker
+	 * K1 of r20: 0.18.0 gave 218 TS5097 here, one per `./x.ts` specifier of database's source the Worker
 	 * reached. K3 of r21: the Worker's globals are what `wrangler types` wrote, and no file of
-	 * @cloudflare/workers-types, which the app has installed, is read for comb's D1 modules, whose
+	 * @cloudflare/workers-types, which the app has installed, is read for database's D1 modules, whose
 	 * types c3/src/d1.ts proves held by the wrong calls each refused
 	 */
 	it.runIf(peers === "all").each(["c3/tsconfig.json", "c3/tsconfig.strict.json"])(
-		"type-checks a stock create-cloudflare Worker from comb's declarations alone (%s)",
+		"type-checks a stock create-cloudflare Worker from database's declarations alone (%s)",
 		(config) => {
 			const result = run(app.dir, "npx", ["tsc", "-p", config, "--listFiles"])
 			expect(result.output.split("\n").filter((line) => line.includes("error TS"))).toEqual([])
 			expect(result.status).toBe(0)
-			expect(combFiles(result.output).source).toEqual([])
-			expect(combFiles(result.output).declarations.length).toBeGreaterThan(0)
+			expect(databaseFiles(result.output).source).toEqual([])
+			expect(databaseFiles(result.output).declarations.length).toBeGreaterThan(0)
 			expect(result.output.split("\n").filter((line) => line.includes("@cloudflare/workers-types"))).toEqual([])
 		},
 	)
@@ -156,7 +156,7 @@ describe.each([
 	})
 
 	/* KT4 of r22b: 0.20.1's queryHelpers and resourceOutcome named types no subpath exports, and a project emitting declarations failed with TS2742 */
-	it.runIf(peers === "all")("emits declarations for a module re-exporting every value comb exports", () => {
+	it.runIf(peers === "all")("emits declarations for a module re-exporting every value database exports", () => {
 		const count = Number(ok(run(app.dir, "bun", ["reexport-all.mjs"]), "reexport-all").trim())
 		expect(count).toBeGreaterThan(180)
 		const result = run(app.dir, "npx", ["tsc", "-p", "tsconfig.reexport.json"])
@@ -166,35 +166,35 @@ describe.each([
 
 	/*
 	 * An install that never ran prepack (a `file:` or link install of the tree, a git dependency) has
-	 * no types/: tsc then takes the `default` condition, comb's source, as every release before 0.19
-	 * did. Last in its describe, since it takes types/ out of the installed comb.
+	 * no types/: tsc then takes the `default` condition, database's source, as every release before 0.19
+	 * did. Last in its describe, since it takes types/ out of the installed database.
 	 */
-	it.runIf(peers === "all")("falls back to comb's source where its declarations were never emitted", () => {
+	it.runIf(peers === "all")("falls back to database's source where its declarations were never emitted", () => {
 		const packed = run(app.dir, "npx", ["tsc", "-p", "tsconfig.bundler.json", "--listFiles"])
-		expect(combFiles(packed.output)).toMatchObject({ source: [] })
+		expect(databaseFiles(packed.output)).toMatchObject({ source: [] })
 		rmSync(join(app.dir, "node_modules/@workerstack/database/types"), { force: true, recursive: true })
 		const unpacked = run(app.dir, "npx", ["tsc", "-p", "tsconfig.bundler.json", "--listFiles"])
 		expect(unpacked.output.split("\n").filter((line) => line.includes("error TS"))).toEqual([])
 		expect(unpacked.status).toBe(0)
-		expect(combFiles(unpacked.output).declarations).toEqual([])
-		expect(combFiles(unpacked.output).source.length).toBeGreaterThan(0)
+		expect(databaseFiles(unpacked.output).declarations).toEqual([])
+		expect(databaseFiles(unpacked.output).source.length).toBeGreaterThan(0)
 	})
 })
 
-/* K8 of r20: every peer at the floor comb states installs, and comb type-checks against it */
-describe("a consumer at comb's peer floors", () => {
+/* K8 of r20: every peer at the floor database states installs, and database type-checks against it */
+describe("a consumer at database's peer floors", () => {
 	let app: Stage
 	beforeAll(() => {
 		app = stage(tarball, "all", APP, "floor")
 	})
 	afterAll(() => app?.dispose())
 
-	it("type-checks every subpath under strict flags, on the TypeScript at comb's floor", () => {
+	it("type-checks every subpath under strict flags, on the TypeScript at database's floor", () => {
 		expect(installedVersion(app.dir, "typescript")).toBe(floorOf(peerRange("typescript")))
 		const result = run(app.dir, "npx", ["tsc", "-p", "tsconfig.bundler.json"])
 		expect(result.output.split("\n").filter((line) => line.includes("error TS"))).toEqual([])
 		expect(result.status).toBe(0)
-		/* KT2's sibling: the floor reads comb's declarations themselves without an error, NoInfer and Uint8Array<ArrayBuffer> among them */
+		/* KT2's sibling: the floor reads database's declarations themselves without an error, NoInfer and Uint8Array<ArrayBuffer> among them */
 		const checked = tscErrors(app.dir, false)
 		expect(checked.filter((line) => line.includes("/@workerstack/database/"))).toEqual([])
 	})
@@ -206,33 +206,36 @@ const tscErrors = (dir: string, skipLibCheck: boolean): string[] =>
 		.output.split("\n")
 		.filter((line) => line.includes("error TS"))
 
-/* KT2 of r22b: below 5.7 tsc read comb's NoInfer and Uint8Array<ArrayBuffer> as any, and a typo compiled */
-describe("a consumer on TypeScript 5.6.3, below comb's floor", () => {
+/* KT2 of r22b: below 5.7 tsc read database's NoInfer and Uint8Array<ArrayBuffer> as any, and a typo compiled */
+describe("a consumer on TypeScript 5.6.3, below database's floor", () => {
 	let app: Stage
 	beforeAll(() => {
 		app = stage(tarball, "all", APP, { pin: { typescript: "5.6.3" } })
 	})
 	afterAll(() => app?.dispose())
 
-	it.each([true, false])("fails at each import of comb, in the project's own file, with skipLibCheck %s", (skip) => {
-		expect(installedVersion(app.dir, "typescript")).toBe("5.6.3")
-		const errors = tscErrors(app.dir, skip)
-		/* each import of every subpath names the floor, whose comment says to upgrade */
-		const floor = join(app.dir, "node_modules/@workerstack/database/types/typescript-floor-types.d.ts")
-		expect(
-			errors.filter((line) => line.endsWith(`error TS2306: File '${floor}' is not a module.`)).length,
-		).toBeGreaterThan(20)
-		/* the two checks it lost now fail too: their imports are any, so each @ts-expect-error is unused */
-		const lines = errors.filter((line) => line.startsWith("src/floor.ts("))
-		expect(lines.map((line) => line.replace(/^src\/floor\.ts\((\d+),\d+\): error (TS\d+).*$/, "$1 $2"))).toEqual([
-			"1 TS2306",
-			"2 TS2306",
-			"7 TS2578",
-			"12 TS2578",
-		])
-		/* and nothing inside comb's declarations is read */
-		expect(errors.filter((line) => line.includes("/@workerstack/database/") && !line.includes("TS2306"))).toEqual([])
-	})
+	it.each([true, false])(
+		"fails at each import of database, in the project's own file, with skipLibCheck %s",
+		(skip) => {
+			expect(installedVersion(app.dir, "typescript")).toBe("5.6.3")
+			const errors = tscErrors(app.dir, skip)
+			/* each import of every subpath names the floor, whose comment says to upgrade */
+			const floor = join(app.dir, "node_modules/@workerstack/database/types/typescript-floor-types.d.ts")
+			expect(
+				errors.filter((line) => line.endsWith(`error TS2306: File '${floor}' is not a module.`)).length,
+			).toBeGreaterThan(20)
+			/* the two checks it lost now fail too: their imports are any, so each @ts-expect-error is unused */
+			const lines = errors.filter((line) => line.startsWith("src/floor.ts("))
+			expect(lines.map((line) => line.replace(/^src\/floor\.ts\((\d+),\d+\): error (TS\d+).*$/, "$1 $2"))).toEqual([
+				"1 TS2306",
+				"2 TS2306",
+				"7 TS2578",
+				"12 TS2578",
+			])
+			/* and nothing inside database's declarations is read */
+			expect(errors.filter((line) => line.includes("/@workerstack/database/") && !line.includes("TS2306"))).toEqual([])
+		},
+	)
 
 	it("is refused by npm", () => {
 		const refused = run(app.dir, "npm", ["install", "--no-audit", "--no-fund", "--loglevel=error"])
@@ -257,7 +260,7 @@ describe.each(admittedOf("drizzle-orm"))("a consumer on drizzle %s", (version) =
 	})
 })
 
-/* K7 of r20: a command whose optional peer is missing names the package, the range comb takes and the install */
+/* K7 of r20: a command whose optional peer is missing names the package, the range database takes and the install */
 describe("a consumer missing each optional peer", () => {
 	const TABLES = `import { sqliteTable } from "drizzle-orm/sqlite-core"
 import { c } from "@workerstack/database/sqlite/columns"
@@ -322,21 +325,26 @@ export const post = sqliteTable("post", { id: c.id("id", { prefix: "post" }), ti
 		}
 	}
 
-	it.each(CASES)("comb $argv.0 $argv.1 without $peer names it, its range and the install", ({ argv, config, peer }) => {
-		const dir = join(app.dir, "cases", peer.replace(/\W+/g, "-"))
-		write(dir, { ...PROJECT, ...(config === undefined ? {} : { "comb.migrate.config.ts": config }) })
-		ok(run(dir, "atlas", ["migrate", "hash", "--dir", `file://${join(dir, "m")}`]), "atlas migrate hash")
-		const result = run(dir, join(app.dir, "node_modules", ".bin", "comb"), argv)
-		expect(result.status).not.toBe(0)
-		expect(result.output).toContain(`comb needs ${peer} (${peerRange(peer)}) to `)
-		expect(result.output).toContain(`install "${peer}@${peerRange(peer)}"`)
-		/* no resolver text from comb's own source, and no blame on the tables module */
-		expect(result.output).not.toContain("@workerstack/database/src/")
-		expect(result.output).not.toContain("could not load")
-		/* a refusal under --json is the one JSON object stdout promises (K5 of r19) */
-		if (argv.includes("--json"))
-			expect(result.output).toContain(`{"applied":[],"database":"core","pending":[],"refused":["comb needs ${peer} (`)
-	})
+	it.each(CASES)(
+		"database $argv.0 $argv.1 without $peer names it, its range and the install",
+		({ argv, config, peer }) => {
+			const dir = join(app.dir, "cases", peer.replace(/\W+/g, "-"))
+			write(dir, { ...PROJECT, ...(config === undefined ? {} : { "database.migrate.config.ts": config }) })
+			ok(run(dir, "atlas", ["migrate", "hash", "--dir", `file://${join(dir, "m")}`]), "atlas migrate hash")
+			const result = run(dir, join(app.dir, "node_modules", ".bin", "database"), argv)
+			expect(result.status).not.toBe(0)
+			expect(result.output).toContain(`database needs ${peer} (${peerRange(peer)}) to `)
+			expect(result.output).toContain(`install "${peer}@${peerRange(peer)}"`)
+			/* no resolver text from database's own source, and no blame on the tables module */
+			expect(result.output).not.toContain("@workerstack/database/src/")
+			expect(result.output).not.toContain("could not load")
+			/* a refusal under --json is the one JSON object stdout promises (K5 of r19) */
+			if (argv.includes("--json"))
+				expect(result.output).toContain(
+					`{"applied":[],"database":"core","pending":[],"refused":["database needs ${peer} (`,
+				)
+		},
+	)
 
 	/* K1, P8 and S2 of r21: every (command, provider) PEERS gives peers to, with each absent and the endpoint dead */
 	const DEAD = "postgres://u:p@127.0.0.1:9/core?sslmode=disable"
@@ -356,45 +364,45 @@ export const post = sqliteTable("post", { id: c.id("id", { prefix: "post" }), ti
 			return required.length === 0 ? [] : [{ atlas, command, needs: required, provider }]
 		}),
 	)
-	/* what records a call: atlas and wrangler on PATH, and fetch inside comb's process, each appending to the log;
-	   atlas says the version comb is tested against, and fails at anything else */
+	/* what records a call: atlas and wrangler on PATH, and fetch inside database's process, each appending to the log;
+	   atlas says the version database is tested against, and fails at anything else */
 	const RECORDERS = {
-		"bin/atlas": `#!/bin/sh\necho "atlas $*" >> "$COMB_CALLS"\n[ "$1" = version ] && echo "atlas version v1.3.0" && exit 0\nexit 1\n`,
-		"bin/wrangler": `#!/bin/sh\necho "wrangler $*" >> "$COMB_CALLS"\nexit 1\n`,
+		"bin/atlas": `#!/bin/sh\necho "atlas $*" >> "$DATABASE_CALLS"\n[ "$1" = version ] && echo "atlas version v1.3.0" && exit 0\nexit 1\n`,
+		"bin/wrangler": `#!/bin/sh\necho "wrangler $*" >> "$DATABASE_CALLS"\nexit 1\n`,
 		"record-fetch.ts": `import { appendFileSync } from "node:fs"
 globalThis.fetch = (async (input: string | URL | Request) => {
-	appendFileSync(process.env["COMB_CALLS"] as string, \`fetch \${input instanceof Request ? input.url : String(input)}\\n\`)
+	appendFileSync(process.env["DATABASE_CALLS"] as string, \`fetch \${input instanceof Request ? input.url : String(input)}\\n\`)
 	throw new TypeError("fetch failed")
 }) as typeof fetch
 `,
 	}
-	/** comb migrate `command` core in the cell for `provider`, as a project would run it, and every call it made */
+	/** database migrate `command` core in the cell for `provider`, as a project would run it, and every call it made */
 	const runCell = (provider: string, command: string, files: Record<string, string> = {}) => {
 		const dir = join(app.dir, "cells", `${provider}-${command}${Object.keys(files).length > 0 ? "-more" : ""}`)
 		write(dir, {
 			...PROJECT,
 			...RECORDERS,
-			"comb.migrate.config.ts": configOf(PROVIDERS[provider] as string),
+			"database.migrate.config.ts": configOf(PROVIDERS[provider] as string),
 			...files,
 		})
 		for (const bin of ["atlas", "wrangler"]) chmodSync(join(dir, "bin", bin), 0o755)
 		const calls = join(dir, "calls.log")
 		writeFileSync(calls, "")
-		const comb = join(app.dir, "node_modules", ".bin", "comb")
-		const result = run(dir, "bun", ["--preload", "./record-fetch.ts", comb, "migrate", command, "core"], {
-			COMB_CALLS: calls,
+		const database = join(app.dir, "node_modules", ".bin", "database")
+		const result = run(dir, "bun", ["--preload", "./record-fetch.ts", database, "migrate", command, "core"], {
+			DATABASE_CALLS: calls,
 			PATH: `${join(dir, "bin")}:${process.env["PATH"] ?? ""}`,
 		})
 		return { calls: readFileSync(calls, "utf8"), result }
 	}
 
 	it.each(CELLS)(
-		"comb migrate $command on $provider names every peer it needs before any I/O",
+		"database migrate $command on $provider names every peer it needs before any I/O",
 		({ atlas, command, needs, provider }) => {
 			const { calls, result } = runCell(provider, command)
 			expect(result.status).not.toBe(0)
 			const each = needs.map(({ peer, why }) => `${peer} (${peerRange(peer)}) to ${why}`)
-			expect(result.output).toContain(`comb needs ${each.join(", and ")}; `)
+			expect(result.output).toContain(`database needs ${each.join(", and ")}; `)
 			expect(result.output).toContain(`install ${needs.map(({ peer }) => `"${peer}@${peerRange(peer)}"`).join(" ")}`)
 			/* no connect, fetch, spawn or Atlas call but Atlas's version read: the Turso create and token mint among them */
 			expect(calls).toBe(atlas ? "atlas version\n" : "")
@@ -402,16 +410,16 @@ globalThis.fetch = (async (input: string | URL | Request) => {
 		},
 	)
 
-	/* KC3 of r22: a SQLite diff whose comb.config.ts declares FTS loads the tables file, through ts-morph */
+	/* KC3 of r22: a SQLite diff whose database.config.ts declares FTS loads the tables file, through ts-morph */
 	it.each(["bun-sqlite", "d1", "libsql", "turso"])(
-		"comb migrate diff on %s with FTS declared names drizzle-kit and ts-morph in one refusal, before Atlas runs",
+		"database migrate diff on %s with FTS declared names drizzle-kit and ts-morph in one refusal, before Atlas runs",
 		(provider) => {
 			const fts = `export default { databases: { core: { tables: "./post.tables.ts", fts: { post: { columns: ["title"] } } } } }\n`
-			const { calls, result } = runCell(provider, "diff", { "comb.config.ts": fts })
+			const { calls, result } = runCell(provider, "diff", { "database.config.ts": fts })
 			expect(result.status).not.toBe(0)
-			const kit = `drizzle-kit (${peerRange("drizzle-kit")}) to export the drizzle schema for comb migrate diff`
-			const morph = `ts-morph (${peerRange("ts-morph")}) to read the tables file whose FTS comb.config.ts declares`
-			expect(result.output).toContain(`comb needs ${kit}, and ${morph}; `)
+			const kit = `drizzle-kit (${peerRange("drizzle-kit")}) to export the drizzle schema for database migrate diff`
+			const morph = `ts-morph (${peerRange("ts-morph")}) to read the tables file whose FTS database.config.ts declares`
+			expect(result.output).toContain(`database needs ${kit}, and ${morph}; `)
 			expect(result.output).toContain(
 				`install "drizzle-kit@${peerRange("drizzle-kit")}" "ts-morph@${peerRange("ts-morph")}"`,
 			)
@@ -419,11 +427,11 @@ globalThis.fetch = (async (input: string | URL | Request) => {
 		},
 	)
 
-	/* K2 of r21: `bun add <peer>` took a major outside comb's range; the refusal's own words land inside it */
+	/* K2 of r21: `bun add <peer>` took a major outside database's range; the refusal's own words land inside it */
 	it.each([
 		["postgres", "baseline"],
 		["turso", "check"],
-	])("installs inside comb's range by the words the %s %s refusal gives", (provider, command) => {
+	])("installs inside database's range by the words the %s %s refusal gives", (provider, command) => {
 		const { result } = runCell(provider, command)
 		const words = /; install ((?:"[^"]+" ?)+)/.exec(result.output)?.[1] ?? ""
 		const dir = join(app.dir, "installs", provider)
@@ -437,7 +445,7 @@ globalThis.fetch = (async (input: string | URL | Request) => {
 	})
 })
 
-/* K3 of r20: the README's own line installs each required peer inside comb's range */
+/* K3 of r20: the README's own line installs each required peer inside database's range */
 describe("a consumer installed by the README's bun add line", () => {
 	let app: Stage
 	beforeAll(() => {
@@ -448,7 +456,7 @@ describe("a consumer installed by the README's bun add line", () => {
 	})
 	afterAll(() => app?.dispose())
 
-	it.each(Object.entries(REQUIRED_PEERS))("installs %s inside comb's range %s", (name, range) => {
+	it.each(Object.entries(REQUIRED_PEERS))("installs %s inside database's range %s", (name, range) => {
 		expect(semver.satisfies(installedVersion(app.dir, name), range)).toBe(true)
 	})
 })

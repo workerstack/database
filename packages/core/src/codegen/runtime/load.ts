@@ -9,7 +9,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { refuseCompiled } from "../../migrate/core/compiled.ts"
 import { resolvePeer } from "../../migrate/core/optional-peer.ts"
-import { type Run, run as defaultRun } from "../../migrate/core/process.ts"
+import { type MigrateRun, run as defaultRun } from "../../migrate/core/process.ts"
 import type { Snapshot } from "./snapshot-types.ts"
 import { scratchDir } from "../../migrate/core/cleanup.ts"
 import { GROUPS } from "./supervise.mjs"
@@ -81,13 +81,13 @@ function childArgs(runtime: "bun" | "node", rest: readonly string[]): string[] {
 
 type LoadOptions = {
 	/**
-	 * The working directory the module loads in: comb's own, where the app and drizzle-kit run, so a
+	 * The working directory the module loads in: database's own, where the app and drizzle-kit run, so a
 	 * root-relative read finds what it finds for them; the process's by default
 	 */
 	cwd?: string | undefined
-	/** The URL of the module comb runs from, which a Bun single-file executable embeds; this module's own unless a test gives one */
+	/** The URL of the module database runs from, which a Bun single-file executable embeds; this module's own unless a test gives one */
 	moduleUrl?: string | undefined
-	run?: Run | undefined
+	run?: MigrateRun | undefined
 	runtime?: "bun" | "node" | undefined
 	/** How long the child may take; LOAD_TIMEOUT_MS unless a test needs less */
 	timeoutMs?: number | undefined
@@ -99,7 +99,7 @@ async function loadSnapshot(tablesPath: string, options: LoadOptions = {}): Prom
 	/* the child would rerun the app itself, as process.execPath is the app */
 	refuseCompiled(
 		moduleUrl,
-		"comb codegen loads the tables file in a child process, which cannot read the modules a Bun single-file executable embeds: run codegen with bun or node, not from a compiled executable",
+		"database codegen loads the tables file in a child process, which cannot read the modules a Bun single-file executable embeds: run codegen with bun or node, not from a compiled executable",
 	)
 	/* the child reads the module's imports with ts-morph, an optional peer (under node its hooks load it
 	   first): resolved here, so a project without it is told so, not that its tables file failed */
@@ -107,7 +107,7 @@ async function loadSnapshot(tablesPath: string, options: LoadOptions = {}): Prom
 		import.meta.resolve("ts-morph"),
 	)
 	const runtime = options.runtime ?? (process.versions["bun"] === undefined ? "node" : "bun")
-	const { dir, remove: removeDir } = scratchDir("comb-codegen-")
+	const { dir, remove: removeDir } = scratchDir("database-codegen-")
 	try {
 		const result = path.join(dir, "snapshot.json")
 		const status = path.join(dir, "status.json")
@@ -126,15 +126,15 @@ async function loadSnapshot(tablesPath: string, options: LoadOptions = {}): Prom
 		)
 		/* the supervisor's own word, as a module may exit 124 itself; codegen's stopping the supervisor is one too */
 		if (fs.existsSync(status) || ran.code === 124)
-			throw new Error(`comb timed out after ${timeoutMs / 1000} s loading ${tablesPath}`)
+			throw new Error(`database timed out after ${timeoutMs / 1000} s loading ${tablesPath}`)
 		if (!fs.existsSync(result))
-			throw new Error(`comb could not load ${tablesPath}: ${ran.stderr.trim() || `the loader exited ${ran.code}`}`)
+			throw new Error(`database could not load ${tablesPath}: ${ran.stderr.trim() || `the loader exited ${ran.code}`}`)
 		const read = JSON.parse(fs.readFileSync(result, "utf8")) as
 			| { at?: string | undefined; error: string }
 			| { snapshot: Snapshot }
 		if ("error" in read)
 			throw new Error(
-				`comb could not load ${tablesPath}: ${read.error}${read.at === undefined ? "" : ` (at ${read.at})`}`,
+				`database could not load ${tablesPath}: ${read.error}${read.at === undefined ? "" : ` (at ${read.at})`}`,
 			)
 		return read.snapshot
 	} finally {

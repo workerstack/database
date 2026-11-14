@@ -1,7 +1,7 @@
 /**
  * What the release publishes: the package as bun packs it, every catalog: and workspace: version
  * resolved (P2). `npm publish` in the package directory sent 0.8.0's devDependencies as catalog:.
- * 0.9.0's release failed in both publish steps, and its manifest would have lost the comb bin.
+ * 0.9.0's release failed in both publish steps, and its manifest would have lost the database bin.
  */
 import { spawnSync } from "node:child_process"
 import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
@@ -102,7 +102,7 @@ describe("the published package (P2)", () => {
 	it("publishes from the packed directory as packed: no rerun script, no manifest npm rewrites", () => {
 		withPacked((dir) => {
 			/* npm 11+ drops a bin written `./path` from the manifest it publishes, and only warns */
-			expect(manifestOf(dir)["bin"]).toEqual({ comb: "src/bin.ts" })
+			expect(manifestOf(dir)["bin"]).toEqual({ database: "src/bin.ts" })
 			for (const line of PUBLISHES) {
 				const run = dryRun(dir, line)
 				expect(run.status, `${line.trim()}\n${run.stderr}`).toBe(0)
@@ -186,8 +186,8 @@ function wrongSources(dir: string, files: string[], maps: string[]): string[] {
 }
 
 /*
- * K1 of r20: a consumer's tsc reads comb's declarations, emitted at pack under types/, and never
- * loads comb's .ts. Every check reads the package the release publishes, never the working tree,
+ * K1 of r20: a consumer's tsc reads database's declarations, emitted at pack under types/, and never
+ * loads database's .ts. Every check reads the package the release publishes, never the working tree,
  * where types/ never exists: each pack runs on its own copy of the package (packedDir).
  */
 describe("the published declarations (K1 of r20)", () => {

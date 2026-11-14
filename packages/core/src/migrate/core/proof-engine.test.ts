@@ -123,7 +123,7 @@ async function probed(sql: string, { unknownRoot = false } = {}) {
 		all: (query: string, params?: readonly unknown[]) => {
 			const rows = db.all(query, params)
 			const probing =
-				db.all("SELECT 1 FROM temp.sqlite_schema WHERE name LIKE 'comb\\_probe\\_%' ESCAPE '\\'").length > 0
+				db.all("SELECT 1 FROM temp.sqlite_schema WHERE name LIKE 'database\\_probe\\_%' ESCAPE '\\'").length > 0
 			return unknownRoot && query.startsWith("EXPLAIN ") && !probing
 				? [...rows, { opcode: "OpenWrite", p1: 99, p2: 9999, p3: 0, p4: "", p5: 0 }]
 				: rows
@@ -150,7 +150,7 @@ describe("the engine pass probes only the tables a statement writes", () => {
 	/* M46: a file may name a temp trigger anything, so the probes' names are the run's own */
 	it("probes a table when the file holds a temp trigger of a probe's old name", async () => {
 		const { findings } = await probed(
-			"CREATE TEMP TRIGGER comb_probe_0 AFTER INSERT ON k BEGIN SELECT 1; END;\nUPDATE k SET a = 'x';",
+			"CREATE TEMP TRIGGER database_probe_0 AFTER INSERT ON k BEGIN SELECT 1; END;\nUPDATE k SET a = 'x';",
 		)
 		expect(findings.unsafe).toContain("UPDATE k SET a = 'x': updates existing rows of k (a)")
 	})
@@ -240,7 +240,7 @@ describe("writtenTables: the existing tables a statement's program opens for wri
  * no approval overrides that.
  */
 /** A fresh directory for the files a statement outside the copy would write */
-const scratch = () => fs.mkdtempSync(path.join(os.tmpdir(), "comb-outside-"))
+const scratch = () => fs.mkdtempSync(path.join(os.tmpdir(), "database-outside-"))
 
 describe("the engine pass never lets a statement reach outside the copy", () => {
 	it.each([
@@ -258,7 +258,7 @@ describe("the engine pass never lets a statement reach outside the copy", () => 
 		const db = await openScratch()
 		db.exec(TABLES)
 		expect(() => applyToCopy(db, statement(dir))).toThrow(
-			`comb never runs ${named} in a migration: it reaches outside the database the migration applies to`,
+			`database never runs ${named} in a migration: it reaches outside the database the migration applies to`,
 		)
 		db.close()
 		expect(fs.readdirSync(dir)).toEqual([])
@@ -284,7 +284,9 @@ describe("the engine pass never lets a statement reach outside the copy", () => 
 		const target = libsqlConnection()
 		await target.client.executeMultiple(START)
 		const file = `ATTACH '${path.join(dir, "live.db")}' AS live;\nDELETE FROM live.users;`
-		await expect(provePending(target, [{ name: "1_attach.sql", sql: file }])).rejects.toThrow("comb never runs ATTACH")
+		await expect(provePending(target, [{ name: "1_attach.sql", sql: file }])).rejects.toThrow(
+			"database never runs ATTACH",
+		)
 		expect((await victim.execute("SELECT id FROM users ORDER BY id")).rows.map((row) => row[0])).toEqual([1, 2])
 		victim.close()
 		await target.close()
@@ -361,7 +363,7 @@ CREATE TABLE wr (k TEXT PRIMARY KEY, n INTEGER) WITHOUT ROWID;`
 
 /* M43: a history trigger that runs 'delete-all' is no FTS sync trigger, so an insert that fires it is unsafe */
 describe("the engine pass on a write that fires a trigger running an FTS5 command", () => {
-	it("calls the insert unsafe for firing it, while comb's own sync trigger fires to no note", async () => {
+	it("calls the insert unsafe for firing it, while database's own sync trigger fires to no note", async () => {
 		const history = `CREATE TABLE post (id INTEGER PRIMARY KEY, title TEXT);
 CREATE VIRTUAL TABLE post_fts USING fts5(title, content='post', content_rowid='id');
 CREATE TRIGGER post_ai AFTER INSERT ON post BEGIN INSERT INTO post_fts(post_fts) VALUES ('delete-all'); INSERT INTO post_fts(rowid, title) VALUES (new.id, new.title); END;`

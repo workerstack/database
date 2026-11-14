@@ -47,7 +47,7 @@ describe("a refused D1 apply or baseline, the local database missing", () => {
 	}, 120_000)
 })
 
-describe("a refused D1 apply on a local database comb never migrated", () => {
+describe("a refused D1 apply on a local database that database never migrated", () => {
 	it("leaves every history table unmade when approval refuses a file", async () => {
 		const dir = project({ "20260101000000_drop.sql": "DROP TABLE post;" })
 		expect(
@@ -59,18 +59,18 @@ describe("a refused D1 apply on a local database comb never migrated", () => {
 		expect(await tables(dir)).toEqual(["post"])
 	}, 120_000)
 
-	it("makes comb's hash and intent tables, the hashes moved out of the intents once wrangler has applied", async () => {
+	it("makes database's hash and intent tables, the hashes moved out of the intents once wrangler has applied", async () => {
 		const dir = project(INIT)
 		const out = d1Io(dir)
 		expect(await runCli(["migrate", "apply", "core", "--local"], out), out.errors.join("\n")).toBe(0)
 		expect(await tables(dir)).toEqual([
-			"_comb_migration_hash_intents",
-			"_comb_migration_hashes",
+			"_database_migration_hash_intents",
+			"_database_migration_hashes",
 			"d1_migrations",
 			"post",
 			"sqlite_sequence",
 		])
-		expect(await d1Column(dir, "SELECT name FROM _comb_migration_hashes")).toEqual(["20260101000000_init.sql"])
-		expect(await d1Column(dir, "SELECT name FROM _comb_migration_hash_intents")).toEqual([])
+		expect(await d1Column(dir, "SELECT name FROM _database_migration_hashes")).toEqual(["20260101000000_init.sql"])
+		expect(await d1Column(dir, "SELECT name FROM _database_migration_hash_intents")).toEqual([])
 	}, 120_000)
 })

@@ -1,8 +1,8 @@
 /**
  * SL5 of r22 (sibling: migrate-cli's pre-0.5.0 hash): SQLite skips only space, tab, newline, form feed and
  * return, so `a b` is column a of type b while `a`, a no-break space and `b` is one column named that. A row
- * this comb records holds the exact hash and `hash_v`, so a file applied with either space and edited to the
- * other is edited. A row comb 0.20 recorded, every space folded and no `hash_v`, still matches its file, and
+ * this database records holds the exact hash and `hash_v`, so a file applied with either space and edited to the
+ * other is edited. A row database 0.20 recorded, every space folded and no `hash_v`, still matches its file, and
  * the file edited to a space its fold equates, on any date; check reads such a history and writes nothing.
  * Each case runs on a local file and on the pinned sqld.
  */
@@ -18,7 +18,7 @@ import { migrateCli, type MigrateProject, migrateProject, sqliteRows } from "../
 const ASCII = "CREATE TABLE t (id INTEGER PRIMARY KEY, a b);\n"
 const UNICODE = "CREATE TABLE t (id INTEGER PRIMARY KEY, a\u00a0b);\n"
 
-/* comb 0.20.1's history table and its record of an applied file, as that version wrote them */
+/* database 0.20.1's history table and its record of an applied file, as that version wrote them */
 const TABLE_0_20 =
 	"CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, hash TEXT NOT NULL, created_at INTEGER NOT NULL, name TEXT UNIQUE)"
 const RECORD_0_20 = "INSERT INTO __drizzle_migrations (hash, created_at, name) VALUES (?, ?, ?)"
@@ -43,7 +43,7 @@ function edit(project: MigrateProject, file: string): void {
 	spawnSync("atlas", ["migrate", "hash", "--dir", `file://${project.migrationsDir}`])
 }
 
-/** The project's database as comb 0.20.1 left it after applying `applied`, which it recorded under its folded hash */
+/** The project's database as database 0.20.1 left it after applying `applied`, which it recorded under its folded hash */
 async function appliedBy020(project: MigrateProject, applied: string, createdAt: number): Promise<void> {
 	const client = createClient({ url: project.url })
 	try {
@@ -67,7 +67,7 @@ describe.each(Object.keys(TARGETS) as Array<keyof typeof TARGETS>)(
 			["such a space, then edited to a plain one", UNICODE, ASCII],
 			["a plain space, then edited to such a one", ASCII, UNICODE],
 		])(
-			"refuses a file this comb applied with %s",
+			"refuses a file this database applied with %s",
 			async (_, applied, edited) => {
 				const project = migrateProject({ "1_t.sql": applied }, await TARGETS[target]())
 				try {
@@ -89,7 +89,7 @@ describe.each(Object.keys(TARGETS) as Array<keyof typeof TARGETS>)(
 			["the file it applied, holding such a space", UNICODE, UNICODE],
 			["a file it applied with a plain space, edited to such a one", ASCII, UNICODE],
 		])(
-			"accepts on a row comb 0.20.1 recorded, on any date, %s, and check writes nothing",
+			"accepts on a row database 0.20.1 recorded, on any date, %s, and check writes nothing",
 			async (_, applied, file) => {
 				const project = migrateProject({ "1_t.sql": file }, await TARGETS[target]())
 				try {
@@ -111,7 +111,7 @@ describe.each(Object.keys(TARGETS) as Array<keyof typeof TARGETS>)(
 )
 
 describe.each(Object.keys(TARGETS) as Array<keyof typeof TARGETS>)(
-	"migrate apply over a history comb 0.20.1 recorded, on %s",
+	"migrate apply over a history database 0.20.1 recorded, on %s",
 	(target) => {
 		it("marks what apply records on a 0.20.1 history, and still accepts the row 0.20.1 recorded", async () => {
 			const files = { "1_t.sql": UNICODE, "2_u.sql": "CREATE TABLE u (id INTEGER PRIMARY KEY);\n" }

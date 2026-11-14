@@ -1,5 +1,5 @@
 /**
- * The Zod schema comb.migrate.config.ts is validated against: a typo fails at load, not at apply.
+ * The Zod schema database.migrate.config.ts is validated against: a typo fails at load, not at apply.
  * Every object is strict, so a misspelled key is refused by name rather than dropped for its default.
  */
 import * as z from "zod"
@@ -150,18 +150,18 @@ const databaseConfigInputSchema = () =>
 		/* one of the two shapes, which shapeIssues has just held it to */
 		.transform((db) => db as DatabaseConfig)
 
-/** What comb.migrate.config.ts declares */
-type CombMigrateConfig = {
-	/** each database comb migrates, by the name `comb migrate` takes; at least one */
+/** What database.migrate.config.ts declares */
+type MigrateConfig = {
+	/** each database that database migrates, by the name `database migrate` takes; at least one */
 	databases: Record<string, DatabaseConfig>
 }
 
 /* typed with the declared config, so the schema cannot drift from it */
-const configInputSchema = (): z.ZodType<CombMigrateConfig> =>
+const configInputSchema = (): z.ZodType<MigrateConfig> =>
 	z.strictObject({
 		databases: z
 			.record(z.string(), databaseConfigInputSchema())
 			.refine((databases) => Object.keys(databases).length > 0, { message: "databases declares no database" }),
 	})
 
-export { type CombMigrateConfig, configInputSchema, DEFAULT_PG_DEV_URL }
+export { type MigrateConfig, configInputSchema, DEFAULT_PG_DEV_URL }

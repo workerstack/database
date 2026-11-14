@@ -12,7 +12,7 @@ import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core"
 import { searchText } from "./search-text.ts"
 
 /** The statements of one refold: the read, and the writes its rows call for */
-type Refold = {
+type SearchRefold = {
 	/** reads every row's rowid, stored fold and sources */
 	select: SQL
 	/** one UPDATE per row `select` read whose stored fold differs from its sources' fold; none for a row already folded */
@@ -20,7 +20,7 @@ type Refold = {
 }
 
 /** The refold of `column` from `sources`, in that order, on `table` */
-function refoldStatements(table: SQLiteTable, column: SQLiteColumn, sources: readonly SQLiteColumn[]): Refold {
+function refoldStatements(table: SQLiteTable, column: SQLiteColumn, sources: readonly SQLiteColumn[]): SearchRefold {
 	const read = sources.map((source, i) => sql`${source} AS ${sql.identifier(`s${i}`)}`)
 	const select = sql`SELECT rowid AS "rowid", ${column} AS "stored", ${sql.join(read, sql`, `)} FROM ${table}`
 	return {
@@ -34,4 +34,4 @@ function refoldStatements(table: SQLiteTable, column: SQLiteColumn, sources: rea
 	}
 }
 
-export { type Refold, refoldStatements }
+export { type SearchRefold, refoldStatements }

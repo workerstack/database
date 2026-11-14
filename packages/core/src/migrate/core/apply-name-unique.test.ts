@@ -13,16 +13,16 @@ vi.mock("bun:sqlite", () => import("../__fixtures__/bun-sqlite-node.ts"))
 const file = (filename: string, sql: string) => ({ filename, hash: filename, statements: [sql] })
 
 /*
- * SL2 of r23: drizzle-orm's SQLite migrator makes __drizzle_migrations without a UNIQUE name, and comb adds
+ * SL2 of r23: drizzle-orm's SQLite migrator makes __drizzle_migrations without a UNIQUE name, and database adds
  * `name` by ALTER, so a run whose batch began after another run committed the same file recorded and ran it twice
  */
 const DRIZZLE_TABLE =
 	"CREATE TABLE __drizzle_migrations (id SERIAL PRIMARY KEY, hash text NOT NULL, created_at numeric, name TEXT, hash_v INTEGER)"
 const SEED = file("0002_seed.sql", "INSERT INTO t VALUES (5)")
 
-/** A database file holding table t and a history the way drizzle's migrator makes it and comb's ALTER leaves it */
+/** A database file holding table t and a history the way drizzle's migrator makes it and database's ALTER leaves it */
 function drizzleHistory(): { file: string; remove(): void } {
-	const dir = mkdtempSync(path.join(tmpdir(), "comb-apply-drizzle-"))
+	const dir = mkdtempSync(path.join(tmpdir(), "database-apply-drizzle-"))
 	const db = path.join(dir, "core.db")
 	const raw = new DatabaseSync(db)
 	raw.exec(`CREATE TABLE t (v INTEGER); ${DRIZZLE_TABLE}`)
@@ -126,7 +126,7 @@ describe("ensureMigrationsTable keeps a name unique (SL2 of r23)", () => {
 			raw.close()
 			const conn = await createBunSqliteProvider({ path: made.file, type: "bun-sqlite" }).connect(BUN_FILE(made.file))
 			await expect(ensureMigrationsTable(conn)).rejects.toThrow(
-				"__drizzle_migrations records 0002_seed.sql, 0003_x.sql more than once, so comb cannot keep a file from being recorded twice: delete the extra rows of each (keep the first), then run it again",
+				"__drizzle_migrations records 0002_seed.sql, 0003_x.sql more than once, so database cannot keep a file from being recorded twice: delete the extra rows of each (keep the first), then run it again",
 			)
 			await conn.close()
 			expect(uniqueIndexes(made.file)).toEqual([["id"]])

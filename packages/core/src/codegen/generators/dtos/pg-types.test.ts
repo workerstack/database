@@ -20,7 +20,7 @@ const rule = (source: string) => pgWriteRule(parseField("v", source, { dialect: 
 
 describe("pgWriteRule: a plain Postgres column's write rule by its data type (F50)", () => {
 	it("gives the date and time types their ISO rule, a time with a zone its offset", () => {
-		/* each format with comb's own pattern, its digits [0-9], as Rust's regex reads zod's \\d as any digit (AA7 of r22) */
+		/* each format with database's own pattern, its digits [0-9], as Rust's regex reads zod's \\d as any digit (AA7 of r22) */
 		expect(rule('date("v")')).toMatch(/^z\.stringFormat\("date", \/\^\(\?:\(\?:\[0-9\]\[0-9\]\[2468\].*\$\/u\)$/)
 		/* each keeps the instant: a timestamp only a local time, a timestamptz only one with its offset */
 		expect(rule('timestamp("v", { mode: "string" })')).toMatch(
@@ -53,10 +53,10 @@ describe("pgWriteRule: a plain Postgres column's write rule by its data type (F5
 		expect(check('numeric("v", { mode: "number", precision: 3 })').safeParse(999.5).success).toBe(false)
 	})
 
-	/* F50: a Postgres data type with no rule is refused, never typed as plain text, naming what comb types */
-	it("refuses a Postgres type comb has no rule for, listing the ones it types", () => {
+	/* F50: a Postgres data type with no rule is refused, never typed as plain text, naming what database types */
+	it("refuses a Postgres type database has no rule for, listing the ones it types", () => {
 		expect(() => rule('sparsevec("v", { dimensions: 3 })')).toThrow(
-			/fixture\.v: comb has no rule for a PgSparseVector column \(string sparsevec\); build it with a c helper, or as drizzle text, varchar, char, uuid, .*inet, cidr, macaddr, macaddr8, bit/,
+			/fixture\.v: database has no rule for a PgSparseVector column \(string sparsevec\); build it with a c helper, or as drizzle text, varchar, char, uuid, .*inet, cidr, macaddr, macaddr8, bit/,
 		)
 		expect(rule('bit("v", { dimensions: 3 })')).toBe(
 			'z.string().regex(/^[01]{3}$/u, { message: "Must be exactly 3 bits" })',
@@ -92,20 +92,20 @@ function levels(source: string): Schema[] {
 	return found
 }
 
-const xComb = (schema: Schema) =>
-	Object.fromEntries(Object.entries(schema).filter(([key]) => key.startsWith("x-comb-")))
+const xDatabase = (schema: Schema) =>
+	Object.fromEntries(Object.entries(schema).filter(([key]) => key.startsWith("x-database-")))
 
 /* C3 of r20: §2.1 puts an array element's keys on `items` beside its anyOf, at every depth a reader stops at */
 describe("a Postgres read array's stated bounds", () => {
 	it.each([
-		['c.text("v", { max: 5 }).array()', { "x-comb-maxLength": 5 }],
-		['c.text("v", { max: 5 }).array().notNull()', { "x-comb-maxLength": 5 }],
-		['c.integer("v", { min: 1, max: 9 }).array()', { "x-comb-maximum": 9, "x-comb-minimum": 1 }],
-		['c.real("v", { min: 0, max: 1 }).array().notNull()', { "x-comb-maximum": 1, "x-comb-minimum": 0 }],
+		['c.text("v", { max: 5 }).array()', { "x-database-maxLength": 5 }],
+		['c.text("v", { max: 5 }).array().notNull()', { "x-database-maxLength": 5 }],
+		['c.integer("v", { min: 1, max: 9 }).array()', { "x-database-maximum": 9, "x-database-minimum": 1 }],
+		['c.real("v", { min: 0, max: 1 }).array().notNull()', { "x-database-maximum": 1, "x-database-minimum": 0 }],
 	])("sit on items at every depth: %s", (source, keys) => {
 		const found = levels(source)
 		expect(found).toHaveLength(6)
-		expect(found.map(xComb)).toEqual(found.map(() => keys))
+		expect(found.map(xDatabase)).toEqual(found.map(() => keys))
 	})
 })
 
@@ -237,7 +237,7 @@ describe("an interval's and a numeric's rules read the parsed modifier (CD5, CD6
 	it("refuses a data type whose SQL type holds no modifier of its kind", () => {
 		const field = parseField("v", 'time("v")', { dialect: "postgres" })
 		expect(() => pgWriteRule({ ...field, sqlType: "time zone" })).toThrow(
-			new TypeError("comb reads no time modifier in time zone"),
+			new TypeError("database reads no time modifier in time zone"),
 		)
 	})
 })
@@ -266,9 +266,9 @@ describe("a timetz and a timestamptz take one offset spelling (CD11 of r22b; sib
 })
 
 /*
- * AA7 of r22: comb publishes its own copy of zod's ISO date, date-time and time regexes, each \d
+ * AA7 of r22: database publishes its own copy of zod's ISO date, date-time and time regexes, each \d
  * written as [0-9]. Read from zod as it runs, so a zod release that changes one fails here rather
- * than leaving comb's rule and zod's apart
+ * than leaving database's rule and zod's apart
  */
 /** The pattern zod publishes for a format, its regex's source */
 const zodPattern = (schema: z.ZodType): string => (z.toJSONSchema(schema) as { pattern: string }).pattern
@@ -279,19 +279,19 @@ const YEAR_0001: readonly (readonly [string, string])[] = [
 	["[0-9]{4}-", "(?:000[1-9]|00[1-9][0-9]|0[1-9][0-9]{2}|[1-9][0-9]{3})-"],
 ]
 
-describe("comb's ISO patterns are zod's, each \\d written as [0-9], its year 0001 at least (AA7, A2-3 of r22)", () => {
+describe("database's ISO patterns are zod's, each \\d written as [0-9], its year 0001 at least (AA7, A2-3 of r22)", () => {
 	it.each([
 		['date("v")', z.iso.date()],
 		['timestamp("v", { mode: "string" })', z.iso.datetime({ local: true })],
 		['timestamp("v", { mode: "string", withTimezone: true })', z.iso.datetime({ offset: true })],
 		['time("v")', z.iso.time()],
 	] as const)("%s", (column, zod) => {
-		const comb = /^z\.stringFormat\("[a-z]+", \/(.*?)\/u\)/.exec(rule(column) as string)?.[1]
+		const database = /^z\.stringFormat\("[a-z]+", \/(.*?)\/u\)/.exec(rule(column) as string)?.[1]
 		const departed = YEAR_0001.reduce(
 			(pattern, [from, to]) => pattern.replace(from, to),
 			zodPattern(zod).replaceAll(String.raw`\d`, "[0-9]"),
 		)
-		expect(comb).toBe(departed)
+		expect(database).toBe(departed)
 	})
 })
 
@@ -305,8 +305,8 @@ describe("an ISO rule's issue, as z.stringFormat raises it (AA7 of r22)", () => 
 		['timestamp("v", { mode: "string" })', z.iso.datetime({ local: true }), "2024-01-01 10:00"],
 		['time("v")', z.iso.time(), "25:00"],
 	] as const)("%s keeps zod's code, format and message, with no origin or pattern", (column, zod, bad) => {
-		const comb = new Function("z", `return ${rule(column)}`)(z) as z.ZodType
-		const [issue] = comb.safeParse(bad).error?.issues ?? []
+		const database = new Function("z", `return ${rule(column)}`)(z) as z.ZodType
+		const [issue] = database.safeParse(bad).error?.issues ?? []
 		const [own] = zod.safeParse(bad).error?.issues ?? []
 		expect(Object.keys(issue ?? {}).sort()).toEqual(["code", "format", "message", "path"])
 		expect(Object.keys(own ?? {}).sort()).toEqual(["code", "format", "message", "origin", "path", "pattern"])

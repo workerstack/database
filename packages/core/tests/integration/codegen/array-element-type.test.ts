@@ -52,7 +52,7 @@ const entityFile = (dir: string): string =>
 
 describe("a Postgres array column's element, as drizzle's type declares it (A2-9)", () => {
 	it("outputs a create DTO an insert of the table takes, a declared null element kept", async () => {
-		const dir = project({ "comb.config.ts": CONFIG, "db.core.tables.ts": TABLES })
+		const dir = project({ "database.config.ts": CONFIG, "db.core.tables.ts": TABLES })
 		await codegen(dir, ["-g", "dtos"])
 		const file = entityFile(dir)
 		expect(file).toBeDefined()
@@ -88,7 +88,7 @@ describe("a Postgres array column's element, as drizzle's type declares it (A2-9
 		"generates from %s with an array column, allowJs false",
 		async (file) => {
 			const dir = project({
-				"comb.config.ts": CONFIG.replace("./db.core.tables.ts", `./${file}`),
+				"database.config.ts": CONFIG.replace("./db.core.tables.ts", `./${file}`),
 				[file]: `import { pgTable, text } from "drizzle-orm/pg-core"
 import { c } from "@workerstack/database/pg/columns"
 export const row = pgTable("row", { id: c.id("row"), tags: text("tags").array().notNull() })

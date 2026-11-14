@@ -1,5 +1,5 @@
 /**
- * An FTS project end to end: comb.config.ts declares an FTS5 index, `migrate diff` writes the
+ * An FTS project end to end: database.config.ts declares an FTS5 index, `migrate diff` writes the
  * virtual table and its triggers beside Atlas's diff, `migrate apply` puts both on a libsql file,
  * and the generated index answers a prefix search for rows inserted after it.
  */
@@ -42,14 +42,14 @@ export default defineConfig({
 let search: App
 
 beforeAll(() => {
-	search = app({ ...BLOG, "comb.config.ts": CONFIG, "comb.migrate.config.ts": MIGRATE_CONFIG })
-	ok(search.comb("codegen", "core"), "codegen")
-	ok(search.comb("migrate", "init"), "migrate init")
-	ok(search.comb("migrate", "diff", "core", "init"), "migrate diff")
-	ok(search.comb("migrate", "apply", "core", "-e", "local"), "migrate apply")
+	search = app({ ...BLOG, "database.config.ts": CONFIG, "database.migrate.config.ts": MIGRATE_CONFIG })
+	ok(search.database("codegen", "core"), "codegen")
+	ok(search.database("migrate", "init"), "migrate init")
+	ok(search.database("migrate", "diff", "core", "init"), "migrate diff")
+	ok(search.database("migrate", "apply", "core", "-e", "local"), "migrate apply")
 }, 180_000)
 
-describe("comb with FTS5, from config to a search", () => {
+describe("database with FTS5, from config to a search", () => {
 	it("indexes rows through the migrated triggers and finds them by prefix", async () => {
 		const client = createClient({ url: `file:${join(search.dir, "local.db")}` })
 		const db = drizzle({ client })

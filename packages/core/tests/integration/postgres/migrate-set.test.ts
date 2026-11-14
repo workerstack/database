@@ -24,7 +24,7 @@ beforeAll(loadPostgresParser)
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-pg-set-"))
+	dir = mkdtempSync(join(tmpdir(), "database-pg-set-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
@@ -34,7 +34,7 @@ async function migrations(files: Record<string, string>): Promise<void> {
 	await hashDir(run, dir)
 }
 
-/** comb's approval, never asking: the files here are safe */
+/** database's approval, never asking: the files here are safe */
 const approve = (m: ParsedMigration) => approveMigration(m, { target: "core", yes: false })
 
 /** The options the commands take for `schema` of the database at `url`, collecting what they print */
@@ -63,7 +63,7 @@ const recorded = async (url: string, schema: string) =>
 		)
 	).map((r) => r.version)
 
-/** What comb 0.12 did: Atlas applies the directory to schema app, its history in the shared atlas_schema_revisions */
+/** What database 0.12 did: Atlas applies the directory to schema app, its history in the shared atlas_schema_revisions */
 function applyAs012(url: string): void {
 	const args = ["migrate", "apply", "--url", `${url}&search_path=app`, "--dir", `file://${dir}`]
 	const ran = spawnSync("atlas", [...args, "--revisions-schema", "atlas_schema_revisions"], { encoding: "utf8" })

@@ -16,7 +16,7 @@ describe("what a Postgres history attached to its tables", () => {
 
 	it("fails on a statement Postgres cannot parse, since the facts after it are unknown (M75)", () => {
 		expect(() => facts("CREATE TABL broken;\nCREATE TABLE t (id int DEFAULT f());")).toThrow(
-			'comb could not read the history: "CREATE TABL broken" (syntax error at or near "TABL")',
+			'database could not read the history: "CREATE TABL broken" (syntax error at or near "TABL")',
 		)
 	})
 

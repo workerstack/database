@@ -2,7 +2,7 @@
 /**
  * S2 of r22: a check stopped by SIGINT or SIGTERM mid-proof leaves no proof scratch. The CLI runs
  * under Bun on a bun:sqlite target, whose proof copy is a scratch file, with a temp directory of
- * its own; the signal goes to comb's pid alone, as a supervisor or a CI step timeout sends it, once
+ * its own; the signal goes to database's pid alone, as a supervisor or a CI step timeout sends it, once
  * the scratch is there.
  */
 import { describe, expect, it } from "bun:test"
@@ -15,14 +15,14 @@ const BIN = path.join(import.meta.dir, "../../src/bin.ts")
 
 /** A bun:sqlite project with `t` applied and 400 pending files, each adding a column to it */
 function project(): { dir: string; tmp: string } {
-	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "comb-interrupt-"))
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "database-interrupt-"))
 	const tmp = path.join(dir, "tmp")
 	const migrations = path.join(dir, "m")
 	fs.mkdirSync(tmp)
 	fs.mkdirSync(migrations)
 	fs.writeFileSync(path.join(migrations, "0001_t.sql"), "CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT);\n")
 	fs.writeFileSync(
-		path.join(dir, "comb.migrate.config.ts"),
+		path.join(dir, "database.migrate.config.ts"),
 		`export default { databases: { core: { migrationsDir: "./m", environments: {
 	local: { name: "core", provider: { type: "bun-sqlite", path: ${JSON.stringify(path.join(dir, "local.db"))} } },
 } } } }\n`,
@@ -43,7 +43,7 @@ function project(): { dir: string; tmp: string } {
 	return { dir, tmp }
 }
 
-const scratches = (tmp: string) => fs.readdirSync(tmp).filter((name) => name.startsWith("comb-scratch-"))
+const scratches = (tmp: string) => fs.readdirSync(tmp).filter((name) => name.startsWith("database-scratch-"))
 
 describe("a check stopped mid-proof (S2 of r22; sibling: P2 of r21's replay cleanup)", () => {
 	it.each([["SIGINT"], ["SIGTERM"]] as const)(

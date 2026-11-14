@@ -9,8 +9,8 @@ import pg from "pg"
 import { afterEach, beforeEach } from "vitest"
 import { pgUrl } from "./pg.ts"
 
-/* the advisory lock both take, in a key pair no comb run or other test takes */
-const KEY = "hashtext('comb test'), hashtext('a replay left')"
+/* the advisory lock both take, in a key pair no database run or other test takes */
+const KEY = "hashtext('database test'), hashtext('a replay left')"
 
 /** Each test of the describe this is called in, run holding the lock in `mode` on its own session */
 function holding(mode: "alone" | "shared"): void {

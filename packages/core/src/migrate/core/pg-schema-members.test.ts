@@ -35,7 +35,9 @@ describe("holdsAnything", () => {
 	it("refuses, naming the schema and the password masked, when the read fails", async () => {
 		const { load, seen } = fakeConnect([], new Error("password authentication failed for App-Secret-0451"))
 		const refused = holdsAnything(target, load)
-		await expect(refused).rejects.toThrow(/^comb could not read what schema App holds: password authentication failed/)
+		await expect(refused).rejects.toThrow(
+			/^database could not read what schema App holds: password authentication failed/,
+		)
 		await expect(refused).rejects.not.toThrow("App-Secret-0451")
 		expect(seen.ended).toBe(true)
 	})

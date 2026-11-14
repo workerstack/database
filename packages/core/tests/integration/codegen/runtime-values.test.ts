@@ -16,7 +16,7 @@ const CONFIG = `export default { databases: { core: { tables: "./src/db/db.core.
 
 /** A project of `tables` (after the imports) and `files` beside it, codegen run */
 async function generated(tables: string, files: Record<string, string> = {}): Promise<string> {
-	const dir = project({ "comb.config.ts": CONFIG, "src/db/db.core.tables.ts": `${HEAD}${tables}\n`, ...files })
+	const dir = project({ "database.config.ts": CONFIG, "src/db/db.core.tables.ts": `${HEAD}${tables}\n`, ...files })
 	await codegen(dir)
 	return dir
 }
@@ -107,7 +107,7 @@ export const user = sqliteTable("user", { id: c.id(USER_PREFIX) })`)
 
 	it("is refused when another table's prefix is the same", async () => {
 		const dir = project({
-			"comb.config.ts": CONFIG,
+			"database.config.ts": CONFIG,
 			"src/db/db.core.tables.ts": `${HEAD}const USER_PREFIX = "usr"
 export const user = sqliteTable("user", { id: c.id(USER_PREFIX) })
 export const team = sqliteTable("team", { id: c.id("usr") })

@@ -9,7 +9,7 @@ import { main, supervise } from "./supervise.mjs"
 let dir: string
 
 beforeEach(() => {
-	dir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-supervise-"))
+	dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-supervise-"))
 })
 
 afterEach(() => fs.rmSync(dir, { force: true, recursive: true }))

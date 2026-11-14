@@ -3,7 +3,7 @@
  * ddl_command_start and ddl_command_end fire on a DDL command whose tag the trigger's
  * `WHEN TAG IN (…)` lists, or on every one when it lists none; sql_drop on a statement that drops
  * something; table_rewrite on a command that rewrites a table. A statement is matched by its
- * command tag, read from its parse tree; a DDL statement whose tag comb does not know matches
+ * command tag, read from its parse tree; a DDL statement whose tag database does not know matches
  * every trigger, so no new kind of statement escapes one. Shared objects (databases, roles,
  * tablespaces) and event triggers themselves fire none, as Postgres runs none for them.
  */
@@ -11,7 +11,7 @@ import type { Finding } from "./classify-alter.ts"
 import { ddlFindings, REWRITES } from "./pg-ddl.ts"
 import { type EventTrigger, type Facts, flag, names, type Node } from "./pg-nodes.ts"
 
-/** A command whose tag comb does not know: every trigger takes it for its own */
+/** A command whose tag database does not know: every trigger takes it for its own */
 const UNKNOWN = "?"
 
 // lookup-table: an object kind's word in a command tag, where it is not the kind's own name
@@ -115,7 +115,7 @@ function objectTag(type: string, node: Node): string | undefined {
 	return undefined
 }
 
-/** A top-level statement's command tag; undefined for one no event trigger runs for, UNKNOWN for DDL comb cannot tag */
+/** A top-level statement's command tag; undefined for one no event trigger runs for, UNKNOWN for DDL database cannot tag */
 function tagOf(type: string, node: Node): string | undefined {
 	const eventTrigger = node["removeType"] === "OBJECT_EVENT_TRIGGER" || node["renameType"] === "OBJECT_EVENT_TRIGGER"
 	if (NO_EVENT.has(type) || eventTrigger) return undefined
@@ -155,7 +155,7 @@ function drops(type: string, node: Node): boolean {
 	)
 }
 
-/** Whether a top-level statement rewrites a table, as table_rewrite takes one: a command whose rewrite comb warns of */
+/** Whether a top-level statement rewrites a table, as table_rewrite takes one: a command whose rewrite database warns of */
 const rewrites = (type: string, node: Node, facts: Facts): boolean =>
 	(ddlFindings(type, node, facts) ?? []).some((finding) => finding.level === "lock" && finding.note === REWRITES)
 
@@ -173,7 +173,7 @@ function fires(trigger: EventTrigger, [type, node]: [string, Node], { everyTrigg
 
 /**
  * The event triggers the top-level statements of a parse tree fire, every one whatever its state
- * once the file set session_replication_role: each unsafe, as its function is code comb does not read
+ * once the file set session_replication_role: each unsafe, as its function is code database does not read
  */
 function eventFindings(
 	stmts: unknown,
@@ -182,7 +182,7 @@ function eventFindings(
 	const tops = (stmts as Array<{ stmt: Node }>).map(({ stmt }) => Object.entries(stmt)[0] as [string, Node])
 	return [...facts.eventTriggers].flatMap(([name, trigger]) =>
 		tops.some((top) => fires(trigger, top, { everyTrigger: everyTrigger === true, facts }))
-			? [{ level: "unsafe" as const, note: `runs event trigger ${name}, whose function comb does not read` }]
+			? [{ level: "unsafe" as const, note: `runs event trigger ${name}, whose function database does not read` }]
 			: [],
 	)
 }

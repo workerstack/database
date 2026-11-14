@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { combErrorKeys, statusKeyToCode } from "./types.ts"
+import { databaseErrorKeys, statusKeyToCode } from "./types.ts"
 
 describe("statusKeyToCode", () => {
 	it("maps every status key to its HTTP code", () => {
@@ -14,9 +14,9 @@ describe("statusKeyToCode", () => {
 	})
 })
 
-describe("combErrorKeys", () => {
+describe("databaseErrorKeys", () => {
 	it("are lower snake case and unique: a consumer keys i18n maps by them", () => {
-		const values = Object.values(combErrorKeys)
+		const values = Object.values(databaseErrorKeys)
 		expect(values.every((key) => /^[a-z]+(?:_[a-z]+)*$/.test(key))).toBe(true)
 		expect(new Set(values).size).toBe(values.length)
 	})

@@ -4,7 +4,7 @@
  * backend's counts never see (pg-server-writes.ts). The read is the server's, another session's work
  * in it too, so each row carries the names of the objects it is about: a change is a file's when it
  * is to the replay's own database, or to a name the file spells (namesIn in sql-code.ts) beside a
- * statement that can run code comb cannot read (pg-replay-hidden.ts). A replay's own rows are left out, but
+ * statement that can run code database cannot read (pg-replay-hidden.ts). A replay's own rows are left out, but
  * for the fields of its own database's row that keep the cleanup from dropping it, which only that
  * replay changes. Beside the catalogs, the server's replication slots, which no catalog
  * holds.
@@ -14,11 +14,12 @@ import { type Catalog, catalogsOf, changedFields } from "./pg-server-writes.ts"
 
 /* the roles a replay made, by the tag their comment carries */
 const TAGGED =
-	"(SELECT objoid FROM pg_shdescription WHERE classoid = 'pg_authid'::regclass AND description LIKE 'comb\\_replay %')"
+	"(SELECT objoid FROM pg_shdescription WHERE classoid = 'pg_authid'::regclass AND description LIKE 'database\\_replay %')"
 /* a setting for every database has no datname, and NOT of a NULL would drop its row too; a comment's too, by construction */
 const REPLAY_SETTING =
-	"coalesce((SELECT datname FROM pg_database WHERE oid = setdatabase) LIKE 'comb\\_replay\\_%', false)"
-const REPLAY_OBJECT = "coalesce((SELECT datname FROM pg_database WHERE oid = objoid) LIKE 'comb\\_replay\\_%', false)"
+	"coalesce((SELECT datname FROM pg_database WHERE oid = setdatabase) LIKE 'database\\_replay\\_%', false)"
+const REPLAY_OBJECT =
+	"coalesce((SELECT datname FROM pg_database WHERE oid = objoid) LIKE 'database\\_replay\\_%', false)"
 
 /* a shared comment's or security label's row a replay makes: on a role it tagged, or on its database */
 const REPLAY_SHARED = `(classoid = 'pg_authid'::regclass AND objoid IN ${TAGGED}) OR (classoid = 'pg_database'::regclass AND ${REPLAY_OBJECT})`
@@ -27,7 +28,7 @@ const REPLAY_SHARED = `(classoid = 'pg_authid'::regclass AND objoid IN ${TAGGED}
 const REPLAYS: Readonly<Record<string, string>> = {
 	pg_auth_members: `m.roleid IN ${TAGGED} OR m.member IN ${TAGGED}`,
 	pg_authid: `r.oid IN ${TAGGED}`,
-	pg_database: "d.datname LIKE 'comb\\_replay\\_%'",
+	pg_database: "d.datname LIKE 'database\\_replay\\_%'",
 	/* a replay's database takes every setting in it with it, and a role it tagged each of its own, every database's too */
 	pg_db_role_setting: `${REPLAY_SETTING} OR setrole IN ${TAGGED}`,
 	pg_shdescription: REPLAY_SHARED,
@@ -101,12 +102,12 @@ async function prepareSnapshot(
 	admin: Sql,
 	{ database, superuser }: { database: string; superuser: boolean },
 ): Promise<void> {
-	await admin.unsafe(`PREPARE comb_snapshot AS ${snapshotRead(superuser)} UNION ALL ${ownDatabase(database)}`, [])
+	await admin.unsafe(`PREPARE database_snapshot AS ${snapshotRead(superuser)} UNION ALL ${ownDatabase(database)}`, [])
 }
 
 /** The shared catalogs as `admin`, a connection with no transaction open that prepareSnapshot prepared, reads them committed */
 async function snapshot(admin: Sql): Promise<Snapshot> {
-	const rows = await admin.unsafe("EXECUTE comb_snapshot", [])
+	const rows = await admin.unsafe("EXECUTE database_snapshot", [])
 	return new Map(
 		rows.map((row) => [
 			`${String(row["noun"])} ${String(row["key"])}`,

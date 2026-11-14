@@ -1,5 +1,5 @@
 /**
- * P2 of r19: a devUrl comb refuses is refused before comb's own dev-schema create, so a refused diff
+ * P2 of r19: a devUrl database refuses is refused before database's own dev-schema create, so a refused diff
  * writes nothing, to the target least of all
  */
 import { mkdtempSync, rmSync } from "node:fs"
@@ -33,7 +33,7 @@ describe("migrate diff on Postgres: a devUrl that is the target", () => {
 	it("refuses diff and the schema diff on a non-public schema, and the target never gets the schema", () =>
 		withScratchDb(async (url) => {
 			const same: PgTarget = { devUrl: url, lockTimeout: "5s", schema: "app", url }
-			const dir = mkdtempSync(join(tmpdir(), "comb-p2-"))
+			const dir = mkdtempSync(join(tmpdir(), "database-p2-"))
 			try {
 				await expect(
 					generateIncrementalMigration({

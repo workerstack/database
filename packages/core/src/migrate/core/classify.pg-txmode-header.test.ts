@@ -1,8 +1,8 @@
 /**
- * PA3 of r22b: comb rates a Postgres file by the transaction Atlas runs it in, which the file's
+ * PA3 of r22b: database rates a Postgres file by the transaction Atlas runs it in, which the file's
  * header decides by Atlas's rule. Each shape below heads a CREATE INDEX CONCURRENTLY, which Postgres
  * runs only outside a transaction: the verdicts are the pinned Atlas's (tests/structure/atlas-header.test.ts
- * holds comb's reader to it).
+ * holds database's reader to it).
  */
 import { describe, expect, it } from "vitest"
 import { classifyMigration } from "./classify.ts"
@@ -17,14 +17,14 @@ const rate = (head: string) =>
 		dialect: "postgres",
 	})
 
-describe("comb reads a txmode header as Atlas does (PA3; sibling: comb's own -- comb:allow-unsafe: line)", () => {
+describe("database reads a txmode header as Atlas does (PA3; sibling: database's own -- database:allow-unsafe: line)", () => {
 	it.each([
 		["a comment line first", "-- Build the index without blocking writes\n-- atlas:txmode none\n\n"],
 		["a comment line after", "-- atlas:txmode none\n-- Build the index without blocking writes\n\n"],
 		["a blank line holding spaces", "-- atlas:txmode none\n \t \n"],
 		["CRLF", "-- atlas:txmode none\r\n\r\n"],
-		["comb's allow-unsafe line first", "-- comb:allow-unsafe: index built online\n-- atlas:txmode none\n\n"],
-		["comb's allow-unsafe line after", "-- atlas:txmode none\n-- comb:allow-unsafe: index built online\n\n"],
+		["database's allow-unsafe line first", "-- database:allow-unsafe: index built online\n-- atlas:txmode none\n\n"],
+		["database's allow-unsafe line after", "-- atlas:txmode none\n-- database:allow-unsafe: index built online\n\n"],
 		["two spaces before none", "-- atlas:txmode  none\n\n"],
 	])("runs the index outside a transaction under %s, as Atlas does", (_, head) => {
 		expect(rate(head).safety).toBe("cautious")

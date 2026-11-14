@@ -1,13 +1,13 @@
 /**
  * Plan 24: a column's `format` and `schema` as the generated field holds and publishes them. An
  * enum's format is meaning alone, its values the rule; a nullable format text takes null and holds a
- * value to the format; a text or number column's schema runs after every rule of comb's, on the
+ * value to the format; a text or number column's schema runs after every rule of database's, on the
  * rewritten value, its issues the caller's exactly as the schema yields them, its input JSON Schema
- * published in an `allOf` on the non-null member beside `x-comb-schema`.
+ * published in an `allOf` on the non-null member beside `x-database-schema`.
  */
 import { describe, expect, it } from "vitest"
 import * as z from "zod"
-import * as comb from "../../../index.ts"
+import * as database from "../../../index.ts"
 import { fieldOf } from "../../__fixtures__/runtime.ts"
 import type { FieldMeta, ImportsMeta } from "../../analyzer-types.ts"
 import type { SchemaType } from "./dto-types.ts"
@@ -19,7 +19,7 @@ const SCHEMAS = { dateOrder, evenMinutes }
 
 /* the example meta a generated field names from the shared file, as `_m` */
 const SHARED_META = { integer: { examples: [42] }, string: { examples: ["string"] } }
-const RULE = { "x-comb-text": "no U+0000 or unpaired surrogate" }
+const RULE = { "x-database-text": "no U+0000 or unpaired surrogate" }
 
 /** The field `raw` declares under the key `f`, its schemas in scope */
 const field = (raw: string): FieldMeta => fieldOf("f", raw, { scope: SCHEMAS })
@@ -32,9 +32,9 @@ function codeOf(raw: string, schemaType: SchemaType): string {
 
 /** The field `raw` as its `schemaType` DTO's generated code builds it */
 const written = (raw: string, schemaType: SchemaType = "create"): z.ZodType =>
-	new Function("z", "comb", "_m", ...Object.keys(SCHEMAS), `return ${codeOf(raw, schemaType)}`)(
+	new Function("z", "database", "_m", ...Object.keys(SCHEMAS), `return ${codeOf(raw, schemaType)}`)(
 		z,
-		comb,
+		database,
 		SHARED_META,
 		...Object.values(SCHEMAS),
 	) as z.ZodType
@@ -57,7 +57,11 @@ const publishedOf = (schema: z.ZodType) =>
 describe("an enum's format (plan 24)", () => {
 	it.each(["read", "readPartial", "create", "update"] as const)("publishes its values and the format on %s", (type) => {
 		const currency = written('c.enum("f", ["USD", "EUR", "GBP"], { format: "iso4217" }).notNull()', type)
-		expect(publishedOf(currency)).toEqual({ enum: ["USD", "EUR", "GBP"], type: "string", "x-comb-format": "iso4217" })
+		expect(publishedOf(currency)).toEqual({
+			enum: ["USD", "EUR", "GBP"],
+			type: "string",
+			"x-database-format": "iso4217",
+		})
 		expect(currency.safeParse("usd").success).toBe(false)
 	})
 })
@@ -80,15 +84,15 @@ describe("a nullable format text (plan 24)", () => {
 		const member = (published["anyOf"] as Array<Record<string, unknown>>)[0] as Record<string, unknown>
 		expect(published).toEqual({
 			anyOf: [member, { type: "null" }],
-			"x-comb-format": "bcp47",
-			"x-comb-transform": ["trim"],
+			"x-database-format": "bcp47",
+			"x-database-transform": ["trim"],
 		})
 		expect(Object.keys(member).toSorted()).toEqual([
 			"minLength",
 			"pattern",
 			"type",
-			"x-comb-format",
-			"x-comb-transform",
+			"x-database-format",
+			"x-database-transform",
 		])
 		expect(member["minLength"]).toBe(2)
 	})
@@ -101,7 +105,7 @@ describe("a text column's schema (plan 24)", () => {
 		expect(written(`${ORDER}.notNull()`).safeParse("x").error?.issues).toEqual(dateOrder.safeParse("x").error?.issues)
 	})
 
-	it("runs after comb's rules, on the rewritten value", () => {
+	it("runs after database's rules, on the rewritten value", () => {
 		expect(written(`${ORDER}.notNull()`).parse(" iso ")).toBe("iso")
 		expect(written(`${ORDER}.notNull()`, "update").parse(" dmy ")).toBe("dmy")
 	})
@@ -111,8 +115,8 @@ describe("a text column's schema (plan 24)", () => {
 			allOf: [{ enum: ["iso", "dmy", "mdy"], type: "string" }],
 			minLength: 1,
 			type: "string",
-			"x-comb-schema": "dateOrder",
-			"x-comb-transform": ["trim"],
+			"x-database-schema": "dateOrder",
+			"x-database-transform": ["trim"],
 			...RULE,
 		})
 	})
@@ -127,14 +131,14 @@ describe("a text column's schema on a nullable column, a chain of two patterns, 
 				{
 					allOf: [{ enum: ["iso", "dmy", "mdy"], type: "string" }],
 					type: "string",
-					"x-comb-schema": "dateOrder",
-					"x-comb-transform": ["trim"],
+					"x-database-schema": "dateOrder",
+					"x-database-transform": ["trim"],
 					...RULE,
 				},
 				{ type: "null" },
 			],
-			"x-comb-schema": "dateOrder",
-			"x-comb-transform": ["trim"],
+			"x-database-schema": "dateOrder",
+			"x-database-transform": ["trim"],
 			...RULE,
 		})
 	})
@@ -151,7 +155,7 @@ describe("a text column's schema on a nullable column, a chain of two patterns, 
 			expect(piped, declared).toEqual({
 				...own,
 				allOf: [...((own["allOf"] ?? []) as unknown[]), { enum: ["iso", "dmy", "mdy"], type: "string" }],
-				"x-comb-schema": "dateOrder",
+				"x-database-schema": "dateOrder",
 			})
 		}
 	})
@@ -166,7 +170,7 @@ describe("a text column's schema on a nullable column, a chain of two patterns, 
 			allOf: [{ enum: ["iso", "dmy", "mdy"], type: "string" }],
 			minLength: 1,
 			type: "string",
-			"x-comb-schema": "dateOrder",
+			"x-database-schema": "dateOrder",
 			...RULE,
 		})
 	})
@@ -175,7 +179,7 @@ describe("a text column's schema on a nullable column, a chain of two patterns, 
 describe("a number column's schema (plan 24)", () => {
 	const SLOT = 'c.integer("f", { min: 0, schema: evenMinutes }).notNull()'
 
-	it("refuses a value with the schema's own issue, after comb's bounds", () => {
+	it("refuses a value with the schema's own issue, after database's bounds", () => {
 		expect(written(SLOT).safeParse(3).error?.issues).toEqual([{ code: "custom", message: "Must be even", path: [] }])
 		expect(written(SLOT).parse(4)).toBe(4)
 		expect(written(SLOT).safeParse(-2).error?.issues).toEqual([
@@ -196,12 +200,12 @@ describe("a number column's schema (plan 24)", () => {
 			maximum: Number.MAX_SAFE_INTEGER,
 			minimum: 0,
 			type: "integer",
-			"x-comb-schema": "evenMinutes",
+			"x-database-schema": "evenMinutes",
 		})
 		expect(publishedOf(written('c.real("f", { schema: evenMinutes }).notNull()', "update"))).toEqual({
 			allOf: [field(SLOT).schemaJson],
 			type: "number",
-			"x-comb-schema": "evenMinutes",
+			"x-database-schema": "evenMinutes",
 		})
 	})
 })

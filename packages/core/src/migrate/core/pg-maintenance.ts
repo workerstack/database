@@ -106,7 +106,7 @@ function lockFindings(node: Node): Finding[] {
 /* a PREPARE's finding: what it holds runs only when an EXECUTE runs it */
 const PREPARES: Finding = {
 	level: "cautious",
-	note: "prepares a statement for an EXECUTE, which comb rates by the statement it runs",
+	note: "prepares a statement for an EXECUTE, which database rates by the statement it runs",
 }
 
 /**
@@ -121,7 +121,7 @@ function maintenanceFindings(type: string, node: Node): Finding[] | undefined {
 	if (type === "LockStmt") return lockFindings(node)
 	/* a PREPARE runs nothing itself: the EXECUTE that runs it is rated by what it runs */
 	if (type === "PrepareStmt") return [PREPARES]
-	/* an EXECUTE is the statement the file prepared, or one comb cannot read (pg-tree.ts) */
+	/* an EXECUTE is the statement the file prepared, or one database cannot read (pg-tree.ts) */
 	if (type === "ExecuteStmt") return []
 	if (type === "CopyStmt") return copyFindings(node)
 	return type === "ClusterStmt" ? [LOCKED] : undefined

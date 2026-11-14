@@ -69,7 +69,7 @@ describe("queryParams and withParam", () => {
 const ssl = (query: string) => postgresOptionsOf(`postgres://db/app${query}`, "url")["ssl"]
 
 describe("postgresOptionsOf", () => {
-	const dir = mkdtempSync(join(tmpdir(), "comb-pg-url-"))
+	const dir = mkdtempSync(join(tmpdir(), "database-pg-url-"))
 	writeFileSync(join(dir, "root.crt"), "ROOT")
 
 	/* r18 P19: an sslmode left unnamed is require, as Atlas's driver reads it, so one URL is read one way */

@@ -22,7 +22,7 @@ export { type ColumnKind, conditionToSQL } from "./condition.ts"
 export { buildConditionSQL, buildFilterSQL, type FilterSQLConfig } from "./filter-sql.ts"
 
 /* Ordering, keyset pagination, pattern operators */
-export { type KeysetPosition, keysetSQL, orderByKeys, orderSQL, type SortKey, type Tiebreak } from "./keyset.ts"
+export { type KeysetPosition, keysetSQL, orderByKeys, orderSQL, type SortKey, type KeysetTiebreak } from "./keyset.ts"
 export { patternToSQL } from "./pattern.ts"
 
 /* FTS5 search */
@@ -41,7 +41,7 @@ export { searchText } from "./search-text.ts"
 export { likeSearch, type LikeSearchResolver } from "./search.ts"
 
 /* a _search column refolded with searchText, row by row */
-export { type Refold, refoldStatements } from "./refold.ts"
+export { type SearchRefold, refoldStatements } from "./refold.ts"
 
 export { SQL_SORT_DIR } from "./sql.ts"
 

@@ -3,7 +3,7 @@
  * Codegen's loader under Bun, where its child is bun itself (load.ts): the child runs with PATH,
  * HOME and NODE_OPTIONS only, in the project's directory, where bun reads its dotenv files and
  * bunfig.toml, so a secret in them never reaches the module, nor a preload the bunfig names (F41
- * of the 0.13.0 round); the child runs where comb runs (F58), so the project is the cwd here.
+ * of the 0.13.0 round); the child runs where database runs (F58), so the project is the cwd here.
  */
 import { afterEach, beforeEach, describe, expect, it } from "bun:test"
 import fs from "node:fs"
@@ -14,7 +14,7 @@ import { loadSnapshot } from "../../src/codegen/runtime/load.ts"
 let dir: string
 
 beforeEach(() => {
-	dir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-load-bun-"))
+	dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-load-bun-"))
 })
 
 afterEach(() => {
@@ -23,18 +23,18 @@ afterEach(() => {
 
 describe("loadSnapshot on bun with dotenv files beside the tables module (F41)", () => {
 	it("loads the module with none of their variables, a bunfig preload included", async () => {
-		fs.writeFileSync(path.join(dir, ".env"), "COMB_F41_SECRET=leaked\n")
-		fs.writeFileSync(path.join(dir, ".env.local"), "COMB_F41_LOCAL=leaked\n")
+		fs.writeFileSync(path.join(dir, ".env"), "DATABASE_F41_SECRET=leaked\n")
+		fs.writeFileSync(path.join(dir, ".env.local"), "DATABASE_F41_LOCAL=leaked\n")
 		const seen = path.join(dir, "preload-saw.json")
 		fs.writeFileSync(
 			path.join(dir, "preload.ts"),
-			`import fs from "node:fs"\nfs.writeFileSync(${JSON.stringify(seen)}, JSON.stringify(Object.keys(process.env).filter((name) => name.startsWith("COMB_F41"))))\n`,
+			`import fs from "node:fs"\nfs.writeFileSync(${JSON.stringify(seen)}, JSON.stringify(Object.keys(process.env).filter((name) => name.startsWith("DATABASE_F41"))))\n`,
 		)
 		fs.writeFileSync(path.join(dir, "bunfig.toml"), 'preload = ["./preload.ts"]\n')
 		const tables = path.join(dir, "db.core.tables.ts")
 		fs.writeFileSync(
 			tables,
-			'const leaked = Object.keys(process.env).filter((name) => name.startsWith("COMB_F41"))\nif (leaked.length > 0) throw new Error(`the module saw ${leaked.join(", ")}`)\nexport {}\n',
+			'const leaked = Object.keys(process.env).filter((name) => name.startsWith("DATABASE_F41"))\nif (leaked.length > 0) throw new Error(`the module saw ${leaked.join(", ")}`)\nexport {}\n',
 		)
 		expect(await loadSnapshot(tables, { cwd: dir })).toMatchObject({ tables: [] })
 		expect(JSON.parse(fs.readFileSync(seen, "utf8"))).toEqual([])

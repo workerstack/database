@@ -1,5 +1,5 @@
 /**
- * A private SQLite database for comb's own reads and runs, bun:sqlite under Bun and node:sqlite
+ * A private SQLite database for database's own reads and runs, bun:sqlite under Bun and node:sqlite
  * under Node; nothing in it reaches a target database. In memory for a read alone (absent.ts), and
  * a scratch file where migration files run (the proof copy, baseline's replay), so each file runs
  * on a fresh connection, as each one applies, and its connection settings end with it.
@@ -9,7 +9,7 @@ import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { pastStop, scratchDir } from "../core/cleanup.ts"
 
-/** What comb does with a private database */
+/** What database does with a private database */
 export type LocalDb = {
 	/** each row a statement that reads returns, by column: a SELECT, a PRAGMA's read or an EXPLAIN, never a write */
 	all(sql: string, params?: readonly unknown[]): Array<Record<string, unknown>>
@@ -50,7 +50,7 @@ async function opener(engine: ScratchEngine): Promise<Open> {
 	}
 	const [major = 0, minor = 0] = process.versions.node.split(".").map(Number)
 	if (major < 22 || (major === 22 && minor < 13))
-		throw new Error(`comb needs Node 22.13 or later (node:sqlite); this is ${process.versions.node}`)
+		throw new Error(`database needs Node 22.13 or later (node:sqlite); this is ${process.versions.node}`)
 	const { DatabaseSync } = (await import("node:sqlite")) as unknown as {
 		DatabaseSync: new (file: string) => { close(): void; exec(sql: string): void; prepare(sql: string): NodeStatement }
 	}
@@ -67,7 +67,7 @@ async function opener(engine: ScratchEngine): Promise<Open> {
 	}
 }
 
-/** A new in-memory database on the runtime comb runs on */
+/** A new in-memory database on the runtime database runs on */
 export async function openMemory(): Promise<LocalDb> {
 	await pastStop()
 	return (await opener("runtime"))(":memory:")
@@ -80,7 +80,7 @@ const SQLITE_BUSY = 5
  * Whether another connection holds the write lock of the database file `file` now, as SQLite answers a try at it:
  * BEGIN IMMEDIATE with no busy wait, rolled back at once, so nothing is written, on the file opened read-write and
  * never created. The answer is SQLite's code, node:sqlite's errcode or bun:sqlite's errno, never its text; a file
- * that is not there, or that SQLite cannot open, holds no lock comb can see.
+ * that is not there, or that SQLite cannot open, holds no lock database can see.
  */
 export async function writeLocked(file: string): Promise<boolean> {
 	const open = await opener("runtime")
@@ -100,7 +100,7 @@ export async function writeLocked(file: string): Promise<boolean> {
 	}
 }
 
-const SCRATCH = "comb-scratch-"
+const SCRATCH = "database-scratch-"
 
 /** Where a scratch's database lives, as its connections open it, and how it goes once they are done */
 type Place = { name: string; release(): void }
@@ -153,7 +153,7 @@ export async function openScratch(engine: ScratchEngine = "runtime"): Promise<Sc
 			}
 		},
 		engine: engine === "libsql" ? `libsql's SQLite ${version}` : `SQLite ${version}`,
-		/* comb's reads key rows by SQLite's default column names, which a file's PRAGMA full_column_names = 1
+		/* database's reads key rows by SQLite's default column names, which a file's PRAGMA full_column_names = 1
 		   renames (sqlite_master.name); the pragmas name a read's columns, never a view's or a table's */
 		exec: (sql) => {
 			db.exec(sql)

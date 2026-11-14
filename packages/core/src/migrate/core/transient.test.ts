@@ -61,7 +61,7 @@ describe("isTransient on @libsql/client's own errors", () => {
 		expect(isTransient(await lostRequest(scheme, answer))).toBe(true)
 	})
 
-	it("holds a request the server refuses, and one on a client comb closed, not transient", async () => {
+	it("holds a request the server refuses, and one on a client database closed, not transient", async () => {
 		expect(isTransient(await lostRequest("http", 400))).toBe(false)
 		expect(isTransient(await closedClient("http"))).toBe(false)
 		expect(isTransient(await closedClient("ws"))).toBe(false)

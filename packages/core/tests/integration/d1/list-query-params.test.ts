@@ -7,7 +7,7 @@ import { drizzle } from "drizzle-orm/d1"
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
 import { afterEach, describe, expect, it } from "vitest"
 import * as z from "zod"
-import { readCombQueryMeta } from "../../../src/meta.ts"
+import { readQueryMeta } from "../../../src/meta.ts"
 import { createCursor } from "../../../src/query/cursor-mint.ts"
 import { queryHelpers } from "../../../src/query/drizzle.ts"
 import { createListQuerySchema } from "../../../src/query/schema.ts"
@@ -39,7 +39,7 @@ afterEach(async () => {
 
 /** The most bound values a filter may carry, as the published caps allow, spread over in-lists */
 function largestFilter(): string {
-	const meta = readCombQueryMeta(z.toJSONSchema(schema, { io: "input", unrepresentable: "any" }))
+	const meta = readQueryMeta(z.toJSONSchema(schema, { io: "input", unrepresentable: "any" }))
 	const conditions = meta?.maxFilterConditions ?? 20
 	const perList = meta?.maxInValues ?? 100
 	let left = meta?.maxFilterValues ?? conditions * perList
@@ -56,7 +56,7 @@ function largestFilter(): string {
 }
 
 function longestSearch(): string {
-	const meta = readCombQueryMeta(z.toJSONSchema(schema, { io: "input", unrepresentable: "any" }))
+	const meta = readQueryMeta(z.toJSONSchema(schema, { io: "input", unrepresentable: "any" }))
 	return Array.from({ length: meta?.maxSearchTerms ?? 100 }, () => "a").join(" ")
 }
 
@@ -92,9 +92,9 @@ describe("the worst-case accepted list request runs on D1 (S-11)", () => {
 				"CREATE TABLE post (id integer PRIMARY KEY, title text NOT NULL, minute_read integer NOT NULL, created_at integer NOT NULL, _search text NOT NULL)",
 			)
 			const sort = schema.parse({ order }).parsedSort
-			const row = { _combId: 1, created_at: 1, id: 1, minute_read: 1, title: "長".repeat(3000) }
+			const row = { _cursorId: 1, created_at: 1, id: 1, minute_read: 1, title: "長".repeat(3000) }
 			const [, meta] = queryHelpers.paginate(
-				[row, { ...row, _combId: 2, id: 2 }],
+				[row, { ...row, _cursorId: 2, id: 2 }],
 				built({ limit: 1, parsedSort: sort }, SEALED),
 			)
 			const result = schema.safeParse({ cursor: meta.nextCursor, filter: largestFilter(), order, q: longestSearch() })
@@ -121,7 +121,7 @@ const term = (i: number) => `title.${i % 2 === 0 ? "like" : "ilike"}.${i % 4 < 2
  * suffix text, which the budget counts as one value, and the last an in-list of the values left
  */
 function fixedTexts(): string {
-	const meta = readCombQueryMeta(z.toJSONSchema(schema, { io: "input", unrepresentable: "any" }))
+	const meta = readQueryMeta(z.toJSONSchema(schema, { io: "input", unrepresentable: "any" }))
 	const [conditions, values] = [meta?.maxFilterConditions ?? 20, meta?.maxFilterValues ?? 60]
 	const texts = Array.from({ length: conditions - 1 }, (_, i) => term(i))
 	const left = Math.min(values - texts.length, meta?.maxInValues ?? 100)

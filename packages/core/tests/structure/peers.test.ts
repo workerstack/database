@@ -1,7 +1,7 @@
 /**
- * K3, K4 and K8 of r20: what an install of comb's peers resolves. Each range admits only tagged
+ * K3, K4 and K8 of r20: what an install of database's peers resolves. Each range admits only tagged
  * releases (drizzle publishes a `1.0.0-rc.N-<hash>` build of every branch, which semver ranks above
- * the tagged rc), each floor's own peers are met by comb's other floors, so npm installs them
+ * the tagged rc), each floor's own peers are met by database's other floors, so npm installs them
  * together, and the README's install lines pin drizzle inside the range, as `latest` is outside it.
  * The registry is read from __snapshots__/peer-registry.json, recorded by
  * support/write-peer-registry.ts.
@@ -30,10 +30,10 @@ const README = readFileSync(join(CORE, "../../README.md"), "utf8")
 /* a build of a branch's commit, as drizzle publishes one: a prerelease ending in the commit's hash */
 const isCommitBuild = (version: string): boolean => /-[0-9a-f]{7,40}$/.test(version)
 
-/** The floor of comb's range for `name` */
+/** The floor of database's range for `name` */
 const floorOf = (name: string): string => semver.minVersion(peerDependencies[name] as string)?.version as string
 
-describe("comb's peer ranges, against the registry", () => {
+describe("database's peer ranges, against the registry", () => {
 	it("are the ranges the registry was recorded for: rerun support/write-peer-registry.ts after a change", () => {
 		expect(Object.fromEntries(Object.entries(REGISTRY).map(([name, { range }]) => [name, range]))).toEqual(
 			peerDependencies,
@@ -47,12 +47,14 @@ describe("comb's peer ranges, against the registry", () => {
 		expect(builds).toEqual([])
 	})
 
-	it("have floors that install together: each floor's peers among comb's are met by comb's floor of them", () => {
+	it("have floors that install together: each floor's peers among database's are met by database's floor of them", () => {
 		const unmet = Object.entries(REGISTRY).flatMap(([name, { floorPeers }]) =>
 			Object.entries(floorPeers)
 				.filter(([peer]) => peer in peerDependencies)
 				.filter(([peer, range]) => !semver.satisfies(floorOf(peer), range))
-				.map(([peer, range]) => `${name}@${floorOf(name)} needs ${peer} ${range}, comb's floor is ${floorOf(peer)}`),
+				.map(
+					([peer, range]) => `${name}@${floorOf(name)} needs ${peer} ${range}, database's floor is ${floorOf(peer)}`,
+				),
 		)
 		expect(unmet).toEqual([])
 	})
@@ -61,7 +63,7 @@ describe("comb's peer ranges, against the registry", () => {
 describe("the README's install lines", () => {
 	const lines = README.split("\n").filter((line) => /^(?:bun add|npm install|pnpm add) /.test(line))
 
-	it("pin drizzle at the version comb's suites run, inside the peer range", () => {
+	it("pin drizzle at the version database's suites run, inside the peer range", () => {
 		expect(lines).toHaveLength(3)
 		for (const line of lines) {
 			const pin = /(?:^| )drizzle-orm(?:@(\S+))?(?: |$)/.exec(line)?.[1]
@@ -72,9 +74,9 @@ describe("the README's install lines", () => {
 })
 
 /* K7 of r20: the range a missing peer's refusal names is the one package.json states */
-describe("comb's refusal for a missing optional peer", () => {
+describe("database's refusal for a missing optional peer", () => {
 	it("names each optional peer a command needs with its range in package.json", () => {
-		/* typescript is a peer for comb's declarations alone (KT2 of r22b): no command runs it */
+		/* typescript is a peer for database's declarations alone (KT2 of r22b): no command runs it */
 		const optional = Object.keys(peerDependenciesMeta).filter(
 			(name) => peerDependenciesMeta[name]?.optional === true && name !== "typescript",
 		)

@@ -49,7 +49,7 @@ describe("seedTables", () => {
 		for (const row of rows("child")) expect(parents).toContain(`${String(row["a"])}|${String(row["b"])}`)
 	})
 
-	it("calls unproven a table whose key comb cannot fill, and one whose every row breaks its key", async () => {
+	it("calls unproven a table whose key database cannot fill, and one whose every row breaks its key", async () => {
 		const { unproven } = await seeded({
 			bad: "CREATE TABLE bad (id INTEGER PRIMARY KEY, code TEXT NOT NULL CHECK (length(code) = 20))",
 			orphan: "CREATE TABLE orphan (b INTEGER NOT NULL REFERENCES bad(id))",
@@ -57,7 +57,7 @@ describe("seedTables", () => {
 			retyped: "CREATE TABLE retyped (p INTEGER REFERENCES parent(id))",
 		})
 		expect(unproven.get("bad")).toMatch(/CHECK constraint failed/)
-		expect(unproven.get("orphan")).toBe("a key it may not leave NULL references a table comb could not seed")
+		expect(unproven.get("orphan")).toBe("a key it may not leave NULL references a table database could not seed")
 		/* an INTEGER column holds a TEXT key's digits as a number, which no parent row matches */
 		expect(unproven.get("retyped")).toBe("FOREIGN KEY constraint failed")
 	})
@@ -270,6 +270,6 @@ describe("seedTables on cycles of foreign keys", () => {
 			b: "CREATE TABLE b (id INTEGER PRIMARY KEY, a INTEGER NOT NULL REFERENCES a (id))",
 		})
 		expect(unproven.get("a")).toMatch(/CHECK constraint failed/)
-		expect(unproven.get("b")).toBe("a key it may not leave NULL references a table comb could not seed")
+		expect(unproven.get("b")).toBe("a key it may not leave NULL references a table database could not seed")
 	})
 })

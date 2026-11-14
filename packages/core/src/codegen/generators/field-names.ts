@@ -86,7 +86,7 @@ function generateFieldNames(ctx: GeneratorContext, config: FieldNamesConfig): vo
 	lines.push(`export { ${constName}, type ${typeName} }`)
 	lines.push("")
 
-	writeGenFile(outputPath, lines.join("\n"), { generator: "comb", staged: ctx.staged })
+	writeGenFile(outputPath, lines.join("\n"), { generator: "database", staged: ctx.staged })
 
 	if (config.updatePackageJson) exportFieldNames(ctx, outputPath)
 

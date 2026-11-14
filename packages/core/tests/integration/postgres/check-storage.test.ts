@@ -59,7 +59,7 @@ const movedAfterHistory = (pending: string) =>
 		writeFileSync(join(dir(), "20260101000000_one.sql"), HISTORY)
 		await hashDir(run, dir())
 		await applyWithAtlas(options(target, []))
-		writeFileSync(join(dir(), "20260102000000_two.sql"), `-- comb:allow-unsafe: the test's moves\n${pending}`)
+		writeFileSync(join(dir(), "20260102000000_two.sql"), `-- database:allow-unsafe: the test's moves\n${pending}`)
 		await hashDir(run, dir())
 		const before = await filesOf(url)
 		const checked: string[] = []

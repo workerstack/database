@@ -3,7 +3,7 @@
  * CS3 of r22b under Bun, which a consumer runs the generated DTOs on: Bun's transpiler writes each
  * non-ASCII character of a regex literal as a `\u` escape, a surrogate pair past U+FFFF, so the
  * literal's `source`, which zod publishes as `pattern`, holds escapes Go's RE2 refuses (it reads no
- * `\u`) and Rust's regex refuses (no surrogate). A pattern comb publishes holds none.
+ * `\u`) and Rust's regex refuses (no surrogate). A pattern database publishes holds none.
  */
 import { afterAll, describe, expect, it } from "bun:test"
 import * as z from "zod"
@@ -37,7 +37,7 @@ async function publishedPatterns(): Promise<Record<string, string[]>> {
 	return found
 }
 
-describe("the patterns comb publishes, read under Bun (CS3 of r22b)", () => {
+describe("the patterns database publishes, read under Bun (CS3 of r22b)", () => {
 	it("hold no \\u escape, which Go's RE2 does not compile, nor a surrogate, which Rust's regex refuses", async () => {
 		const held = Object.entries(await publishedPatterns()).filter(([, patterns]) =>
 			patterns.some((pattern) => /\\u/u.test(pattern)),

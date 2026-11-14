@@ -1,4 +1,4 @@
-/* What a declaration shows a consumer, read off the syntax: shared by the surface graph and comb/public-jsdoc. */
+/* What a declaration shows a consumer, read off the syntax: shared by the surface graph and database/public-jsdoc. */
 
 // lookup-table: the nodes whose body a consumer does not see
 const FUNCTIONS = new Set(["ArrowFunctionExpression", "FunctionDeclaration", "FunctionExpression"])

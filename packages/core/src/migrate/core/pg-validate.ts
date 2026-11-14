@@ -68,7 +68,7 @@ function holding(held: Held, key: string): string {
 			i === unnamed.length - 1 ? `${clause}, which only check on a postgres:// devUrl names` : clause,
 		),
 		...(owners.length > 0
-			? [`this file ${unnamed.length > 0 ? "also " : ""}locks ${listed(owners)}, which comb cannot name`]
+			? [`this file ${unnamed.length > 0 ? "also " : ""}locks ${listed(owners)}, which database cannot name`]
 			: []),
 	].join(", and ")
 }

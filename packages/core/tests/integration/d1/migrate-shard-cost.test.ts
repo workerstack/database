@@ -8,7 +8,7 @@
  * What limits a check on either is the same work, four processes started one after another: three of wrangler's
  * `d1 execute` reads of the database, each booting miniflare, and the proof's child booting miniflare and running
  * the file once (0.7 to 0.8 s each, about 3 s of a 3.2 s check on the machine this was measured on). Once the copy
- * holds only what the file names, the shard adds only its larger schema crossing those reads and comb scoping it.
+ * holds only what the file names, the shard adds only its larger schema crossing those reads and database scoping it.
  */
 import fs from "node:fs"
 import path from "node:path"

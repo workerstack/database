@@ -18,7 +18,7 @@ beforeAll(loadPostgresParser)
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-pg-baseline-uncompared-"))
+	dir = mkdtempSync(join(tmpdir(), "database-pg-baseline-uncompared-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
@@ -78,10 +78,10 @@ describe("a Postgres baseline over a target lacking a kind the catalog read now 
 		[
 			"an event trigger",
 			"CREATE FUNCTION et() RETURNS event_trigger LANGUAGE plpgsql AS $$BEGIN END$$;\n",
-			"CREATE EVENT TRIGGER comb_p12_e ON ddl_command_start EXECUTE FUNCTION et();\n",
-			/event trigger comb_p12_e/,
+			"CREATE EVENT TRIGGER database_p12_e ON ddl_command_start EXECUTE FUNCTION et();\n",
+			/event trigger database_p12_e/,
 		],
-		["a publication", T, "CREATE PUBLICATION comb_p12_pub FOR TABLE t;\n", /publication comb_p12_pub/],
+		["a publication", T, "CREATE PUBLICATION database_p12_pub FOR TABLE t;\n", /publication database_p12_pub/],
 		["an aggregate", ADD2, "CREATE AGGREGATE mysum(int) (SFUNC = add2, STYPE = int);\n", /aggregate mysum\(int4\)/],
 		[
 			"a function's SECURITY DEFINER",
@@ -134,7 +134,7 @@ describe("a Postgres baseline over a target lacking a kind it does not compare (
 		[
 			"a text search configuration",
 			"",
-			"CREATE TEXT SEARCH CONFIGURATION comb_p12_ts (COPY = english);\n",
+			"CREATE TEXT SEARCH CONFIGURATION database_p12_ts (COPY = english);\n",
 			"text search configurations",
 		],
 	])("baselines a target lacking %s, and names its kind in the warning", async (...[, target, history, kind]) => {

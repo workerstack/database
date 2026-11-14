@@ -9,7 +9,7 @@ import { refuseUnseenReach } from "./live-guard.ts"
 const INIT =
 	"CREATE TABLE `u` (`id` integer PRIMARY KEY);\nCREATE TABLE `post` (`id` integer PRIMARY KEY, `u` integer REFERENCES `u`(`id`) ON DELETE CASCADE);"
 const BEFORE = extractSchema(INIT)
-/* Atlas's rebuild of u, guarded as comb writes it */
+/* Atlas's rebuild of u, guarded as database writes it */
 const REBUILD = guardRebuilds(
 	"CREATE TABLE `new_u` (`id` integer NOT NULL, PRIMARY KEY (`id`));\nINSERT INTO `new_u` (`id`) SELECT `id` FROM `u`;\nDROP TABLE `u`;\nALTER TABLE `new_u` RENAME TO `u`;\n",
 	BEFORE,

@@ -80,7 +80,9 @@ export async function soundness(engine: Engine): Promise<Record<string, unknown>
 	await engine.run("INSERT INTO post_fts(post_fts, rank) VALUES('integrity-check', 1)")
 	return {
 		foreignKeyCheck: await engine.rows("PRAGMA foreign_key_check"),
-		keepTables: await engine.rows("SELECT name FROM sqlite_master WHERE name LIKE '\\_comb\\_keep\\_%' ESCAPE '\\'"),
+		keepTables: await engine.rows(
+			"SELECT name FROM sqlite_master WHERE name LIKE '\\_database\\_keep\\_%' ESCAPE '\\'",
+		),
 	}
 }
 
@@ -97,7 +99,7 @@ export type History = {
 }
 
 /** A history in `dir`, a fresh directory by default, whose diffs add the FTS groups in `fts` */
-export function history(dir: string = mkdtempSync(join(tmpdir(), "comb-rebuild-guard-")), fts = FTS): History {
+export function history(dir: string = mkdtempSync(join(tmpdir(), "database-rebuild-guard-")), fts = FTS): History {
 	const files = () =>
 		readdirSync(dir)
 			.filter((file) => file.endsWith(".sql"))

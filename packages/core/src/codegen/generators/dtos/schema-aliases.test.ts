@@ -70,7 +70,7 @@ describe("aliasSchemaImports", () => {
 	it("aliases a name a generated file declares, and numbers on an alias that is taken too", () => {
 		const refs = [
 			project("/app/schemas.ts", "z"),
-			project("/app/schemas.ts", "combMeta"),
+			project("/app/schemas.ts", "databaseMeta"),
 			project("/app/schemas.ts", "__"),
 			project("/app/schemas.ts", "userDtoReadSchema"),
 			project("/app/x/schemas.ts", "zFromAppSchemas"),
@@ -78,7 +78,7 @@ describe("aliasSchemaImports", () => {
 		]
 		expect(namesOf(aliasSchemaImports(analysis([["user", refs]]), "/"))[0]?.map(([name]) => name)).toEqual([
 			"zFromAppSchemas2",
-			"combMetaFromAppSchemas",
+			"databaseMetaFromAppSchemas",
 			"schemaFromAppSchemas",
 			"userDtoReadSchemaFromAppSchemas",
 			"zFromAppSchemas",
@@ -90,15 +90,15 @@ describe("aliasSchemaImports", () => {
 /* plan 24: a text or number column's schema is imported and aliased as a c.json one is, and stays no c.json type */
 describe("aliasSchemaImports on a scalar column's schema", () => {
 	it("aliases its import and leaves the field's jsonSchemaName null", () => {
-		const order = project("/app/schemas.ts", "comb")
+		const order = project("/app/schemas.ts", "database")
 		const scalar = { jsonSchemaName: null, name: "order", schemaImports: [order], schemaJson: { type: "string" } }
 		const input = {
 			...analysis([["user", []]]),
 			tables: [{ fields: [scalar], varName: "user" }],
 		} as unknown as AnalysisResult
 		const result = aliasSchemaImports(input, "/app")
-		expect(namesOf(result)).toEqual([[[null, "combFromSchemas", "comb"]]])
-		expect(result.imports.jsonSchemaImports).toEqual(new Set(["combFromSchemas"]))
+		expect(namesOf(result)).toEqual([[[null, "databaseFromSchemas", "database"]]])
+		expect(result.imports.jsonSchemaImports).toEqual(new Set(["databaseFromSchemas"]))
 	})
 })
 

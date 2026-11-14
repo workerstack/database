@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { defineCodegenConfig, GENERATORS } from "./config.ts"
 
 describe("defineCodegenConfig", () => {
-	it("returns the config it is given, so comb.config.ts can export it typed", () => {
+	it("returns the config it is given, so database.config.ts can export it typed", () => {
 		const config = { databases: { core: { generators: ["dtos" as const], tables: "./core.tables.ts" } } }
 		expect(defineCodegenConfig(config)).toBe(config)
 	})

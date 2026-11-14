@@ -21,7 +21,7 @@ type SortKey = {
 }
 
 /** The unique column that breaks ties after every sort key, so the order is total */
-type Tiebreak = {
+type KeysetTiebreak = {
 	/** the column; unique and never null, or a page repeats or skips rows */
 	column: SQLWrapper
 	/** its direction */
@@ -37,7 +37,7 @@ function orderSQL(key: SortKey): SQL {
 }
 
 /** ORDER BY for the keys followed by the tiebreak, which makes the order total. */
-function orderByKeys(keys: readonly SortKey[], tiebreak: Tiebreak): SQL[] {
+function orderByKeys(keys: readonly SortKey[], tiebreak: KeysetTiebreak): SQL[] {
 	return [...keys.map(orderSQL), orderSQL({ column: tiebreak.column, direction: tiebreak.direction })]
 }
 
@@ -92,7 +92,7 @@ function afterInfinite(key: SortKey, bound: AnchorBound): SQL {
 	/* NULLs are last ascending and first descending exactly when they flag 1 in the row's order */
 	const flag = sql.raw((nulls === "last") === (key.direction === "asc") ? "IS NULL" : "IS NOT NULL")
 	const op = sql.raw(key.direction === "asc" ? ">" : "<")
-	return sql`(${key.column} ${flag}, ${key.column}) ${op} (SELECT comb_bound ${flag}, comb_bound FROM (SELECT ${bound.value} AS comb_bound))`
+	return sql`(${key.column} ${flag}, ${key.column}) ${op} (SELECT database_bound ${flag}, database_bound FROM (SELECT ${bound.value} AS database_bound))`
 }
 
 /** Rows strictly after `value` on this key alone; null when none can be. */
@@ -115,7 +115,7 @@ type KeysetPosition = {
 	/** the list's sort keys, in order */
 	keys: readonly SortKey[]
 	/** the list's tiebreak */
-	tiebreak: Tiebreak
+	tiebreak: KeysetTiebreak
 	/** the row's value for each key, in the keys' order; null for a NULL */
 	values: readonly unknown[]
 }
@@ -185,5 +185,5 @@ export {
 	orderByKeys,
 	orderSQL,
 	type SortKey,
-	type Tiebreak,
+	type KeysetTiebreak,
 }

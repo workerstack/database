@@ -69,11 +69,11 @@ describe("whileStoppable (KC3 of r23)", () => {
 			throw new Error("connection refused")
 		})
 		expect([seen.print.mock.calls, seen.earlier]).toEqual([
-			[["Stopped by SIGTERM: comb could not read what was applied: connection refused"]],
+			[["Stopped by SIGTERM: database could not read what was applied: connection refused"]],
 			[
 				expect.objectContaining({
 					applied: [],
-					message: "Stopped by SIGTERM: comb could not read what was applied: connection refused",
+					message: "Stopped by SIGTERM: database could not read what was applied: connection refused",
 					pending: [],
 					unknown: ["a", "b"],
 				}),

@@ -48,7 +48,7 @@ function useTmpDir(prefix: string): () => string {
 
 /** A temp directory per test, and readers that analyze a schema written into it. */
 function manifestFixture() {
-	const tmpDir = useTmpDir("comb-manifest-")
+	const tmpDir = useTmpDir("database-manifest-")
 	const analyzed = async (source = SCHEMA) => {
 		const fp = path.join(tmpDir(), "db.test.tables.ts")
 		fs.writeFileSync(fp, PRELUDE + source)
@@ -365,7 +365,7 @@ describe("entity manifest — written output", () => {
 	it("writes valid JSON with a checksum header field", async () => {
 		const written = await write()
 		expect(typeof written["_generated"]).toBe("string")
-		expect(written["_generated"]).toContain("comb checksum:")
+		expect(written["_generated"]).toContain("database checksum:")
 		expect(written["v"]).toBe(MANIFEST_VERSION)
 	})
 

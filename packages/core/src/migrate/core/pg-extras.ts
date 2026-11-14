@@ -1,25 +1,25 @@
 /**
- * Statements about an object comb owns on Postgres (pg-objects.ts): a comment, a grant, an
+ * Statements about an object database owns on Postgres (pg-objects.ts): a comment, a grant, an
  * `ALTER POLICY`, an `ALTER VIEW … SET`, an index on a materialized view, a trigger on a view, a
  * role granted to another. A statement is about the object it names, whatever its keyword: an
- * `ALTER TABLE` naming a view is read as the `ALTER VIEW` it is. Atlas replays the history without comb's objects, so it would run such a statement
- * against an object that is not there; comb takes each out of what Atlas sees, keeps it with its
+ * `ALTER TABLE` naming a view is read as the `ALTER VIEW` it is. Atlas replays the history without database's objects, so it would run such a statement
+ * against an object that is not there; database takes each out of what Atlas sees, keeps it with its
  * object, and writes it again after the object is created again. Any other statement that names
- * an object comb owns is refused, since comb could not keep it.
+ * an object database owns is refused, since database could not keep it.
  */
 import { codeOf } from "../../sql-lexer.ts"
 import { IDENT, lastPart, QNAME, splitTopLevel } from "./sql-code.ts"
 
-/** An object comb owns, as far as its statements go: its kind and key, and what was said about it */
+/** An object database owns, as far as its statements go: its kind and key, and what was said about it */
 type Owned = { extras: string[]; key: string; kind: string; name: string }
 
-/** The objects comb owns, by `${kind} ${key}` */
+/** The objects database owns, by `${kind} ${key}` */
 type Owners = Map<string, Owned>
 
 /** A statement as written and as code */
 type Said = { code: string; sql: string }
 
-// per-process-constant: the statements comb keeps with an object, composed once
+// per-process-constant: the statements database keeps with an object, composed once
 const COMMENT = /* @__PURE__ */ new RegExp(
 	`^COMMENT ON (VIEW|MATERIALIZED VIEW|SEQUENCE|ROLE|EXTENSION) (${QNAME}) IS\\b`,
 	"i",
@@ -63,12 +63,12 @@ const DROP_TRIGGER = /* @__PURE__ */ new RegExp(`^DROP TRIGGER (?:IF EXISTS )?($
 // per-process-constant: see above
 const ALTER_TABLE = /* @__PURE__ */ new RegExp(`^ALTER TABLE (?:IF EXISTS )?(?:ONLY )?(${QNAME}) (.+)$`, "i")
 
-/* what comb keeps of an ALTER VIEW: a setting, an owner, a column's default; a rename or move it cannot keep */
+/* what database keeps of an ALTER VIEW: a setting, an owner, a column's default; a rename or move it cannot keep */
 const KEPT_VIEW_ACTION = /^(?:SET|RESET|OWNER TO|ALTER (?:COLUMN )?\S+ (?:SET|DROP) DEFAULT)\b/i
 
 const kindOf = (word: string): string => word.toLowerCase()
 
-/** The view or materialized view comb owns by `name`, as a list of none or one */
+/** The view or materialized view database owns by `name`, as a list of none or one */
 const viewNamed = (name: string, owners: Owners): Owned[] =>
 	["view", "materialized view"].flatMap((kind) => owners.get(`${kind} ${lastPart(name)}`) ?? [])
 
@@ -79,7 +79,7 @@ function ownersOf(names: string, owners: Owners, kinds: readonly string[]): { mi
 	return { mixed: owned.length > 0 && owned.length < listed.length, owned }
 }
 
-/** The object a statement is about, and whether comb keeps it with that object; undefined when it names none */
+/** The object a statement is about, and whether database keeps it with that object; undefined when it names none */
 function about(code: string, owners: Owners): { keep: boolean; owned: Owned[] } | undefined {
 	const [, kind, name] = COMMENT.exec(code) ?? []
 	if (kind !== undefined)
@@ -110,7 +110,7 @@ function viewAbout(code: string, owners: Owners): { keep: boolean; owned: Owned[
 	return { keep: true, owned: [owners.get(`materialized view ${lastPart(indexed)}`) ?? []].flat() }
 }
 
-/** A grant or revoke: of a privilege on views, materialized views or sequences, or of roles comb owns */
+/** A grant or revoke: of a privilege on views, materialized views or sequences, or of roles database owns */
 function grantAbout(code: string, owners: Owners): { keep: boolean; owned: Owned[] } | undefined {
 	const [, objects] = PRIVILEGE.exec(code) ?? []
 	if (objects !== undefined) {
@@ -123,7 +123,7 @@ function grantAbout(code: string, owners: Owners): { keep: boolean; owned: Owned
 	return { keep: !mixed, owned }
 }
 
-/** An index comb keeps with a materialized view, dropped: taken off it; true when one was */
+/** An index database keeps with a materialized view, dropped: taken off it; true when one was */
 function dropsKeptIndex(code: string, owners: Owners): boolean {
 	const [, names] = DROP_INDEX.exec(code) ?? []
 	if (names === undefined) return false
@@ -137,7 +137,7 @@ function dropsKeptIndex(code: string, owners: Owners): boolean {
 	return found
 }
 
-/** A trigger comb keeps with a view, dropped: taken off it; true when it was one */
+/** A trigger database keeps with a view, dropped: taken off it; true when it was one */
 function dropsKeptTrigger(code: string, owners: Owners): boolean {
 	const [, trigger, on] = DROP_TRIGGER.exec(code) ?? []
 	if (trigger === undefined || on === undefined) return false
@@ -151,7 +151,7 @@ function dropsKeptTrigger(code: string, owners: Owners): boolean {
 
 /**
  * Keep a statement about an owned object with that object: true when it was kept (so Atlas must
- * not see it), refused when it names an owned object comb cannot keep it with
+ * not see it), refused when it names an owned object database cannot keep it with
  */
 function followExtra({ code, sql }: Said, owners: Owners, source: string): boolean {
 	if (dropsKeptIndex(code, owners) || dropsKeptTrigger(code, owners)) return true
@@ -161,7 +161,7 @@ function followExtra({ code, sql }: Said, owners: Owners, source: string): boole
 	const owner = other ? owners.get(`${kindOf(other[1] as string)} ${lastPart(other[2] as string)}`) : undefined
 	if ((named && found.keep === false) || owner !== undefined) {
 		throw new Error(
-			`${source}: ${sql.trim()} changes an object comb writes itself (a view, policy, sequence, role or extension), which comb cannot keep; drop and create the object again instead`,
+			`${source}: ${sql.trim()} changes an object database writes itself (a view, policy, sequence, role or extension), which database cannot keep; drop and create the object again instead`,
 		)
 	}
 	if (!named) return false

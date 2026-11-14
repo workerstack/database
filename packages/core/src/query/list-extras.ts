@@ -3,8 +3,8 @@
  * a number, a bigint, or a decimal string (libsql's intMode "string"). An extra rendered
  * by hand as its own alias reads as that string, which no value of it is.
  */
-import { CombError } from "../error.ts"
-import { combErrorKeys } from "../types.ts"
+import { DatabaseError } from "../error.ts"
+import { databaseErrorKeys } from "../types.ts"
 import { RealText } from "./cursor-codec.ts"
 import {
 	heldValue,
@@ -19,7 +19,7 @@ import type { SortField } from "./types.ts"
 import { UnmintableRow } from "./cursor-refusals.ts"
 
 /** The column every built list selects its tiebreak as, which the next cursor's id is minted from */
-const COMB_ID = "_combId" as const
+const DATABASE_ID = "_cursorId" as const
 
 /* an integer from 0 as a SQLite driver writes it in a string (libsql's intMode "string"): canonical, which no alias is */
 const DECIMAL: RegExp = /^(?:0|[1-9]\d*)$/
@@ -43,7 +43,7 @@ const KEY_CLASSES: ReadonlySet<string> = /* @__PURE__ */ new Set([
 ])
 
 /**
- * The class of a list's sort key or tiebreak, as `_combKeyTypes` carries it: SQLite's storage class,
+ * The class of a list's sort key or tiebreak, as `_cursorKeyTypes` carries it: SQLite's storage class,
  * or on Postgres its family (`float`, `fixed`, `time`, `other`), which no key's value is read by
  */
 type KeyClass = "+inf" | "-inf" | "blob" | "fixed" | "float" | "integer" | "null" | "other" | "real" | "text" | "time"
@@ -74,11 +74,11 @@ const isKeyTexts = (value: unknown, sort: readonly SortField[]): boolean =>
 	typeof value === "string" && value.split(",").length === sort.length
 
 /**
- * The class of each of `sort`'s keys, then the tiebreak's, from the row's `_combKeyTypes`; none where
+ * The class of each of `sort`'s keys, then the tiebreak's, from the row's `_cursorKeyTypes`; none where
  * the builder selected none (a table list over columns, or a Postgres one)
  */
 function storedClasses(row: Record<string, unknown>): readonly KeyClass[] | undefined {
-	const types = row["_combKeyTypes"]
+	const types = row["_cursorKeyTypes"]
 	return typeof types === "string" ? (types.split(",") as KeyClass[]) : undefined
 }
 
@@ -115,11 +115,11 @@ function isFlag(value: unknown): boolean {
 /** Each extra a builder selects, and whether a value of it is one, in the order malformed names them */
 const EXTRA_CHECKS: ReadonlyArray<readonly [string, (value: unknown, sort: readonly SortField[]) => boolean]> = [
 	["_total", isCount],
-	[COMB_ID, (id) => id !== COMB_ID],
-	["_combKeyTypes", isKeyTypes],
-	["_combKeyTexts", isKeyTexts],
-	["_combTextKeys", isTextKeys],
-	["_combAnchorGone", isFlag],
+	[DATABASE_ID, (id) => id !== DATABASE_ID],
+	["_cursorKeyTypes", isKeyTypes],
+	["_cursorKeyTexts", isKeyTexts],
+	["_cursorTextKeys", isTextKeys],
+	["_cursorAnchorGone", isFlag],
 ]
 
 /**
@@ -132,7 +132,7 @@ function malformed(row: object, sort: readonly SortField[]): string | undefined 
 	return wrong === undefined ? undefined : `${wrong[0]} ${shown(values[wrong[0]])}`
 }
 
-/* what a Postgres float key carries in `_combKeyTexts` under extra_float_digits 0 or below */
+/* what a Postgres float key carries in `_cursorKeyTexts` under extra_float_digits 0 or below */
 const FLOAT_MARK = "!f"
 
 /**
@@ -140,22 +140,22 @@ const FLOAT_MARK = "!f"
  * binds it as read: a timestamp's TEXT, a boolean's value but 0 or 1, a `numeric()`'s ±Infinity or BLOB,
  * which the read places nowhere a cursor resumes after
  */
-const storesUnread = (field: string, stored: string): CombError =>
+const storesUnread = (field: string, stored: string): DatabaseError =>
 	new UnmintableRow(
 		`${field} stores a ${stored.toUpperCase()} value its column's drizzle mode reads as another, which no cursor of a list that binds the key as read resumes after: store what the mode reads back (a timestamp's epoch number, a boolean's 0 or 1, a finite number), or sort by a column of the list's own table`,
 	)
 
 /** The 500 for a SQLite number key no text SQLite prints of reads back as it, which no cursor binds exactly */
-const printsUnread = (field: string): CombError =>
+const printsUnread = (field: string): DatabaseError =>
 	new UnmintableRow(
 		`${field} holds a REAL no text SQLite prints of it reads back as (D1 misprints some past about 1e100 and below 1e-100), which no cursor resumes after: store a number of fewer significant digits, or sort by another column`,
 	)
 
 /** The 500 for a Postgres float key read under extra_float_digits 0 or below: its read is rounded */
-const printsRounded = (field: string): CombError =>
-	new CombError({
+const printsRounded = (field: string): DatabaseError =>
+	new DatabaseError({
 		cause: `${field} is a float Postgres prints rounded under extra_float_digits 0 or below, which no cursor resumes from: leave extra_float_digits at its default of 1, or sort by another column`,
-		errorKey: combErrorKeys.SORT_NOT_WIRED,
+		errorKey: databaseErrorKeys.SORT_NOT_WIRED,
 		status: "internal_server_error",
 	})
 
@@ -176,7 +176,7 @@ function storedText(value: unknown, stored: KeyClass | undefined, carried: strin
 }
 
 /**
- * A 500 naming the first of `sort`'s keys whose stored value the row's `_combKeyTexts` marks as none
+ * A 500 naming the first of `sort`'s keys whose stored value the row's `_cursorKeyTexts` marks as none
  * a list binding it as read places: a SQLite value of a class its mode reads as another, `!` and the
  * class (a timestamp's TEXT, a boolean's value but 0 or 1); and a Postgres float the session's extra_float_digits prints rounded on any list.
  * paginate asks it of every row it serves, so the refusal never hangs on which row ends a page
@@ -188,12 +188,12 @@ function refuseUnheld(row: Record<string, unknown>, sort: readonly SortField[]):
 
 /**
  * A 500 naming the first of `sort`'s SQLite REAL keys no text SQLite prints of reads back as, which
- * the row's `_combTextKeys` or `_combKeyTexts` marks `!n`: no cursor resumes after it, so the page
+ * the row's `_cursorTextKeys` or `_cursorKeyTexts` marks `!n`: no cursor resumes after it, so the page
  * that serves the row refuses, and the merge orders it by its printf text
  */
 function refuseUnprinted(row: Record<string, unknown>, sort: readonly SortField[]): void {
 	const held = textKeysOf(row)
-	const texts = row["_combKeyTexts"]
+	const texts = row["_cursorKeyTexts"]
 	const carried = typeof texts === "string" ? texts.split(",") : []
 	const unprinted = sort.find((_, i) => isUnprinted(held?.[i]) || isUnprinted(carried[i]))
 	if (unprinted !== undefined) throw printsUnread(unprinted.field)
@@ -201,7 +201,7 @@ function refuseUnprinted(row: Record<string, unknown>, sort: readonly SortField[
 
 /** refuseUnheld's refusals of a key the row typed (typedKeys) cannot stand for: a class its mode reads as another, a rounded float */
 function refuseUnread(row: Record<string, unknown>, sort: readonly SortField[]): void {
-	const texts = row["_combKeyTexts"]
+	const texts = row["_cursorKeyTexts"]
 	if (typeof texts !== "string") return
 	const carried = texts.split(",")
 	const unread = sort.findIndex((_, i) => STORED_CLASSES.has(carried[i]?.slice(1)) && carried[i]?.startsWith("!"))
@@ -211,23 +211,23 @@ function refuseUnread(row: Record<string, unknown>, sort: readonly SortField[]):
 }
 
 /**
- * `row` with each sort key, and the tiebreak, as SQLite stored it, by the class `_combKeyTypes`
+ * `row` with each sort key, and the tiebreak, as SQLite stored it, by the class `_cursorKeyTypes`
  * carries: an integer the driver read as a decimal string as that integer, so a cursor
  * minted from it compares as one, a string binding as text, which SQLite orders after every
  * integer; a REAL ±Infinity D1's transport read as null as itself; a time key its
- * stored value `_combKeyTexts` carries, and a SQLite key holding a value of a class
- * its mode reads as another the value `_combTextKeys` carries: a timestamp's TEXT, a
+ * stored value `_cursorKeyTexts` carries, and a SQLite key holding a value of a class
+ * its mode reads as another the value `_cursorTextKeys` carries: a timestamp's TEXT, a
  * boolean's value but 0 or 1, a text's integer. A text key that looks like a number stays
  * text. The merge compares rows through it.
  */
 function typedKeys(row: Record<string, unknown>, sort: readonly SortField[]): Record<string, unknown> {
 	const stored = storedClasses(row)
-	const texts = row["_combKeyTexts"]
+	const texts = row["_cursorKeyTexts"]
 	const held = textKeysOf(row)
 	if (stored === undefined && typeof texts !== "string" && held === undefined) return row
 	const carried = typeof texts === "string" ? texts.split(",") : []
 	refuseUnread(row, sort)
-	const typed = [...sort.map(({ field }) => field), COMB_ID]
+	const typed = [...sort.map(({ field }) => field), DATABASE_ID]
 		.map((field, i) => {
 			const own = held?.[i]
 			if (isStoredKey(own)) return [field, heldValue(own)] as const
@@ -239,12 +239,12 @@ function typedKeys(row: Record<string, unknown>, sort: readonly SortField[]): Re
 }
 
 /**
- * The sort fields whose value in `typedKeys(row, sort)` is the stored text `_combKeyTexts` or `_combTextKeys` carried in
+ * The sort fields whose value in `typedKeys(row, sort)` is the stored text `_cursorKeyTexts` or `_cursorTextKeys` carried in
  * place of the value as read, which a cursor binds as itself, past the
  * column's mapper; every other key binds through it, a text key that looks like a number included
  */
 function carriedTexts(row: Record<string, unknown>, sort: readonly SortField[]): Set<string> {
-	const texts = row["_combKeyTexts"]
+	const texts = row["_cursorKeyTexts"]
 	const held = textKeysOf(row)
 	if (typeof texts !== "string" && held === undefined) return new Set()
 	const carried = typeof texts === "string" ? texts.split(",") : []
@@ -257,14 +257,14 @@ function carriedTexts(row: Record<string, unknown>, sort: readonly SortField[]):
 }
 
 /**
- * `typedKeys(row, sort)` as a cursor carries it: each SQLite REAL key's text, held (`_combTextKeys`)
- * or a timestamp's carried (`_combKeyTexts`), as its RealText, which the next page binds as the list
+ * `typedKeys(row, sort)` as a cursor carries it: each SQLite REAL key's text, held (`_cursorTextKeys`)
+ * or a timestamp's carried (`_cursorKeyTexts`), as its RealText, which the next page binds as the list
  * checked it; the merge compares typedKeys' numbers, the same parse of the same text
  */
 function cursorKeys(row: Record<string, unknown>, sort: readonly SortField[]): Record<string, unknown> {
 	refuseUnprinted(row, sort)
 	const typed = typedKeys(row, sort)
-	const texts = row["_combKeyTexts"]
+	const texts = row["_cursorKeyTexts"]
 	const carried = typeof texts === "string" ? texts.split(",") : []
 	const held = textKeysOf(row)
 	const reals = sort.flatMap(({ field }, i): Array<readonly [string, RealText]> => {
@@ -281,7 +281,7 @@ function cursorKeys(row: Record<string, unknown>, sort: readonly SortField[]): R
 export {
 	carriedTexts,
 	cursorKeys,
-	COMB_ID,
+	DATABASE_ID,
 	INTEGER_TEXT,
 	type KeyClass,
 	malformed,

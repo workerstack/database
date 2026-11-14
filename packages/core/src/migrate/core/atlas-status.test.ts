@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { atlasStatus, json, NO_HISTORY } from "./atlas-status.ts"
-import type { Run } from "./process.ts"
+import type { MigrateRun } from "./process.ts"
 
 const target = {
 	devUrl: "postgres://localhost/dev",
@@ -10,7 +10,7 @@ const target = {
 }
 const print = () => undefined
 const answering =
-	(code: number, stdout: string, stderr = ""): Run =>
+	(code: number, stdout: string, stderr = ""): MigrateRun =>
 	async () => ({ code, stderr, stdout })
 
 describe("atlasStatus: Atlas's status of the snapshot", () => {

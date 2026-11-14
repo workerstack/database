@@ -28,27 +28,29 @@ describe("a Postgres function call", () => {
 		expect(builtinFinding(["pg_catalog", "lower"], at(["lower"]))).toBeUndefined()
 	})
 
-	it("is unsafe for dblink, which runs SQL comb cannot read, and for any other function", () => {
-		expect(builtinFinding(["dblink"], at())?.note).toBe("calls dblink, which runs SQL comb cannot read")
+	it("is unsafe for dblink, which runs SQL database cannot read, and for any other function", () => {
+		expect(builtinFinding(["dblink"], at())?.note).toBe("calls dblink, which runs SQL database cannot read")
 		expect(builtinFinding(["dblink_exec"], at())?.level).toBe("unsafe")
 		expect(builtinFinding(["purge"], at())).toEqual({
 			level: "unsafe",
-			note: "calls purge, which comb cannot read",
+			note: "calls purge, which database cannot read",
 		})
 		/* M90: only pg_catalog names the built-in; public.lower is a function of public's, from outside the history */
 		expect(builtinFinding(["public", "lower"], at())).toEqual({
 			level: "unsafe",
-			note: "calls public.lower, which comb cannot read",
+			note: "calls public.lower, which database cannot read",
 		})
 		/* a call qualified by the target's schema names the function a migration defined there */
 		expect(builtinFinding(["app", "f"], at(["f"], "app"))?.note).toBe("calls app.f, a function a migration defined")
 		/* one defined in another schema is keyed with it; a name of three parts is never the target's */
 		expect(builtinFinding(["other", "f"], at(["other.f"]))?.note).toBe("calls other.f, a function a migration defined")
-		expect(builtinFinding(["db", "app", "f"], at(["f"], "app"))?.note).toBe("calls db.app.f, which comb cannot read")
+		expect(builtinFinding(["db", "app", "f"], at(["f"], "app"))?.note).toBe(
+			"calls db.app.f, which database cannot read",
+		)
 		/* a pure built-in's name in another schema is that schema's function */
 		expect(builtinFinding(["app", "lower"], at())).toEqual({
 			level: "unsafe",
-			note: "calls app.lower, which comb cannot read",
+			note: "calls app.lower, which database cannot read",
 		})
 	})
 })

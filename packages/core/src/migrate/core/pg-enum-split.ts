@@ -1,7 +1,7 @@
 /**
  * Atlas writes `ALTER TYPE … ADD VALUE` into the same file as the statements that use the new
  * value, and Postgres refuses that inside one transaction ("unsafe use of new value", 55P04), so
- * the file fails on apply although the dev replay passed. comb moves the ADD VALUE statements into
+ * the file fails on apply although the dev replay passed. database moves the ADD VALUE statements into
  * a file of their own at the migration's version and the rest to the next second, each its own
  * transaction.
  */
@@ -25,7 +25,7 @@ function splitEnumValues(name: string, file: string): Array<[string, string]> {
 	if (version === undefined || values.length === 0 || rest.length === 0) return [[name, file]]
 	return [
 		[`${version}${suffix}_enum_values.sql`, atlasFile(values)],
-		/* comb's file: its directives honored, a blank line after them (withDirectivesFirst) */
+		/* database's file: its directives honored, a blank line after them (withDirectivesFirst) */
 		[`${nextVersion(version)}${suffix}.sql`, atlasFile(rest, withDirectivesFirst(atlasHeader(file).text, ""))],
 	]
 }

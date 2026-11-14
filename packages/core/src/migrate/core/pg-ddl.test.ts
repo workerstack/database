@@ -69,7 +69,7 @@ describe("ddlFindings: an ALTER TABLE's constraints, defaults and other commands
 		"rates ALTER TABLE t %s by the rule family's rule",
 		(command) => {
 			expect(rated(`ALTER TABLE t ${command}`)).toEqual([
-				{ level: "unsafe", note: "comb rates every rule change unsafe; approve it in the file" },
+				{ level: "unsafe", note: "database rates every rule change unsafe; approve it in the file" },
 			])
 		},
 	)

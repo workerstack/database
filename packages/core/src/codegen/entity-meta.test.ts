@@ -84,7 +84,7 @@ describe("deriveEntityMeta: partial unique indexes", () => {
 	})
 })
 
-/* C5 of r17: a private column's SQL name is found in a predicate as comb quotes it, never read as a pattern */
+/* C5 of r17: a private column's SQL name is found in a predicate as database quotes it, never read as a pattern */
 describe("deriveEntityMeta: a private column whose SQL name is regex syntax", () => {
 	it("keeps an index whose predicate does not name it, and drops one that does", () => {
 		const meta = deriveEntityMeta(

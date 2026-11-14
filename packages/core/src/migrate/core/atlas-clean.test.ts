@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest"
 import { readInspect, refuseUnclean } from "./atlas-clean.ts"
-import type { Run, RunResult } from "./process.ts"
+import type { MigrateRun, RunResult } from "./process.ts"
 
 const TARGET = { devUrl: "", lockTimeout: "5s", schema: "app", url: "postgres://app:S3cret@db/app" }
 const BASELINE =
-	"the database has objects but no migration history, and no shared history row matches this directory's files (a database made by hand, or another directory's history); if its schema matches the migrations, record them with comb migrate baseline"
+	"the database has objects but no migration history, and no shared history row matches this directory's files (a database made by hand, or another directory's history); if its schema matches the migrations, record them with database migrate baseline"
 
 /** Atlas answering every call with `answer`, recording the arguments and the URL it was given */
 function atlas(answer: RunResult) {
 	const calls: Array<{ args: readonly string[]; url: string | undefined }> = []
-	const exec: Run = async (_cmd, args, options) => {
-		calls.push({ args, url: options?.env?.["COMB_ATLAS_URL"] })
+	const exec: MigrateRun = async (_cmd, args, options) => {
+		calls.push({ args, url: options?.env?.["DATABASE_ATLAS_URL"] })
 		return answer
 	}
 	return { calls, exec }

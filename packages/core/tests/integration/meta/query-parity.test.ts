@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from "vitest"
 import * as z from "zod"
-import { readCombQueryMeta } from "../../../src/meta.ts"
+import { readQueryMeta } from "../../../src/meta.ts"
 import { createListQuerySchema } from "../../../src/query/schema.ts"
 
 const schema = createListQuerySchema({
@@ -31,7 +31,7 @@ function sampleFor(field: string): string {
 }
 
 function meta() {
-	const published = readCombQueryMeta(z.toJSONSchema(schema, { io: "input", unrepresentable: "any" }))
+	const published = readQueryMeta(z.toJSONSchema(schema, { io: "input", unrepresentable: "any" }))
 	if (!published) throw new Error("createListQuerySchema did not stamp query meta")
 	return published
 }
@@ -40,7 +40,7 @@ describe("published query meta is present on both io views", () => {
 	it("survives the transform/pipe on the output view too", () => {
 		/* Stamping the base instead of the returned pipe passes the input view
 		   and silently loses the output view — see docs/meta-contract.md §3.1. */
-		const output = readCombQueryMeta(z.toJSONSchema(schema, { io: "output", unrepresentable: "any" }))
+		const output = readQueryMeta(z.toJSONSchema(schema, { io: "output", unrepresentable: "any" }))
 		expect(output).toEqual(meta())
 	})
 })
@@ -134,7 +134,7 @@ describe("searchable matches whether the parser takes q", () => {
 
 	it("publishes the declared fields and accepts q when search is declared", () => {
 		const searchable = createListQuerySchema({ search: ["title"], sort: ["created_at"] })
-		const published = readCombQueryMeta(z.toJSONSchema(searchable, { io: "input", unrepresentable: "any" }))
+		const published = readQueryMeta(z.toJSONSchema(searchable, { io: "input", unrepresentable: "any" }))
 		expect(published?.searchable).toEqual(["title"])
 		expect(searchable.safeParse({ q: "anything" }).success).toBe(true)
 	})
@@ -191,7 +191,7 @@ describe("a config change moves the published facts with it", () => {
 			pagination: { defaultLimit: 5, maxLimit: 5 },
 			sort: ["archived"],
 		})
-		const published = readCombQueryMeta(z.toJSONSchema(other, { io: "input", unrepresentable: "any" }))
+		const published = readQueryMeta(z.toJSONSchema(other, { io: "input", unrepresentable: "any" }))
 
 		expect(published).toMatchObject({
 			defaultOrder: "archived.desc",
@@ -222,7 +222,7 @@ describe("maxFilterBytes and maxSearchBytes match the parser", () => {
 
 	it("accepts a search of the published bytes, and refuses one byte more", () => {
 		const searched = createListQuerySchema({ search: ["title"], sort: ["created_at"] })
-		const published = readCombQueryMeta(z.toJSONSchema(searched, { io: "input", unrepresentable: "any" }))
+		const published = readQueryMeta(z.toJSONSchema(searched, { io: "input", unrepresentable: "any" }))
 		const bytes = published?.maxSearchBytes as number
 		const q = encodedTo("", bytes)
 		expect(searched.safeParse({ q }).success).toBe(true)

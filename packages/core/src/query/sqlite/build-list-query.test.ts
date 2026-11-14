@@ -1,7 +1,7 @@
 import { type SQL, sql } from "drizzle-orm"
 import { integer, SQLiteDialect, sqliteTable, text } from "drizzle-orm/sqlite-core"
 import { describe, expect, it } from "vitest"
-import { CombError } from "../../error.ts"
+import { DatabaseError } from "../../error.ts"
 import { createCursor } from "../cursor-mint.ts"
 import { applyListQuery, buildListQuery } from "./build-list-query.ts"
 import { likeSearch } from "./search.ts"
@@ -200,7 +200,7 @@ describe("buildListQuery — sort and cursors", () => {
 				table: organization,
 			})
 		const unsupported = expect.objectContaining({ errorKey: "cursor_pagination_unsupported" })
-		/* minting one is refused as building on one is (QL5 of r22b, comb-9d's ruling) */
+		/* minting one is refused as building on one is (QL5 of r22b, database-9d's ruling) */
 		expect(() => built(createCursor({ id: "o1" }, [{ direction: "desc", field: "@relevance" }], SEALED))()).toThrow(
 			unsupported,
 		)
@@ -228,7 +228,7 @@ describe("buildListQuery — search", () => {
 				parsed: { cursor: undefined, filterAst: null, limit: 20, page: 1, parsedSort: [], q: "hello" },
 				table: organization,
 			}),
-		).toThrow(CombError)
+		).toThrow(DatabaseError)
 	})
 
 	it("returns null search when q is undefined", () => {
@@ -347,16 +347,16 @@ describe("buildListQuery — the search option with a cursor", () => {
 
 describe("buildListQuery — sort fields it cannot order by (Q-L3)", () => {
 	it.each(["ghost", "constructor", "toString"])("throws for %s, which is not a column of the table", (field) => {
-		expect(() => buildListQuery({ ...SEALED, parsed: parsedWith(field), table: organization })).toThrow(CombError)
+		expect(() => buildListQuery({ ...SEALED, parsed: parsedWith(field), table: organization })).toThrow(DatabaseError)
 	})
 
 	it("throws for a computed sort with no resolver, or one that is not its own entry", () => {
 		expect(() => buildListQuery({ ...SEALED, parsed: parsedWith("@relevance"), table: organization })).toThrow(
-			CombError,
+			DatabaseError,
 		)
 		expect(() =>
 			buildListQuery({ ...SEALED, computedSorts: {}, parsed: parsedWith("@constructor"), table: organization }),
-		).toThrow(CombError)
+		).toThrow(DatabaseError)
 	})
 })
 
@@ -372,7 +372,7 @@ describe("buildListQuery — a table without an id column", () => {
 	it("orders without a tiebreak, and refuses a cursor it could not honor", () => {
 		expect(buildListQuery({ ...SEALED, parsed, table: tag }).orderBy).toHaveLength(1)
 		const cursor = createCursor({ id: "x", name: "a" }, parsed.parsedSort, SEALED)
-		expect(() => buildListQuery({ ...SEALED, parsed: { ...parsed, cursor }, table: tag })).toThrow(CombError)
+		expect(() => buildListQuery({ ...SEALED, parsed: { ...parsed, cursor }, table: tag })).toThrow(DatabaseError)
 	})
 })
 

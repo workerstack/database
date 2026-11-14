@@ -43,14 +43,14 @@ describe("Postgres classification from the parse tree", () => {
 		],
 		["a DELETE, whatever its WHERE", "DELETE FROM users WHERE id = 1;"],
 		["a MERGE that deletes", "MERGE INTO users u USING audit a ON false WHEN MATCHED THEN DELETE;"],
-		["dblink, which runs SQL comb cannot read", "SELECT dblink_exec('conn', 'DELETE FROM users');"],
+		["dblink, which runs SQL database cannot read", "SELECT dblink_exec('conn', 'DELETE FROM users');"],
 		["a DO block", "DO $$ BEGIN PERFORM 1; END $$;"],
 		["a function", "CREATE FUNCTION f() RETURNS int LANGUAGE sql AS $$ SELECT 1 $$;"],
 		["a function in public", "CREATE FUNCTION public.f() RETURNS int LANGUAGE sql AS $$ SELECT 1 $$;\nSELECT f();"],
 		["a procedure", "CREATE PROCEDURE p() LANGUAGE sql AS $$ SELECT 1 $$;"],
 		["a trigger", "CREATE TRIGGER t AFTER INSERT ON users FOR EACH ROW EXECUTE FUNCTION f();"],
 		["a CALL", "CALL p();"],
-		["a call of a function comb cannot read", "SELECT my_func();"],
+		["a call of a function database cannot read", "SELECT my_func();"],
 		["a call of one in a default", "ALTER TABLE users ADD COLUMN x int DEFAULT my_func();"],
 		["a temp table that takes a table's name", "CREATE TEMP TABLE users (id int);"],
 		["a pg_temp table that takes a table's name", "CREATE TABLE pg_temp.users (id int);"],
@@ -76,10 +76,10 @@ describe("Postgres classification from the parse tree: notes and controls", () =
 
 	it("names what it found", () => {
 		expect(notes("UPDATE users* SET email = NULL;")).toContain("updates existing rows of users (email)")
-		expect(notes("SELECT my_func();")).toContain("calls my_func, which comb cannot read")
+		expect(notes("SELECT my_func();")).toContain("calls my_func, which database cannot read")
 		expect(notes("INSERT INTO logged (id) VALUES (1);")).toContain("fires trigger logged_audit")
 		expect(notes("CREATE TEMP TABLE users (id int);")).toContain("shadows users for the rest of the file")
-		expect(notes("UPDATE users SET;")).toMatch(/comb could not parse this as Postgres 17: syntax error/)
+		expect(notes("UPDATE users SET;")).toMatch(/database could not parse this as Postgres 17: syntax error/)
 	})
 
 	it.each([

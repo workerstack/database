@@ -1,12 +1,12 @@
 /**
- * What the generated DTOs accept, run at runtime on comb's real column helpers: each schema is
+ * What the generated DTOs accept, run at runtime on database's real column helpers: each schema is
  * imported and parsed, so a rule is judged by the value it takes, not by the text it emits.
  */
 import fs from "node:fs"
 import path from "node:path"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import * as z from "zod"
-import { readCombEntityMeta } from "../../../meta/read.ts"
+import { readEntityMeta } from "../../../meta/read.ts"
 import { analyze } from "../../analyzer.ts"
 import { testContext } from "../__fixtures__/context.ts"
 import { generateDtos } from "./generate.ts"
@@ -60,7 +60,7 @@ const ROW = {
 	updatedAt: 1,
 }
 
-describe("generated DTOs on comb's own columns", () => {
+describe("generated DTOs on database's own columns", () => {
 	it("keeps a nomutate column on create, which it must be given, and leaves it off update (F9)", () => {
 		expect(accepts("Create", { createdAt: 1, externalId: "e" })).toBe(false)
 		expect(accepts("Create", CREATE)).toBe(true)
@@ -81,7 +81,7 @@ describe("generated DTOs on comb's own columns", () => {
 		expect(schema("Update").parse({ orgId: "org_2" })).toEqual({})
 		expect(update).toContain("teamId")
 		expect(schema("Update").parse({ teamId: "tm_2" })).toEqual({ teamId: "tm_2" })
-		const meta = readCombEntityMeta(z.toJSONSchema(schema("Read"), { unrepresentable: "any" }))
+		const meta = readEntityMeta(z.toJSONSchema(schema("Read"), { unrepresentable: "any" }))
 		expect(meta?.immutable).toContain("orgId")
 		expect(meta?.immutable).not.toContain("teamId")
 	})
@@ -92,8 +92,8 @@ describe("generated DTOs on comb's own columns", () => {
 		}
 		/* one flat union, null its member, the rules beside it (C4 of r18) */
 		expect(published.properties["blob"]).toMatchObject({
-			"x-comb-maxBytes": 20,
-			"x-comb-text": "no U+0000 or unpaired surrogate",
+			"x-database-maxBytes": 20,
+			"x-database-text": "no U+0000 or unpaired surrogate",
 		})
 		expect(accepts("Create", { ...CREATE, blob: { s: "x".repeat(30) } })).toBe(false)
 	})

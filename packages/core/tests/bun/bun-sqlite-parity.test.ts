@@ -2,7 +2,7 @@
 /**
  * Driver parity on Bun's own engines. The query semantics run on libsql under vitest
  * (tests/integration/sqlite); this file proves the same SQL behaves the same on bun:sqlite,
- * and that Bun.SQL reports Postgres errors in the shape comb's handler reads. It runs under
+ * and that Bun.SQL reports Postgres errors in the shape database's handler reads. It runs under
  * `bun test` because vitest on Node cannot load `bun:sqlite` or `Bun.SQL`.
  */
 import { SQL } from "bun"
@@ -12,7 +12,7 @@ import { getTableColumns, sql } from "drizzle-orm"
 import { drizzle as bunSqlDrizzle } from "drizzle-orm/bun-sql"
 import { drizzle } from "drizzle-orm/bun-sqlite"
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
-import type { CombError } from "../../src/error.ts"
+import type { DatabaseError } from "../../src/error.ts"
 import { pgErrorHandler } from "../../src/pg/error-handler.ts"
 import { queryHelpers } from "../../src/query/drizzle.ts"
 import { createListQuerySchema } from "../../src/query/schema.ts"
@@ -63,7 +63,7 @@ function vendors(query: Record<string, string>): string[] {
 		.map((row) => row.vendor)
 }
 
-describe("bun:sqlite runs comb's list queries like libsql does", () => {
+describe("bun:sqlite runs database's list queries like libsql does", () => {
 	it("like is case-sensitive with * as the only wildcard, ilike ignores ASCII case", () => {
 		expect(vendors({ filter: "vendor.like.acme" })).toEqual(["acme"])
 		expect(vendors({ filter: "vendor.ilike.acme" }).sort()).toEqual(["ACME", "acme"])
@@ -127,7 +127,7 @@ describe("bun:sqlite constraint errors map like libsql's", () => {
 			try {
 				sqliteErrorHandler(error, MAPS)
 			} catch (thrown) {
-				return (thrown as CombError).errorKey
+				return (thrown as DatabaseError).errorKey
 			}
 		}
 		return "not handled"
@@ -153,7 +153,7 @@ describe("bun:sqlite answers an UPDATE of a foreign key column the map does not 
 	]
 
 	/** What sqliteErrorHandler throws for `statement` on the U23 schema */
-	function thrownBy(statement: string): CombError | undefined {
+	function thrownBy(statement: string): DatabaseError | undefined {
 		const sqlite = new Database(":memory:")
 		for (const ddl of [
 			"PRAGMA foreign_keys = ON",
@@ -173,7 +173,7 @@ describe("bun:sqlite answers an UPDATE of a foreign key column the map does not 
 			try {
 				sqliteErrorHandler(error, PARTIAL)
 			} catch (thrown) {
-				return thrown as CombError
+				return thrown as DatabaseError
 			}
 		}
 		return undefined
@@ -228,7 +228,7 @@ describe("on the Postgres test server, under the run's lock (tests/support/pg-lo
 			},
 		]
 
-		async function errorOf(statement: string, viaDrizzle: boolean): Promise<CombError | undefined> {
+		async function errorOf(statement: string, viaDrizzle: boolean): Promise<DatabaseError | undefined> {
 			const client = new SQL({ max: 1, url: PG_URL })
 			try {
 				await client.unsafe(
@@ -241,7 +241,7 @@ describe("on the Postgres test server, under the run's lock (tests/support/pg-lo
 				)
 				pgErrorHandler(failure, MAPS)
 			} catch (thrown) {
-				return thrown as CombError
+				return thrown as DatabaseError
 			} finally {
 				await client.close()
 			}

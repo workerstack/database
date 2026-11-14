@@ -4,7 +4,7 @@ import { PORTABLE_PATTERNS } from "../../../tests/support/portable-patterns.ts"
 import { unportableOf } from "./pattern-grammar.ts"
 import { patternLiteral } from "./pattern.ts"
 
-/* AA4-1 of r24: a pattern holds only the grammar ECMAScript on every Node comb supports, Go's RE2 and
+/* AA4-1 of r24: a pattern holds only the grammar ECMAScript on every Node database supports, Go's RE2 and
    Rust's regex compile alike, so a construct outside it is refused, not published as written */
 const refusal = (pattern: string): string => {
 	try {
@@ -87,7 +87,7 @@ describe("patternLiteral: only the grammar every engine reads alike (AA4-1 of r2
 		expect(() => RE2JS.compile(literal.slice(1, -2))).not.toThrow()
 	})
 
-	it("throws a fault past a refusal as itself: a source not compiled under u is comb's bug, not the pattern's", () => {
+	it("throws a fault past a refusal as itself: a source not compiled under u is database's bug, not the pattern's", () => {
 		expect(() => unportableOf("a{")).toThrow(TypeError)
 	})
 })

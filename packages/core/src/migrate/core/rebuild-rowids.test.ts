@@ -22,7 +22,7 @@ describe("kept", () => {
 		expect(kept("gen", schema, false).columns).toHaveLength(99)
 	})
 
-	it("carries every rowid table's rowid as comb 0.8 did", () => {
+	it("carries every rowid table's rowid as database 0.8 did", () => {
 		expect(kept("ki", schema, true).rowid).toBe(true)
 		expect(kept("wide", schema, true).rowid).toBe(true)
 		expect(kept("bare", schema, true).rowid).toBe(false)

@@ -1,6 +1,6 @@
 /**
  * Whether a Postgres history may make anything baseline's catalog read compares (pg-live-catalog.ts),
- * the gate a docker:// dev database is held to: Atlas's own container, which comb cannot reach, so a
+ * the gate a docker:// dev database is held to: Atlas's own container, which database cannot reach, so a
  * history that may make any such object is refused naming devUrl, and one that makes none
  * needs no replay. It fails closed: a statement passes only when its node is one proved to
  * make nothing the read compares, so a statement no one thought of is refused, not let through.
@@ -94,7 +94,7 @@ const INERT: ReadonlyMap<string, Inert> = /* @__PURE__ */ new Map<string, Inert>
 
 /**
  * Whether `files` may make anything the catalog read compares, which a docker:// dev database, Atlas's
- * own container, keeps out of comb's reach: by parse-tree node, read once, any statement INERT does not
+ * own container, keeps out of database's reach: by parse-tree node, read once, any statement INERT does not
  * prove inert counting, one the parser cannot read among them
  */
 function makesCompared(files: readonly HistoryFile[]): boolean {

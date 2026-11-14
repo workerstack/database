@@ -1,7 +1,7 @@
 import { getTableColumns, type SQL, sql } from "drizzle-orm"
 import { integer, SQLiteDialect, sqliteTable } from "drizzle-orm/sqlite-core"
 import { describe, expect, it } from "vitest"
-import { CombError } from "../error.ts"
+import { DatabaseError } from "../error.ts"
 import { CursorRef, encodeCursor, openCursor, sortSignature } from "./cursor.ts"
 import { createCursor } from "./cursor-mint.ts"
 import { createListQuerySchema } from "./schema.ts"
@@ -19,17 +19,17 @@ const dialect = new (SQLiteDialect as unknown as new () => {
 
 /** Hand-made rows as a builder reads them: each row's id selected again as the tiebreak paginate mints from (Q2) */
 const wired = <T extends object>(rows: readonly T[]): T[] =>
-	rows.map((row) => (Object.hasOwn(row, "id") ? { ...row, _combId: (row as { id: unknown }).id } : row))
+	rows.map((row) => (Object.hasOwn(row, "id") ? { ...row, _cursorId: (row as { id: unknown }).id } : row))
 
 describe("queryHelpers.listOptions' extras (Q2, Q3 of r17)", () => {
 	it("select the tiebreak and the count on an offset page, and the tiebreak alone on a cursor one", () => {
 		const first = queryHelpers.listOptions({ limit: 1, parsedSort: [] }, SEALED)
-		expect(Object.keys(first.extras).toSorted()).toEqual(["_combId", "_total"])
-		expect(first.pagination.expects.toSorted()).toEqual(["_combId", "_total"])
+		expect(Object.keys(first.extras).toSorted()).toEqual(["_cursorId", "_total"])
+		expect(first.pagination.expects.toSorted()).toEqual(["_cursorId", "_total"])
 		const cursor = createCursor({ id: 2 }, [], SEALED)
 		const next = queryHelpers.listOptions({ cursor, limit: 1, parsedSort: [] }, SEALED)
-		expect(Object.keys(next.extras)).toEqual(["_combId"])
-		expect(dialect.sqlToQuery(next.extras["_combId"](getTableColumns(post))).sql).toBe('"post"."id"')
+		expect(Object.keys(next.extras)).toEqual(["_cursorId"])
+		expect(dialect.sqlToQuery(next.extras["_cursorId"](getTableColumns(post))).sql).toBe('"post"."id"')
 	})
 })
 
@@ -76,12 +76,14 @@ describe("queryHelpers.listOptions", () => {
 
 	it("refuses a cursor minted under another order, and a sort field the table lacks", () => {
 		const cursor = createCursor({ id: 1, name: "a" }, [{ direction: "asc", field: "name" }], SEALED)
-		expect(() => queryHelpers.listOptions({ cursor, limit: 10, ...sortedBy("created_at") }, SEALED)).toThrow(CombError)
+		expect(() => queryHelpers.listOptions({ cursor, limit: 10, ...sortedBy("created_at") }, SEALED)).toThrow(
+			DatabaseError,
+		)
 		const options = queryHelpers.listOptions({ limit: 10, ...sortedBy("ghost") }, SEALED)
-		expect(() => options.orderBy(getTableColumns(post))).toThrow(CombError)
+		expect(() => options.orderBy(getTableColumns(post))).toThrow(DatabaseError)
 		expect(() =>
 			queryHelpers.listOptions({ limit: 10, ...sortedBy("constructor") }, SEALED).orderBy(getTableColumns(post)),
-		).toThrow(CombError)
+		).toThrow(DatabaseError)
 	})
 })
 
@@ -216,7 +218,7 @@ describe("queryHelpers.paginate — next cursor and hasMore", () => {
 		)
 		expect(onePage([{ createdAt: "2" }, { createdAt: "1" }])).toThrow(
 			expect.objectContaining({
-				cause: "the next cursor is minted from each row's _combId; select them, and the built query's extras",
+				cause: "the next cursor is minted from each row's _cursorId; select them, and the built query's extras",
 			}),
 		)
 		expect(onePage([{ createdAt: "1", id: "1" }])).not.toThrow()
@@ -233,9 +235,9 @@ describe("queryHelpers.paginate — an anchor gone where no bound is safe", () =
 	}
 
 	it("answers invalid_cursor before it reads _total, and strips the flag from a page it serves", () => {
-		const gone = () => queryHelpers.paginate(wired([{ _combAnchorGone: 1, _total: 9, id: 1 }]), built(query, SEALED))
+		const gone = () => queryHelpers.paginate(wired([{ _cursorAnchorGone: 1, _total: 9, id: 1 }]), built(query, SEALED))
 		expect(gone).toThrow(expect.objectContaining({ errorKey: "invalid_cursor" }))
-		const [items] = queryHelpers.paginate(wired([{ _combAnchorGone: 0, id: 1 }]), built(query, SEALED))
+		const [items] = queryHelpers.paginate(wired([{ _cursorAnchorGone: 0, id: 1 }]), built(query, SEALED))
 		expect(items).toEqual([{ id: 1 }])
 	})
 })

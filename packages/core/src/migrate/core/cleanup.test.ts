@@ -89,7 +89,7 @@ describe("sweepScratch (S2 of r22; sibling: P2 of r21's replay sweep by owner)",
 	const left = () => fs.readdirSync(dir).sort()
 	const make = (name: string) => fs.mkdirSync(path.join(dir, name))
 	beforeEach(() => {
-		dir = fs.mkdtempSync(path.join(os.tmpdir(), "comb-sweep-"))
+		dir = fs.mkdtempSync(path.join(os.tmpdir(), "database-sweep-"))
 	})
 	afterEach(() => {
 		vi.restoreAllMocks()
@@ -98,49 +98,49 @@ describe("sweepScratch (S2 of r22; sibling: P2 of r21's replay sweep by owner)",
 
 	it("removes one a gone process of this host left at once, and keeps a live one's, another host's and one with no pid", () => {
 		const mark = hostMark()
-		make(`comb-scratch-${DEAD}-${mark}-gone`)
-		make(`comb-scratch-${process.pid}-${mark}-live`)
-		make(`comb-scratch-${DEAD}-00000000-elsewhere`)
-		make("comb-scratch-nopid")
-		make(`comb-codegen-${DEAD}-${mark}-other-prefix`)
-		sweepScratch("comb-scratch-", dir)
+		make(`database-scratch-${DEAD}-${mark}-gone`)
+		make(`database-scratch-${process.pid}-${mark}-live`)
+		make(`database-scratch-${DEAD}-00000000-elsewhere`)
+		make("database-scratch-nopid")
+		make(`database-codegen-${DEAD}-${mark}-other-prefix`)
+		sweepScratch("database-scratch-", dir)
 		expect(left()).toEqual(
 			[
-				`comb-codegen-${DEAD}-${mark}-other-prefix`,
-				`comb-scratch-${DEAD}-00000000-elsewhere`,
-				`comb-scratch-${process.pid}-${mark}-live`,
-				"comb-scratch-nopid",
+				`database-codegen-${DEAD}-${mark}-other-prefix`,
+				`database-scratch-${DEAD}-00000000-elsewhere`,
+				`database-scratch-${process.pid}-${mark}-live`,
+				"database-scratch-nopid",
 			].sort(),
 		)
 	})
 
 	it("removes any past the stale age, a live pid's too, since no run holds one that long", () => {
 		const mark = hostMark()
-		make(`comb-scratch-${process.pid}-${mark}-live`)
-		make("comb-scratch-nopid")
-		sweepScratch("comb-scratch-", dir, Date.now() + SCRATCH_STALE_MS - 60_000)
+		make(`database-scratch-${process.pid}-${mark}-live`)
+		make("database-scratch-nopid")
+		sweepScratch("database-scratch-", dir, Date.now() + SCRATCH_STALE_MS - 60_000)
 		expect(left()).toHaveLength(2)
-		sweepScratch("comb-scratch-", dir, Date.now() + SCRATCH_STALE_MS + 60_000)
+		sweepScratch("database-scratch-", dir, Date.now() + SCRATCH_STALE_MS + 60_000)
 		expect(left()).toEqual([])
 	})
 
 	it("keeps another user's, and reads every one as this user's where there are no uids", () => {
-		make(`comb-scratch-${DEAD}-${hostMark()}-theirs`)
+		make(`database-scratch-${DEAD}-${hostMark()}-theirs`)
 		const stat = fs.statSync(path.join(dir, left()[0] as string))
 		vi.spyOn(fs, "statSync").mockReturnValue({ ...stat, uid: stat.uid + 1 } as fs.Stats)
-		sweepScratch("comb-scratch-", dir)
+		sweepScratch("database-scratch-", dir)
 		expect(left()).toHaveLength(1)
 		vi.spyOn(process, "getuid").mockReturnValue(undefined as unknown as number)
-		sweepScratch("comb-scratch-", dir)
+		sweepScratch("database-scratch-", dir)
 		expect(left()).toEqual([])
 	})
 
 	it("passes over one another run removed first", () => {
-		make(`comb-scratch-${DEAD}-${hostMark()}-raced`)
+		make(`database-scratch-${DEAD}-${hostMark()}-raced`)
 		vi.spyOn(fs, "statSync").mockImplementation(() => {
 			throw Object.assign(new Error("gone"), { code: "ENOENT" })
 		})
-		expect(() => sweepScratch("comb-scratch-", dir)).not.toThrow()
+		expect(() => sweepScratch("database-scratch-", dir)).not.toThrow()
 	})
 })
 
@@ -148,21 +148,21 @@ describe("scratchDir", () => {
 	afterEach(() => vi.restoreAllMocks())
 
 	it("makes a 0700 directory named for this process under the temp directory, and removes it", () => {
-		const scratch = scratchDir("comb-cleanup-test-")
+		const scratch = scratchDir("database-cleanup-test-")
 		expect(path.dirname(scratch.dir)).toBe(os.tmpdir())
-		expect(path.basename(scratch.dir)).toMatch(new RegExp(`^comb-cleanup-test-${process.pid}-${hostMark()}-`))
+		expect(path.basename(scratch.dir)).toMatch(new RegExp(`^database-cleanup-test-${process.pid}-${hostMark()}-`))
 		expect(fs.statSync(scratch.dir).mode & 0o777).toBe(0o700)
 		scratch.remove()
 		expect(fs.existsSync(scratch.dir)).toBe(false)
 	})
 
 	it("sweeps what a gone process left at a prefix's first scratch, and only then", () => {
-		const leftover = path.join(os.tmpdir(), `comb-cleanup-sweep-${DEAD}-${hostMark()}-gone`)
+		const leftover = path.join(os.tmpdir(), `database-cleanup-sweep-${DEAD}-${hostMark()}-gone`)
 		fs.mkdirSync(leftover)
-		const first = scratchDir("comb-cleanup-sweep-")
+		const first = scratchDir("database-cleanup-sweep-")
 		expect(fs.existsSync(leftover)).toBe(false)
 		fs.mkdirSync(leftover)
-		const second = scratchDir("comb-cleanup-sweep-")
+		const second = scratchDir("database-cleanup-sweep-")
 		expect(fs.existsSync(leftover)).toBe(true)
 		for (const each of [first, second]) each.remove()
 		fs.rmSync(leftover, { force: true, recursive: true })
@@ -228,11 +228,11 @@ describe("stubKill, past a stop whose step outlasts the test", () => {
 	})
 })
 
-describe("a signal, on what comb holds and with a host listening", () => {
+describe("a signal, on what database holds and with a host listening", () => {
 	const kill = stubKill()
 
 	it("removes a held scratch, and the steps onSignals holds", async () => {
-		const scratch = scratchDir("comb-cleanup-signal-")
+		const scratch = scratchDir("database-cleanup-signal-")
 		const cleanup = vi.fn(async () => undefined)
 		await onSignals(cleanup, async () => deliver("SIGTERM"))
 		expect([fs.existsSync(scratch.dir), cleanup.mock.calls.length]).toEqual([false, 1])
@@ -362,7 +362,7 @@ describe("a second signal while a stop's steps run (PA4 of r22)", () => {
 		} finally {
 			release()
 		}
-		/* a supervisor that sends SIGTERM twice must not end comb before the child it stops has ended */
+		/* a supervisor that sends SIGTERM twice must not end database before the child it stops has ended */
 		expect([order, kill.calls()]).toEqual([
 			["step started", "ends asked while the step runs: 0", "step done"],
 			[[process.pid, "SIGTERM"]],

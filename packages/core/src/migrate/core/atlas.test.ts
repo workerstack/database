@@ -13,12 +13,12 @@ const KIT = {
 	peer: "drizzle-kit",
 	runtime: process.execPath,
 } as const
-import type { Run, RunOptions, RunResult } from "./process.ts"
+import type { MigrateRun, RunOptions, RunResult } from "./process.ts"
 
 type Call = { cmd: string; args: readonly string[]; options: RunOptions | undefined }
 
 /** A runner that records each call and answers from `script`, in order. */
-function fakeRun(...script: Array<RunResult | ((call: Call) => RunResult)>): Run & { calls: Call[] } {
+function fakeRun(...script: Array<RunResult | ((call: Call) => RunResult)>): MigrateRun & { calls: Call[] } {
 	const calls: Call[] = []
 	const fake = async (cmd: string, args: readonly string[], options?: RunOptions) => {
 		const call = { args, cmd, options }
@@ -74,7 +74,7 @@ describe("generateSchemaDiff", () => {
 		const [call] = run.calls
 		expect(call?.cmd).toBe("atlas")
 		expect(call?.args.slice(0, 2)).toEqual(["schema", "diff"])
-		expect(call?.args.at(-1)).toMatch(/^sqlite:\/\/comb-[0-9a-f-]{36}\?mode=memory$/)
+		expect(call?.args.at(-1)).toMatch(/^sqlite:\/\/database-[0-9a-f-]{36}\?mode=memory$/)
 		expect(existsSync(fileArg(call?.args ?? [], "--from"))).toBe(false)
 	})
 
@@ -111,7 +111,7 @@ describe("generateSchemaDiff on Postgres", () => {
 		await generateSchemaDiff({ dialect: "postgres", fromSchema: "", readyDev, run, target, toSchema: "" })
 		expect(readied).toEqual([target])
 		expect(run.calls[0]?.args).toContain("--config")
-		expect(run.calls[0]?.options?.env).toEqual({ COMB_ATLAS_DEV_URL: "postgres://localhost/dev?search_path=app" })
+		expect(run.calls[0]?.options?.env).toEqual({ DATABASE_ATLAS_DEV_URL: "postgres://localhost/dev?search_path=app" })
 		await expect(generateSchemaDiff({ dialect: "postgres", fromSchema: "", run, toSchema: "" })).rejects.toThrow(
 			"a Postgres diff needs a target (devUrl and schema)",
 		)
@@ -151,7 +151,7 @@ describe("exportDrizzleSchema", () => {
 		])
 	})
 
-	/* K1 of r22: the drizzle-kit the project at cwd holds, its bin as its package.json names it, on the runtime running comb (AD5) */
+	/* K1 of r22: the drizzle-kit the project at cwd holds, its bin as its package.json names it, on the runtime running database (AD5) */
 	it("runs the drizzle-kit the project at cwd holds, and refuses a cwd that holds none", async () => {
 		const run = fakeRun(ok("CREATE TABLE t (a integer);"))
 		expect(await exportDrizzleSchema({ cwd: import.meta.dirname, dialect: "sqlite", run })).toBe(
@@ -160,7 +160,7 @@ describe("exportDrizzleSchema", () => {
 		expect(run.calls[0]?.cmd).toBe(process.execPath)
 		expect(run.calls[0]?.args[0]).toMatch(/\/drizzle-kit\/bin\.cjs$/)
 		await expect(exportDrizzleSchema({ cwd: tmpdir(), dialect: "sqlite", run })).rejects.toThrow(
-			`comb needs drizzle-kit (${OPTIONAL_PEER_RANGES["drizzle-kit"]}) to export the drizzle schema for comb migrate diff`,
+			`database needs drizzle-kit (${OPTIONAL_PEER_RANGES["drizzle-kit"]}) to export the drizzle schema for database migrate diff`,
 		)
 	})
 
@@ -182,14 +182,14 @@ describe("exportDrizzleSchema", () => {
 })
 
 describe("exportDrizzleSchema's drizzle config", () => {
-	/* D2-14 of the area D round-two review: drizzle-kit runs on comb's runtime, and on Node it cannot load a JSON config */
-	it("refuses a JSON drizzle config when comb runs on Node, before drizzle-kit runs, and exports it on Bun", async () => {
+	/* D2-14 of the area D round-two review: drizzle-kit runs on database's runtime, and on Node it cannot load a JSON config */
+	it("refuses a JSON drizzle config when database runs on Node, before drizzle-kit runs, and exports it on Bun", async () => {
 		const run = fakeRun(ok("CREATE TABLE t (a integer);"))
 		const options = { configPath: "/w/drizzle.config.json", cwd: import.meta.dirname, dialect: "sqlite" as const, run }
 		await onBun(undefined, () =>
 			expect(exportDrizzleSchema(options)).rejects.toThrow(
 				new Error(
-					"/w/drizzle.config.json is JSON, which drizzle-kit cannot load when comb runs on Node: write it as drizzle.config.ts, export default the same object, or run comb on Bun",
+					"/w/drizzle.config.json is JSON, which drizzle-kit cannot load when database runs on Node: write it as drizzle.config.ts, export default the same object, or run database on Bun",
 				),
 			),
 		)
@@ -199,8 +199,8 @@ describe("exportDrizzleSchema's drizzle config", () => {
 	})
 
 	/* D3-2 of the area D round-three review: with no configPath, drizzle-kit looks up drizzle.config.ts, .js, then .json in cwd */
-	it("refuses the JSON config drizzle-kit's own lookup finds when comb runs on Node, and exports it on Bun", async () => {
-		const cwd = mkdtempSync(join(tmpdir(), "comb-dk-lookup-"))
+	it("refuses the JSON config drizzle-kit's own lookup finds when database runs on Node, and exports it on Bun", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "database-dk-lookup-"))
 		try {
 			writeFileSync(join(cwd, "drizzle.config.json"), "{}")
 			const run = fakeRun(ok("CREATE TABLE t (a integer);"), ok("CREATE TABLE t (a integer);"))
@@ -208,7 +208,7 @@ describe("exportDrizzleSchema's drizzle config", () => {
 			await onBun(undefined, () =>
 				expect(exportWith(KIT, options)).rejects.toThrow(
 					new Error(
-						`${join(cwd, "drizzle.config.json")} is JSON, which drizzle-kit cannot load when comb runs on Node: write it as drizzle.config.ts, export default the same object, or run comb on Bun`,
+						`${join(cwd, "drizzle.config.json")} is JSON, which drizzle-kit cannot load when database runs on Node: write it as drizzle.config.ts, export default the same object, or run database on Bun`,
 					),
 				),
 			)
@@ -235,7 +235,7 @@ describe("exportDrizzleSchema on Postgres", () => {
 		expect(run.calls[0]?.args).toEqual(["/kit/bin.cjs", "export", "--config", "/w/drizzle.pg.ts"])
 	})
 
-	it("drops the CREATE SCHEMA of the schema comb migrates, which Atlas's scoped run already has", async () => {
+	it("drops the CREATE SCHEMA of the schema database migrates, which Atlas's scoped run already has", async () => {
 		expect(await pg('CREATE SCHEMA "app";\nCREATE TABLE "app"."post" ("id" integer);\n', "app")).toBe(
 			'CREATE TABLE "app"."post" ("id" integer);\n',
 		)
@@ -243,7 +243,7 @@ describe("exportDrizzleSchema on Postgres", () => {
 
 	it("refuses an object in another schema, naming it", async () => {
 		await expect(pg('CREATE SCHEMA "auth";\nCREATE TABLE "auth"."users" ("id" integer);\n')).rejects.toThrow(
-			'the drizzle schema creates objects outside schema "public" (CREATE SCHEMA "auth"); comb migrates one schema per database',
+			'the drizzle schema creates objects outside schema "public" (CREATE SCHEMA "auth"); database migrates one schema per database',
 		)
 		await expect(pg('CREATE SEQUENCE "public"."counter" START WITH 1;\n', "app")).rejects.toThrow(
 			'outside schema "app" (CREATE SEQUENCE "public"."counter" START WITH 1)',

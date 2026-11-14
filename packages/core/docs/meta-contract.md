@@ -1,4 +1,4 @@
-# The comb meta contract
+# The database meta contract
 
 Status: v1, implemented in `@workerstack/database` (`packages/core`).
 
@@ -8,24 +8,24 @@ Consumer of record: honey's `.metaSpec()` policy layer — see
 ## 1. What this is, and the boundary it keeps
 
 ```
-comb                     honey                        oat
+database                     honey                        oat
 schema + query truth ──► maps facts to tags ────────► tests the live API
-  stamps x-comb          x-entity, x-query, …          checks unlocked
+  stamps x-database          x-entity, x-query, …          checks unlocked
 ```
 
-comb publishes **facts about tables and queries**. honey decides **which documents those
+database publishes **facts about tables and queries**. honey decides **which documents those
 facts appear in**, and under what tag names. oat consumes the resulting document.
 
-comb's payload therefore uses comb's own vocabulary — `generated`, `immutable`, `softDelete`,
+database's payload therefore uses database's own vocabulary — `generated`, `immutable`, `softDelete`,
 `uniqueIndexes` — never oat's tag names (`x-generated`, `x-immutable`, `x-soft-delete`, `x-unique`).
 Encoding the tag names
 here would weld three projects into one: oat could not rename a tag, and honey could not target
-a different tester, without a comb release. The mapping lives in exactly one place, honey's
+a different tester, without a database release. The mapping lives in exactly one place, honey's
 policy, and that is what lets any of the three be replaced.
 
 ### The property that makes this worth building
 
-`CombQueryMeta` is produced **from the same config object that parses the request at runtime**,
+`QueryMeta` is produced **from the same config object that parses the request at runtime**,
 inside `createListQuerySchema`. There is no second declaration to keep in sync, so the document
 cannot drift from behavior — not "should not", cannot.
 
@@ -38,13 +38,13 @@ tester self-confirming and it would report clean forever.
 
 ## 2. The wire format
 
-One reserved key, `x-comb`, carrying a flat discriminated union.
+One reserved key, `x-database`, carrying a flat discriminated union.
 
 ```jsonc
 {
 	"type": "object",
 	"properties": { "id": { "type": "string" } /* … */ },
-	"x-comb": {
+	"x-database": {
 		"v": 1,
 		"kind": "entity",
 		"name": "post",
@@ -61,7 +61,7 @@ One reserved key, `x-comb`, carrying a flat discriminated union.
 
 ```jsonc
 {
-	"x-comb": {
+	"x-database": {
 		"v": 1,
 		"kind": "query",
 		"filterable": ["status", "title", "created_at"],
@@ -76,7 +76,7 @@ One reserved key, `x-comb`, carrying a flat discriminated union.
 }
 ```
 
-**Why one key rather than `x-comb-entity` / `x-comb-query`:** one reserved name is one collision
+**Why one key rather than `x-database-entity` / `x-database-query`:** one reserved name is one collision
 surface, the version is stated once, and honey needs exactly one `schema` policy entry whose
 `expand` switches on `kind`. Two keys would double all three.
 
@@ -89,9 +89,9 @@ ordinary discriminated union: `if (m.kind === "entity")` narrows, with no extra 
 
 ### 2.1 Field keys
 
-Beside `x-comb` on the object, a field's own JSON Schema may carry flat `x-comb-*` keys for rules
+Beside `x-database` on the object, a field's own JSON Schema may carry flat `x-database-*` keys for rules
 JSON Schema cannot state. Every one sits on the property's own schema, beside the `anyOf` of a
-nullable field, so a reader finds it at `properties[name]["x-comb-*"]`; an array element's rules
+nullable field, so a reader finds it at `properties[name]["x-database-*"]`; an array element's rules
 sit on `items` the same way, a nullable array's on the property's own `items` beside its `anyOf`
 (at `properties[name].items`, each further level of a written multidimensional one an `items`
 deeper), which binds an array alone, so a null still passes. A nullable field's non-null member carries the same keys with the
@@ -106,17 +106,17 @@ no `anyOf` walk. A nullable trimmed text with a `max` of 9, as codegen publishes
 			"type": "string",
 			"maxLength": 9,
 			"examples": ["string"],
-			"x-comb-transform": ["trim"],
-			"x-comb-text": "no U+0000 or unpaired surrogate"
+			"x-database-transform": ["trim"],
+			"x-database-text": "no U+0000 or unpaired surrogate"
 		},
 		{ "type": "null" }
 	],
-	"x-comb-transform": ["trim"],
-	"x-comb-text": "no U+0000 or unpaired surrogate"
+	"x-database-transform": ["trim"],
+	"x-database-text": "no U+0000 or unpaired surrogate"
 }
 ```
 
-- `x-comb-transform`: the rewrites a written text takes before any check, in the order applied;
+- `x-database-transform`: the rewrites a written text takes before any check, in the order applied;
   an email's is `["trim", "lowercase"]`, a url's `["trim", "strip-tab-newline"]`, and `passwordText()`'s `["nfc"]`. A
   read publishes none. See §6.9 for
   what the published bounds then mean. Each value is one exact operation, which a reader in any
@@ -149,30 +149,30 @@ no `anyOf` walk. A nullable trimmed text with a `max` of 9, as codegen publishes
   ]
   ```
 
-- `x-comb-text`: the storable-text rule: the value, after its transforms, holds no U+0000 and no
+- `x-database-text`: the storable-text rule: the value, after its transforms, holds no U+0000 and no
   unpaired surrogate, which no engine stores as sent. On a JSON value it binds every string in it.
-- `x-comb-maxBytes`: the most UTF-8 bytes of the value's JSON text, `JSON.stringify` of the value as
+- `x-database-maxBytes`: the most UTF-8 bytes of the value's JSON text, `JSON.stringify` of the value as
   sent, quotes and escapes included: a string `ab"` is 6 bytes (`"ab\""`). A `c.json` field
   publishes it.
-- `x-comb-maxUtf8Bytes`: the most UTF-8 bytes of a string value itself, after its transforms, with
+- `x-database-maxUtf8Bytes`: the most UTF-8 bytes of a string value itself, after its transforms, with
   no quotes or escapes: `ab"` is 3 bytes. `passwordText({ hash: "bcrypt" })` publishes 72, the bytes
   bcrypt reads.
-- `x-comb-cidr`: `true` on a Postgres cidr: the address, an IPv4 or IPv6 one with its prefix length
+- `x-database-cidr`: `true` on a Postgres cidr: the address, an IPv4 or IPv6 one with its prefix length
   or without (a host), has no bit set past that length: `10.0.0.0/8` is a network, `10.0.0.1/8` is
   not. `isCidr` from `@workerstack/database` is the check.
-- `x-comb-url`: `"whatwg"` on a written url: the value, after its transforms, parses with the WHATWG URL
+- `x-database-url`: `"whatwg"` on a written url: the value, after its transforms, parses with the WHATWG URL
   parser (`new URL(value)`, `URL.canParse(value)`), which the published pattern's `https://` prefix
   alone does not state: `https://ex.co:99999`, `https://a b` and `https://:80` do not parse.
-- `x-comb-rectangular`: `true` on a multidimensional array: every sub-array of one level, across the
+- `x-database-rectangular`: `true` on a multidimensional array: every sub-array of one level, across the
   whole level, has the same length, as Postgres stores an array: `[[1, 2], [3, 4]]` is one,
   `[[1, 2], [3]]` is not.
-- `x-comb-format`: the standard a written value is held to, by its id, on a text, an enum or an
-  integer. On a text, the value after its `x-comb-transform` matches the published `pattern` and
+- `x-database-format`: the standard a written value is held to, by its id, on a text, an enum or an
+  integer. On a text, the value after its `x-database-transform` matches the published `pattern` and
   length bounds; where the id below names a registry, it is also a member of that pinned registry,
   which no pattern states, so a reader must check it, with the predicate named, which
   `@workerstack/database` exports, or with the release named (`HRK` matches `^[A-Z]{3}$` and is no
   `iso4217` value: withdrawn in 2023). A text failing it gets zod's `invalid_format` issue with the
-  id as its `format` and no message of comb's, so a zod locale or error map words it. On an enum the
+  id as its `format` and no message of database's, so a zod locale or error map words it. On an enum the
   listed values are the rule, each one the format takes, and the id is what they mean; every DTO of
   an enum publishes it, as each holds the values. On an integer the published `minimum` and
   `maximum` are the standard's range, or a declared one inside it. A read of a text or an integer
@@ -208,23 +208,23 @@ no `anyOf` walk. A nullable trimmed text with a `max` of 9, as codegen publishes
   - `uuid-v7`: RFC 9562 UUID version 7, lowercase hex.
   - `iso8601-month`: ISO 8601 month number, 1 January to 12 December.
   - `iso8601-weekday`: ISO 8601 §3.2.2 weekday number, 1 Monday to 7 Sunday.
-- `x-comb-schema`: the export name of the zod schema a written text or number is piped into after
+- `x-database-schema`: the export name of the zod schema a written text or number is piped into after
   every other rule, on the value as rewritten; its issues reach the caller as the schema yields
   them. The `allOf` beside it is the schema's published part: its input JSON Schema, last, after
   the patterns of the field's own chain when that has two or more. A refine in the schema publishes
   nothing, so a rule it states only as a refine is one the producer alone runs: a reader may take a
   value the producer then refuses. On a nullable field the `allOf` sits on the non-null member
   alone, as its `type` would refuse the null the field takes. A read publishes none.
-- `x-comb-minLength`, `x-comb-maxLength`, `x-comb-minimum`, `x-comb-maximum`: on a read, the
+- `x-database-minLength`, `x-database-maxLength`, `x-database-minimum`, `x-database-maximum`: on a read, the
   declared bounds it states without enforcing them, so a stored row past one still reads.
 
 ## 3. Producer API
 
 ```ts
-import { combMeta } from "@workerstack/database/meta"
+import { databaseMeta } from "@workerstack/database/meta"
 
 const postReadSchema = z.compile(z.object({/* … */})).meta(
-	combMeta({
+	databaseMeta({
 		kind: "entity",
 		name: "post",
 		identity: "id",
@@ -238,15 +238,15 @@ const postReadSchema = z.compile(z.object({/* … */})).meta(
 )
 ```
 
-`combMeta()` returns `{ "x-comb": … }` — an object to spread into or pass to `.meta()`. It
+`databaseMeta()` returns `{ "x-database": … }` — an object to spread into or pass to `.meta()`. It
 stamps `v` itself; callers never write the version.
 
-Two call sites inside comb produce it automatically:
+Two call sites inside database produce it automatically:
 
-| Producer                                               | Stamps                                  | Source of truth               |
-| ------------------------------------------------------ | --------------------------------------- | ----------------------------- |
-| `generateDtos` (`codegen/generators/dtos/generate.ts`) | `CombEntityMeta` on the **read** schema | `TableMeta` from the analyzer |
-| `createListQuerySchema` (`query/list-schema.ts`)       | `CombQueryMeta` on the returned schema  | its own `config` argument     |
+| Producer                                               | Stamps                              | Source of truth               |
+| ------------------------------------------------------ | ----------------------------------- | ----------------------------- |
+| `generateDtos` (`codegen/generators/dtos/generate.ts`) | `EntityMeta` on the **read** schema | `TableMeta` from the analyzer |
+| `createListQuerySchema` (`query/list-schema.ts`)       | `QueryMeta` on the returned schema  | its own `config` argument     |
 
 `createListQuerySchema` builds its stamp with `listQueryStamp` (`query/list-meta.ts`); `query/schema.ts`
 only re-exports it.
@@ -269,13 +269,13 @@ successfully in development and emit nothing for a consumer reading the output v
 ## 4. Reader API, and the versioning story
 
 ```ts
-import { readCombMeta, readCombEntityMeta, readCombQueryMeta, COMB_META_VERSION } from "@workerstack/database/meta"
+import { readDatabaseMeta, readEntityMeta, readQueryMeta, DATABASE_META_VERSION } from "@workerstack/database/meta"
 
-const meta = readCombEntityMeta(jsonSchema) // CombEntityMeta | null
-const any = readCombMeta(jsonSchema, { maxVersion: 1 })
+const meta = readEntityMeta(jsonSchema) // EntityMeta | null
+const any = readDatabaseMeta(jsonSchema, { maxVersion: 1 })
 ```
 
-The reader takes a **JSON Schema object** and reads `x-comb` off its root. It does not unwrap
+The reader takes a **JSON Schema object** and reads `x-database` off its root. It does not unwrap
 `items` — honey already does that, documented in its §2.3, and a fact should have one unwrapping
 owner rather than two that can disagree.
 
@@ -283,7 +283,7 @@ owner rather than two that can disagree.
 
 `v` is a single integer, and it is bumped **only on a breaking change**: a field removed, or a
 field whose meaning changed. **Adding a field never bumps `v`.** That is the whole rule, and it
-is what lets comb and honey ship independently.
+is what lets database and honey ship independently.
 
 Two obligations follow, and the reader enforces both:
 
@@ -303,7 +303,7 @@ meaning, read optimistically by a v1 reader — silently narrows what oat tests,
 comes back green. Under-testing that reports success is the one outcome a contract tester must
 never produce.
 
-So: on a version it does not understand, comb's reader degrades to the state oat handles well
+So: on a version it does not understand, database's reader degrades to the state oat handles well
 (no tag, visible gap) rather than the state it handles badly (confident and wrong).
 
 The mirror case is safe and needs no ceremony: an **older** payload read by a newer consumer is
@@ -316,14 +316,14 @@ just missing fields. Every field a later version adds is therefore optional at t
 
 `.meta()` in Zod 4 is a **shallow merge onto a clone**. Verified:
 
-| Sequence                                        | Result                                                                                                           |
-| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| comb stamps, user adds `.meta({ description })` | both present; `x-comb` survives                                                                                  |
-| comb stamps, user calls `.describe()`           | both present                                                                                                     |
-| user stamps their own `x-comb` after comb       | **user wins** — last write, per key                                                                              |
-| `.optional()` around a stamped object           | survives                                                                                                         |
-| `.nullable()` around a stamped object           | moved under `anyOf[0]`: `readCombMeta` on the root reads null; the caller unwraps it, as it unwraps `items` (§4) |
-| **`.extend()` on a stamped object**             | **`x-comb` is dropped**                                                                                          |
+| Sequence                                            | Result                                                                                                               |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| database stamps, user adds `.meta({ description })` | both present; `x-database` survives                                                                                  |
+| database stamps, user calls `.describe()`           | both present                                                                                                         |
+| user stamps their own `x-database` after database   | **user wins** — last write, per key                                                                                  |
+| `.optional()` around a stamped object               | survives                                                                                                             |
+| `.nullable()` around a stamped object               | moved under `anyOf[0]`: `readDatabaseMeta` on the root reads null; the caller unwraps it, as it unwraps `items` (§4) |
+| **`.extend()` on a stamped object**                 | **`x-database` is dropped**                                                                                          |
 
 The last row is the trap. `.extend()` builds a new object type and does not carry the registry
 entry, so a consumer who extends a generated read schema loses the entity facts **silently** —
@@ -332,27 +332,27 @@ fully described one call earlier.
 
 Mitigation, in order of preference:
 
-1. Stamp after extending: `base.extend({ … }).meta(combMeta({ … }))`.
-2. `carryCombMeta(from, to)` — re-stamps `to` with whatever `from` carries, exported for exactly
+1. Stamp after extending: `base.extend({ … }).meta(databaseMeta({ … }))`.
+2. `carryDatabaseMeta(from, to)` — re-stamps `to` with whatever `from` carries, exported for exactly
    this case. `from` is the stamped Zod schema or its JSON Schema. It returns `null`, and stamps
-   nothing, when `from` carries no readable `x-comb`.
+   nothing, when `from` carries no readable `x-database`.
 
-**Decision: merge, last write wins, reader validates.** Not throw — comb has no hook to throw
-from. `.meta()` is Zod's API, called on a schema comb has already returned; intercepting it would
+**Decision: merge, last write wins, reader validates.** Not throw — database has no hook to throw
+from. `.meta()` is Zod's API, called on a schema database has already returned; intercepting it would
 mean wrapping the schema in something that is no longer a plain Zod type, which costs every
 consumer more than the case is worth. Not clobber either: silently discarding a user's
 `description` to protect a key of ours would be the same disrespect in the other direction.
 
 So the reserved key behaves like any other metadata key, and the safety lives in the reader — a
-malformed or unrecognised `x-comb` is refused with a diagnostic (§4.2), never partially trusted.
+malformed or unrecognised `x-database` is refused with a diagnostic (§4.2), never partially trusted.
 
-A user who deliberately writes their own `x-comb` is taken at their word. It is a reserved key
+A user who deliberately writes their own `x-database` is taken at their word. It is a reserved key
 under an `x-` prefix carrying a documented version field; overwriting it is a considered act, not
-an accident, and comb's reader will validate the shape and refuse it if malformed.
+an accident, and database's reader will validate the shape and refuse it if malformed.
 
-## 6. What comb can and cannot know
+## 6. What database can and cannot know
 
-Being explicit about the gaps is the point; a fact comb guesses at is worse than one it omits.
+Being explicit about the gaps is the point; a fact database guesses at is worse than one it omits.
 
 ### 6.1 `searchable` is declared, and enforced at both ends
 
@@ -362,7 +362,7 @@ publishes the list. The declaration is load-bearing at the other end too: `build
 throws `search_not_wired` when a request carries `q` and the handler passed no `search`
 resolver, so a schema that promises search cannot silently answer with the unfiltered list.
 
-`null` stays valid on the wire for producers that genuinely cannot know; comb's own schema
+`null` stays valid on the wire for producers that genuinely cannot know; database's own schema
 builder no longer emits it.
 
 ### 6.2 Foreign keys are immutable, and nearly went unpublished
@@ -379,7 +379,7 @@ named "immutable":
 if (isUpdateSchema) return null
 ```
 
-Foreign keys are immutable in comb by design, unless a column declares `{ mutable: true }` for a
+Foreign keys are immutable in database by design, unless a column declares `{ mutable: true }` for a
 reference that moves (a person's team, a category's parent), and publishing `immutable` without them would have
 told a consumer that `project_id` and `author_id` are freely mutable — the fields a tenant-boundary
 attack tries first. The `patch.immutable-field-rejected` check would have run, passed, and covered
@@ -405,15 +405,15 @@ in a second place is a fact that will drift.
 ### 6.3 `tenantColumn` is declared, never inferred
 
 This field is **opt-in per table**. `null` is the honest default, not a missing
-annotation comb forgot to fill. A consumer that has not written `{ tenant: true }`
-on any column should not expect tenancy facts from comb — that is the contract,
+annotation database forgot to fill. A consumer that has not written `{ tenant: true }`
+on any column should not expect tenancy facts from database — that is the contract,
 not a bug in 0.1.1.
 
 This is the highest-value field in the contract. Downstream, a missing tenant declaration is why
 oat reports a cross-tenant read as `AMBIGUITY` rather than `SECURITY` — the strongest check in the
 suite is advisory for want of one fact.
 
-comb **can** know it, but only if the table says so:
+database **can** know it, but only if the table says so:
 
 ```ts
 export const post = sqliteTable("post", {
@@ -423,7 +423,7 @@ export const post = sqliteTable("post", {
 })
 ```
 
-**Why not infer it.** comb sees that `org_id` is a foreign key. It does not see that `org` is the
+**Why not infer it.** database sees that `org_id` is a foreign key. It does not see that `org` is the
 tenant rather than an ordinary parent — a `post` belongs to an `author` and to an `org` by the
 identical mechanism. Every available signal is a name: match `org|organization|tenant|workspace|
 account|project`, and hope. That is precisely oat's own documented fallback, so inferring here
@@ -446,11 +446,11 @@ tenant or none; with two there is no safe resolution, and publishing either woul
 presented as a fact.
 
 **Until an app adopts the annotation, `tenantColumn` is `null` and honey should fill it.** That
-composes correctly without further coordination: comb's stamp is schema-derived (rank 1), a route
+composes correctly without further coordination: database's stamp is schema-derived (rank 1), a route
 or middleware contribution in honey is route meta (rank 2), and route meta wins. So an app can
-migrate column by column, and the two sources never fight. honey also holds a fact comb never will —
+migrate column by column, and the two sources never fight. honey also holds a fact database never will —
 which _path parameter_ carries the tenant — so `x-tenant` staying honey's to emit is right even
-once comb can name the column.
+once database can name the column.
 
 ### 6.4 Composite primary keys
 
@@ -476,7 +476,7 @@ See `docs/state-machines.md`.
 
 The query stays fat (sort keys, id, `_total`, join keys). The response gets thin.
 `createListQuerySchema({ fields })` is what puts `select` on the wire and `selectable` on
-`x-comb`. Without `fields`, both are absent — so a contract tester cannot report "accepted but
+`x-database`. Without `fields`, both are absent — so a contract tester cannot report "accepted but
 ignored". `queryHelpers.paginate` / `queryHelpers.project` is what honors `parsedFields`, as the last
 mutation of item shape. Do not apply `select=` in the HTTP framework: the output schema is the
 full entity, and a runtime subset would fail a consumer that validates the body as that schema.
@@ -495,14 +495,14 @@ did not bump `v`. Each value is computed from the config that parses the request
 ### 6.8 Partial unique indexes are published apart
 
 A partial unique index (`uniqueIndex().on(...).where(...)`) makes its columns unique only among
-the rows its predicate matches, so it is no uniqueness of the column. comb published none before
+the rows its predicate matches, so it is no uniqueness of the column. database published none before
 0.15; it publishes them now as `partialUniqueIndexes: [{ columns, name, where }]`, beside
 `uniqueIndexes` and never inside it. A reader built before 0.15 ignores a key it does not know: a
 `where` added to an entry of `uniqueIndexes` would be dropped, and that reader would claim a global
 uniqueness the index does not hold, the very harm leaving partial indexes out avoided. A field of
 its own is skipped whole by such a reader, so it claims nothing. `where` is the predicate as the
 index's SQL holds it: SQL over the columns' SQL names, each quoted, while `columns` lists property
-names, as every other list of the stamp does. comb publishes no property-name form of the
+names, as every other list of the stamp does. database publishes no property-name form of the
 predicate; a reader that needs one maps the SQL names through the manifest's columns. An index over a private column, or whose predicate names one, is left out,
 so a private name never reaches the document. The field was added within v1: a payload without it
 reads as `[]`, and one whose entry lacks `where` is malformed.
@@ -513,8 +513,8 @@ zod publishes no overwrite: `.trim()` and `.toLowerCase()` leave no trace in `z.
 a client reading the spec could not learn that `"  Ann@Example.COM "` is stored as
 `"ann@example.com"`, and a validator built from it disagreed with the server both ways. It
 accepted `"   "` for a trimmed required text, which the server refuses, and refused `"ABC"`
-under a lowercase field's `^[a-z]+$`, which the server stores as `"abc"`. comb publishes the list
-as `x-comb-transform` (§2.1), written from the one list the generated zod chain is written
+under a lowercase field's `^[a-z]+$`, which the server stores as `"abc"`. database publishes the list
+as `x-database-transform` (§2.1), written from the one list the generated zod chain is written
 from, so the two cannot drift. A field's published `minLength`, `maxLength`, `pattern` and
 `format` bind the transformed value: a consumer applies the listed transforms, in order, before
 it checks, generates or compares a value; that is honey's and oat's half of C2 of r18, theirs to ship.
@@ -524,12 +524,12 @@ it checks, generates or compares a value; that is honey's and oat's half of C2 o
 `stableTiebreak` is the column keyset pagination breaks ties on. oat calls it load-bearing:
 without it, page-walk checks report phantom gaps and duplicates.
 
-comb's SQLite cursor builder resolves it as `getTableColumns(table)["id"]` — the **JavaScript
+database's SQLite cursor builder resolves it as `getTableColumns(table)["id"]` — the **JavaScript
 property name** `CURSOR_TIEBREAK_COLUMN`, not the SQL column. It once returned `null` when that
 lookup missed, which added no cursor predicate: the query returned the first page again, and rows
 silently duplicated and went missing across pages.
 
-`buildListQuery` now throws a `CombError` when it is asked to cursor-page a table with no `id`
+`buildListQuery` now throws a `DatabaseError` when it is asked to cursor-page a table with no `id`
 property, so the failure is loud at the one place it can be exact. `stableTiebreak` is published as
 the list schema's `tiebreak`, `"id"` by default, matching what `buildListQuery` does; a derived
 list breaks ties on its `idColumn`, so its schema names that column (QL10 of r22b).
@@ -541,7 +541,7 @@ the invariant to be stated, which is the argument for doing this at all.
 
 ## 8. Worked example, end to end
 
-**1 — comb table definition**
+**1 — database table definition**
 
 ```ts
 export const post = sqliteTable("post", {
@@ -563,12 +563,12 @@ export const postDtoReadSchema = z
 		...timestampsCreatedUpdatedDeletedReadSnakeCase,
 		id: _str
 			.meta({ examples: ["pst_01h5a3g8k9m2n4p6q8r0t2v4x6"] })
-			.meta({ "x-comb-maxLength": 48, "x-comb-minLength": 1 }),
+			.meta({ "x-database-maxLength": 48, "x-database-minLength": 1 }),
 		status: _z_7520e2bc.meta({ examples: ["draft"] }),
-		title: _str.meta(_m.string).meta({ "x-comb-maxLength": 200 }).nullable().meta({ "x-comb-maxLength": 200 }),
+		title: _str.meta(_m.string).meta({ "x-database-maxLength": 200 }).nullable().meta({ "x-database-maxLength": 200 }),
 	})
 	.meta(
-		combMeta({
+		databaseMeta({
 			generated: ["id", "created_at", "updated_at", "deleted_at"],
 			identity: "id",
 			immutable: ["id", "created_at", "updated_at", "deleted_at"],
@@ -585,7 +585,7 @@ export const postDtoReadSchema = z
 
 This is the generated file's own text (a test reads it from the generator, so it cannot drift).
 The generator hoists repeated expressions into `_shared` under names hashed from their code
-(`_z_7520e2bc` is the status's rules); a read states a declared bound as `x-comb-maxLength`, on
+(`_z_7520e2bc` is the status's rules); a read states a declared bound as `x-database-maxLength`, on
 the property itself and, as `title` is nullable, on its non-null member too (§2.1), and enforces
 only what the column holds. `title` is nullable because the
 column is not `.notNull()`. Every generated column is
@@ -598,17 +598,17 @@ leaves out every generated column too, so a client chooses no id and backdates n
 ```ts
 .metaSpec({
   schema: {
-    "x-comb": {
+    "x-database": {
       from: ["output", "input.search"],
       expand: (m) => {
-        const f = readCombMeta(/* the JSON Schema root honey already has */)
+        const f = readDatabaseMeta(/* the JSON Schema root honey already has */)
         if (f?.kind === "entity") return {
           "x-entity": { name: f.name, identity: f.identity },
           "x-generated": f.generated,
           "x-immutable": f.immutable.length ? f.immutable : undefined,
           "x-soft-delete": f.softDelete ?? undefined,
           "x-tenant": f.tenantColumn ?? undefined,
-          // Tag names are the consumer's. comb publishes uniqueIndexes, not x-unique.
+          // Tag names are the consumer's. database publishes uniqueIndexes, not x-unique.
           "x-unique": f.uniqueIndexes.length ? f.uniqueIndexes : undefined,
         }
         if (f?.kind === "query") return {
@@ -627,8 +627,8 @@ leaves out every generated column too, so a client chooses no id and backdates n
 })
 ```
 
-Tag names in this snippet (`x-entity`, `x-unique`, …) are the consumer's. comb publishes
-`uniqueIndexes` in comb's vocabulary; honey chooses the document tag they become.
+Tag names in this snippet (`x-entity`, `x-unique`, …) are the consumer's. database publishes
+`uniqueIndexes` in database's vocabulary; honey chooses the document tag they become.
 
 Note `searchable` is spread conditionally: `null` must become an **absent** key, not
 `searchable: null`, so oat falls back to its own narrowing rather than reading an empty list as
@@ -673,16 +673,16 @@ carries the key** (`meta-spec.ts:443-450` at `cd7eb5c`). With the default order 
 `input.json`, `input.search`, … — the entity descriptor is found first and the query descriptor is
 never read. No error is raised; `x-query` is simply absent.
 
-**This is not comb's to fix by splitting the key.** Two keys would trade one silent drop for a
+**This is not database's to fix by splitting the key.** Two keys would trade one silent drop for a
 permanent second collision surface, a second version field, and a second policy entry, and honey
 would still stop at the first hit for any future third descriptor. The single-key design holds; the
 resolution is that a schema entry should collect from **every** source in `from`, not the first,
 and invoke its `expand` per hit — which the discriminated `kind` already makes unambiguous.
 
 Until then an app can work around it with two policy entries narrowed by `from`, if honey allows
-the same source key twice; comb's side needs no change either way.
+the same source key twice; database's side needs no change either way.
 
-`tests/integration/meta/stamp-to-document.test.ts` pins comb's half: both stamps present, correct, and each
+`tests/integration/meta/stamp-to-document.test.ts` pins database's half: both stamps present, correct, and each
 resolvable on its own schema, with the drop reproduced against a transcription of honey's own
 search so the fix has a concrete case to satisfy.
 
@@ -692,7 +692,7 @@ The stamp travels on a Zod schema, which is the right channel for honey and wron
 else — a Go service, a migration audit, a dashboard, anything that will not run TypeScript to
 learn the shape of the database.
 
-`comb codegen -g manifest` writes `db.<name>.manifest.gen.json` alongside the generated entities.
+`database codegen -g manifest` writes `db.<name>.manifest.gen.json` alongside the generated entities.
 Per entity it carries the identity, id prefix, `softDelete`, `tenantColumn`, relations with their
 referential actions, unique indexes, partial unique indexes (`partialUniqueIndexes`, each with its
 `where`) and check constraints. A relation names its target in `table` by that entity's `name`, schema-qualified on Postgres as
@@ -702,23 +702,23 @@ per column, each carrying the whole key as `key: { columns, refColumns }`, paire
 a reader joins on every column together rather than on independent pairs. Per column it carries the helper that
 declared it, its `sqlType`, the column's SQL type with its modifier as drizzle writes it (`timestamp(3) with time zone`, `interval day`, `numeric(3, -2)`), an array's that of its element, beside its `dimensions` (0 for a column of one value, 2 for `integer[][]`) and `nullElements`, whether a written element may be null, as the column's drizzle type declares it (false for a column of one value), the bounds a write takes and enum values, `textKind` (`"email"`, `"url"`, `"imageUri"`,
 `"password"`, `"name"`, or null), `format`, the id of the standard format a write checks the
-value against (`"iso4217"`, `"iso8601-weekday"`), as `x-comb-format` publishes it (§2.1), or null
+value against (`"iso4217"`, `"iso8601-weekday"`), as `x-database-format` publishes it (§2.1), or null
 when the column declares none, `schema`, the export name of the zod schema a text or number column
 declares, which a write runs after the column's own rules and whose published part is
-`x-comb-schema`'s (§2.1), or null when none and on a `c.json` column, whose schema is its value's
-shape rather than a rule beside it, `transform`, the list the DTO publishes as `x-comb-transform`
+`x-database-schema`'s (§2.1), or null when none and on a `c.json` column, whose schema is its value's
+shape rather than a rule beside it, `transform`, the list the DTO publishes as `x-database-transform`
 (§2.1), and `generated`, `immutable` and `private` flags. `min`, `max`, `patterns` and `maxBytes`
 are what the create DTO enforces, not what the column declares, from `writeRules`, which reads
-the rules the DTO's builders read: a text's declared bounds with comb's own (a required text's 1, a
+the rules the DTO's builders read: a text's declared bounds with database's own (a required text's 1, a
 format's floor, an id's 1 to 48), an integer's clamped to what the column
 holds on the dialect, a timestamp's to a JS number's exact range, and none on a boolean, an enum
-or a timestamp comb fills. A plain Postgres column whose type has a write rule of its own (a uuid, a date, an inet, a real, a numeric with a precision) states none either: its
+or a timestamp database fills. A plain Postgres column whose type has a write rule of its own (a uuid, a date, an inet, a real, a numeric with a precision) states none either: its
 rule is its type's, which `kind` and `sqlType` name together, as a precision, a time zone, an interval's fields and a numeric's scale each change it, and as an inet's union of formats or a numeric's exclusive
 bounds fit no `min`, `max` or pattern; a reader applies the type's own check. `patterns` lists every regex the value must match, the declared one and
 the kind's own (an id's, a url's https, a name's, an image URI's), as regex literals in the order
 the chain checks them; an email's own check is its format, which `textKind` names. A password
 column stores the hash, so it is held to its declared bounds and pattern alone, with a required
-one's 1, and `textKind: "password"` implies no rule of comb's on the plaintext. `maxBytes` is a `c.json` column's byte limit. A test holds each column's values to
+one's 1, and `textKind: "password"` implies no rule of database's on the plaintext. `maxBytes` is a `c.json` column's byte limit. A test holds each column's values to
 the JSON Schema the create DTO publishes, on both dialects. All of them bind a value after its
 `transform`, as §6.9 says of the document. Every column that declares a state machine carries it, `transitions` included. The stamp
 publishes the first such column and leaves `transitions` out. Private columns are listed and
@@ -730,7 +730,7 @@ from `deriveEntityMeta`, the function the schema stamp uses, `uniqueIndexes` fro
 filters it applies, so the manifest cannot claim a fact the document contradicts — the rule §6.2
 was written to enforce, applied to a second output. Each column's `generated` and `immutable` flags
 come from `writesOf`, the one rule that decides which write bodies take a column, which the create
-and update DTOs and the stamp's `generated` and `immutable` read too: a column comb or the database
+and update DTOs and the stamp's `generated` and `immutable` read too: a column database or the database
 fills (`autogenerate`, a generated or identity column, a key that `c.id`, `c.serialId`,
 AUTOINCREMENT or a default fills) is in neither body, and is `generated` and `immutable`; a column a
 body sets once (a key, a composite key's column, `nomutate`, a tenant, a reference not declared
@@ -742,8 +742,8 @@ manifest to the bodies field by field.
 
 Entities are sorted by name and the file carries a checksum header, so regenerating an unchanged
 schema is a no-op and a real change is a readable diff. `v` follows the same rule as the contract:
-additive fields never bump it. `v` 2 (comb 0.19) changed what `min` and `max` mean, from declared
-to enforced, and replaced `pattern` with `patterns`, so a reader of `v` 1 refuses it. `v` 3 (comb
+additive fields never bump it. `v` 2 (database 0.19) changed what `min` and `max` mean, from declared
+to enforced, and replaced `pattern` with `patterns`, so a reader of `v` 1 refuses it. `v` 3 (database
 0.21) changed what a relation's `table` means, from the target's TypeScript variable to its
 entity name, so a reader of `v` 2 refuses it.
 
@@ -784,29 +784,29 @@ neither would have been caught by a test that restated the rule.
 
 ## 10. Publishing: source, with declarations
 
-comb ships its TypeScript source for runtimes and bundlers, and from 0.19 the declarations a type
+database ships its TypeScript source for runtimes and bundlers, and from 0.19 the declarations a type
 checker reads. `prepack` emits them, with declaration maps, under `types/` from
 `tsconfig.types.json` (which extends `tsconfig.strict.json`), and each export names them first:
 `{ "types": "./types/x.d.ts", "default": "./src/x.ts" }`. Bun, `tsx`, Vite and Wrangler take
-`default` and compile the source; a consumer's `tsc` takes `types` and never loads comb's `.ts`.
+`default` and compile the source; a consumer's `tsc` takes `types` and never loads database's `.ts`.
 The order is the contract: the first condition that matches wins, and `default` always matches.
 
 **Why.** A source-shipping package inherits the consumer's compiler settings, and `skipLibCheck`
 does not help, because it only covers `.d.ts`. Up to 0.18 that meant two costs. First, every
-relative specifier in comb ends in `.ts`, so a project without `allowImportingTsExtensions`
-failed with TS5097: the stock create-cloudflare Worker, comb's main audience, gave 218 errors.
-Second, the consumer's strict flags applied to comb's internals, which is why comb holds its
+relative specifier in database ends in `.ts`, so a project without `allowImportingTsExtensions`
+failed with TS5097: the stock create-cloudflare Worker, database's main audience, gave 218 errors.
+Second, the consumer's strict flags applied to database's internals, which is why database holds its
 source to the union of them (below). Measured on 0.19's source with tsc 7.0.2 (plan 19, leaf
 1.6; `.tmp/grunt/r20-premise/k1-*`), six packs, each in a fresh consumer:
 
-| Pack                                  | create-cloudflare tsconfig | every subpath, bundler or nodenext | comb `.ts` tsc loads | consumer `tsc` | tarball gz, files |
-| ------------------------------------- | -------------------------- | ---------------------------------- | -------------------- | -------------- | ----------------- |
-| source only (0.18)                    | 218 TS5097                 | 761 TS5097                         | 279                  | 290 ms         | 582.5 KiB, 306    |
-| specifiers rewritten to `.js`         | 0                          | 0                                  | 279                  | 228 ms         | 582.7 KiB, 306    |
-| declarations beside the source        | 150 TS5097                 | 663 TS5097                         | 259                  | 217 ms         | 703.6 KiB, 874    |
-| declarations under `types/` (shipped) | 0                          | 0                                  | 0                    | 65 ms          | 783.1 KiB, 874    |
-| `.js` and declarations beside         | 0                          | 0                                  | 259                  | 224 ms         | 703.6 KiB, 874    |
-| `.js` and declarations under `types/` | 0                          | 0                                  | 0                    | 62 ms          | 783.3 KiB, 874    |
+| Pack                                  | create-cloudflare tsconfig | every subpath, bundler or nodenext | database `.ts` tsc loads | consumer `tsc` | tarball gz, files |
+| ------------------------------------- | -------------------------- | ---------------------------------- | ------------------------ | -------------- | ----------------- |
+| source only (0.18)                    | 218 TS5097                 | 761 TS5097                         | 279                      | 290 ms         | 582.5 KiB, 306    |
+| specifiers rewritten to `.js`         | 0                          | 0                                  | 279                      | 228 ms         | 582.7 KiB, 306    |
+| declarations beside the source        | 150 TS5097                 | 663 TS5097                         | 259                      | 217 ms         | 703.6 KiB, 874    |
+| declarations under `types/` (shipped) | 0                          | 0                                  | 0                        | 65 ms          | 783.1 KiB, 874    |
+| `.js` and declarations beside         | 0                          | 0                                  | 259                      | 224 ms         | 703.6 KiB, 874    |
+| `.js` and declarations under `types/` | 0                          | 0                                  | 0                        | 62 ms          | 783.3 KiB, 874    |
 
 Bun, `tsx`, Wrangler and Vite (with `@cloudflare/vite-plugin`, and `--ssr` with `ssr.noExternal`)
 behaved the same on all six. Beside the source, a declaration's `./x.ts` or `./x.js` resolves to
@@ -816,7 +816,7 @@ specifier needs rewriting. The `.js` rewrite adds nothing a consumer's tsc sees 
 declarations, and would cost a codemod over about 2,500 specifiers and a lint rule.
 
 **What it costs.** +200 KiB gzipped and +568 files (284 declarations, 284 maps). The maps stay:
-with them, go-to-definition opens comb's source; without them, it lands in the declaration. Nothing
+with them, go-to-definition opens database's source; without them, it lands in the declaration. Nothing
 is committed or kept in sync by hand: `types/` is gitignored, emitted at each pack and removed by
 `postpack`, and `tests/structure/api.test.ts` snapshots the same emit. `release-manifest.test.ts`
 reads the tarball the release publishes, the one the consumer suite installs: each export names
@@ -824,12 +824,12 @@ its declaration first, every declaration and map ships, and every map's `sources
 package.
 
 **Where declarations are missing.** An install that never ran `prepack` (a `file:` or link install
-of the repository, a git dependency) has no `types/`. tsc then takes `default`, comb's source,
+of the repository, a git dependency) has no `types/`. tsc then takes `default`, database's source,
 exactly as before 0.19, and a consumer cell holds that. Plain Node still refuses TypeScript under
-the dependency folder (`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`), whatever the pack; run comb
+the dependency folder (`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`), whatever the pack; run database
 through `tsx` or a bundler.
 
-**Why 0.18 rejected declarations, and what changed.** It held that declarations would hide comb's
+**Why 0.18 rejected declarations, and what changed.** It held that declarations would hide database's
 strict errors from consumers while leaving its internals loose, that every `.ts` specifier would
 need rewriting, and that the bun-shebang CLI runs `.ts` directly. The first never applied:
 `typecheck:strict` stays a gate, and `isolatedDeclarations`, which keeps the emit faithful to the
@@ -839,14 +839,14 @@ is still the source. The cost 0.18 feared, a pipeline across 20 exports, is one 
 
 **The durable rule, which is the part worth sharing with honey and flare:** a package that ships
 source must compile under the union of the strict flags its consumers might set, and must prove it
-in CI. `bun run typecheck:strict` does that, and both workflows run it. comb's exposure turned out
+in CI. `bun run typecheck:strict` does that, and both workflows run it. database's exposure turned out
 to be 51 errors, all mechanical: dot access on index-signature types became bracket access, and
 optional properties were widened from `p?: T` to `p?: T | undefined`. honey's is reportedly ~480,
-dominated by `noUncheckedIndexedAccess`, which comb has none of. Shipping declarations then takes
+dominated by `noUncheckedIndexedAccess`, which database has none of. Shipping declarations then takes
 the consumer's flags off the package's internals altogether; the rule still holds, because the
 declarations are only as honest as the source they come from. Measure first.
 
-**Generated files under `isolatedDeclarations`.** comb's own source compiles under it; the files
+**Generated files under `isolatedDeclarations`.** database's own source compiles under it; the files
 codegen writes are the app's, and only some do. Clean, each export's type annotated: constraints,
 entities, enum-checks, error-keys, field-names, rows, rqb-cols, sql-cols and table-names
 (`tests/integration/codegen/isolated-declarations.test.ts` holds them to it). Not clean: the DTO
@@ -866,17 +866,17 @@ versioned separately from the package, precisely so the two can move at differen
 
 ## 11. Rejected alternatives
 
-**A JSON sidecar file instead of Zod meta.** comb already generates `*.entities.gen.ts` and could
+**A JSON sidecar file instead of Zod meta.** database already generates `*.entities.gen.ts` and could
 emit `entities.json`. Rejected as the _primary_ channel: a sidecar is a second artifact that can
 drift from the schema honey actually serves, and honey would need a path convention to find it.
 The stamp travels on the object honey already converts to JSON Schema, so there is nothing to
 locate and nothing to keep in sync. A manifest remains worthwhile for consumers that are not
 honey (§4.4 of the brief) — as a _projection_ of the same facts, not a second source.
 
-**Encoding oat's tag names directly** (`x-soft-delete` in comb's payload, honey passing through).
+**Encoding oat's tag names directly** (`x-soft-delete` in database's payload, honey passing through).
 Rejected per §1: it is fewer moving parts today and a three-way version lock forever.
 
-**A separate key per fact** (`x-comb-entity`, `x-comb-query`, `x-comb-tenant`). Rejected: N
+**A separate key per fact** (`x-database-entity`, `x-database-query`, `x-database-tenant`). Rejected: N
 collision surfaces, N version fields, and N honey policy entries, for no gain over a discriminant.
 
 **Optimistic partial reads of a newer `v`.** Rejected in §4.2 — under-testing that reports green
@@ -887,18 +887,18 @@ would make the tester self-confirming. §6.1.
 
 ## 12. Open questions
 
-1. **Does honey want the reader, or the raw object?** comb exports `readCombMeta` so the version
+1. **Does honey want the reader, or the raw object?** database exports `readDatabaseMeta` so the version
    check has one implementation. If honey's `expand` receives the already-parsed root, it should
-   call comb's reader rather than reaching for `value["x-comb"]` — otherwise the refuse-on-newer
+   call database's reader rather than reaching for `value["x-database"]` — otherwise the refuse-on-newer
    rule lives in two places and one of them will rot.
 2. **`defaultOrder` when `sort` is empty.** `createListQuerySchema` falls back to
    `parsedSort = []` and the SQLite builder then defaults to `created_at desc`. Those two defaults
    are declared in different files and can diverge; currently the stamp reports the schema's view.
    Unifying them is worth doing before either is depended on.
 3. **Terminal-state modeling.** Implemented. `c.enum` takes an optional third argument
-   (`initial` / `terminal` / `transitions`); the published subset is `CombEntityMeta.states`
+   (`initial` / `terminal` / `transitions`); the published subset is `EntityMeta.states`
    (`column`, `values`, `initial`, `terminal` — not `transitions`). See
-   `docs/state-machines.md`. `successWhen` is still not derivable: comb knows which states
+   `docs/state-machines.md`. `successWhen` is still not derivable: database knows which states
    are final, not which of them mean success.
 4. **Does `v` belong per-kind?** Entity and query facts will not evolve at the same rate, and one
    shared integer means a query-only breaking change forces entity readers to update. A

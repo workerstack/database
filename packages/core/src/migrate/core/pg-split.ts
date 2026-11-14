@@ -5,12 +5,12 @@
  * classifier rates it unsafe, and a history holding one fails the classification. Each file is
  * parsed once: its read keeps every statement's parse tree, and extractSchema records the history's
  * trees beside the schema it leaves (recordRead), which the history's facts read. A
- * file comb writes from such statements (atlasFile) is one Atlas sends each of alone.
+ * file database writes from such statements (atlasFile) is one Atlas sends each of alone.
  */
 import { atlasHeader } from "./atlas-header.ts"
 import { atlasChunks, type Chunk, unterminated } from "./atlas-scan.ts"
 import { parsePostgres, postgresParser } from "./pg-parser.ts"
-import type { Dialect } from "../types.ts"
+import type { MigrateDialect } from "../types.ts"
 
 type RawStmt = { stmt_len?: number | undefined; stmt_location?: number | undefined }
 
@@ -105,7 +105,7 @@ function pgRead(sql: string): PgRead {
 }
 
 /** `sql` as `dialect` reads it, a Postgres file parsed here */
-const fileRead = (sql: string, dialect: Dialect): FileRead =>
+const fileRead = (sql: string, dialect: MigrateDialect): FileRead =>
 	dialect === "postgres" ? { dialect, read: pgRead(sql), sql } : { dialect, sql }
 
 /** The statements of the Postgres file `sql`, in the order Postgres runs them; throws for a file Atlas cannot split */
@@ -147,7 +147,7 @@ function historyTree(statement: string): unknown {
 		return parsePostgres(statement).stmts
 	} catch (error) {
 		/* what it defined or attached is unknown, so the facts after it are too */
-		throw new Error(`comb could not read the history: ${JSON.stringify(statement)} (${(error as Error).message})`, {
+		throw new Error(`database could not read the history: ${JSON.stringify(statement)} (${(error as Error).message})`, {
 			cause: error,
 		})
 	}
@@ -174,11 +174,11 @@ function sendsAlone(file: string, statements: readonly string[]): boolean {
 	)
 }
 
-/** A delimiter no statement holds, which ends a chunk only where comb puts it */
+/** A delimiter no statement holds, which ends a chunk only where database puts it */
 function freeDelimiter(statements: readonly string[]): string {
 	let n = 0
-	while (statements.some((statement) => statement.includes(`@comb${n}@`))) n++
-	return `@comb${n}@`
+	while (statements.some((statement) => statement.includes(`@database${n}@`))) n++
+	return `@database${n}@`
 }
 
 /**
@@ -195,7 +195,9 @@ function atlasFile(statements: readonly string[], head = ""): string {
 	const body = statements.map((statement) => `${statement}\n${delim}\n`).join("")
 	const own = `-- atlas:delimiter ${delim}\n${rest === "" ? "\n" : rest}${body}`
 	if (sendsAlone(own, statements)) return own
-	throw new Error(`comb cannot write these statements so that Atlas sends each alone: ${JSON.stringify(statements)}`)
+	throw new Error(
+		`database cannot write these statements so that Atlas sends each alone: ${JSON.stringify(statements)}`,
+	)
 }
 
 export {

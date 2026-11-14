@@ -1,5 +1,5 @@
 /**
- * comb's one cleanup rule: what a run makes outside itself (a scratch
+ * database's one cleanup rule: what a run makes outside itself (a scratch
  * directory, a replay database) is held here until the run lets it go, and a stop signal runs
  * every step still held before the process ends as the signal would. A scratch directory is named
  * for the process that made it, so a later run removes one a killed process left at once, by
@@ -24,7 +24,7 @@ const held = /* @__PURE__ */ new Set<Step>()
  * The signals a held step runs on: every one whose default action ends the process and that a
  * terminal or a supervisor sends. A Ctrl-C (SIGINT), a Ctrl-\ (SIGQUIT), a container stop or a CI
  * step timeout (SIGTERM), and a terminal's hangup, as an SSH drop sends it (SIGHUP): a child in a
- * group of its own gets none of them from the terminal, so comb's forward is its only signal.
+ * group of its own gets none of them from the terminal, so database's forward is its only signal.
  */
 export const STOP_SIGNALS = ["SIGHUP", "SIGINT", "SIGQUIT", "SIGTERM"] as const
 
@@ -74,7 +74,7 @@ async function runSteps(steps: readonly Step[], signal: NodeJS.Signals): Promise
  * While the steps run, work outside them waits (pastStop), so a caller whose child a step stopped
  * never goes on to start the next. A signal that comes while they run (a supervisor's second SIGTERM,
  * a second Ctrl-C) runs what was held since once they end, and the last stop alone ends the process,
- * once: a child a step stops ends before comb does.
+ * once: a child a step stops ends before database does.
  */
 function stop(signal: NodeJS.Signals): void {
 	const steps = [...held]

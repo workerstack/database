@@ -9,7 +9,7 @@ describe("analyzer: column facts the helpers hide", () => {
 	let dir: string
 
 	beforeEach(() => {
-		dir = fs.mkdtempSync(path.join(fixtureRoot(), "comb-analyzer-columns-"))
+		dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-analyzer-columns-"))
 	})
 
 	afterEach(() => {

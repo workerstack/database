@@ -31,7 +31,7 @@ type EnumField = {
 	values: string[]
 }
 
-/** The name of the CHECK comb writes for an enum column; the constraint map keys its entry by it */
+/** The name of the CHECK database writes for an enum column; the constraint map keys its entry by it */
 export const enumCheckName = (table: Pick<TableMeta, "sqlName">, fieldName: string): string =>
 	`${table.sqlName}_${fieldName}_enum`
 
@@ -119,7 +119,7 @@ export function generateEnumChecks(ctx: GeneratorContext, config: EnumChecksConf
 		lines.push("")
 	}
 
-	writeGenFile(outputPath, lines.join("\n"), { generator: "comb", staged: ctx.staged })
+	writeGenFile(outputPath, lines.join("\n"), { generator: "database", staged: ctx.staged })
 
 	let totalEnums = 0
 	for (const { enumFields } of tablesWithEnums) {

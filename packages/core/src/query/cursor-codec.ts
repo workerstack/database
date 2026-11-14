@@ -61,7 +61,7 @@ function encodeValue(value: unknown): unknown {
 	/* a Date no JS Date holds, a date-mode ±infinity, stays a Date: null under the tag, never the null group */
 	if (value instanceof Date) return { [DATE_TAG]: Number.isNaN(value.getTime()) ? null : value.getTime() }
 	if (value instanceof CursorRef) return { [REF_TAG]: [value.prefix, value.length] }
-	/* the cursor's `r` flag, not a tag, marks it, so a released comb's decoder reads the text */
+	/* the cursor's `r` flag, not a tag, marks it, so a released database's decoder reads the text */
 	if (value instanceof RealText) return value.text
 	if (value instanceof Uint8Array) return { [BYTES_TAG]: encodeBase64Url(value) }
 	if (typeof value === "number" && !Number.isFinite(value)) return { [NUM_TAG]: String(value) }

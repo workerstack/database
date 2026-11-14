@@ -219,7 +219,7 @@ describe("the guard around Atlas's rebuild of a referenced table, on libsql", ()
 			"CREATE TRIGGER `u_seen` AFTER UPDATE ON `u` BEGIN SELECT 1; END;\n",
 			"u_seen",
 		],
-		["a table named with the guard's prefix", "CREATE TABLE `_comb_keep_x` (`id` integer);\n", "_comb_keep_x"],
+		["a table named with the guard's prefix", "CREATE TABLE `_database_keep_x` (`id` integer);\n", "_database_keep_x"],
 	])(
 		"refuses to write the rebuild for %s, naming it",
 		async (_, sql, name) => {

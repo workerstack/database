@@ -27,7 +27,7 @@ type Options = { dialect?: "postgres" | "sqlite"; files?: Record<string, string>
 /** A project of `tables` and `files` beside it, codegen run */
 async function generated(tables: string, { dialect = "sqlite", files = {}, head = true }: Options = {}) {
 	const source = `${head ? HEAD[dialect] : ""}${tables}\n`
-	const dir = project({ "comb.config.ts": config(dialect), "src/db/db.core.tables.ts": source, ...files })
+	const dir = project({ "database.config.ts": config(dialect), "src/db/db.core.tables.ts": source, ...files })
 	await codegen(dir)
 	return dir
 }
@@ -48,7 +48,7 @@ const accepts = (schema: z.ZodObject | undefined, value: unknown) => (schema as 
 const keys = (schema: z.ZodObject | undefined) => Object.keys(schema?.shape ?? {}).sort()
 const entities = (dir: string) => fs.readdirSync(path.join(dir, "src/db/dtos")).sort()
 
-describe("a column no comb rule names (F6)", () => {
+describe("a column no database rule names (F6)", () => {
 	it("types a column of c imported under another name", async () => {
 		const dir = await generated(
 			`import { sqliteTable } from "drizzle-orm/sqlite-core"

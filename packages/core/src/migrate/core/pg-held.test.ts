@@ -1,7 +1,7 @@
 /**
  * The locks a Postgres file's open transaction holds to its COMMIT (0005 of r22b), read through the
  * VALIDATE that scans under them: each case is a statement, then a VALIDATE, in one file, and what
- * comb says the file holds at the VALIDATE. tests/integration/postgres/lock-oracle-held.test.ts holds
+ * database says the file holds at the VALIDATE. tests/integration/postgres/lock-oracle-held.test.ts holds
  * the lock of each statement family to Postgres 17's own pg_locks; these hold the ways a statement
  * reaches past the relation it names, and the statements that take none.
  */
@@ -38,7 +38,7 @@ const HISTORY = [
 
 const VALIDATE = "ALTER TABLE users VALIDATE CONSTRAINT pos;"
 
-/** What comb says the file holds when `first` runs before VALIDATE in it; "" when it warns of none */
+/** What database says the file holds when `first` runs before VALIDATE in it; "" when it warns of none */
 function holds(first: string): string {
 	const rated = classifyMigration(`${first}\n${VALIDATE}\n`, {
 		before: extractSchema(HISTORY, undefined, "postgres"),
@@ -49,17 +49,17 @@ function holds(first: string): string {
 	return said.replace(/^this file holds /, "")
 }
 
-/* what comb says of a lock it cannot name, which only the replay measures */
+/* what database says of a lock it cannot name, which only the replay measures */
 const ONLY_CHECK = "which only check on a postgres:// devUrl names"
 
-/** What comb says of a DROP … CASCADE of `objects`, whose dependents the history's text does not show, and of `others` */
+/** What database says of a DROP … CASCADE of `objects`, whose dependents the history's text does not show, and of `others` */
 const unnamed = (objects: string, others?: string): string =>
 	`this file's DROP … CASCADE locks what depends on ${objects}${others === undefined ? "" : `, and this file also locks ${others}`}, ${ONLY_CHECK}`
 
-/** What comb says of `others`, what the file locks that the history's text does not name, with no DROP … CASCADE */
+/** What database says of `others`, what the file locks that the history's text does not name, with no DROP … CASCADE */
 const locks = (others: string): string => `this file locks ${others}, ${ONLY_CHECK}`
 
-/* each statement before the VALIDATE, and what comb says the file then holds */
+/* each statement before the VALIDATE, and what database says the file then holds */
 const HOLDS: Array<[string, string]> = [
 	/* through a view to every relation its query reads, a view's included, users by two paths */
 	["LOCK v_both IN SHARE MODE;", "orders, users, v_both and v_users locked against writes"],
@@ -210,12 +210,12 @@ const HOLDS: Array<[string, string]> = [
 	/* a DROP or REASSIGN OWNED drops or alters every object its roles own, which neither the history nor check's replay shows */
 	[
 		"DROP OWNED BY app, CURRENT_USER;",
-		"this file locks everything CURRENT_USER owns and everything app owns, which comb cannot name",
+		"this file locks everything CURRENT_USER owns and everything app owns, which database cannot name",
 	],
-	["REASSIGN OWNED BY app TO CURRENT_USER;", "this file locks everything app owns, which comb cannot name"],
+	["REASSIGN OWNED BY app TO CURRENT_USER;", "this file locks everything app owns, which database cannot name"],
 	[
 		"DROP TABLE ev_loose;\nDROP OWNED BY app;",
-		`ev_loose locked against reads and writes, and ${locks("the sequences ev_loose owns")}, and this file also locks everything app owns, which comb cannot name`,
+		`ev_loose locked against reads and writes, and ${locks("the sequences ev_loose owns")}, and this file also locks everything app owns, which database cannot name`,
 	],
 	/* an ALTER TYPE … CASCADE rewrites each table made OF the type, which the history does not show */
 	["ALTER TYPE pair RENAME ATTRIBUTE a TO c CASCADE;", locks("the tables of type pair")],

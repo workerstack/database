@@ -1,5 +1,5 @@
 /**
- * The Atlas CLI for the migration suites: comb's Atlas defects only show on the real binary,
+ * The Atlas CLI for the migration suites: database's Atlas defects only show on the real binary,
  * so these run it. The suites are required, locally as in CI: a missing binary fails the run.
  */
 import { spawnSync } from "node:child_process"
@@ -11,14 +11,14 @@ export function requireAtlas(probe: () => boolean = runs): void {
 	if (!probe()) throw new Error("atlas is not on PATH: the Atlas suites are required (https://atlasgo.io)")
 }
 
-export const DOCKER_VAR = "COMB_TEST_DOCKER"
+export const DOCKER_VAR = "DATABASE_TEST_DOCKER"
 
 const dockerRuns = () => spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0
 
 /**
  * Whether the docker://postgres/17/dev case runs. Atlas starts a short-lived container for it, and
  * each start changes the host's network under other sessions' browsers, so locally it runs only
- * with COMB_TEST_DOCKER=1; in CI it runs, and Docker must work.
+ * with DATABASE_TEST_DOCKER=1; in CI it runs, and Docker must work.
  */
 export function dockerDevWanted(env: NodeJS.ProcessEnv = process.env, probe: () => boolean = dockerRuns): boolean {
 	const ci = env.CI !== undefined && env.CI !== ""

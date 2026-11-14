@@ -10,25 +10,25 @@ const post = sqliteTable("post", { id: integer("id").primaryKey(), title: text("
 const schema = createListQuerySchema({ pagination: { defaultLimit: 2, maxLimit: 10 }, sort: ["title"] })
 const single = buildListQuery({ ...SEALED, parsed: schema.parse({ limit: "2", order: "title.asc" }), table: post })
 const merged = buildListQuery({ ...SEALED, merged: {}, parsed: schema.parse({ limit: "2" }), table: post })
-const counted = built(schema.parse({ limit: "2" }), { ...SEALED, expects: ["_combId", "_total"] }).pagination
+const counted = built(schema.parse({ limit: "2" }), { ...SEALED, expects: ["_cursorId", "_total"] }).pagination
 const unwired = expect.objectContaining({ errorKey: "page_not_wired", status: 500 })
 
 describe("refuseUnwired", () => {
 	it("passes rows that carry every extra their builder selected, each its kind", () => {
-		expect(() => refuseUnwired([{ _combId: 1, _total: 1, id: 1, title: "a" }], counted)).not.toThrow()
+		expect(() => refuseUnwired([{ _cursorId: 1, _total: 1, id: 1, title: "a" }], counted)).not.toThrow()
 	})
 
 	it("refuses rows read without the extras, naming each one missing", () => {
-		expect(() => refuseUnwired([{ _combId: 1, id: 1 }, { id: 2 }], counted)).toThrow(
+		expect(() => refuseUnwired([{ _cursorId: 1, id: 1 }, { id: 2 }], counted)).toThrow(
 			expect.objectContaining({
-				cause: expect.stringMatching(/^the rows carry no _combId, _total: select the built query's extras/),
+				cause: expect.stringMatching(/^the rows carry no _cursorId, _total: select the built query's extras/),
 				errorKey: "page_not_wired",
 			}),
 		)
 	})
 
 	it("refuses an extra rendered by hand as its own alias", () => {
-		expect(() => refuseUnwired([{ _combId: 1, _total: "_total", id: 1 }], counted)).toThrow(
+		expect(() => refuseUnwired([{ _cursorId: 1, _total: "_total", id: 1 }], counted)).toThrow(
 			expect.objectContaining({ cause: expect.stringMatching(/^the rows carry _total "_total", no value/) }),
 		)
 	})
@@ -37,13 +37,15 @@ describe("refuseUnwired", () => {
 describe("refuseGoneAnchor", () => {
 	it("refuses a page whose anchor row is gone, as a driver reads the flag", () => {
 		for (const flag of [1, 1n, true])
-			expect(() => refuseGoneAnchor([{ id: 1 }, { _combAnchorGone: flag, id: 2 }])).toThrow(
+			expect(() => refuseGoneAnchor([{ id: 1 }, { _cursorAnchorGone: flag, id: 2 }])).toThrow(
 				expect.objectContaining({ errorKey: "invalid_cursor", status: 400 }),
 			)
 	})
 
 	it("passes rows whose flag is unset or 0", () => {
-		expect(() => refuseGoneAnchor([{ id: 1 }, { _combAnchorGone: 0, id: 2 }, { _combAnchorGone: null }])).not.toThrow()
+		expect(() =>
+			refuseGoneAnchor([{ id: 1 }, { _cursorAnchorGone: 0, id: 2 }, { _cursorAnchorGone: null }]),
+		).not.toThrow()
 	})
 })
 

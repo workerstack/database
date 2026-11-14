@@ -1,14 +1,14 @@
 /**
- * `comb codegen`: analyze a tables file and run the generators on it. Config mode runs each
- * database comb.config.ts declares; direct mode (--tables) is one database with the direct set
- * of generators, written beside the tables file.
+ * `database codegen`: analyze a tables file and run the generators on it. Config mode runs each database that
+ * database.config.ts declares; direct mode (--tables) is one database with the direct set, beside the tables file.
  */
 import path from "node:path"
 import type { GeneratorContext } from "../codegen/generators/context-types.ts"
 import { isGeneratedContent, type Staged } from "../codegen/utils/fs.ts"
 import { claim, commitRuns, holdLines, type Run } from "./codegen-record.ts"
 import { parseArgs } from "./args.ts"
-import { type CodegenConfig, type DatabaseCodegen, databaseIn, loadCombConfig, tablesFile } from "./comb-config.ts"
+import type { CodegenConfig, DatabaseCodegen } from "./database-config.ts"
+import { databaseIn, loadDatabaseConfig, tablesFile } from "./database-config.ts"
 import { CliError, type CliIo } from "./output.ts"
 import { dbIdentifiers } from "../codegen/utils/case.ts"
 import { GENERATORS, type GeneratorName } from "../codegen/config.ts"
@@ -185,7 +185,7 @@ function assertDialect(database: Database, tables: "postgres" | "sqlite" | null)
 	const declared = database.db.dialect
 	if (declared === undefined || tables === null || declared === tables) return
 	throw new CliError(
-		`${database.name}: comb.config.ts says dialect ${declared}, but ${path.basename(database.tablesPath)} declares ${tables} tables; fix the config's dialect`,
+		`${database.name}: database.config.ts says dialect ${declared}, but ${path.basename(database.tablesPath)} declares ${tables} tables; fix the config's dialect`,
 	)
 }
 
@@ -246,13 +246,13 @@ async function generate(
 	}
 }
 
-/** The databases a codegen run covers: the one --tables names, or those comb.config.ts declares */
+/** The databases a codegen run covers: the one --tables names, or those database.config.ts declares */
 async function databases(positionals: readonly string[], tables: string | undefined, io: CliIo): Promise<Database[]> {
 	if (tables !== undefined) {
 		const tablesPath = tablesFile(io.cwd, tables, "--tables")
 		return [{ db: { tables }, direct: true, exportNamespace: undefined, generators: DIRECT, name: "", tablesPath }]
 	}
-	const config = await loadCombConfig(io.cwd)
+	const config = await loadDatabaseConfig(io.cwd)
 	/* a name given twice runs once: a second run into the same staged map would record nothing */
 	const names = positionals.length > 0 ? [...new Set(positionals)] : Object.keys(config.databases)
 	const picked = names.map((name) => [name, databaseIn(config, name)] as const)

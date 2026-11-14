@@ -21,11 +21,11 @@ beforeAll(loadPostgresParser)
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-pg-replay-drop-held-"))
+	dir = mkdtempSync(join(tmpdir(), "database-pg-replay-drop-held-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
-const UNSAFE = "-- comb:allow-unsafe: the test's history\n"
+const UNSAFE = "-- database:allow-unsafe: the test's history\n"
 
 /** The files, named in order and hashed, in `at` */
 async function write(files: readonly string[], at = dir): Promise<void> {
@@ -41,8 +41,8 @@ const paused = (made: string, resume: string, role = `CREATE ROLE ${made};`): st
 
 describe("a check killed mid-replay whose database a session holds across the drop", () => {
 	it("says the database and the role it could not drop, and ends as the signal would", async () => {
-		const [made, mgr] = testRoles("comb_t_killed", "comb_t_holdmgr")
-		const resume = unique("comb_t_resume")
+		const [made, mgr] = testRoles("database_t_killed", "database_t_holdmgr")
+		const resume = unique("database_t_resume")
 		let holder: pg.Client | undefined
 		try {
 			await withScratchDb((dev) =>
@@ -61,9 +61,9 @@ describe("a check killed mid-replay whose database a session holds across the dr
 					expect(said.at(-1)).toBe("exit 143")
 					const left = "which a replay left on devUrl's server: "
 					const swept = "; the next check or apply that reaches that server drops it$"
-					expect(said.filter((line) => line.startsWith("comb could not drop"))).toEqual([
-						expect.stringMatching(new RegExp(`^comb could not drop database ${database}, ${left}.+${swept}`)),
-						expect.stringMatching(new RegExp(`^comb could not drop role ${made}, ${left}.+${swept}`)),
+					expect(said.filter((line) => line.startsWith("database could not drop"))).toEqual([
+						expect.stringMatching(new RegExp(`^database could not drop database ${database}, ${left}.+${swept}`)),
+						expect.stringMatching(new RegExp(`^database could not drop role ${made}, ${left}.+${swept}`)),
 					])
 				}),
 			)

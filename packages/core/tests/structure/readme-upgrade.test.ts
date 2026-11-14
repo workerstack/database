@@ -86,12 +86,12 @@ describe("the 0.21 API item", () => {
 	})
 
 	it("names both keys ListExtra and ListExtras gain (G1-3)", () => {
-		expect(upgrade).toContain("`ListExtra` and `ListExtras` gain `_combKeyTexts` and `_combTextKeys` (steps 60, 63)")
+		expect(upgrade).toMatch(/`ListExtra` and `ListExtras` gain `_\w+KeyTexts` and `_\w+TextKeys` \(steps 60, 63\)/)
 	})
 
 	it("names the D1 fake D1DatabaseLike.withSession, a property now, refuses (G1-4)", () => {
 		const property = paragraph(upgrade, "`D1DatabaseLike.withSession` is a property now")
-		expect(property).toContain("Every optional property comb declares takes `undefined`")
+		expect(property).toMatch(/Every optional property \w+ declares takes `undefined`/)
 		expect(property).toContain("**Fix:** a D1 fake's `withSession` takes `string | undefined`")
 	})
 })

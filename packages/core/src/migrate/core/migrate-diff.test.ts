@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { generateIncrementalMigration, type MigrateDiffOptions } from "./migrate-diff.ts"
-import type { Run, RunResult } from "./process.ts"
+import type { MigrateRun, RunResult } from "./process.ts"
 
 const ok = (stdout = ""): RunResult => ({ code: 0, stderr: "", stdout })
 const fail = (stderr: string, code = 1): RunResult => ({ code, stderr, stdout: "" })
@@ -26,7 +26,10 @@ function sumOf(dir: string): string {
 
 type DiffCall = { dir: string; history: Record<string, string>; name: string; target: string }
 
-type FakeAtlas = Run & { calls: string[][]; envs: Array<Readonly<Record<string, string | undefined>> | undefined> }
+type FakeAtlas = MigrateRun & {
+	calls: string[][]
+	envs: Array<Readonly<Record<string, string | undefined>> | undefined>
+}
 
 /**
  * A model of the atlas CLI: `migrate hash` writes the dir's atlas.sum, `migrate diff` hands the
@@ -36,7 +39,7 @@ type FakeAtlas = Run & { calls: string[][]; envs: Array<Readonly<Record<string, 
 function fakeAtlas(onDiff: (call: DiffCall) => RunResult = () => ok(), hashResult?: () => RunResult): FakeAtlas {
 	const calls: string[][] = []
 	const envs: FakeAtlas["envs"] = []
-	const fake: Run = async (_cmd, args, runOptions) => {
+	const fake: MigrateRun = async (_cmd, args, runOptions) => {
 		calls.push([...args])
 		envs.push(runOptions?.env)
 		const dir = dirOf(args, "--dir")
@@ -57,13 +60,13 @@ function fakeAtlas(onDiff: (call: DiffCall) => RunResult = () => ok(), hashResul
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-migrate-diff-test-"))
+	dir = mkdtempSync(join(tmpdir(), "database-migrate-diff-test-"))
 })
 afterEach(() => {
 	rmSync(dir, { force: true, recursive: true })
 })
 
-const options = (run: Run, more: Partial<MigrateDiffOptions> = {}): MigrateDiffOptions => ({
+const options = (run: MigrateRun, more: Partial<MigrateDiffOptions> = {}): MigrateDiffOptions => ({
 	dialect: "sqlite",
 	migrationName: "add_b",
 	migrationsDir: dir,
@@ -225,7 +228,7 @@ describe("generateIncrementalMigration — postgres", () => {
 		expect(added.calls[diff]?.join(" ")).not.toContain("Dev-Secret-0451")
 		expect(added.calls[diff]?.join(" ")).not.toContain("postgres://")
 		expect(added.calls[diff]).toContain("--config")
-		expect(added.envs[diff]?.["COMB_ATLAS_DEV_URL"]).toBe(
+		expect(added.envs[diff]?.["DATABASE_ATLAS_DEV_URL"]).toBe(
 			"postgres://dev:Dev-Secret-0451@localhost/dev?sslmode=disable&search_path=public",
 		)
 		expect(
@@ -258,7 +261,7 @@ describe("generateIncrementalMigration — postgres objects Atlas refuses", () =
 		)
 		/* the view replays in place, in a DO block Atlas does not inspect, so what depends on it replays too (P4 of r19) */
 		const view =
-			'DO $comb$ BEGIN EXECUTE $comb_view$CREATE VIEW "v" AS (select "title" from "post")$comb_view$; END $comb$'
+			'DO $database$ BEGIN EXECUTE $database_view$CREATE VIEW "v" AS (select "title" from "post")$database_view$; END $database$'
 		expect(seen[0]?.history["20260101000000_init.sql"]).toBe(
 			`-- atlas:txmode none\nCREATE TABLE "post" ("title" text);\n${view};\nCREATE INDEX CONCURRENTLY "i" ON "post" ("title");\n`,
 		)
@@ -269,7 +272,7 @@ describe("generateIncrementalMigration — postgres objects Atlas refuses", () =
 		expect(readFileSync(join(dir, "atlas.sum"), "utf8")).toBe(sumOf(dir))
 	})
 
-	it("writes comb's part alone when only a comb-owned object changed", async () => {
+	it("writes database's part alone when only a database-owned object changed", async () => {
 		seed('CREATE TABLE "post" ("title" text);\nCREATE VIEW "v" AS (select 1);\n')
 		const schema = 'CREATE TABLE "post" ("title" text);\nCREATE VIEW "v" AS (select 2);\n'
 		const { files, synced } = await generateIncrementalMigration(

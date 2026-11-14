@@ -1,7 +1,7 @@
 /**
  * F1, F2 of the 0.14.1 review: the c.json schemas a table imports are each its own module's, whatever
  * their export names, run at runtime on the generated module: two modules' `profile`, and a schema
- * named as a generated file names its own (`z`, `combMeta`, `_str`).
+ * named as a generated file names its own (`z`, `databaseMeta`, `_str`).
  */
 import fs from "node:fs"
 import path from "node:path"
@@ -19,8 +19,8 @@ const TABLES = `import { sqliteTable } from "drizzle-orm/sqlite-core"
 import { c } from "@workerstack/database/sqlite/columns"
 import { profile as homeProfile } from "./home/schemas.ts"
 import { profile as workProfile } from "./work/schemas.ts"
-import { _str as tag, combMeta as note, z as zone } from "./named/schemas.ts"
-import { comb as order, evenMinutes } from "./scalar/schemas.ts"
+import { _str as tag, databaseMeta as note, z as zone } from "./named/schemas.ts"
+import { database as order, evenMinutes } from "./scalar/schemas.ts"
 export const account = sqliteTable("account", {
 	id: c.id("acc"),
 	home: c.json("home", homeProfile).notNull(),
@@ -37,9 +37,9 @@ export const account = sqliteTable("account", {
 const MODULES: Record<string, string> = {
 	"home/schemas.ts": 'import * as z from "zod"\nexport const profile = z.object({ street: z.string() })\n',
 	"named/schemas.ts":
-		'import * as zod from "zod"\nexport const _str = zod.object({ t: zod.string() })\nexport const combMeta = zod.object({ n: zod.number() })\nexport const z = zod.object({ tz: zod.string() })\n',
+		'import * as zod from "zod"\nexport const _str = zod.object({ t: zod.string() })\nexport const databaseMeta = zod.object({ n: zod.number() })\nexport const z = zod.object({ tz: zod.string() })\n',
 	"scalar/schemas.ts":
-		'import * as z from "zod"\nexport const comb = z.enum(["iso", "dmy", "mdy"])\nexport const evenMinutes = z.int().refine((value) => value % 2 === 0, { error: "Must be even" })\n',
+		'import * as z from "zod"\nexport const database = z.enum(["iso", "dmy", "mdy"])\nexport const evenMinutes = z.int().refine((value) => value % 2 === 0, { error: "Must be even" })\n',
 	"work/schemas.ts": 'import * as z from "zod"\nexport const profile = z.object({ desk: z.number() })\n',
 }
 
@@ -74,19 +74,19 @@ describe("generated DTOs: each c.json column's own schema", () => {
 	})
 })
 
-/* plan 24: a text or number column's schema is imported as a c.json one is, aliased away from comb's own namespace */
+/* plan 24: a text or number column's schema is imported as a c.json one is, aliased away from database's own namespace */
 describe("generated DTOs: a text or number column's schema and a format", () => {
 	const row = { ...NAMED, home: { street: "Main" }, work: { desk: 4 } }
 	const parsed = (fields: Record<string, unknown>) =>
 		account["accountDtoCreateSchema"]?.safeParse({ ...row, ...fields })
 
-	it("imports the schema from its module under a name apart from comb's, beside comb's namespace", () => {
+	it("imports the schema from its module under a name apart from database's, beside database's namespace", () => {
 		const file = fs.readFileSync(path.join(dir, "dtos", "account", "index.gen.ts"), "utf8").split("\n")
-		expect(file).toContain('import { comb as combFromScalarSchemas, evenMinutes } from "../../scalar/schemas"')
-		expect(file).toContain('import * as comb from "@workerstack/database"')
+		expect(file).toContain('import { database as databaseFromScalarSchemas, evenMinutes } from "../../scalar/schemas"')
+		expect(file).toContain('import * as database from "@workerstack/database"')
 	})
 
-	it("pipes each value into its schema after comb's rules, and holds the format", () => {
+	it("pipes each value into its schema after database's rules, and holds the format", () => {
 		expect(parsed({ currency: " eur ", order: " iso ", slot: 4 })?.data).toMatchObject({
 			currency: "EUR",
 			order: "iso",

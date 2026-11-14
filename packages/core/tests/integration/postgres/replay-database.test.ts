@@ -25,7 +25,7 @@ beforeAll(loadPostgresParser)
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-pg-replay-db-"))
+	dir = mkdtempSync(join(tmpdir(), "database-pg-replay-db-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
@@ -78,16 +78,16 @@ const left = (sent: string, index: number, what: string) =>
 
 describe("the replay on a server dev and target share leaves what lies past its database as it was", () => {
 	it("leaves out roles' changes, other databases, ALTER SYSTEM and the target's settings, names them, and runs CREATE ROLE", async () => {
-		const [made, pre] = testRoles("comb_t_made", "comb_t_pre")
-		const other = unique("comb_t_other")
+		const [made, pre] = testRoles("database_t_made", "database_t_pre")
+		const other = unique("database_t_other")
 		onTestFinished(() => onServer(`DROP DATABASE IF EXISTS ${other}`))
 		await onServer(`CREATE ROLE ${pre} NOLOGIN`, `CREATE DATABASE ${other}`)
 		await withScratchDb((dev) =>
 			withScratchDb(async (url) => {
 				const target = new URL(url).pathname.slice(1)
 				await write([
-					`-- comb:allow-unsafe: the test's history\nCREATE ROLE ${made};\nCREATE TABLE t (id int PRIMARY KEY);\nALTER TABLE t ENABLE ROW LEVEL SECURITY;\nCREATE POLICY p ON t TO ${made} USING (true);\nALTER ROLE ${pre} CONNECTION LIMIT 7;\nALTER DATABASE ${target} SET work_mem = '8MB';\n`,
-					`-- atlas:txmode none\n\n-- comb:allow-unsafe: the test's history\nALTER SYSTEM SET work_mem = '9MB';\nDROP DATABASE ${other};\n`,
+					`-- database:allow-unsafe: the test's history\nCREATE ROLE ${made};\nCREATE TABLE t (id int PRIMARY KEY);\nALTER TABLE t ENABLE ROW LEVEL SECURITY;\nCREATE POLICY p ON t TO ${made} USING (true);\nALTER ROLE ${pre} CONNECTION LIMIT 7;\nALTER DATABASE ${target} SET work_mem = '8MB';\n`,
+					`-- atlas:txmode none\n\n-- database:allow-unsafe: the test's history\nALTER SYSTEM SET work_mem = '9MB';\nDROP DATABASE ${other};\n`,
 				])
 				for (const round of [1, 2]) {
 					const { out, refused } = await check(dev, url)
@@ -115,7 +115,7 @@ describe("the replay on a server dev and target share leaves what lies past its 
 
 describe("baseline's replay, and two at once, on a server dev and target share", () => {
 	it("baselines a target those files built, leaving the same statements out", async () => {
-		const [made, pre] = testRoles("comb_t_made", "comb_t_pre")
+		const [made, pre] = testRoles("database_t_made", "database_t_pre")
 		await query(pgUrl(), `CREATE ROLE ${pre} NOLOGIN; CREATE ROLE ${made} NOLOGIN`)
 		await withScratchDb((dev) =>
 			withScratchDb(async (url) => {
@@ -139,11 +139,11 @@ describe("baseline's replay, and two at once, on a server dev and target share",
 	})
 
 	it("passes two replays at once whose history creates one role, and drops it after both", async () => {
-		const [made] = testRoles("comb_t_made")
+		const [made] = testRoles("database_t_made")
 		await withScratchDb((dev) =>
 			withScratchDb(async (url) => {
 				await write([
-					`-- comb:allow-unsafe: the test's history\nCREATE ROLE ${made};\nCREATE TABLE t (id int PRIMARY KEY);\nALTER TABLE t ENABLE ROW LEVEL SECURITY;\nCREATE POLICY p ON t TO ${made} USING (true);\n`,
+					`-- database:allow-unsafe: the test's history\nCREATE ROLE ${made};\nCREATE TABLE t (id int PRIMARY KEY);\nALTER TABLE t ENABLE ROW LEVEL SECURITY;\nCREATE POLICY p ON t TO ${made} USING (true);\n`,
 				])
 				const both = await Promise.all([check(dev, url), check(dev, url)])
 				expect(both.map(({ refused }) => refused)).toEqual([undefined, undefined])
@@ -159,15 +159,15 @@ describe("the replay's sweep", () => {
 		const hourAgo = Date.now() - 61 * 60_000
 		/* 0.19 named a replay database for its run's start and eight hex digits */
 		const [leaked, young] = [
-			`comb_replay_${hourAgo}_${unique("t").slice(-8)}`,
-			`comb_replay_${Date.now()}_${unique("t").slice(-8)}`,
+			`database_replay_${hourAgo}_${unique("t").slice(-8)}`,
+			`database_replay_${Date.now()}_${unique("t").slice(-8)}`,
 		]
-		const [stale, fresh, untagged] = testRoles("comb_t_stale", "comb_t_fresh", "comb_replay_untagged")
+		const [stale, fresh, untagged] = testRoles("database_t_stale", "database_t_fresh", "database_replay_untagged")
 		onTestFinished(() => onServer(`DROP DATABASE IF EXISTS ${leaked}`, `DROP DATABASE IF EXISTS ${young}`))
 		await onServer(
 			`CREATE DATABASE ${leaked}`,
 			`CREATE DATABASE ${young}`,
-			`CREATE ROLE ${stale}; CREATE ROLE ${fresh}; CREATE ROLE ${untagged}; COMMENT ON ROLE ${stale} IS 'comb_replay ${hourAgo}'; COMMENT ON ROLE ${fresh} IS 'comb_replay ${Date.now()}'`,
+			`CREATE ROLE ${stale}; CREATE ROLE ${fresh}; CREATE ROLE ${untagged}; COMMENT ON ROLE ${stale} IS 'database_replay ${hourAgo}'; COMMENT ON ROLE ${fresh} IS 'database_replay ${Date.now()}'`,
 		)
 		await withScratchDb((dev) =>
 			withScratchDb(async (url) => {
@@ -189,7 +189,7 @@ describe("the replay's sweep", () => {
 
 describe("the replay's database", () => {
 	it("refuses a devUrl role without CREATEDB, naming the privilege", async () => {
-		const [role] = testRoles("comb_t_nocreatedb")
+		const [role] = testRoles("database_t_nocreatedb")
 		const refused = await withScratchDb(async (dev) => {
 			const as = await asRole(dev, role, "NOCREATEDB")
 			return withScratchDb(async (url) => {
@@ -201,7 +201,7 @@ describe("the replay's database", () => {
 	}, 60_000)
 
 	it("copies devUrl's extensions in their schema, and refuses naming one it cannot make", async () => {
-		const [role] = testRoles("comb_t_creator")
+		const [role] = testRoles("database_t_creator")
 		await withScratchDb(async (dev) => {
 			await query(dev, "CREATE SCHEMA ext; CREATE EXTENSION citext WITH SCHEMA ext VERSION '1.5'")
 			await withScratchDb(async (url) => {
@@ -210,7 +210,7 @@ describe("the replay's database", () => {
 				await query(dev, "CREATE EXTENSION pageinspect")
 				const as = await asRole(dev, role, "CREATEDB")
 				expect((await check(as, url)).refused).toMatch(
-					/^devUrl's database holds the extension pageinspect, which comb could not make in the database it replays the history in: permission denied to create extension "pageinspect"/,
+					/^devUrl's database holds the extension pageinspect, which database could not make in the database it replays the history in: permission denied to create extension "pageinspect"/,
 				)
 			})
 		})
@@ -275,7 +275,7 @@ describe("the replay copies every extension a plain CREATE EXTENSION doesn't nee
 	it("copies one an earlier file uses and a later file creates IF NOT EXISTS", async () => {
 		const outcome = await withScratchDb((dev) =>
 			asApplied(dev, "CREATE EXTENSION pgcrypto", [
-				"-- comb:allow-unsafe: the test's history\nCREATE TABLE k (id int, salt bytea DEFAULT gen_random_bytes(16));\n",
+				"-- database:allow-unsafe: the test's history\nCREATE TABLE k (id int, salt bytea DEFAULT gen_random_bytes(16));\n",
 				"CREATE EXTENSION IF NOT EXISTS pgcrypto;\n",
 			]),
 		)
@@ -300,7 +300,7 @@ describe("the replay copies every extension a plain CREATE EXTENSION doesn't nee
 			await withScratchDb(async (url) => {
 				await write([
 					"CREATE EXTENSION cube;\nCREATE TABLE places (id int, at cube);\n",
-					"-- comb:allow-unsafe: the test's history\nCREATE VIEW reach AS SELECT geo.earth() AS r;\n",
+					"-- database:allow-unsafe: the test's history\nCREATE VIEW reach AS SELECT geo.earth() AS r;\n",
 				])
 				expect((await check(dev, url)).refused).toBeUndefined()
 			})
@@ -311,7 +311,7 @@ describe("the replay copies every extension a plain CREATE EXTENSION doesn't nee
 describe("the replay's database beside the roles the history makes", () => {
 	/* P6 of r21: since Postgres 16 a role's maker needs the role granted to SET it, as `OWNER TO` does; the grant was left out */
 	it("runs a grant of a role the replay made, under a role that is no superuser, and leaves out one of a role it did not", async () => {
-		const [manager, app, other] = testRoles("comb_t_mgr", "comb_t_app", "comb_t_other")
+		const [manager, app, other] = testRoles("database_t_mgr", "database_t_app", "database_t_other")
 		await onServer(`CREATE ROLE ${other}`)
 		await withScratchDb(async (dev) => {
 			const as = await asRole(dev, manager, "CREATEDB CREATEROLE")
@@ -319,7 +319,7 @@ describe("the replay's database beside the roles the history makes", () => {
 				const grant = `GRANT ${app} TO CURRENT_USER`
 				const outside = `GRANT ${other} TO CURRENT_USER`
 				await write([
-					`-- comb:allow-unsafe: the test's history\nCREATE ROLE ${app};\n${grant};\n${outside};\nGRANT CREATE ON SCHEMA public TO ${app};\nCREATE TABLE t (id int);\nALTER TABLE t OWNER TO ${app};\n`,
+					`-- database:allow-unsafe: the test's history\nCREATE ROLE ${app};\n${grant};\n${outside};\nGRANT CREATE ON SCHEMA public TO ${app};\nCREATE TABLE t (id int);\nALTER TABLE t OWNER TO ${app};\n`,
 				])
 				const { out, refused } = await check(as, url)
 				expect(refused).toBeUndefined()
@@ -337,14 +337,14 @@ describe("two replays at once, one paused between the file making a role and the
 	const pause = pauses()
 
 	it("passes both, and drops the role after both", async () => {
-		const [made] = testRoles("comb_t_made")
-		const resume = unique("comb_t_resume")
-		const other = mkdtempSync(join(tmpdir(), "comb-pg-replay-db-b-"))
+		const [made] = testRoles("database_t_made")
+		const resume = unique("database_t_resume")
+		const other = mkdtempSync(join(tmpdir(), "database-pg-replay-db-b-"))
 		try {
 			await withScratchDb((dev) =>
 				withScratchDb(async (url) => {
 					const policy = `CREATE TABLE t (id int PRIMARY KEY);\nALTER TABLE t ENABLE ROW LEVEL SECURITY;\nCREATE POLICY p ON t TO ${made} USING (true);\n`
-					const unsafe = "-- comb:allow-unsafe: the test's history\n"
+					const unsafe = "-- database:allow-unsafe: the test's history\n"
 					await write([`${unsafe}CREATE ROLE ${made};\n`, `${unsafe}${waitFor(resume)}`, `${unsafe}${policy}`])
 					await write([`${unsafe}CREATE ROLE ${made};\n${policy}`], other)
 					const long = check(dev, url)

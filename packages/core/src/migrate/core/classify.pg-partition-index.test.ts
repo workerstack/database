@@ -22,7 +22,7 @@ CREATE INDEX ev_at ON ev (at);
 const rate = (later: string, more = "") =>
 	classifyMigration(later, { before: extractSchema(`${HISTORY}${more}`, undefined, "postgres"), dialect: "postgres" })
 
-/** comb's recipe for an index on partitioned `table` */
+/** database's recipe for an index on partitioned `table` */
 const RECIPE = (table: string) =>
 	`${table} is partitioned, which CREATE INDEX CONCURRENTLY refuses: create it ON ONLY ${table}, then CREATE INDEX CONCURRENTLY on each partition in its own -- atlas:txmode none file, then ALTER INDEX … ATTACH PARTITION each to it`
 
@@ -56,7 +56,7 @@ describe("a CREATE INDEX on a partitioned table (PA10; sibling: ON ONLY and a pl
 	})
 })
 
-/** comb's route to a primary key or unique constraint on partitioned `table` */
+/** database's route to a primary key or unique constraint on partitioned `table` */
 const KEY_ROUTE = (table: string) =>
 	`add it to ONLY ${table}, which builds nothing and locks no partition, then build each partition's unique index with CREATE UNIQUE INDEX CONCURRENTLY in its own -- atlas:txmode none file, add each partition's constraint USING INDEX, then ALTER INDEX … ATTACH PARTITION each to ${table}'s`
 

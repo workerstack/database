@@ -1,6 +1,6 @@
 /**
  * The module hooks codegen's child runs under node, which loads no TypeScript of its own on the
- * versions comb supports: a TypeScript file is transpiled with the TypeScript ts-morph bundles,
+ * versions database supports: a TypeScript file is transpiled with the TypeScript ts-morph bundles,
  * under the consumer's tsconfig, and
  * a specifier node cannot resolve (no extension, a tsconfig `paths` alias) is resolved as the
  * consumer's tsconfig resolves it. Plain JavaScript, as node loads hooks before any TypeScript.
@@ -55,7 +55,7 @@ export function resolveSync(specifier, context, nextResolve) {
  * @param {(url: string, context: unknown) => unknown} nextLoad
  */
 export function loadSync(url, context, nextLoad) {
-	/* by its path: comb imports comb.config.ts with a ?mtime= query */
+	/* by its path: database imports database.config.ts with a ?mtime= query */
 	if (!url.startsWith("file:") || !TYPESCRIPT.test(new URL(url).pathname)) return nextLoad(url, context)
 	const file = fileURLToPath(url)
 	if (!runsAsCommonJs(file, fs.readFileSync(file, "utf8")))

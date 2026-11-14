@@ -1,5 +1,5 @@
-import { CombError } from "../../error.ts"
-import { type ConstraintMap, combErrorKeys, type StatusKey } from "../../types.ts"
+import { DatabaseError } from "../../error.ts"
+import { type ConstraintMap, databaseErrorKeys, type StatusKey } from "../../types.ts"
 import { constraintError } from "../constraint-handler.ts"
 import { resourceOutcome } from "../resource-outcome.ts"
 import { readSqliteError, type SqliteErrorRead } from "../read-error.ts"
@@ -31,20 +31,20 @@ type Outcome = { cause: string; errorKey: string; status: StatusKey }
 
 const QUERY_FAILED: Outcome = {
 	cause: "The database rejected the query.",
-	errorKey: combErrorKeys.DATABASE_IO_ERROR,
+	errorKey: databaseErrorKeys.DATABASE_IO_ERROR,
 	status: "internal_server_error",
 }
 
 /* D1 caps a LIKE or GLOB pattern at 50 bytes (SQLITE_LIMIT_LIKE_PATTERN_LENGTH): the request's to shorten */
 const PATTERN_TOO_LONG: Outcome = {
 	cause: "A like or ilike filter value with a * inside it may be at most 50 bytes on D1, once escaped.",
-	errorKey: combErrorKeys.INVALID_VALUE,
+	errorKey: databaseErrorKeys.INVALID_VALUE,
 	status: "bad_request",
 }
 
 const STORAGE_FULL: Outcome = {
 	cause: "The database storage limit has been reached.",
-	errorKey: combErrorKeys.STORAGE_LIMIT_REACHED,
+	errorKey: databaseErrorKeys.STORAGE_LIMIT_REACHED,
 	status: "unprocessable_entity",
 }
 
@@ -73,7 +73,7 @@ function platformOutcome(message: string): Outcome {
 	if (D1_TRANSIENT_PATTERNS.some((pattern) => lower.includes(pattern))) {
 		return {
 			cause: "The database is temporarily unavailable. Please retry.",
-			errorKey: combErrorKeys.DATABASE_UNAVAILABLE,
+			errorKey: databaseErrorKeys.DATABASE_UNAVAILABLE,
 			status: "service_unavailable",
 		}
 	}
@@ -89,25 +89,25 @@ function engineOutcome(code: string): Outcome {
 }
 
 /**
- * The CombError a Cloudflare D1 database error is: a constraint violation through the shared
+ * The DatabaseError a Cloudflare D1 database error is: a constraint violation through the shared
  * SQLite handlers, then a query error (500) or a platform failure (transient 503, storage 422);
  * undefined for an error that is none of these. It throws nothing, so a caller can ask what an
- * error is (a unique violation it expects, say) without catching. The CombError's `cause` is safe
+ * error is (a unique violation it expects, say) without catching. The DatabaseError's `cause` is safe
  * for clients; the original error, which holds the SQL and its bound values, is on `source`.
  */
-function classifyD1Error(error: unknown, constraintMaps: readonly ConstraintMap[]): CombError | undefined {
+function classifyD1Error(error: unknown, constraintMaps: readonly ConstraintMap[]): DatabaseError | undefined {
 	if (!(error instanceof Error)) return undefined
 	const constraint = constraintError(error, constraintMaps)
 	if (constraint !== null) return constraint
 	const read = readSqliteError(error)
-	if (tooComplex(read)) return new CombError({ ...PATTERN_TOO_LONG, source: error })
+	if (tooComplex(read)) return new DatabaseError({ ...PATTERN_TOO_LONG, source: error })
 	const platform = read === null ? platformMessage(error) : null
 	if (read === null && platform === null) return undefined
 	const outcome = read === null ? platformOutcome(platform as string) : engineOutcome(read.code)
-	return new CombError({ ...outcome, source: error })
+	return new DatabaseError({ ...outcome, source: error })
 }
 
-/** Throw the CombError classifyD1Error finds for `error`; return when it finds none */
+/** Throw the DatabaseError classifyD1Error finds for `error`; return when it finds none */
 function d1ErrorHandler(error: unknown, constraintMaps: readonly ConstraintMap[]): void {
 	const classified = classifyD1Error(error, constraintMaps)
 	if (classified !== undefined) throw classified

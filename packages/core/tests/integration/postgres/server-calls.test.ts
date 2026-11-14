@@ -14,7 +14,7 @@ import { LOOPBACK, query, roleOf, testRoles, unique } from "../support/pg-roles.
 const { checked, checkThenApply } = pgCheck()
 
 /* a txmode none file's head, its change approved */
-const NONE = "-- atlas:txmode none\n\n-- comb:allow-unsafe: the test's change\n"
+const NONE = "-- atlas:txmode none\n\n-- database:allow-unsafe: the test's change\n"
 
 /** The line check prints for `sent`, in the pending file, left out as a call of `call` */
 const left = (sent: string, call: string) =>
@@ -29,12 +29,12 @@ const dropSlot = (slot: string) =>
 	query(pgUrl(), `SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots WHERE slot_name = '${slot}'`)
 
 describe("a call that acts on the server is left out and named (PR2; sibling: BEYOND's statements, P2's DO-hidden dblink)", () => {
-	const slot = unique("comb_t_slot")
+	const slot = unique("database_t_slot")
 	afterEach(() => dropSlot(slot))
 
 	it.each([
 		["a txmode none file", NONE],
-		["a file in a transaction", "-- comb:allow-unsafe: the test's change\n"],
+		["a file in a transaction", "-- database:allow-unsafe: the test's change\n"],
 	])(
 		"leaves a slot's making out of the replay in %s, names it, and apply makes it",
 		async (_, head) => {
@@ -54,12 +54,12 @@ describe("a call that acts on the server is left out and named (PR2; sibling: BE
 describe("a dblink connection's every call is left out with it (PR2; sibling: a slot's making)", () => {
 	it("leaves a dblink session's every call out, names each, and apply runs them", async () => {
 		const sent = [
-			`SELECT dblink_connect('comb_t_link', ${LOOPBACK})`,
-			"SELECT dblink_open('comb_t_link', 'cur', 'SELECT 1')",
-			"SELECT * FROM dblink_fetch('comb_t_link', 'cur', 1) AS r(n int)",
-			"SELECT dblink_disconnect('comb_t_link')",
+			`SELECT dblink_connect('database_t_link', ${LOOPBACK})`,
+			"SELECT dblink_open('database_t_link', 'cur', 'SELECT 1')",
+			"SELECT * FROM dblink_fetch('database_t_link', 'cur', 1) AS r(n int)",
+			"SELECT dblink_disconnect('database_t_link')",
 		]
-		const history = `${T}-- comb:allow-unsafe: the test's history\nCREATE EXTENSION IF NOT EXISTS dblink;\n`
+		const history = `${T}-- database:allow-unsafe: the test's history\nCREATE EXTENSION IF NOT EXISTS dblink;\n`
 		const out: string[] = []
 		const ran = await checkThenApply(history, `${NONE}${sent.join(";\n")};\n`, out)
 		expect(ran).toEqual({ apply: undefined, check: undefined })
@@ -71,10 +71,10 @@ describe("a dblink connection's every call is left out with it (PR2; sibling: a 
 	}, 60_000)
 
 	it("leaves dblink_exec's CREATE ROLE out, names it, and apply runs it", async () => {
-		const [role] = testRoles("comb_t_call")
+		const [role] = testRoles("database_t_call")
 		const sent = `SELECT dblink_exec(${LOOPBACK}, 'CREATE ROLE ${role}')`
 		const out: string[] = []
-		const history = `${T}-- comb:allow-unsafe: the test's history\nCREATE EXTENSION IF NOT EXISTS dblink;\n`
+		const history = `${T}-- database:allow-unsafe: the test's history\nCREATE EXTENSION IF NOT EXISTS dblink;\n`
 		const { refused: check } = await checked(history, `${NONE}${sent};\n`)
 		const afterCheck = await roleOf(role)
 		const { apply } = await checkThenApply(history, `${NONE}${sent};\n`, out)
@@ -90,7 +90,7 @@ describe("a dblink connection's every call is left out with it (PR2; sibling: a 
 
 describe("a backend another session holds stays its own (PR2; sibling: the replay's cleanup ending its database's backends)", () => {
 	it("leaves another session alive through check when the file ends it", async () => {
-		const tag = unique("comb_t_victim")
+		const tag = unique("database_t_victim")
 		const session = new pg.Client({ application_name: tag, connectionString: pgUrl() })
 		const ended: unknown[] = []
 		session.on("error", (error) => ended.push(error))
@@ -113,12 +113,12 @@ describe("a backend another session holds stays its own (PR2; sibling: the repla
 /* P2 of r22 reads the server's committed catalogs; a slot is a row of one, read by its name */
 /* PR1 of r23: a physical slot is the server's, with no creator, so the cleanup leaves one it cannot prove the replay made */
 describe("a slot a DO block makes is the file's (PR2; sibling: P2's DO-hidden dblink role)", () => {
-	const slot = unique("comb_t_slot")
+	const slot = unique("database_t_slot")
 	afterEach(() => dropSlot(slot))
 
 	it.each([
 		["a txmode none file", NONE],
-		["a file in a transaction", "-- comb:allow-unsafe: the test's change\n"],
+		["a file in a transaction", "-- database:allow-unsafe: the test's change\n"],
 	])(
 		"refuses one in %s, and leaves it, naming it",
 		async (_, head) => {
@@ -128,7 +128,7 @@ describe("a slot a DO block makes is the file's (PR2; sibling: P2's DO-hidden db
 			)
 			expect({ refused, slot: await slotOf(slot) }).toEqual({
 				refused: expect.stringContaining(
-					`comb leaves replication slot ${slot} added on devUrl's server, as another session may have made that change`,
+					`database leaves replication slot ${slot} added on devUrl's server, as another session may have made that change`,
 				),
 				slot: [{ slot_name: slot }],
 			})
@@ -141,7 +141,7 @@ describe("a slot a DO block makes is the file's (PR2; sibling: P2's DO-hidden db
 		for (let i = 0; i < 200; i++) {
 			const [sleeping] = await query(
 				pgUrl(),
-				"SELECT 1 AS n FROM pg_stat_activity WHERE query = 'SELECT pg_sleep(1.5)' AND datname LIKE 'comb\\_replay\\_%'",
+				"SELECT 1 AS n FROM pg_stat_activity WHERE query = 'SELECT pg_sleep(1.5)' AND datname LIKE 'database\\_replay\\_%'",
 			)
 			if (sleeping !== undefined) break
 			await new Promise((tick) => setTimeout(tick, 25))
@@ -217,7 +217,7 @@ async function dropSubscriptions(prefix: string): Promise<void> {
 
 /* a subscription lives in the database it is made in, which Postgres will not drop while it holds one */
 describe("a subscription the file makes in the replay's database dies with it (sibling: a slot a DO block makes)", () => {
-	const prefix = unique("comb_t_sub")
+	const prefix = unique("database_t_sub")
 	afterEach(() => dropSubscriptions(prefix))
 
 	it.each([
@@ -229,17 +229,17 @@ describe("a subscription the file makes in the replay's database dies with it (s
 			const made = `EXECUTE format('CREATE SUBSCRIPTION %I CONNECTION ''dbname=postgres'' PUBLICATION p WITH (connect = false, enabled = false, create_slot = false)', ${name})`
 			const { out, refused } = await checked(T, `${NONE}DO $$ BEGIN COMMIT; ${made}; END $$;\n`)
 			expect({
-				left: out.filter((line) => line.startsWith("comb could not drop")),
+				left: out.filter((line) => line.startsWith("database could not drop")),
 				refused,
 				subscriptions: await subscriptionsOf(prefix),
 			}).toEqual({
 				left: [],
 				refused: expect.stringMatching(
-					new RegExp(`comb drops the database it replays in, and subscription ${prefix}\\S* in it; check applies`),
+					new RegExp(`database drops the database it replays in, and subscription ${prefix}\\S* in it; check applies`),
 				),
 				subscriptions: [],
 			})
-			expect(refused).not.toContain("comb leaves")
+			expect(refused).not.toContain("database leaves")
 		},
 		60_000,
 	)

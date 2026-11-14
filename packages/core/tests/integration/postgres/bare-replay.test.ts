@@ -15,7 +15,7 @@ import { writingServer } from "../../support/server-lock.ts"
 const { checked, checkThenApply, devUrl, dir, files, options } = pgCheck()
 
 /* a txmode none file's head, its change approved */
-const NONE = "-- atlas:txmode none\n\n-- comb:allow-unsafe: the test's change\n"
+const NONE = "-- atlas:txmode none\n\n-- database:allow-unsafe: the test's change\n"
 
 /* P1 of r22: Atlas sends a txmode none file's statements bare; 0.20 wrapped each in BEGIN/COMMIT, so a batched
    backfill's COMMIT failed check and passed apply, and a LOCK TABLE passed check and failed apply */
@@ -71,7 +71,7 @@ describe("a txmode none file replays bare, as Atlas sends it (P1; sibling: r21 P
 describe("a txmode none file's statement runs in a transaction of its own first (P1 amendment; sibling: a DO's ALTER ROLE)", () => {
 	/* P5 of r22: a role the statement adds is the replay's to adopt, a change to one the server held is not */
 	it("adopts a role a DO makes and leaves none, and refuses a DO that changes a role the server held, naming it", async () => {
-		const [made, held] = testRoles("comb_t_bare", "comb_t_held")
+		const [made, held] = testRoles("database_t_bare", "database_t_held")
 		await query(pgUrl(), `CREATE ROLE ${held} NOLOGIN`)
 		const { refused: adopted } = await checked(T, `${NONE}DO $$ BEGIN CREATE ROLE ${made}; END $$;\n`)
 		const { refused } = await checked(T, `${NONE}DO $$ BEGIN ALTER ROLE ${held} CONNECTION LIMIT 4; END $$;\n`)
@@ -93,9 +93,9 @@ const databaseOf = (name: string) => query(pgUrl(), `SELECT datname FROM pg_data
    committed catalogs, read around each file and each bare statement, do. PR1 of r23: Postgres keeps no creator for a
    role or a database, so the cleanup leaves what it cannot prove the replay made, and says so */
 describe("a second backend's change is the file's (P2; sibling: P1's bare path)", () => {
-	const DBLINK = "-- comb:allow-unsafe: the test's history\nCREATE EXTENSION IF NOT EXISTS dblink;\n"
-	const ALLOW = "-- comb:allow-unsafe: the test's change\n"
-	const [side, svc] = [unique("comb_t_side"), unique("comb_t_svc")]
+	const DBLINK = "-- database:allow-unsafe: the test's history\nCREATE EXTENSION IF NOT EXISTS dblink;\n"
+	const ALLOW = "-- database:allow-unsafe: the test's change\n"
+	const [side, svc] = [unique("database_t_side"), unique("database_t_svc")]
 	afterEach(async () => {
 		await query(pgUrl(), `DROP DATABASE IF EXISTS ${side} WITH (FORCE)`)
 		await dropRoles(svc)
@@ -140,19 +140,19 @@ describe("another session's change is its own (P2; sibling: two checks on one se
 	])(
 		"%s",
 		async (_, named) => {
-			const [other] = testRoles("comb_t_other")
+			const [other] = testRoles("database_t_other")
 			/*
 			 * the file waits for the other session's role, spelled by concatenation so the file does not
 			 * name it, so the role commits between the reads around the file whatever the server's load:
 			 * a role committed after the file is no change of it (AE6, .tmp/grunt/p21/areas/pg/ae6/red.log)
 			 */
-			const tail = other.slice("comb_t_".length)
-			const wait = `DO $$ BEGIN WHILE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'comb_t_' || '${tail}') LOOP PERFORM pg_sleep(0.02); END LOOP; END $$`
-			const spelled = named ? `-- comb:allow-unsafe: the test's name\nSELECT '${other}';\n` : ""
-			const pending = `-- atlas:txmode none\n\n-- comb:allow-unsafe: the test's wait\n${wait};\n${spelled}`
+			const tail = other.slice("database_t_".length)
+			const wait = `DO $$ BEGIN WHILE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'database_t_' || '${tail}') LOOP PERFORM pg_sleep(0.02); END LOOP; END $$`
+			const spelled = named ? `-- database:allow-unsafe: the test's name\nSELECT '${other}';\n` : ""
+			const pending = `-- atlas:txmode none\n\n-- database:allow-unsafe: the test's wait\n${wait};\n${spelled}`
 			const check = checked(T, pending)
 			/* the role is made once the file waits for it, so after the read before the file */
-			const waiting = `SELECT 1 AS n FROM pg_stat_activity WHERE query LIKE 'DO $$ BEGIN WHILE NOT EXISTS%${tail}%' AND datname LIKE 'comb\\_replay\\_%'`
+			const waiting = `SELECT 1 AS n FROM pg_stat_activity WHERE query LIKE 'DO $$ BEGIN WHILE NOT EXISTS%${tail}%' AND datname LIKE 'database\\_replay\\_%'`
 			while ((await query(pgUrl(), waiting)).length === 0) await new Promise((tick) => setTimeout(tick, 25))
 			await query(pgUrl(), `CREATE ROLE ${other}`)
 			const { refused } = await check
@@ -162,14 +162,14 @@ describe("another session's change is its own (P2; sibling: two checks on one se
 	)
 
 	it("passes two checks on one server at once, each making a role and running bare statements", async () => {
-		const roles = testRoles("comb_t_one", "comb_t_two")
+		const roles = testRoles("database_t_one", "database_t_two")
 		const dirs = [dir(), tempDir()]
 		try {
 			const both = roles.map(async (role, i) => {
 				const at = dirs[i] as string
 				await files(
-					`${T}-- comb:allow-unsafe: the test's role\nCREATE ROLE ${role};\n`,
-					`-- atlas:txmode none\n\n-- comb:allow-unsafe: the test's sleep\nSELECT pg_sleep(0.5);\nGRANT SELECT ON t TO ${role};\nSELECT pg_sleep(0.5);\n`,
+					`${T}-- database:allow-unsafe: the test's role\nCREATE ROLE ${role};\n`,
+					`-- atlas:txmode none\n\n-- database:allow-unsafe: the test's sleep\nSELECT pg_sleep(0.5);\nGRANT SELECT ON t TO ${role};\nSELECT pg_sleep(0.5);\n`,
 					at,
 				)
 				return withScratchDb((url) =>
@@ -194,14 +194,14 @@ describe("a file that runs only what its parse says made no change past its data
 	])(
 		"passes %s of plain statements that spell a login role and a database another session makes while it runs, and leaves both",
 		async (_, mode) => {
-			const [role] = testRoles("comb_t_rpt")
-			const database = unique("comb_t_rptdb")
+			const [role] = testRoles("database_t_rpt")
+			const database = unique("database_t_rptdb")
 			onTestFinished(() => query(pgUrl(), `DROP DATABASE IF EXISTS ${database} WITH (FORCE)`).then(() => undefined))
 			const check = checked(
 				T,
-				`${mode}CREATE SCHEMA ${role};\nCREATE TABLE ${role}.daily (id int);\nCREATE SCHEMA ${database};\n-- comb:allow-unsafe: the test's sleep\nSELECT pg_sleep(3), '${role}' AS waiting;\n`,
+				`${mode}CREATE SCHEMA ${role};\nCREATE TABLE ${role}.daily (id int);\nCREATE SCHEMA ${database};\n-- database:allow-unsafe: the test's sleep\nSELECT pg_sleep(3), '${role}' AS waiting;\n`,
 			)
-			const sleeping = `SELECT 1 AS n FROM pg_stat_activity WHERE query LIKE 'SELECT pg_sleep(3), ''${role}''%' AND datname LIKE 'comb\\_replay\\_%'`
+			const sleeping = `SELECT 1 AS n FROM pg_stat_activity WHERE query LIKE 'SELECT pg_sleep(3), ''${role}''%' AND datname LIKE 'database\\_replay\\_%'`
 			while ((await query(pgUrl(), sleeping)).length === 0) await new Promise((tick) => setTimeout(tick, 25))
 			await query(pgUrl(), `CREATE ROLE ${role} LOGIN PASSWORD 'bi'`)
 			await query(pgUrl(), `CREATE DATABASE ${database}`)
@@ -223,7 +223,7 @@ describe("a file that runs only what its parse says made no change past its data
 const bare = (change: string) => `${NONE}DO $$ BEGIN COMMIT; EXECUTE '${change}'; END $$;\n`
 
 /* each catalog statement the AE6 tests make on the shared server, written to the run's log */
-const logCatalog = (statement: string): void => void process.stderr.write(`[comb] AE6 catalog: ${statement}\n`)
+const logCatalog = (statement: string): void => void process.stderr.write(`[database] AE6 catalog: ${statement}\n`)
 
 /** `statement` run on the test server as its superuser, logged first */
 async function catalog(statement: string): Promise<void> {
@@ -234,7 +234,7 @@ async function catalog(statement: string): Promise<void> {
 /* AE6 of r22: a bare committing DO's change to a role or setting it names by keyword, which the read must resolve */
 describe("a bare change to a row the file names by keyword is the file's (AE6; sibling: P2's spelled names)", () => {
 	it("refuses ALTER ROLE CURRENT_USER SET under a CREATEDB devUrl, naming the setting devUrl's server keeps", async () => {
-		const [role] = testRoles("comb_t_kw")
+		const [role] = testRoles("database_t_kw")
 		logCatalog(
 			`CREATE ROLE ${role} LOGIN CREATEDB PASSWORD <the URL's>; DROP ROLE ${role} with dropRoles as the test ends`,
 		)
@@ -242,7 +242,9 @@ describe("a bare change to a row the file names by keyword is the file's (AE6; s
 		try {
 			logCatalog(`ALTER ROLE CURRENT_USER SET work_mem = '9MB', as ${role}, from the check's bare DO`)
 			const { refused } = await checked(T, bare("ALTER ROLE CURRENT_USER SET work_mem = ''9MB''"), dev)
-			expect(refused).toMatch(new RegExp(`; comb leaves .*setting every database for ${role} added on devUrl's server`))
+			expect(refused).toMatch(
+				new RegExp(`; database leaves .*setting every database for ${role} added on devUrl's server`),
+			)
 		} finally {
 			await catalog(`ALTER ROLE ${role} RESET ALL`)
 		}
@@ -252,11 +254,11 @@ describe("a bare change to a row the file names by keyword is the file's (AE6; s
 	it("refuses ALTER ROLE ALL SET, naming the setting every role keeps", async () => {
 		await writingServer(async () => {
 			try {
-				logCatalog("ALTER ROLE ALL SET comb_t.probe = 'leaked', from the check's bare DO")
-				const { refused } = await checked(T, bare("ALTER ROLE ALL SET comb_t.probe = ''leaked''"))
-				expect(refused).toContain("comb leaves setting every database for every role ")
+				logCatalog("ALTER ROLE ALL SET database_t.probe = 'leaked', from the check's bare DO")
+				const { refused } = await checked(T, bare("ALTER ROLE ALL SET database_t.probe = ''leaked''"))
+				expect(refused).toContain("database leaves setting every database for every role ")
 			} finally {
-				await catalog("ALTER ROLE ALL RESET comb_t.probe")
+				await catalog("ALTER ROLE ALL RESET database_t.probe")
 			}
 		})
 	}, 60_000)

@@ -6,7 +6,7 @@
 import { type SQL, sql as drizzleSql } from "drizzle-orm"
 import { integer, SQLiteDialect, sqliteTable, text } from "drizzle-orm/sqlite-core"
 import { describe, expect, it } from "vitest"
-import { CombError } from "../../error.ts"
+import { DatabaseError } from "../../error.ts"
 import { createCursor } from "../cursor-mint.ts"
 import { createListQuerySchema } from "../list-schema.ts"
 import type { SortField } from "../types.ts"
@@ -69,7 +69,7 @@ describe("buildDerivedListQuery — pagination mode", () => {
 		const cursor = createCursor({ id: "d_9", unmapped: 1 }, sort, SEALED)
 		expect(() =>
 			buildDerivedListQuery({ ...SEALED, ...base, parsed: { cursor, limit: 20, parsedSort: sort } }),
-		).toThrow(CombError)
+		).toThrow(DatabaseError)
 	})
 
 	it("trims the search term and reports null when it is empty", () => {
@@ -164,7 +164,7 @@ describe("buildDerivedListQuery — cursor predicates across NULLs", () => {
 		/* encoded asc, queried desc — re-serving page one would duplicate rows */
 		expect(() =>
 			buildDerivedListQuery({ ...SEALED, ...base, parsed: parsed({ cursor: cursorFor(5, "asc") }) }),
-		).toThrow(CombError)
+		).toThrow(DatabaseError)
 	})
 })
 

@@ -23,37 +23,37 @@ function text(raw: string, schemaType: SchemaType, { dialect = "sqlite", ...over
 	return Object.keys(keys).length === 0 ? code : `${code}.meta(${JSON.stringify(keys)})`
 }
 
-/* generated code names comb's isStorableText under comb's namespace, which the generated file imports (C2 of r17) */
-const parse = (code: string) => new Function("z", "comb", `return ${code}`)(z, { isStorableText }) as z.ZodString
+/* generated code names database's isStorableText under database's namespace, which the generated file imports (C2 of r17) */
+const parse = (code: string) => new Function("z", "database", `return ${code}`)(z, { isStorableText }) as z.ZodString
 
 /* F65: a read never refuses a stored row; it states the declared bounds and enforces what the engine holds */
 describe("textBase on a read (F65)", () => {
-	it("states a declared length and comb's id length, enforcing neither", () => {
+	it("states a declared length and database's id length, enforcing neither", () => {
 		for (const type of ["read", "readPartial"] as const) {
 			expect(text('c.text("t", { min: 3, max: 10 })', type)).toBe(
-				'z.string().meta({"x-comb-maxLength":10,"x-comb-minLength":3})',
+				'z.string().meta({"x-database-maxLength":10,"x-database-minLength":3})',
 			)
-			expect(text('c.id("usr")', type)).toBe('z.string().meta({"x-comb-maxLength":48,"x-comb-minLength":1})')
+			expect(text('c.id("usr")', type)).toBe('z.string().meta({"x-database-maxLength":48,"x-database-minLength":1})')
 		}
 		expect(parse(text('c.text("t", { min: 3, max: 10 })', "read")).safeParse("a stored row past ten").success).toBe(
 			true,
 		)
-		expect(text('c.text("t", { email: true, max: 20 })', "read")).toBe('z.string().meta({"x-comb-maxLength":20})')
+		expect(text('c.text("t", { email: true, max: 20 })', "read")).toBe('z.string().meta({"x-database-maxLength":20})')
 		expect(text('c.text("t")', "read")).toBe("z.string()")
 	})
 
 	it("states a SQLite length, which SQLite never holds a column to, and enforces a Postgres one", () => {
-		expect(text('c.text("t")', "read", { length: 4 })).toBe('z.string().meta({"x-comb-maxLength":4})')
+		expect(text('c.text("t")', "read", { length: 4 })).toBe('z.string().meta({"x-database-maxLength":4})')
 		expect(text('c.text("t")', "read", { dialect: "postgres", length: 4 })).toBe("z.string().max(4)")
 		/* a declared max under a Postgres length is stated beside the length the column holds */
 		expect(text('c.text("t", { max: 3 })', "read", { dialect: "postgres", length: 4 })).toBe(
-			'z.string().max(4).meta({"x-comb-maxLength":3})',
+			'z.string().max(4).meta({"x-database-maxLength":3})',
 		)
 	})
 
 	it("reads a password's stored hash as any string, stating its declared bounds as any text's", () => {
 		expect(text('c.text("t", { password: true, min: 12, pattern: "/^a/" })', "read")).toBe(
-			'z.string().meta({"x-comb-minLength":12})',
+			'z.string().meta({"x-database-minLength":12})',
 		)
 	})
 })
@@ -62,18 +62,18 @@ describe("textBase on a write", () => {
 	it("enforces every declared bound and the text guard", () => {
 		const write = text('c.text("t", { min: 3, max: 10 }).notNull()', "create")
 		expect(write).toBe(
-			`z.string().min(3).max(10).refine(comb.isStorableText, { message: "Must not contain U+0000 or an unpaired surrogate" }).meta({"x-comb-text":"${STORABLE_TEXT_RULE}"})`,
+			`z.string().min(3).max(10).refine(database.isStorableText, { message: "Must not contain U+0000 or an unpaired surrogate" }).meta({"x-database-text":"${STORABLE_TEXT_RULE}"})`,
 		)
 		expect(parse(write).safeParse("eleven char").success).toBe(false)
 		expect(text('c.text("t", { email: true, max: 20 })', "update")).toBe(
-			'z.string().trim().toLowerCase().check(z.email()).min(6).max(20).meta({ format: void 0 }).meta({"x-comb-transform":["trim","lowercase"]})',
+			'z.string().trim().toLowerCase().check(z.email()).min(6).max(20).meta({ format: void 0 }).meta({"x-database-transform":["trim","lowercase"]})',
 		)
 	})
 })
 
 describe("stated", () => {
-	it("names each bound given as x-comb meta, and is empty with none", () => {
-		expect(stated({ maximum: 1, minimum: null })).toEqual({ "x-comb-maximum": 1 })
+	it("names each bound given as x-database meta, and is empty with none", () => {
+		expect(stated({ maximum: 1, minimum: null })).toEqual({ "x-database-maximum": 1 })
 		expect(stated({ maxLength: null })).toEqual({})
 	})
 })
@@ -94,7 +94,7 @@ describe("textBase on a password column, which stores the hash", () => {
 		expect(write.safeParse("hash\u0000").success).toBe(false)
 	})
 
-	it("holds the hash to its declared max and pattern, and to no cap or pattern of comb's own", () => {
+	it("holds the hash to its declared max and pattern, and to no cap or pattern of database's own", () => {
 		const declared = parse(
 			text('c.text("t", { password: true, max: 255, pattern: "/^\\\\$argon2id\\\\$/" })', "create"),
 		)
@@ -105,7 +105,7 @@ describe("textBase on a password column, which stores the hash", () => {
 	})
 })
 
-/* C1 of r18: comb's own bounds on a text, beside the declared ones, may leave no value: refused by the one effective range */
+/* C1 of r18: database's own bounds on a text, beside the declared ones, may leave no value: refused by the one effective range */
 describe("textBase: a text's effective bounds that leave no value", () => {
 	it.each([
 		["a required text's max of 0", 'c.text("t", { max: 0 }).notNull()', "min 1 and max 0"],
@@ -114,16 +114,16 @@ describe("textBase: a text's effective bounds that leave no value", () => {
 		expect(() => text(raw, "create")).toThrow(`t: its length ${bounds} leave no value; widen them`)
 	})
 
-	it("takes a range that holds a value, comb's own bounds included, and a read of any", () => {
+	it("takes a range that holds a value, database's own bounds included, and a read of any", () => {
 		expect(text('c.text("t", { password: true, min: 72, max: 72 })', "create")).toContain(".min(72).max(72)")
 		expect(text('c.text("t", { url: true, max: 9 })', "create")).toContain(".max(9)")
 		expect(text('c.text("t", { max: 1 }).notNull()', "create")).toContain(".min(1).max(1)")
-		expect(text('c.text("t", { max: 0 }).notNull()', "read")).toBe('z.string().meta({"x-comb-maxLength":0})')
+		expect(text('c.text("t", { max: 0 }).notNull()', "read")).toBe('z.string().meta({"x-database-maxLength":0})')
 	})
 })
 
 /** The transforms the JSON Schema of `code` publishes */
-const transforms = (code: string) => z.toJSONSchema(parse(code), { io: "input" })["x-comb-transform"]
+const transforms = (code: string) => z.toJSONSchema(parse(code), { io: "input" })["x-database-transform"]
 
 /* C2 of r18: a written text's transforms rewrite the value, so its schema publishes them, in order, from the one list that writes the chain */
 describe("textBase: a written text's transforms", () => {

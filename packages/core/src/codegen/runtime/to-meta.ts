@@ -4,7 +4,7 @@
  * indexes sorted into plain, partial and expression ones.
  */
 import path from "node:path"
-import type { CombColumnKind } from "../../meta/column.ts"
+import type { ColumnMetaKind } from "../../meta/column.ts"
 import type {
 	AnalysisResult,
 	FieldMeta,
@@ -41,9 +41,9 @@ const EPOCH_KINDS: ReadonlySet<string> = /* @__PURE__ */ new Set([
 // lookup-table: the helpers that fill their own timestamp
 const TIMESTAMP_KINDS: ReadonlySet<string> = /* @__PURE__ */ new Set(["createdAt", "deletedAt", "updatedAt"])
 
-/** Whether a column holds epoch milliseconds: a comb timestamp or integer, or a plain integer column */
+/** Whether a column holds epoch milliseconds: a database timestamp or integer, or a plain integer column */
 const isEpoch = (field: FieldMeta) =>
-	field.combKind === null ? field.dataType.startsWith("number int") : EPOCH_KINDS.has(field.combKind)
+	field.databaseKind === null ? field.dataType.startsWith("number int") : EPOCH_KINDS.has(field.databaseKind)
 
 /** The timestamp columns a table declares, each under its own name, and the casing they share */
 function detectTimestamps(fields: FieldMeta[]): TimestampsMeta {
@@ -55,11 +55,11 @@ function detectTimestamps(fields: FieldMeta[]): TimestampsMeta {
 	const declared = Object.values(names).filter((name) => name !== null)
 	const snake = declared.filter((name) => name.includes("_")).length
 	const style = snake === 0 ? "camelCase" : snake === declared.length ? "snake_case" : "mixed"
-	/* the shared spread takes a column only when its own read schema is the spread's: comb's
+	/* the shared spread takes a column only when its own read schema is the spread's: database's
 	 * helper of that name, read back, NOT NULL but for deletedAt; any other is its own field */
 	const spread = (key: keyof TimestampsMeta["names"]) => {
 		const field = fields.find((each) => each.name === names[key])
-		return field?.combKind === key && !field.constraints.private && field.isNotNull === (key !== "deletedAt")
+		return field?.databaseKind === key && !field.constraints.private && field.isNotNull === (key !== "deletedAt")
 	}
 	return {
 		createdAt: spread("createdAt"),
@@ -90,17 +90,17 @@ function foreignKeyOf(column: SnapshotColumn, tables: readonly SnapshotTable[]):
 		onUpdate: fk.onUpdate ?? undefined,
 		refColumn: fk.column,
 		refTable: fk.table,
-		toId: target?.columns.find((each) => each.key === fk.column)?.comb?.kind === "id",
+		toId: target?.columns.find((each) => each.key === fk.column)?.database?.kind === "id",
 	}
 }
 
-/** Whether something other than the caller fills a timestamp: comb's own helper, or a default or update hook under its name */
+/** Whether something other than the caller fills a timestamp: database's own helper, or a default or update hook under its name */
 const isFilled = (column: SnapshotColumn, kind: string | null) =>
 	TIMESTAMP_KINDS.has(kind ?? "") ||
 	(Object.hasOwn(TIMESTAMP_KEYS, column.key) && (column.hasDefault || column.onUpdate))
 
 /*
- * The data types drizzle gives a column that comb types with no c helper, each by its own rule: text,
+ * The data types drizzle gives a column that database types with no c helper, each by its own rule: text,
  * numbers, a boolean and JSON on both dialects, and each Postgres type with one. Any other is
  * refused rather than typed as plain text, a type drizzle adds later among them.
  */
@@ -130,7 +130,7 @@ const TYPABLE: ReadonlySet<string> = /* @__PURE__ */ new Set([
 	"string uuid",
 ])
 
-/* the plain drizzle columns comb types, by dialect, as a refusal names them */
+/* the plain drizzle columns database types, by dialect, as a refusal names them */
 // lookup-table: a dialect's typable drizzle columns
 const TYPED_COLUMNS = {
 	postgres:
@@ -139,42 +139,42 @@ const TYPED_COLUMNS = {
 } as const
 
 /** What a column's `c` helper recorded, as FieldMeta names it; a plain drizzle column's own enum values */
-function combFactsOf(
+function databaseFactsOf(
 	column: SnapshotColumn,
 ): Pick<FieldMeta, "enumValues" | "jsonSchemaName" | "prefix" | "schemaImports" | "schemaJson" | "states"> {
-	const comb = column.comb
-	const schema = comb?.schema ?? null
+	const database = column.database
+	const schema = database?.schema ?? null
 	return {
-		enumValues: comb?.values ?? column.enumValues,
-		jsonSchemaName: comb?.kind === "json" ? (schema as ModuleExport).name : null,
-		prefix: comb?.prefix ?? null,
+		enumValues: database?.values ?? column.enumValues,
+		jsonSchemaName: database?.kind === "json" ? (schema as ModuleExport).name : null,
+		prefix: database?.prefix ?? null,
 		schemaImports: schema === null ? [] : [importOf(schema)],
-		schemaJson: comb?.schemaJson ?? null,
-		states: comb?.states ?? null,
+		schemaJson: database?.schemaJson ?? null,
+		states: database?.states ?? null,
 	}
 }
 
 /* the c helpers whose values are text, whose min and max bound a length */
 // lookup-table: measuredBy's text kinds
-const TEXT_KINDS: ReadonlySet<CombColumnKind> = /* @__PURE__ */ new Set<CombColumnKind>(["enum", "id", "ref", "text"])
+const TEXT_KINDS: ReadonlySet<ColumnMetaKind> = /* @__PURE__ */ new Set<ColumnMetaKind>(["enum", "id", "ref", "text"])
 
 /** Whether a column's min and max bound its length (text, a numeric column's digits aside) or its value */
-const measuredBy = (column: SnapshotColumn, kind: CombColumnKind | null): "length" | "value" =>
+const measuredBy = (column: SnapshotColumn, kind: ColumnMetaKind | null): "length" | "value" =>
 	(kind === null ? column.dataType.startsWith("string") && column.dataType !== "string numeric" : TEXT_KINDS.has(kind))
 		? "length"
 		: "value"
 
-/** One column as FieldMeta; a constraint comb cannot honour, or a column it cannot type, is an error naming it */
+/** One column as FieldMeta; a constraint database cannot honour, or a column it cannot type, is an error naming it */
 function fieldOf(column: SnapshotColumn, { file, table, tables }: Build): FieldMeta {
-	const kind = (column.comb?.kind ?? null) as CombColumnKind | null
+	const kind = (column.database?.kind ?? null) as ColumnMetaKind | null
 	const place = `${file}: ${table.exportName}.${column.key}`
 	if (kind === null && !TYPABLE.has(column.dataType))
 		throw new Error(
-			`${place}: comb has no rule for a ${column.columnType} column (${column.dataType}); build it with a c helper, or as drizzle ${TYPED_COLUMNS[table.dialect]}`,
+			`${place}: database has no rule for a ${column.columnType} column (${column.dataType}); build it with a c helper, or as drizzle ${TYPED_COLUMNS[table.dialect]}`,
 		)
 	const filled = isFilled(column, kind)
-	const facts = combFactsOf(column)
-	const constraints = fieldConstraintsOf(column.comb?.constraints ?? {}, {
+	const facts = databaseFactsOf(column)
+	const constraints = fieldConstraintsOf(column.database?.constraints ?? {}, {
 		fieldName: column.key,
 		filled,
 		helper: kind,
@@ -190,7 +190,7 @@ function fieldOf(column: SnapshotColumn, { file, table, tables }: Build): FieldM
 		...facts,
 		autoIncrement: column.autoIncrement,
 		columnType: column.columnType,
-		combKind: kind,
+		databaseKind: kind,
 		constraints,
 		dataType: column.dataType,
 		drizzleHelper: kind ?? column.columnType,
@@ -236,7 +236,7 @@ function tableOf(build: Build): TableMeta {
 		checkConstraints: table.checks.map(({ expression, name }) => ({ expression, name })),
 		fields,
 		hasCompositePrimaryKey: table.compositeKey.length > 0,
-		idPrefix: table.columns.find((column) => column.comb?.kind === "id")?.comb?.prefix ?? null,
+		idPrefix: table.columns.find((column) => column.database?.kind === "id")?.database?.prefix ?? null,
 		schema: table.schema,
 		sqlName: table.sqlName,
 		timestamps: detectTimestamps(fields),

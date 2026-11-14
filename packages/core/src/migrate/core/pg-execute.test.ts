@@ -1,6 +1,6 @@
 /**
  * PA15 of r22b: a Postgres file's EXECUTE rated by the statement the file prepared, wherever it
- * stands (AE2-2 of r22), or as one comb cannot read, as the pinned Atlas runs it
+ * stands (AE2-2 of r22), or as one database cannot read, as the pinned Atlas runs it
  * (tests/integration/postgres/copy-execute-oracle.test.ts).
  */
 import { describe, expect, it } from "vitest"
@@ -24,7 +24,7 @@ describe("an EXECUTE (PA15 of r22b)", () => {
 	it("is the statement the file prepared", () => {
 		expect(rated("PREPARE p AS SELECT 1;\nEXECUTE p;")).toEqual({
 			cautiousStatements: [
-				"PREPARE p AS SELECT 1 (prepares a statement for an EXECUTE, which comb rates by the statement it runs)",
+				"PREPARE p AS SELECT 1 (prepares a statement for an EXECUTE, which database rates by the statement it runs)",
 			],
 			safety: "cautious",
 			unsafeStatements: [],
@@ -51,9 +51,9 @@ describe("an EXECUTE (PA15 of r22b)", () => {
 
 /** Why check refuses an EXECUTE of `name` that nothing before it in its file prepares */
 const unprepared = (name: string) =>
-	`no statement before it in its file prepares ${name}, and comb applies each file in a session of its own, so an earlier file's PREPARE never reaches it: Postgres fails the file with "prepared statement "${name}" does not exist"; PREPARE it in this file`
+	`no statement before it in its file prepares ${name}, and database applies each file in a session of its own, so an earlier file's PREPARE never reaches it: Postgres fails the file with "prepared statement "${name}" does not exist"; PREPARE it in this file`
 
-/* AE2-9 of r22: comb's apply runs one Atlas call per file (atlas-apply-runs.ts), so an EXECUTE runs
+/* AE2-9 of r22: database's apply runs one Atlas call per file (atlas-apply-runs.ts), so an EXECUTE runs
    only what its own file prepared, or what user code before it did: a refusal is as sound as a rating */
 describe("an EXECUTE of a statement its file does not prepare (AE2-9 of r22)", () => {
 	it.each([
@@ -72,7 +72,7 @@ describe("an EXECUTE of a statement its file does not prepare (AE2-9 of r22)", (
 		["DEALLOCATE q;\nBEGIN;\nSET search_path = public;\nSHOW search_path;\nEXECUTE p;", "EXECUTE p", "p"],
 	])("refuses %j at check, past any approval", (sql, statement, name) => {
 		expect(() => rate(sql)).toThrow(`${statement}: ${unprepared(name)}`)
-		expect(() => rate(`-- comb:allow-unsafe: prepared elsewhere\n${sql}`)).toThrow(unprepared(name))
+		expect(() => rate(`-- database:allow-unsafe: prepared elsewhere\n${sql}`)).toThrow(unprepared(name))
 	})
 
 	it.each([
@@ -89,7 +89,7 @@ describe("an EXECUTE of a statement its file does not prepare (AE2-9 of r22)", (
 		["CREATE TABLE x AS EXECUTE p;", "an event trigger a CREATE TABLE AS fires"],
 	])("rates %j, whose user code may prepare it, unsafe and names that code", (sql, dynamic) => {
 		expect(rate(sql).unsafeStatements.map((line) => line.replace(/^CREATE TABLE x AS /, ""))).toContain(
-			`EXECUTE p (runs a prepared statement comb cannot read, which ${dynamic} before it may prepare; approve it in the file)`,
+			`EXECUTE p (runs a prepared statement database cannot read, which ${dynamic} before it may prepare; approve it in the file)`,
 		)
 	})
 })

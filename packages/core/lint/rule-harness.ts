@@ -95,7 +95,7 @@ export function reportsOf(rule: Rule, fixture: Fixture, { options = [], repo = "
 
 /** Writes the fixture to a temp repo and runs `rule` over it in process, so a rule that reads other files from disk finds them */
 export function reportsOnDisk(rule: Rule, fixture: Fixture, options: unknown[] = []): Report[] {
-	const repo = mkdtempSync(join(tmpdir(), "comb-rule-"))
+	const repo = mkdtempSync(join(tmpdir(), "database-rule-"))
 	try {
 		for (const [file, code] of Object.entries(fixture)) {
 			mkdirSync(dirname(join(repo, file)), { recursive: true })
@@ -141,7 +141,7 @@ type Diagnostic = { filename: string; help?: string; labels: Array<{ span: { lin
 
 /* the fixture written to a temp folder outside any checkout, oxlint run there under `config` over every file of it */
 function lintInTemp(fixture: Fixture, config: object): { diagnostics: Diagnostic[]; dir: string } {
-	const dir = mkdtempSync(join(tmpdir(), "comb-lint-"))
+	const dir = mkdtempSync(join(tmpdir(), "database-lint-"))
 	try {
 		/* oxlint applies a checkout's .gitignore even with --no-ignore, so a fixture inside one lints nothing */
 		if (insideGitCheckout(dir)) throw new Error(`TMPDIR ${tmpdir()} is inside a git checkout; set it outside one`)
@@ -159,13 +159,13 @@ function lintInTemp(fixture: Fixture, config: object): { diagnostics: Diagnostic
 	}
 }
 
-/** Runs the real oxlint binary with the comb plugin and only `comb/<name>` on, with `options`, over the fixture. */
+/** Runs the real oxlint binary with the database plugin and only `database/<name>` on, with `options`, over the fixture. */
 export function oxlintReports(name: string, fixture: Fixture, options: unknown[] = []): Report[] {
 	const config = {
 		categories: { correctness: "off", suspicious: "off" },
-		jsPlugins: [{ name: "comb", specifier: PLUGIN }],
+		jsPlugins: [{ name: "database", specifier: PLUGIN }],
 		plugins: [],
-		rules: { [`comb/${name}`]: ["error", ...options] },
+		rules: { [`database/${name}`]: ["error", ...options] },
 	}
 	const { diagnostics, dir } = lintInTemp(fixture, config)
 	return diagnostics

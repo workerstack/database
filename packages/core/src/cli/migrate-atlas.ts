@@ -1,6 +1,6 @@
 /**
- * `comb migrate apply`, `baseline` and `status` on a Postgres database: Atlas applies and records,
- * comb snapshots, classifies and approves (migrate/core/atlas-apply.ts). The URL's warnings (TLS,
+ * `database migrate apply`, `baseline` and `status` on a Postgres database: Atlas applies and records,
+ * database snapshots, classifies and approves (migrate/core/atlas-apply.ts). The URL's warnings (TLS,
  * poolers) are printed before anything runs.
  */
 import { approveMigration } from "../migrate/core/approval.ts"

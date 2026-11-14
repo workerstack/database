@@ -23,7 +23,7 @@ beforeAll(loadPostgresParser)
 
 let dir = ""
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "comb-pg-baseline-objects-"))
+	dir = mkdtempSync(join(tmpdir(), "database-pg-baseline-objects-"))
 })
 afterEach(() => rmSync(dir, { force: true, recursive: true }))
 
@@ -93,7 +93,7 @@ describe("a Postgres baseline: the functions, procedures and triggers Atlas OSS 
 			const { out, refused } = await baseline(url, devUrl, `${TABLE}${FUNCTION}${TRIGGER}`)
 			expect(refused).toBeUndefined()
 			expect(out).toEqual([
-				"Warning: the bodies of 2 functions and 1 trigger were not compared: Atlas OSS cannot load them, and comb does not read them",
+				"Warning: the bodies of 2 functions and 1 trigger were not compared: Atlas OSS cannot load them, and database does not read them",
 				UNCOMPARED,
 				"Marked applied: 20260101000000_init.sql",
 			])
@@ -155,7 +155,7 @@ CREATE TRIGGER t_seen AFTER INSERT OR DELETE ON t FOR EACH STATEMENT EXECUTE FUN
 			const { out, refused } = await baseline(url, devUrl, both)
 			expect(refused).toBeUndefined()
 			expect(out).toEqual([
-				"Warning: the bodies of 2 functions and 1 trigger were not compared: Atlas OSS cannot load them, and comb does not read them",
+				"Warning: the bodies of 2 functions and 1 trigger were not compared: Atlas OSS cannot load them, and database does not read them",
 				UNCOMPARED,
 				"Marked applied: 20260101000000_init.sql",
 			])
@@ -215,9 +215,9 @@ CREATE POLICY "own" ON "u" USING (true);
 	}, 60_000)
 })
 
-/* P3 of the 0.15.0 review: Atlas found the dev database not clean, and comb said the target had no history */
+/* P3 of the 0.15.0 review: Atlas found the dev database not clean, and database said the target had no history */
 describe("a Postgres baseline on a dev database that is not empty", () => {
-	/* 16.3 (b) of plan 21: Atlas reads the database comb's replay made, never devUrl's own, so what that holds is no matter */
+	/* 16.3 (b) of plan 21: Atlas reads the database that database's replay made, never devUrl's own, so what that holds is no matter */
 	it("baselines, reading nothing of the dev database's own and leaving it as it was", async () => {
 		await withDevAndTarget(async (devUrl, url) => {
 			await exec(url, TABLE)
@@ -234,7 +234,7 @@ describe("a Postgres baseline on a dev database that is not empty", () => {
 	it("names the dev database from migrate diff too, which reaches no target", async () => {
 		await withScratchDb(async (devUrl) => {
 			await exec(devUrl, 'CREATE TABLE "leftover" ("x" integer);')
-			const history = mkdtempSync(join(tmpdir(), "comb-pg-dirty-dev-"))
+			const history = mkdtempSync(join(tmpdir(), "database-pg-dirty-dev-"))
 			try {
 				await expect(
 					generateIncrementalMigration({
@@ -252,7 +252,7 @@ describe("a Postgres baseline on a dev database that is not empty", () => {
 	}, 60_000)
 })
 
-/* r18 P10: comb takes row level security and extensions out of Atlas's replay, and Atlas OSS compares
+/* r18 P10: database takes row level security and extensions out of Atlas's replay, and Atlas OSS compares
    no domain, composite or range type, rule or collation, nor a policy's or sequence's settings */
 describe("a Postgres baseline: the kinds and settings Atlas OSS does not compare", () => {
 	const PARTS = {

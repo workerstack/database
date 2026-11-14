@@ -35,7 +35,7 @@ describe("limitSchemaFor", () => {
 })
 
 /*
- * AB4-9 of area B: a count held at most the digits its maximum needs, so the query string comb accepts
+ * AB4-9 of area B: a count held at most the digits its maximum needs, so the query string database accepts
  * stays within maxQueryBytes; leading zeros past them held no number, and a 40 KB query parsed to limit 5
  */
 describe("a limit or page of more digits than its maximum", () => {

@@ -1,12 +1,12 @@
 /**
- * C21 of the 0.14.1 review: combDatabaseErrorKeys is the set the database classifiers answer with,
+ * C21 of the 0.14.1 review: databaseDriverErrorKeys is the set the database classifiers answer with,
  * no more and no fewer, read from the modules that classify: each SQLite and Postgres module, D1's
  * error handler, and the value errors they share.
  */
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { describe, expect, it } from "vitest"
-import { combDatabaseErrorKeys, combErrorKeys } from "../../src/types.ts"
+import { databaseDriverErrorKeys, databaseErrorKeys } from "../../src/types.ts"
 
 const SRC = join(import.meta.dirname, "../../src")
 const CLASSIFYING = [
@@ -16,15 +16,15 @@ const CLASSIFYING = [
 	"value-error.ts",
 ].filter((file) => file.endsWith(".ts") && !file.endsWith(".test.ts"))
 
-describe("combDatabaseErrorKeys", () => {
+describe("databaseDriverErrorKeys", () => {
 	it("is every key the database classifiers answer with, and no other", () => {
 		const used = new Set(
 			CLASSIFYING.flatMap((file) =>
-				[...readFileSync(join(SRC, file), "utf8").matchAll(/combErrorKeys\.([A-Z_]+)/g)].map(
-					(match) => combErrorKeys[match[1] as keyof typeof combErrorKeys],
+				[...readFileSync(join(SRC, file), "utf8").matchAll(/databaseErrorKeys\.([A-Z_]+)/g)].map(
+					(match) => databaseErrorKeys[match[1] as keyof typeof databaseErrorKeys],
 				),
 			),
 		)
-		expect([...combDatabaseErrorKeys].toSorted()).toEqual([...used].toSorted())
+		expect([...databaseDriverErrorKeys].toSorted()).toEqual([...used].toSorted())
 	})
 })
