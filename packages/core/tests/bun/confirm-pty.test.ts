@@ -94,7 +94,8 @@ async function typed(argv: readonly string[], keys: readonly string[], cwd: stri
 	}
 	await proc.exited
 	clearTimeout(killer)
-	return { code: proc.exitCode, screen, signal: proc.signalCode }
+	/* bun 1.4's types allow a signal number too; the cases name signals, so one reads as its name or its number */
+	return { code: proc.exitCode, screen, signal: proc.signalCode === null ? null : String(proc.signalCode) }
 }
 
 const scratches = (tmp: string) => fs.readdirSync(tmp).filter((name) => name.startsWith("database-scratch-"))

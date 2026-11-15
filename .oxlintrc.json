@@ -1,6 +1,5 @@
 {
 	"$schema": "./node_modules/oxlint/configuration_schema.json",
-	"extends": ["./oxlint.base.json"],
 	"plugins": ["typescript", "unicorn", "oxc"],
 	"jsPlugins": [{ "name": "database", "specifier": "./packages/core/lint/index.js" }],
 	"env": {
@@ -18,9 +17,12 @@
 		".agents/**",
 		".claude/**",
 		".codex/**",
-		".gemini/**",
 		".grok/**",
-		".rulesync/**"
+		"**/dist/**",
+		"**/coverage/**",
+		".tmp/**",
+		".cursor/**",
+		".repo/**"
 	],
 	"categories": {
 		"correctness": "error",

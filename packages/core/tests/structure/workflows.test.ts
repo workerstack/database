@@ -1,7 +1,7 @@
 /**
  * Every GitHub Action the workflows run is pinned to a full commit SHA, with the release it
  * names in a trailing comment. A tag can be moved to other code; a SHA cannot. And CI runs the
- * gates standards lists for database, no more and no fewer, so the rule every agent reads names what CI checks.
+ * gates AGENTS.md lists for database, no more and no fewer, so the rule every agent reads names what CI checks.
  */
 import { globSync, readdirSync, readFileSync } from "node:fs"
 import { availableParallelism, homedir } from "node:os"
@@ -130,10 +130,11 @@ export function ciJobs(yaml: string): Array<{ lines: string; name: string; runsO
 		}))
 }
 
-/** The gates CI runs, in order: package.json's standards.ci, which standards' sync renders through its gates() */
+/** The gates CI runs, in order: the scripts AGENTS.md's "CI on the pushed tip is the full gate" sentence names */
 function ciGates(): string[] {
-	const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { standards: { ci: string[] } }
-	return pkg.standards.ci
+	const agents = readFileSync(join(ROOT, "AGENTS.md"), "utf8")
+	const sentence = /CI on the pushed tip is the full gate:([^.]*)\./.exec(agents)?.[1] ?? ""
+	return [...sentence.matchAll(/`([^`]+)`/g)].map((match) => match[1] as string)
 }
 
 /** The script a `bun run` step runs, through database's package filter or the root, whatever arguments it passes on */
@@ -173,7 +174,7 @@ const scriptsOf = (lines: string) =>
 /* what a job off Linux runs: a part of a gate, never a gate of its own (4.19) */
 const OFF_LINUX = { "macos-latest": ["test:posix"] }
 
-describe("ci.yml runs the gates standards lists for database", () => {
+describe("ci.yml runs the gates AGENTS.md lists for database", () => {
 	const jobs = ciJobs(readFileSync(join(WORKFLOWS, "ci.yml"), "utf8"))
 	/* the 0.13 RC: CI ran test:coverage and the local gate ran test, so a local pass hid what CI failed */
 	it("every bun run step on Linux is a listed gate, every listed gate a Linux step, and every other step setup", () => {
