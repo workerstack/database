@@ -127,7 +127,7 @@ declare function readCompared(cursor: string, parsedSort: readonly SortField[], 
  * cursor's row (cursor-ref.ts), never bind as it is.
  */
 declare function readCursor(cursor: string, parsedSort: readonly SortField[], options: CursorOptions): DecodedCursor;
-export { CursorRef, CURSOR_TIEBREAK_COLUMN, MAX_CURSOR_LENGTH, cursorBytes, cursorProblem, effectiveNulls, encodeCursor, mintCursor, readCompared, readCursor, readKeyset, sortSignature, type CursorId, type CursorOptions, type CursorPayload, type CursorValue, type DecodedCursor, openCursor, };
+export { CursorRef, CURSOR_TIEBREAK_COLUMN, MAX_CURSOR_LENGTH, cursorBytes, cursorProblem, effectiveNulls, encodeCursor, mintCursor, readCompared, readCursor, readKeyset, sortSignature, type CursorId, type CursorOptions, type CursorValue, type DecodedCursor, openCursor, };
 
 // query/pagination.d.ts
 /**
@@ -139,13 +139,13 @@ export { CursorRef, CURSOR_TIEBREAK_COLUMN, MAX_CURSOR_LENGTH, cursorBytes, curs
  * cursors through closures over the options its builder was given, so logging or serializing a
  * built query shows no part of the secret.
  */
-import { type DecodedCursor } from "./cursor.ts";
+import type * as z from "zod";
 import { type ColumnCheck, type KeysetKind } from "./cursor-mint.ts";
 import { type CursorOptions } from "./cursor-seal.ts";
+import { type DecodedCursor } from "./cursor.ts";
 import { DATABASE_ID } from "./list-extras.ts";
 import type { paginationResponseSchema } from "./schema.ts";
 import type { ListQueryInput, ParsedFields, SortField } from "./types.ts";
-import type * as z from "zod";
 /**
  * The name of one column a builder selects for `paginate` to read, which no row it returns keeps: the
  * tiebreak, the gone-anchor flag, the count, each sort key's storage class, or its stored text
@@ -250,6 +250,11 @@ declare function paginate<T extends object>(items: readonly T[], built: {
 export { applySelect, DATABASE_ID, nextCursorOf, type ListExtra, type ListPagination, type ListRow, paginate, type PaginationFacts, type PaginationResponse, paginationOf, totalOf, };
 
 // query/cursor-mint.d.ts
+/**
+ * Minting a cursor that `readCursor` will open: one whose sealed length stays within
+ * MAX_CURSOR_LENGTH, a value too long for it carried by reference (cursor-ref.ts) on a table's
+ * list, and refused on a derived list, which no row holds to read a reference back from.
+ */
 import { type CursorOptions } from "./cursor-seal.ts";
 import type { SortField } from "./types.ts";
 /**
@@ -402,7 +407,7 @@ declare const queryHelpers: {
     /** a row cut to its `select`, as `drizzleProject` cuts it */
     project: typeof drizzleProject;
 };
-export { type CursorOptions, drizzleListOptions, type DrizzleListOptions, drizzleProject, queryHelpers };
+export { drizzleListOptions, type DrizzleListOptions, drizzleProject, queryHelpers };
 
 // query/filter-values.d.ts
 /**
@@ -802,8 +807,8 @@ export type { ComputedFilterResolver, ComputedSortResolver, FieldSelection, Fiel
 // query/schema-types.d.ts
 /** The configs and outputs of the list and retrieve query schemas. Declaration-only. */
 import type * as z from "zod";
-import type { FilterLimits } from "./filter.ts";
 import type { LimitsGiven } from "./filter-validate.ts";
+import type { FilterLimits } from "./filter.ts";
 import type { RESERVED_LIST_KEYS, RESERVED_RETRIEVE_KEYS } from "./schema-params.ts";
 import type { FieldType, FilterAST, ParsedFields, SortDirection, SortField } from "./types.ts";
 /** The fields an endpoint's `select` may name; any other is a 400 naming it */
@@ -1091,7 +1096,7 @@ declare function carriedTexts(row: Record<string, unknown>, sort: readonly SortF
  * checked it; the merge compares typedKeys' numbers, the same parse of the same text
  */
 declare function cursorKeys(row: Record<string, unknown>, sort: readonly SortField[]): Record<string, unknown>;
-export { carriedTexts, cursorKeys, DATABASE_ID, INTEGER_TEXT, type KeyClass, malformed, refuseUnheld, storedClasses, typedKeys, unencoded, };
+export { carriedTexts, cursorKeys, DATABASE_ID, INTEGER_TEXT, malformed, refuseUnheld, storedClasses, typedKeys, unencoded, };
 
 // query/filter-parse.d.ts
 /**
@@ -1394,8 +1399,8 @@ export { FILTER_GRAMMAR, DATABASE_META_KEY, DATABASE_META_VERSION, type EntityMe
  * Reading database's facts off a JSON Schema. Returns null, never throws: a refused or malformed
  * payload degrades to "no facts", never to a confident wrong answer. See docs/meta-contract.md §4.
  */
-import { isRecord } from "./read-indexes.ts";
 import { type EntityMeta, type DatabaseMeta, type QueryMeta } from "./contract.ts";
+import { isRecord } from "./read-indexes.ts";
 /** How readDatabaseMeta, readEntityMeta and readQueryMeta read a payload */
 type ReadOptions = {
     /**
@@ -1444,16 +1449,10 @@ declare const REQUEST_BYTES: {
     readonly q: 600;
     readonly select: 500;
 };
-/**
- * `value`'s bytes as the widest common encoding writes it: a character either encoding escapes,
- * a space (%20 in a URL) and ~ or ! (%7E, %21 in a form) among them, as three per UTF-8 byte;
- * undefined for a lone surrogate, which no URL carries
- */
-declare function encodedBytes(value: string): number | undefined;
 /** Whether `value` takes at most `bytes` however a client encodes it */
 declare const withinBytes: (bytes: number) => (value: string) => boolean;
 declare const encodedMessage: (bytes: number) => string;
-export { encodedBytes, encodedMessage, LIST_QUERY_LIMITS, MAX_QUERY_BYTES, PAGINATION_DEFAULTS, REQUEST_BYTES, withinBytes, };
+export { encodedMessage, LIST_QUERY_LIMITS, MAX_QUERY_BYTES, PAGINATION_DEFAULTS, REQUEST_BYTES, withinBytes };
 
 // query/schema-params.d.ts
 /** The zod pieces the list and retrieve query schemas share: request params and parsed outputs. */

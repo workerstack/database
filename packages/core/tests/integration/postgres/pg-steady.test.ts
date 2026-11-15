@@ -8,39 +8,44 @@
  * same catalog: side effects are not a pg_proc column, so it stays a list, but each built-in in it
  * must be one Postgres 17 has.
  */
-import postgres from "postgres"
-import { afterAll, describe, expect, it } from "vitest"
-import { pgUrl } from "../support/pg.ts"
-import { PURE_BUILTINS as PURE } from "../../../src/migrate/core/pg-builtins.ts"
+import postgres from "postgres";
+import { afterAll, describe, expect, it } from "vitest";
 
-const sql = postgres(pgUrl(), { max: 1, onnotice: () => undefined })
-afterAll(() => sql.end())
+import { PURE_BUILTINS as PURE } from "../../../src/migrate/core/pg-builtins.ts";
+import { pgUrl } from "../support/pg.ts";
 
-/* the extensions' functions PURE names besides the built-ins: uuid-ossp, unaccent, pgcrypto's digest */
+const sql = postgres(pgUrl(), { max: 1, onnotice: () => {} });
+
+afterAll(() => sql.end());
+
+// the extensions' functions PURE names besides the built-ins: uuid-ossp, unaccent, pgcrypto's digest
 const EXTENSIONS = new Set([
-	"digest",
-	"unaccent",
-	"uuid_generate_v1",
-	"uuid_generate_v1mc",
-	"uuid_generate_v3",
-	"uuid_generate_v4",
-	"uuid_generate_v5",
-	"uuid_nil",
-	"uuid_ns_dns",
-	"uuid_ns_oid",
-	"uuid_ns_url",
-	"uuid_ns_x500",
-])
+  "digest",
+  "unaccent",
+  "uuid_generate_v1",
+  "uuid_generate_v1mc",
+  "uuid_generate_v3",
+  "uuid_generate_v4",
+  "uuid_generate_v5",
+  "uuid_nil",
+  "uuid_ns_dns",
+  "uuid_ns_oid",
+  "uuid_ns_url",
+  "uuid_ns_x500",
+]);
 
 /** `names` wrapped into lines of at most 110 characters */
 function wrapped(names: readonly string[]): string[] {
-	const lines: string[] = []
-	for (const name of names) {
-		const last = lines.at(-1)
-		if (last !== undefined && last.length + 1 + name.length <= 110) lines[lines.length - 1] = `${last} ${name}`
-		else lines.push(name)
-	}
-	return lines
+  const lines: string[] = [];
+
+  for (const name of names) {
+    const last = lines.at(-1);
+
+    if (last !== undefined && last.length + 1 + name.length <= 110) lines[lines.length - 1] = `${last} ${name}`;
+    else lines.push(name);
+  }
+
+  return lines;
 }
 
 /** The generated module's text for `names` */
@@ -51,41 +56,45 @@ const moduleOf = (names: readonly string[]): string => `/**
  * do not edit.
  */
 
-/* the names, space-separated, as one string: a set literal of ${names.length} would be as many lines */
+// the names, space-separated, as one string: a set literal of ${names.length} would be as many lines
 const NAMES = \`
 ${wrapped(names).join("\n")}
-\`
+\`;
 
 /** The set of the space-separated names in \`text\` */
-const setOf = (text: string): ReadonlySet<string> => new Set(text.trim().split(/\\s+/))
+const setOf = (text: string): ReadonlySet<string> => new Set(text.trim().split(/\\s+/));
 
 // lookup-table: the steady built-ins, by name
-export const STEADY_BUILTINS: ReadonlySet<string> = /* @__PURE__ */ setOf(NAMES)
-`
+export const STEADY_BUILTINS: ReadonlySet<string> = /* @__PURE__ */ setOf(NAMES);
+`;
 
 describe("the steady built-ins (P15 of r18)", () => {
-	it("are Postgres 17's IMMUTABLE and STABLE pg_catalog functions, as pg-steady-builtins.ts lists them", async () => {
-		const [{ major }] = await sql<
-			[{ major: number }]
-		>`SELECT current_setting('server_version_num')::int / 10000 AS major`
-		expect(major, "the steady built-ins are read from Postgres 17").toBe(17)
-		const rows = await sql<Array<{ proname: string }>>`
+  it("are Postgres 17's IMMUTABLE and STABLE pg_catalog functions, as pg-steady-builtins.ts lists them", async () => {
+    const [{ major }] = await sql<
+      [{ major: number }]
+    >`SELECT current_setting('server_version_num')::int / 10000 AS major`;
+
+    expect(major, "the steady built-ins are read from Postgres 17").toBe(17);
+
+    const rows = await sql<Array<{ proname: string }>>`
 			SELECT proname FROM pg_proc
 			WHERE pronamespace = 'pg_catalog'::regnamespace AND prokind = 'f'
 				AND prorettype NOT IN ('cstring'::regtype, 'internal'::regtype)
 				AND NOT ('cstring'::regtype = ANY (proargtypes) OR 'internal'::regtype = ANY (proargtypes))
 			GROUP BY proname
 			HAVING bool_and(provolatile IN ('i', 's'))
-			ORDER BY proname COLLATE "C"`
-		await expect(moduleOf(rows.map(({ proname }) => proname))).toMatchFileSnapshot(
-			"../../../src/migrate/core/pg-steady-builtins.ts",
-		)
-	})
+			ORDER BY proname COLLATE "C"`;
 
-	it("hold every built-in the PURE list names, which Postgres 17 has", async () => {
-		const rows = await sql<Array<{ proname: string }>>`
-			SELECT DISTINCT proname FROM pg_proc WHERE pronamespace = 'pg_catalog'::regnamespace`
-		const catalog = new Set(rows.map(({ proname }) => proname))
-		expect([...PURE].filter((name) => !catalog.has(name) && !EXTENSIONS.has(name))).toEqual([])
-	})
-})
+    await expect(moduleOf(rows.map(({ proname }) => proname))).toMatchFileSnapshot(
+      "../../../src/migrate/core/pg-steady-builtins.ts",
+    );
+  });
+
+  it("hold every built-in the PURE list names, which Postgres 17 has", async () => {
+    const rows = await sql<Array<{ proname: string }>>`
+			SELECT DISTINCT proname FROM pg_proc WHERE pronamespace = 'pg_catalog'::regnamespace`;
+
+    const catalog = new Set(rows.map(({ proname }) => proname));
+    expect([...PURE].filter((name) => !catalog.has(name) && !EXTENSIONS.has(name))).toEqual([]);
+  });
+});

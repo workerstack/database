@@ -193,8 +193,8 @@ export { FILTER_GRAMMAR, DATABASE_META_KEY, DATABASE_META_VERSION, type EntityMe
  * Reading database's facts off a JSON Schema. Returns null, never throws: a refused or malformed
  * payload degrades to "no facts", never to a confident wrong answer. See docs/meta-contract.md §4.
  */
-import { isRecord } from "./read-indexes.ts";
 import { type EntityMeta, type DatabaseMeta, type QueryMeta } from "./contract.ts";
+import { isRecord } from "./read-indexes.ts";
 /** How readDatabaseMeta, readEntityMeta and readQueryMeta read a payload */
 type ReadOptions = {
     /**

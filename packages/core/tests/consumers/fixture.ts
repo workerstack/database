@@ -1,7 +1,7 @@
 /** The consumer app the cells build: a Worker on database's runtime subpaths, and a module that types every subpath. */
-import { SUBPATHS } from "./stage.ts"
+import { SUBPATHS } from "./stage.ts";
 
-export const WORKER = `import { createListQuerySchema } from "@workerstack/database/query"
+const WORKER = `import { createListQuerySchema } from "@workerstack/database/query"
 import { buildListQuery } from "@workerstack/database/query/sqlite"
 import { c } from "@workerstack/database/sqlite/columns"
 import { d1ErrorHandler } from "@workerstack/database/sqlite/d1/error-handler"
@@ -26,22 +26,22 @@ export default {
 		}
 	},
 }
-`
+`;
 
 /**
  * Counts every Function made from a string. Imported first, so it is in place before database's modules
  * build their schemas; on workerd the call then throws, as it refuses code from strings (4.18)
  */
-export const COUNT_EVAL = `const Real = globalThis.Function
+const COUNT_EVAL = `const Real = globalThis.Function
 export const counter = { made: 0 }
 globalThis.Function = new Proxy(Real, {
 	apply: (target, self, args) => (counter.made++, Reflect.apply(target, self, args)),
 	construct: (target, args) => (counter.made++, Reflect.construct(target, args)),
 })
-`
+`;
 
 /** A Worker that builds and parses database's query schemas and says how many Functions that made */
-export const NO_EVAL_WORKER = `import { counter } from "./count-eval.ts"
+const NO_EVAL_WORKER = `import { counter } from "./count-eval.ts"
 import { createListQuerySchema, createRetrieveQuerySchema, paginationResponseSchema } from "@workerstack/database/query"
 
 export default {
@@ -56,22 +56,22 @@ export default {
 		return Response.json({ made: counter.made, parsed })
 	},
 }
-`
+`;
 
 /** A module that imports the types of every subpath */
-export const ALL_TYPES = `${SUBPATHS.map((spec, i) => `import type * as m${i} from "${spec}"`).join("\n")}
+const ALL_TYPES = `${SUBPATHS.map((spec, i) => `import type * as m${i} from "${spec}"`).join("\n")}
 export type All = [${SUBPATHS.map((_, i) => `typeof m${i}`).join(", ")}]
-`
+`;
 
 /** The subpaths a Worker imports at runtime: all but the tooling, which runs under Node */
 export const RUNTIME: string[] = SUBPATHS.filter(
-	(spec) => !/^@workerstack\/database\/(?:cli|codegen|migrate|package\.json)(?:\/|$)/.test(spec),
-)
+  (spec) => !/^@workerstack\/database\/(?:cli|codegen|migrate|package\.json)(?:\/|$)/.test(spec),
+);
 
 /** A module that imports the types of every runtime subpath, for a Worker's own lib (K1 of r17) */
-export const WORKER_TYPES = `${RUNTIME.map((spec, i) => `import type * as m${i} from "${spec}"`).join("\n")}
+const WORKER_TYPES = `${RUNTIME.map((spec, i) => `import type * as m${i} from "${spec}"`).join("\n")}
 export type All = [${RUNTIME.map((_, i) => `typeof m${i}`).join(", ")}]
-`
+`;
 
 /**
  * A script that writes src/reexport.ts, re-exporting every value export of every subpath as a
@@ -89,13 +89,13 @@ for (const [i, spec] of specs.entries()) {
 }
 writeFileSync("src/reexport.ts", lines.join("\\n") + "\\n")
 console.log(lines.filter((line) => line.startsWith("export ")).length)
-`
+`;
 
 /**
  * A module of the two checks a TypeScript below 5.7 dropped with no error under skipLibCheck (KT2
  * of r22b): each must stay an error at database's floor, and below it the named imports fail instead
  */
-export const FLOOR = `import { createUlidFactory } from "@workerstack/database"
+const FLOOR = `import { createUlidFactory } from "@workerstack/database"
 import { defineStateMachine } from "@workerstack/database/states"
 export const post = defineStateMachine({
 	initial: "draft",
@@ -108,7 +108,7 @@ export const post = defineStateMachine({
 })
 // @ts-expect-error random fills bytes, not a string
 export const ids = createUlidFactory({ random: (bytes: string) => void bytes.toUpperCase() })
-`
+`;
 
 /**
  * A module that forwards values that may be unset into database's option bags under
@@ -116,7 +116,7 @@ export const ids = createUlidFactory({ random: (bytes: string) => void bytes.toU
  * left out, so each optional property it reads takes undefined, and 0.20.1 refused these with
  * TS2379; what database hands back keeps each optional key absent, never undefined
  */
-export const UNSET = `import { createUlidFactory, LruCache } from "@workerstack/database"
+const UNSET = `import { createUlidFactory, LruCache } from "@workerstack/database"
 import { createListQuerySchema, createRetrieveQuerySchema, type DrizzleListOptions, validateFilter } from "@workerstack/database/query"
 import type { ListExtras } from "@workerstack/database/query/sqlite"
 import { c } from "@workerstack/database/sqlite/columns"
@@ -145,33 +145,33 @@ type Defined<T> = { [K in keyof T]?: Exclude<T[K], undefined> }
 declare const built: { extras: ListExtras; options: DrizzleListOptions }
 export const selected: Defined<ListExtras> = built.extras
 export const options: Defined<Pick<DrizzleListOptions, "where">> & { extras: Defined<DrizzleListOptions["extras"]> } = built.options
-`
+`;
 
 /** A module that exports list and retrieve schemas, their types inferred, as an app's route module does (K11 of r17) */
-export const SCHEMAS = `import { createListQuerySchema, createRetrieveQuerySchema } from "@workerstack/database/query"
+const SCHEMAS = `import { createListQuerySchema, createRetrieveQuerySchema } from "@workerstack/database/query"
 export const listSchema = createListQuerySchema({ sort: ["created_at"] })
 export const retrieveSchema = createRetrieveQuerySchema({ fields: { scalars: ["id"] } })
-`
+`;
 
 /** A D1-only project's migrate config, which needs neither @libsql/client nor libpg-query (K2 of r17) */
-export const MIGRATE_CONFIG = `import { defineConfig } from "@workerstack/database/migrate"
+const MIGRATE_CONFIG = `import { defineConfig } from "@workerstack/database/migrate"
 export default defineConfig({
 	databases: { core: { migrationsDir: "migrations", name: "core", provider: { databaseName: "CORE_DB", type: "d1" } } },
 })
-`
+`;
 
 const STRICT = {
-	exactOptionalPropertyTypes: true,
-	noPropertyAccessFromIndexSignature: true,
-	noUncheckedIndexedAccess: true,
-	skipLibCheck: true,
-	strict: true,
-	target: "es2023",
-	types: ["@cloudflare/workers-types", "node"],
-}
+  exactOptionalPropertyTypes: true,
+  noPropertyAccessFromIndexSignature: true,
+  noUncheckedIndexedAccess: true,
+  skipLibCheck: true,
+  strict: true,
+  target: "es2023",
+  types: ["@cloudflare/workers-types", "node"],
+};
 
 /** create-cloudflare 2.74.6's templates/hello-world/ts/tsconfig.json, verbatim: database's main audience, no flag added (K1 of r20) */
-export const CREATE_CLOUDFLARE_TSCONFIG = `{
+const CREATE_CLOUDFLARE_TSCONFIG = `{
 	"compilerOptions": {
 		/* Visit https://aka.ms/tsconfig.json to read more about this file */
 
@@ -213,24 +213,24 @@ export const CREATE_CLOUDFLARE_TSCONFIG = `{
 	"exclude": ["test"],
 	"include": ["worker-configuration.d.ts", "src/**/*.ts"]
 }
-`
+`;
 
-/* the flags a consumer might add to it, beyond `strict`: database's surface must hold under all of them (meta-contract §10) */
+// the flags a consumer might add to it, beyond `strict`: database's surface must hold under all of them (meta-contract §10)
 const STRICT_UNION = {
-	allowUnreachableCode: false,
-	allowUnusedLabels: false,
-	erasableSyntaxOnly: true,
-	exactOptionalPropertyTypes: true,
-	noFallthroughCasesInSwitch: true,
-	noImplicitOverride: true,
-	noImplicitReturns: true,
-	noPropertyAccessFromIndexSignature: true,
-	noUncheckedIndexedAccess: true,
-	noUncheckedSideEffectImports: true,
-	noUnusedLocals: true,
-	noUnusedParameters: true,
-	verbatimModuleSyntax: true,
-}
+  allowUnreachableCode: false,
+  allowUnusedLabels: false,
+  erasableSyntaxOnly: true,
+  exactOptionalPropertyTypes: true,
+  noFallthroughCasesInSwitch: true,
+  noImplicitOverride: true,
+  noImplicitReturns: true,
+  noPropertyAccessFromIndexSignature: true,
+  noUncheckedIndexedAccess: true,
+  noUncheckedSideEffectImports: true,
+  noUnusedLocals: true,
+  noUnusedParameters: true,
+  verbatimModuleSyntax: true,
+};
 
 /**
  * K3 of r21: database's D1 modules in a Worker typed by `wrangler types` alone keep their types, the
@@ -269,158 +269,158 @@ export async function routed(env: Env, ctx: ExecutionContext, bookmark: string |
 	tracker.track("session", "core")
 	return [mapping?.target ?? "", ...tracker.getBookmarks().map((tagged) => tagged.bookmark)]
 }
-`
+`;
 
-/* the D1 and KV bindings every environment of the c3 project holds */
-const C3_DB = { binding: "DB", database_id: "00000000-0000-0000-0000-000000000000", database_name: "core" }
+// the D1 and KV bindings every environment of the c3 project holds
+const C3_DB = { binding: "DB", database_id: "00000000-0000-0000-0000-000000000000", database_name: "core" };
+
 const C3_SHARD_0 = {
-	binding: "SHARD_DB_0",
-	database_id: "00000000-0000-0000-0000-000000000001",
-	database_name: "shard-0",
-}
-const C3_KV = { binding: "KV", id: "00000000000000000000000000000000" }
+  binding: "SHARD_DB_0",
+  database_id: "00000000-0000-0000-0000-000000000001",
+  database_name: "shard-0",
+};
+
+const C3_KV = { binding: "KV", id: "00000000000000000000000000000000" };
 
 /** The files every staged consumer holds: the Worker, the types module, two tsconfigs, wrangler and vite config */
 export const APP: Record<string, string> = {
-	"src/count-eval.ts": COUNT_EVAL,
-	"src/floor.ts": FLOOR,
-	"src/no-eval.ts": NO_EVAL_WORKER,
-	"database.migrate.config.ts": MIGRATE_CONFIG,
-	"src/schemas.ts": SCHEMAS,
-	"src/types.ts": ALL_TYPES,
-	"src/unset.ts": UNSET,
-	"src/worker-types.ts": WORKER_TYPES,
-	"src/worker.ts": WORKER,
-	/* a bundler project: database's .ts source compiles as the app's own */
-	"tsconfig.bundler.json": JSON.stringify({
-		compilerOptions: {
-			...STRICT,
-			allowImportingTsExtensions: true,
-			module: "esnext",
-			moduleResolution: "bundler",
-			noEmit: true,
-		},
-		include: ["src/types.ts", "src/floor.ts", "src/unset.ts"],
-	}),
-	/* a Node project: nodenext, emitting, with the .ts imports rewritten to .js */
-	"tsconfig.nodenext.json": JSON.stringify({
-		compilerOptions: {
-			...STRICT,
-			module: "nodenext",
-			moduleResolution: "nodenext",
-			outDir: "out",
-			rewriteRelativeImportExtensions: true,
-			rootDir: "src",
-		},
-		include: ["src/types.ts", "src/unset.ts"],
-	}),
-	/* the migrate config alone, Node's types alone: no optional peer's types are needed (K2 of r17) */
-	"tsconfig.migrate.json": JSON.stringify({
-		compilerOptions: {
-			...STRICT,
-			allowImportingTsExtensions: true,
-			module: "esnext",
-			moduleResolution: "bundler",
-			noEmit: true,
-			types: ["node"],
-		},
-		include: ["database.migrate.config.ts"],
-	}),
-	/* declarations emitted for a module that exports database's schemas: each type has a public name (K11 of r17) */
-	"tsconfig.declarations.json": JSON.stringify({
-		compilerOptions: {
-			...STRICT,
-			allowImportingTsExtensions: true,
-			declaration: true,
-			emitDeclarationOnly: true,
-			module: "esnext",
-			moduleResolution: "bundler",
-			outDir: "decl",
-			rootDir: "src",
-		},
-		include: ["src/schemas.ts"],
-	}),
-	/* declarations emitted for a module that re-exports every value database exports: each type has a public name (KT4 of r22b) */
-	"tsconfig.reexport.json": JSON.stringify({
-		compilerOptions: {
-			...STRICT,
-			allowImportingTsExtensions: true,
-			declaration: true,
-			emitDeclarationOnly: true,
-			module: "esnext",
-			moduleResolution: "bundler",
-			outDir: "decl-reexport",
-			rootDir: "src",
-		},
-		include: ["src/reexport.ts"],
-	}),
-	/* a stock Worker project: no DOM, workers-types alone, as \`wrangler types\` sets it up (K1 of r17) */
-	"tsconfig.worker.json": JSON.stringify({
-		compilerOptions: {
-			...STRICT,
-			allowImportingTsExtensions: true,
-			lib: ["esnext"],
-			module: "esnext",
-			moduleResolution: "bundler",
-			noEmit: true,
-			types: ["@cloudflare/workers-types"],
-		},
-		include: ["src/worker-types.ts"],
-	}),
-	/* the Workers side of create-cloudflare's React Router template: lib ES2022, the floor database's runtime subpaths keep to (K2 of r20) */
-	"tsconfig.worker-es2022.json": JSON.stringify({
-		compilerOptions: {
-			...STRICT,
-			allowImportingTsExtensions: true,
-			lib: ["DOM", "DOM.Iterable", "ES2022"],
-			module: "esnext",
-			moduleResolution: "bundler",
-			noEmit: true,
-			target: "es2022",
-			types: ["@cloudflare/workers-types"],
-		},
-		include: ["src/worker-types.ts"],
-	}),
-	/* a nodejs_compat Worker, or a package whose scripts run on Node: no DOM, Workers' and Node's types, every subpath (K1 of r18) */
-	"tsconfig.worker-node.json": JSON.stringify({
-		compilerOptions: {
-			...STRICT,
-			allowImportingTsExtensions: true,
-			lib: ["esnext"],
-			module: "esnext",
-			moduleResolution: "bundler",
-			noEmit: true,
-		},
-		include: ["src/types.ts"],
-	}),
-	/* everything bundled, so tooling that leaked into a runtime import would show in the output */
-	"vite.config.mjs": `export default { build: { outDir: "dist-vite" }, ssr: { noExternal: true } }\n`,
-	"wrangler.toml": 'name = "consumer"\nmain = "src/worker.ts"\ncompatibility_date = "2026-10-01"\n',
-	/* a project create-cloudflare scaffolds, apart from the app's own files its src glob would take in */
-	"c3/tsconfig.json": CREATE_CLOUDFLARE_TSCONFIG,
-	/*
-	 * the bindings `wrangler types` writes c3/worker-configuration.d.ts from, at the stage (K3 of r21);
-	 * SHARD_DB_1 is bound in staging alone, so wrangler writes it optional (AD1 of the area D review)
-	 */
-	"c3/wrangler.jsonc": JSON.stringify({
-		compatibility_date: "2026-10-01",
-		d1_databases: [C3_DB, C3_SHARD_0],
-		env: {
-			staging: {
-				d1_databases: [
-					C3_DB,
-					C3_SHARD_0,
-					{ binding: "SHARD_DB_1", database_id: "00000000-0000-0000-0000-000000000002", database_name: "shard-1" },
-				],
-				kv_namespaces: [C3_KV],
-			},
-		},
-		kv_namespaces: [C3_KV],
-		main: "src/index.ts",
-		name: "c3",
-	}),
-	"c3/src/index.ts": WORKER,
-	"c3/src/d1.ts": C3_D1,
-	"c3/src/types.ts": WORKER_TYPES,
-	"c3/tsconfig.strict.json": JSON.stringify({ compilerOptions: STRICT_UNION, extends: "./tsconfig.json" }),
-}
+  "src/count-eval.ts": COUNT_EVAL,
+  "src/floor.ts": FLOOR,
+  "src/no-eval.ts": NO_EVAL_WORKER,
+  "database.migrate.config.ts": MIGRATE_CONFIG,
+  "src/schemas.ts": SCHEMAS,
+  "src/types.ts": ALL_TYPES,
+  "src/unset.ts": UNSET,
+  "src/worker-types.ts": WORKER_TYPES,
+  "src/worker.ts": WORKER,
+  // a bundler project: database's .ts source compiles as the app's own
+  "tsconfig.bundler.json": JSON.stringify({
+    compilerOptions: {
+      ...STRICT,
+      allowImportingTsExtensions: true,
+      module: "esnext",
+      moduleResolution: "bundler",
+      noEmit: true,
+    },
+    include: ["src/types.ts", "src/floor.ts", "src/unset.ts"],
+  }),
+  // a Node project: nodenext, emitting, with the .ts imports rewritten to .js
+  "tsconfig.nodenext.json": JSON.stringify({
+    compilerOptions: {
+      ...STRICT,
+      module: "nodenext",
+      moduleResolution: "nodenext",
+      outDir: "out",
+      rewriteRelativeImportExtensions: true,
+      rootDir: "src",
+    },
+    include: ["src/types.ts", "src/unset.ts"],
+  }),
+  // the migrate config alone, Node's types alone: no optional peer's types are needed (K2 of r17)
+  "tsconfig.migrate.json": JSON.stringify({
+    compilerOptions: {
+      ...STRICT,
+      allowImportingTsExtensions: true,
+      module: "esnext",
+      moduleResolution: "bundler",
+      noEmit: true,
+      types: ["node"],
+    },
+    include: ["database.migrate.config.ts"],
+  }),
+  // declarations emitted for a module that exports database's schemas: each type has a public name (K11 of r17)
+  "tsconfig.declarations.json": JSON.stringify({
+    compilerOptions: {
+      ...STRICT,
+      allowImportingTsExtensions: true,
+      declaration: true,
+      emitDeclarationOnly: true,
+      module: "esnext",
+      moduleResolution: "bundler",
+      outDir: "decl",
+      rootDir: "src",
+    },
+    include: ["src/schemas.ts"],
+  }),
+  // declarations emitted for a module that re-exports every value database exports: each type has a public name (KT4 of r22b)
+  "tsconfig.reexport.json": JSON.stringify({
+    compilerOptions: {
+      ...STRICT,
+      allowImportingTsExtensions: true,
+      declaration: true,
+      emitDeclarationOnly: true,
+      module: "esnext",
+      moduleResolution: "bundler",
+      outDir: "decl-reexport",
+      rootDir: "src",
+    },
+    include: ["src/reexport.ts"],
+  }),
+  // a stock Worker project: no DOM, workers-types alone, as \`wrangler types\` sets it up (K1 of r17)
+  "tsconfig.worker.json": JSON.stringify({
+    compilerOptions: {
+      ...STRICT,
+      allowImportingTsExtensions: true,
+      lib: ["esnext"],
+      module: "esnext",
+      moduleResolution: "bundler",
+      noEmit: true,
+      types: ["@cloudflare/workers-types"],
+    },
+    include: ["src/worker-types.ts"],
+  }),
+  // the Workers side of create-cloudflare's React Router template: lib ES2022, the floor database's runtime subpaths keep to (K2 of r20)
+  "tsconfig.worker-es2022.json": JSON.stringify({
+    compilerOptions: {
+      ...STRICT,
+      allowImportingTsExtensions: true,
+      lib: ["DOM", "DOM.Iterable", "ES2022"],
+      module: "esnext",
+      moduleResolution: "bundler",
+      noEmit: true,
+      target: "es2022",
+      types: ["@cloudflare/workers-types"],
+    },
+    include: ["src/worker-types.ts"],
+  }),
+  // a nodejs_compat Worker, or a package whose scripts run on Node: no DOM, Workers' and Node's types, every subpath (K1 of r18)
+  "tsconfig.worker-node.json": JSON.stringify({
+    compilerOptions: {
+      ...STRICT,
+      allowImportingTsExtensions: true,
+      lib: ["esnext"],
+      module: "esnext",
+      moduleResolution: "bundler",
+      noEmit: true,
+    },
+    include: ["src/types.ts"],
+  }),
+  // everything bundled, so tooling that leaked into a runtime import would show in the output
+  "vite.config.mjs": `export default { build: { outDir: "dist-vite" }, ssr: { noExternal: true } }\n`,
+  "wrangler.toml": 'name = "consumer"\nmain = "src/worker.ts"\ncompatibility_date = "2026-10-01"\n',
+  // a project create-cloudflare scaffolds, apart from the app's own files its src glob would take in
+  "c3/tsconfig.json": CREATE_CLOUDFLARE_TSCONFIG,
+  // the bindings `wrangler types` writes c3/worker-configuration.d.ts from, at the stage (K3 of r21);
+  // SHARD_DB_1 is bound in staging alone, so wrangler writes it optional (AD1 of the area D review)
+  "c3/wrangler.jsonc": JSON.stringify({
+    compatibility_date: "2026-10-01",
+    d1_databases: [C3_DB, C3_SHARD_0],
+    env: {
+      staging: {
+        d1_databases: [
+          C3_DB,
+          C3_SHARD_0,
+          { binding: "SHARD_DB_1", database_id: "00000000-0000-0000-0000-000000000002", database_name: "shard-1" },
+        ],
+        kv_namespaces: [C3_KV],
+      },
+    },
+    kv_namespaces: [C3_KV],
+    main: "src/index.ts",
+    name: "c3",
+  }),
+  "c3/src/index.ts": WORKER,
+  "c3/src/d1.ts": C3_D1,
+  "c3/src/types.ts": WORKER_TYPES,
+  "c3/tsconfig.strict.json": JSON.stringify({ compilerOptions: STRICT_UNION, extends: "./tsconfig.json" }),
+};

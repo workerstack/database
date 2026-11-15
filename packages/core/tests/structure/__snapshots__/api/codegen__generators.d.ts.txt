@@ -70,8 +70,8 @@ export declare function generateConstraints(ctx: GeneratorContext, config: Const
 export {};
 
 // codegen/generators/fts.d.ts
-import { type FtsTableConfig } from "./fts-sql.ts";
 import type { GeneratorContext } from "./context-types.ts";
+import { type FtsTableConfig } from "./fts-sql.ts";
 /** Where the fts generator writes and which tables it indexes */
 export type FtsGeneratorConfig = {
     /** file name stem; defaults to `db.<dbName>` */
@@ -123,8 +123,8 @@ export { dedup, DEFAULT_TOKENIZER, ftsColumns, ftsReferenceSql, generateFtsSql }
 export type { FtsTableConfig };
 
 // codegen/generators/manifest.d.ts
-import type { TableMeta } from "../analyzer-types.ts";
 import type { IntegerFormat, TextFormat } from "../../formats/catalog.ts";
+import type { TableMeta } from "../analyzer-types.ts";
 import type { GeneratorContext } from "./context-types.ts";
 /**
  * Manifest format version.
@@ -304,7 +304,6 @@ export declare function generateDiagrams(ctx: GeneratorContext, config: Diagrams
 
 // codegen/generators/dtos/index.d.ts
 export { generateDtos } from "./generate.ts";
-export type { DtosConfig } from "./dto-types.ts";
 
 // codegen/generators/entities.d.ts
 import type { GeneratorContext } from "./context-types.ts";
@@ -1083,8 +1082,8 @@ export { FILTER_GRAMMAR, DATABASE_META_KEY, DATABASE_META_VERSION, type EntityMe
  * Reading database's facts off a JSON Schema. Returns null, never throws: a refused or malformed
  * payload degrades to "no facts", never to a confident wrong answer. See docs/meta-contract.md §4.
  */
-import { isRecord } from "./read-indexes.ts";
 import { type EntityMeta, type DatabaseMeta, type QueryMeta } from "./contract.ts";
+import { isRecord } from "./read-indexes.ts";
 /** How readDatabaseMeta, readEntityMeta and readQueryMeta read a payload */
 type ReadOptions = {
     /**

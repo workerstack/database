@@ -1,492 +1,512 @@
 /**
  * Every GitHub Action the workflows run is pinned to a full commit SHA, with the release it
  * names in a trailing comment. A tag can be moved to other code; a SHA cannot. And CI runs the
- * gates standards lists for database, no more and no fewer, so the rule every agent reads names what CI checks.
+ * gates AGENTS.md lists, no more and no fewer, so the rule every agent reads names what CI checks.
  */
-import { globSync, readdirSync, readFileSync } from "node:fs"
-import { availableParallelism, homedir } from "node:os"
-import { join } from "node:path"
-import { describe, expect, it } from "vitest"
-import { ATLAS_FLOOR_PATH, ATLAS_FLOOR_SHA256, ATLAS_FLOOR_VERSION } from "../support/atlas-floor.ts"
-import { DATE_KEYS, OFF_UTC_INTEGRATION, OFF_UTC_POSTGRES, OFF_UTC_UNIT, OFF_UTC_ZONE } from "../support/off-utc.ts"
-import { PG_KEYWORDS } from "../support/pg-keywords.ts"
-import { POSIX_EXCLUDE, POSIX_INTEGRATION, POSIX_UNIT } from "../support/posix.ts"
-import { SQLD_ARCHIVE, SQLD_PATH, SQLD_VERSION } from "../support/sqld.ts"
-import { workers } from "../support/workers.ts"
+import { globSync, readdirSync, readFileSync } from "node:fs";
+import { availableParallelism, homedir } from "node:os";
+import { join } from "node:path";
 
-const ROOT = join(import.meta.dirname, "../../../..")
-const WORKFLOWS = join(ROOT, ".github/workflows")
+import { describe, expect, it } from "vitest";
 
-const USES = /^\s*-?\s*uses:\s*(\S+)(.*)$/
+import { ATLAS_FLOOR_PATH, ATLAS_FLOOR_SHA256, ATLAS_FLOOR_VERSION } from "../support/atlas-floor.ts";
+import { DATE_KEYS, OFF_UTC_INTEGRATION, OFF_UTC_POSTGRES, OFF_UTC_UNIT, OFF_UTC_ZONE } from "../support/off-utc.ts";
+import { PG_KEYWORDS } from "../support/pg-keywords.ts";
+import { POSIX_EXCLUDE, POSIX_INTEGRATION, POSIX_UNIT } from "../support/posix.ts";
+import { SQLD_ARCHIVE, SQLD_PATH, SQLD_VERSION } from "../support/sqld.ts";
+import { workers } from "../support/workers.ts";
+
+const ROOT = join(import.meta.dirname, "../../../..");
+const WORKFLOWS = join(ROOT, ".github/workflows");
+
+const USES = /^\s*-?\s*uses:\s*(\S+)(.*)$/;
 
 /** Each `uses:` in `yaml` that is not `owner/repo@<40-hex sha> # vX.Y.Z` (local and docker actions aside). */
 export function unpinned(yaml: string): string[] {
-	return yaml
-		.split("\n")
-		.map((line) => USES.exec(line))
-		.filter((match): match is RegExpExecArray => match !== null)
-		.filter(([, action]) => !action!.startsWith("./") && !action!.startsWith("docker://"))
-		.filter(([, action, rest]) => !/@[0-9a-f]{40}$/.test(action!) || !/^\s+#\s*v\d+\.\d+\.\d+\s*$/.test(rest!))
-		.map(([, action]) => action!)
+  return yaml
+    .split("\n")
+    .map((line) => USES.exec(line))
+    .filter((match): match is RegExpExecArray => match !== null)
+    .filter(([, action]) => !action!.startsWith("./") && !action!.startsWith("docker://"))
+    .filter(([, action, rest]) => !/@[0-9a-f]{40}$/.test(action!) || !/^\s+#\s*v\d+\.\d+\.\d+\s*$/.test(rest!))
+    .map(([, action]) => action!);
 }
 
 /** Each line in `yaml` that pipes a download straight into a shell: code nothing pins or checks */
 export function pipedToShell(yaml: string): string[] {
-	return yaml
-		.split("\n")
-		.filter((line) => /\b(?:curl|wget)\b[^|#]*\|\s*(?:sudo\s+)?(?:[\w=-]+=\S*\s+)*(?:ba|z)?sh\b/.test(line))
-		.map((line) => line.trim())
+  return yaml
+    .split("\n")
+    .filter((line) => /\b(?:curl|wget)\b[^|#]*\|\s*(?:sudo\s+)?(?:[\w=-]+=\S*\s+)*(?:ba|z)?sh\b/.test(line))
+    .map((line) => line.trim());
 }
 
 describe("workflow downloads", () => {
-	it("no workflow pipes a download into a shell; binaries are fetched by version and checked against a pinned sha256", () => {
-		const files = readdirSync(WORKFLOWS).filter((name) => /\.ya?ml$/.test(name))
-		const piped = files.flatMap((name) =>
-			pipedToShell(readFileSync(join(WORKFLOWS, name), "utf8")).map((line) => `${name}: ${line}`),
-		)
-		expect(piped).toEqual([])
-	})
+  it("no workflow pipes a download into a shell; binaries are fetched by version and checked against a pinned sha256", () => {
+    const files = readdirSync(WORKFLOWS).filter((name) => /\.ya?ml$/.test(name));
 
-	it.each([
-		["        run: curl -sSf https://atlasgo.sh | ATLAS_VERSION=v1.3.0 CI=true sh", 1],
-		["        run: curl -fsSL https://x.sh | bash", 1],
-		["        run: wget -qO- https://x.sh | sudo sh", 1],
-		['        run: curl -sSfL -o "$RUNNER_TEMP/atlas" https://release.ariga.io/atlas/atlas-linux-amd64-v1.3.0', 0],
-		["        run: echo abc | sha256sum -c -", 0],
-	])("the checker: %s", (line, hits) => {
-		expect(pipedToShell(line)).toHaveLength(hits)
-	})
-})
+    const piped = files.flatMap((name) =>
+      pipedToShell(readFileSync(join(WORKFLOWS, name), "utf8")).map((line) => `${name}: ${line}`),
+    );
+
+    expect(piped).toEqual([]);
+  });
+
+  it.each([
+    ["        run: curl -sSf https://atlasgo.sh | ATLAS_VERSION=v1.3.0 CI=true sh", 1],
+    ["        run: curl -fsSL https://x.sh | bash", 1],
+    ["        run: wget -qO- https://x.sh | sudo sh", 1],
+    ['        run: curl -sSfL -o "$RUNNER_TEMP/atlas" https://release.ariga.io/atlas/atlas-linux-amd64-v1.3.0', 0],
+    ["        run: echo abc | sha256sum -c -", 0],
+  ])("the checker: %s", (line, hits) => {
+    expect(pipedToShell(line)).toHaveLength(hits);
+  });
+});
 
 /** The permissions block at the top of a workflow, before `jobs:` (every job inherits it) */
 function workflowPermissions(yaml: string): string {
-	const top = yaml.slice(0, yaml.search(/^jobs:/m))
-	return /^permissions:\n((?:[ \t]+.*\n)*)/m.exec(top)?.[1] ?? ""
+  const top = yaml.slice(0, yaml.search(/^jobs:/m));
+
+  return /^permissions:\n((?:[ \t]+.*\n)*)/m.exec(top)?.[1] ?? "";
 }
 
 describe("workflow permissions", () => {
-	it("grant nothing beyond contents: read to every job; a job that publishes asks for more itself", () => {
-		for (const name of readdirSync(WORKFLOWS).filter((file) => /\.ya?ml$/.test(file))) {
-			const granted = workflowPermissions(readFileSync(join(WORKFLOWS, name), "utf8"))
-			expect(granted.trim().split("\n").filter(Boolean), name).toEqual(granted.trim() === "" ? [] : ["contents: read"])
-		}
-	})
-})
+  it("grant nothing beyond contents: read to every job; a job that publishes asks for more itself", () => {
+    for (const name of readdirSync(WORKFLOWS).filter((file) => /\.ya?ml$/.test(file))) {
+      const granted = workflowPermissions(readFileSync(join(WORKFLOWS, name), "utf8"));
+      expect(granted.trim().split("\n").filter(Boolean), name).toEqual(granted.trim() === "" ? [] : ["contents: read"]);
+    }
+  });
+});
 
 describe("workflow actions", () => {
-	it("every workflow pins every action to a commit SHA", () => {
-		const files = readdirSync(WORKFLOWS).filter((name) => /\.ya?ml$/.test(name))
-		expect(files.length).toBeGreaterThan(0)
-		const loose = files.flatMap((name) =>
-			unpinned(readFileSync(join(WORKFLOWS, name), "utf8")).map((action) => `${name}: ${action}`),
-		)
-		expect(loose).toEqual([])
-	})
+  it("every workflow pins every action to a commit SHA", () => {
+    const files = readdirSync(WORKFLOWS).filter((name) => /\.ya?ml$/.test(name));
+    expect(files.length).toBeGreaterThan(0);
 
-	it.each([
-		["      - uses: actions/checkout@v4", ["actions/checkout@v4"]],
-		["      - uses: actions/checkout@latest", ["actions/checkout@latest"]],
-		[
-			"      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
-			["actions/checkout@11d5960a326750d5838078e36cf38b85af677262"],
-		],
-		["      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0", []],
-		["        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0", []],
-		["      - uses: ./.github/actions/local", []],
-		["      - run: echo uses: actions/checkout@v4", []],
-	])("the checker: %s", (yaml, expected) => {
-		expect(unpinned(yaml)).toEqual(expected)
-	})
-})
+    const loose = files.flatMap((name) =>
+      unpinned(readFileSync(join(WORKFLOWS, name), "utf8")).map((action) => `${name}: ${action}`),
+    );
+
+    expect(loose).toEqual([]);
+  });
+
+  it.each([
+    ["      - uses: actions/checkout@v4", ["actions/checkout@v4"]],
+    ["      - uses: actions/checkout@latest", ["actions/checkout@latest"]],
+    [
+      "      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+      ["actions/checkout@11d5960a326750d5838078e36cf38b85af677262"],
+    ],
+    ["      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0", []],
+    ["        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0", []],
+    ["      - uses: ./.github/actions/local", []],
+    ["      - run: echo uses: actions/checkout@v4", []],
+  ])("the checker: %s", (yaml, expected) => {
+    expect(unpinned(yaml)).toEqual(expected);
+  });
+});
 
 /**
  * One CI step as ci.yml lists it: a one-line `run:` by its command, a `run: |` block by its step's
  * name. A step's `bun run [--filter <package>] <script>` names the script it runs.
  */
 export function ciSteps(yaml: string): Array<{ command?: string; name?: string }> {
-	const steps: Array<{ command?: string; name?: string }> = []
-	let name: string | undefined
-	for (const line of yaml.split("\n")) {
-		const named = /^\s+- name:\s*(.+?)\s*$/.exec(line)
-		if (named !== null) name = named[1]
-		const run = /^\s+(-\s+)?run:\s*(.*?)\s*$/.exec(line)
-		if (run === null) continue
-		steps.push(run[2] === "|" ? { name } : { command: run[2] })
-		name = undefined
-	}
-	return steps
+  const steps: Array<{ command?: string; name?: string }> = [];
+  let name: string | undefined;
+
+  for (const line of yaml.split("\n")) {
+    const named = /^\s+- name:\s*(.+?)\s*$/.exec(line);
+
+    if (named !== null) name = named[1];
+    const run = /^\s+(-\s+)?run:\s*(.*?)\s*$/.exec(line);
+
+    if (run === null) continue;
+    steps.push(run[2] === "|" ? { name } : { command: run[2] });
+    name = undefined;
+  }
+
+  return steps;
 }
 
 /** Each job of a workflow: its runner and its own lines */
 export function ciJobs(yaml: string): Array<{ lines: string; name: string; runsOn: string }> {
-	const body = yaml.slice(yaml.search(/^jobs:\n/m) + "jobs:\n".length)
-	return body
-		.split(/^(?= {2}[\w-]+:$)/m)
-		.filter((block) => /^ {2}[\w-]+:$/m.test(block))
-		.map((lines) => ({
-			lines,
-			name: /^ {2}([\w-]+):$/m.exec(lines)?.[1] as string,
-			runsOn: /^ {4}runs-on:\s*(\S+)/m.exec(lines)?.[1] ?? "",
-		}))
+  const body = yaml.slice(yaml.search(/^jobs:\n/m) + "jobs:\n".length);
+
+  return body
+    .split(/^(?= {2}[\w-]+:$)/m)
+    .filter((block) => /^ {2}[\w-]+:$/m.test(block))
+    .map((lines) => ({
+      lines,
+      name: /^ {2}([\w-]+):$/m.exec(lines)?.[1] as string,
+      runsOn: /^ {4}runs-on:\s*(\S+)/m.exec(lines)?.[1] ?? "",
+    }));
 }
 
-/** The gates CI runs, in order: package.json's standards.ci, which standards' sync renders through its gates() */
+/** The gates CI runs, as AGENTS.md's "Before you call it done" names them, each in backticks */
 function ciGates(): string[] {
-	const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { standards: { ci: string[] } }
-	return pkg.standards.ci
+  const agents = readFileSync(join(ROOT, "AGENTS.md"), "utf8");
+  const named = /^CI runs the root scripts ([\s\S]*?),\s+and `test:posix` on macOS\./m.exec(agents)?.[1] ?? "";
+
+  return [...named.matchAll(/`([^`]+)`/g)].map((match) => match[1] as string);
 }
 
 /** The script a `bun run` step runs, through database's package filter or the root, whatever arguments it passes on */
-const scriptOf = (command: string) => /^bun run (?:--filter \S+ )?(\S+)(?: .*)?$/.exec(command)?.[1]
+const scriptOf = (command: string) => /^bun run (?:--filter \S+ )?(\S+)(?: .*)?$/.exec(command)?.[1];
 
-/* the coverage job merges the shards' blobs and runs no test of its own */
-const MERGE = "bun run test:coverage --merge-reports"
+// the coverage job merges the shards' blobs and runs no test of its own
+const MERGE = "bun run test:coverage --merge-reports";
 
 /** Whether a job runs a suite: a `bun run test…` step other than the coverage merge */
 const runsSuites = (lines: string) =>
-	ciSteps(lines).some(
-		({ command }) => command !== undefined && command !== MERGE && scriptOf(command)?.startsWith("test") === true,
-	)
+  ciSteps(lines).some(
+    ({ command }) => command !== undefined && command !== MERGE && scriptOf(command)?.startsWith("test") === true,
+  );
 
-/* the CI steps no local gate stands for: installs, the commit-message lint lefthook's commit-msg
-   hook runs, the release dry run, the Atlas binaries the test jobs fetch, and the Postgres service's
-   fsync turned off (tests/integration/support/pg-fsync.ts) */
+// the CI steps no local gate stands for: installs, the release dry run, the Atlas binaries the test
+// jobs fetch, and the Postgres service's fsync turned off (tests/integration/support/pg-fsync.ts)
 const SETUP = {
-	commands: ["bun install --frozen-lockfile", "npm install -g npm@latest"],
-	names: [
-		"Lint commit messages",
-		"dry-run the release publish",
-		"install atlas v1.3.0",
-		`install atlas v${ATLAS_FLOOR_VERSION}`,
-		`install sqld ${SQLD_VERSION}`,
-		"test Postgres without fsync",
-	],
-}
+  commands: ["bun install --frozen-lockfile", "npm install -g npm@latest"],
+  names: [
+    "dry-run the release publish",
+    "install atlas v1.3.0",
+    `install atlas v${ATLAS_FLOOR_VERSION}`,
+    `install sqld ${SQLD_VERSION}`,
+    "test Postgres without fsync",
+  ],
+};
 
 /** The scripts a job's `bun run` steps run */
 const scriptsOf = (lines: string) =>
-	ciSteps(lines).flatMap(({ command }) => {
-		const script = command === undefined ? undefined : scriptOf(command)
-		return script === undefined ? [] : [script]
-	})
+  ciSteps(lines).flatMap(({ command }) => {
+    const script = command === undefined ? undefined : scriptOf(command);
 
-/* what a job off Linux runs: a part of a gate, never a gate of its own (4.19) */
-const OFF_LINUX = { "macos-latest": ["test:posix"] }
+    return script === undefined ? [] : [script];
+  });
 
-describe("ci.yml runs the gates standards lists for database", () => {
-	const jobs = ciJobs(readFileSync(join(WORKFLOWS, "ci.yml"), "utf8"))
-	/* the 0.13 RC: CI ran test:coverage and the local gate ran test, so a local pass hid what CI failed */
-	it("every bun run step on Linux is a listed gate, every listed gate a Linux step, and every other step setup", () => {
-		const linux = jobs.filter((job) => job.runsOn === "ubuntu-latest")
-		const steps = linux.flatMap((job) => ciSteps(job.lines))
-		const listed = ciGates()
-		const ran = linux.flatMap((job) => scriptsOf(job.lines))
-		const other = steps.filter(({ command }) => command === undefined || scriptOf(command) === undefined)
-		expect([...new Set(ran)].toSorted()).toEqual([...listed].toSorted())
-		expect(
-			other.filter(({ command, name }) =>
-				command === undefined ? !SETUP.names.includes(name ?? "") : !SETUP.commands.includes(command),
-			),
-		).toEqual([])
-	})
+// what a job off Linux runs: a part of a gate, never a gate of its own (4.19)
+const OFF_LINUX = { "macos-latest": ["test:posix"] };
 
-	it("runs on another runner only a part of a gate, every suite of it in Linux's project of its kind too", () => {
-		const off = jobs.filter((job) => job.runsOn !== "ubuntu-latest")
-		expect(off.map((job) => [job.runsOn, scriptsOf(job.lines)])).toEqual(Object.entries(OFF_LINUX))
-		const CORE = join(ROOT, "packages/core")
-		/* each list's suites are those of the Linux project of its name in vitest.config.ts */
-		for (const [patterns, linux] of [
-			[POSIX_UNIT, /^(?:src\/.+|tests\/structure\/[^/]+)\.test\.ts$/],
-			[POSIX_INTEGRATION, /^tests\/integration\/.+\.test\.ts$/],
-			[POSIX_EXCLUDE, /^tests\/integration\/.+\.test\.ts$/],
-		] as const) {
-			for (const pattern of patterns) {
-				const files = globSync(pattern, { cwd: CORE })
-				expect(files.length, pattern).toBeGreaterThan(0)
-				for (const file of files) expect(file, pattern).toMatch(linux)
-			}
-		}
-	})
+describe("ci.yml runs the gates AGENTS.md lists", () => {
+  const jobs = ciJobs(readFileSync(join(WORKFLOWS, "ci.yml"), "utf8"));
+  // the 0.13 RC: CI ran test:coverage and the local gate ran test, so a local pass hid what CI failed
+  it("every bun run step on Linux is a listed gate, every listed gate a Linux step, and every other step setup", () => {
+    const linux = jobs.filter((job) => job.runsOn === "ubuntu-latest");
+    const steps = linux.flatMap((job) => ciSteps(job.lines));
+    const listed = ciGates();
+    const ran = linux.flatMap((job) => scriptsOf(job.lines));
+    const other = steps.filter(({ command }) => command === undefined || scriptOf(command) === undefined);
+    expect([...new Set(ran)].toSorted()).toEqual([...listed].toSorted());
+    expect(
+      other.filter(({ command, name }) =>
+        command === undefined ? !SETUP.names.includes(name ?? "") : !SETUP.commands.includes(command),
+      ),
+    ).toEqual([]);
+  });
 
-	it("splits a workflow into its jobs, each with its runner", () => {
-		const yaml =
-			"on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: x\n  b-c:\n    runs-on: macos-latest\n"
-		expect(ciJobs(yaml).map(({ name, runsOn }) => [name, runsOn])).toEqual([
-			["a", "ubuntu-latest"],
-			["b-c", "macos-latest"],
-		])
-	})
+  it("runs on another runner only a part of a gate, every suite of it in Linux's project of its kind too", () => {
+    const off = jobs.filter((job) => job.runsOn !== "ubuntu-latest");
+    expect(off.map((job) => [job.runsOn, scriptsOf(job.lines)])).toEqual(Object.entries(OFF_LINUX));
+    const CORE = join(ROOT, "packages/core");
 
-	it("reads a step's script through database's package filter, and a block step by its name", () => {
-		expect(
-			ciSteps(
-				"      - run: bun run --filter @workerstack/database test:e2e\n      - name: x\n        run: |\n          y\n",
-			),
-		).toEqual([{ command: "bun run --filter @workerstack/database test:e2e" }, { name: "x" }])
-		expect(scriptOf("bun run --filter @workerstack/database test:e2e")).toBe("test:e2e")
-		expect(scriptOf("bun run test:coverage --shard=${{ matrix.shard }}/3 --reporter=blob")).toBe("test:coverage")
-		expect(scriptOf("bun install --frozen-lockfile")).toBeUndefined()
-	})
-})
+    // each list's suites are those of the Linux project of its name in vitest.config.ts
+    for (const [patterns, linux] of [
+      [POSIX_UNIT, /^(?:src\/.+|tests\/structure\/[^/]+)\.test\.ts$/],
+      [POSIX_INTEGRATION, /^tests\/integration\/.+\.test\.ts$/],
+      [POSIX_EXCLUDE, /^tests\/integration\/.+\.test\.ts$/],
+    ] as const) {
+      for (const pattern of patterns) {
+        const files = globSync(pattern, { cwd: CORE });
+        expect(files.length, pattern).toBeGreaterThan(0);
 
-/*
- * One test:coverage job ran 20.2 minutes on one runner and 1.53x that on another (runs 42044117817, 42076507764), so its
- * timeout cancelled a run with no test failed. It runs as shards with the thresholds off, each shard's blob uploaded, and
- * one coverage job merges every blob and holds the config's perFile thresholds over the whole (vitest merges the
- * coverage before it checks them, and on a 52-file slice the merge read every file as one unsharded run did).
- */
+        for (const file of files) expect(file, pattern).toMatch(linux);
+      }
+    }
+  });
+
+  it("splits a workflow into its jobs, each with its runner", () => {
+    const yaml =
+      "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: x\n  b-c:\n    runs-on: macos-latest\n";
+
+    expect(ciJobs(yaml).map(({ name, runsOn }) => [name, runsOn])).toEqual([
+      ["a", "ubuntu-latest"],
+      ["b-c", "macos-latest"],
+    ]);
+  });
+
+  it("reads a step's script through database's package filter, and a block step by its name", () => {
+    expect(
+      ciSteps(
+        "      - run: bun run --filter @workerstack/database test:e2e\n      - name: x\n        run: |\n          y\n",
+      ),
+    ).toEqual([{ command: "bun run --filter @workerstack/database test:e2e" }, { name: "x" }]);
+    expect(scriptOf("bun run --filter @workerstack/database test:e2e")).toBe("test:e2e");
+    expect(scriptOf("bun run test:coverage --shard=${{ matrix.shard }}/3 --reporter=blob")).toBe("test:coverage");
+    expect(scriptOf("bun install --frozen-lockfile")).toBeUndefined();
+  });
+});
+
+// One test:coverage job ran 20.2 minutes on one runner and 1.53x that on another (runs 42044117817, 42076507764), so its
+// timeout cancelled a run with no test failed. It runs as shards with the thresholds off, each shard's blob uploaded, and
+// one coverage job merges every blob and holds the config's perFile thresholds over the whole (vitest merges the
+// coverage before it checks them, and on a 52-file slice the merge read every file as one unsharded run did).
 describe("ci.yml's sharded coverage", () => {
-	const jobs = ciJobs(readFileSync(join(WORKFLOWS, "ci.yml"), "utf8"))
-	const job = (name: string) => (jobs.find((each) => each.name === name) as { lines: string }).lines
+  const jobs = ciJobs(readFileSync(join(WORKFLOWS, "ci.yml"), "utf8"));
+  const job = (name: string) => (jobs.find((each) => each.name === name) as { lines: string }).lines;
 
-	it("runs test:coverage in as many shards as the matrix lists, each with the thresholds off and its blob uploaded", () => {
-		const lines = job("test")
-		const shards = /^ {8}shard: \[([\d, ]+)\]$/m.exec(lines)?.[1]?.split(", ").map(Number)
-		expect(shards).toEqual(Array.from({ length: shards?.length ?? 0 }, (_, index) => index + 1))
-		const runs = ciSteps(lines).flatMap(({ command }) =>
-			command?.startsWith("bun run test:coverage") ? [command] : [],
-		)
-		expect(runs).toHaveLength(1)
-		const run = runs[0] as string
-		expect(run).toContain(`--shard=\${{ matrix.shard }}/${shards?.length}`)
-		expect(run).toContain("--reporter=blob")
-		for (const metric of ["lines", "branches", "functions", "statements"])
-			expect(run).toContain(`--coverage.thresholds.${metric}=0`)
-		expect(run).toContain("--coverage.thresholds.perFile=false")
-		expect(lines).toContain("path: packages/core/.vitest/blob/")
-		expect(lines).toContain("include-hidden-files: true")
-		expect(lines).toContain("if-no-files-found: error")
-	})
+  it("runs test:coverage in as many shards as the matrix lists, each with the thresholds off and its blob uploaded", () => {
+    const lines = job("test");
+    const shards = /^ {8}shard: \[([\d, ]+)\]$/m.exec(lines)?.[1]?.split(", ").map(Number);
+    expect(shards).toEqual(Array.from({ length: shards?.length ?? 0 }, (_, index) => index + 1));
 
-	it("merges every shard's blob in one job after them, under the config's own thresholds", () => {
-		const lines = job("coverage")
-		expect(lines).toMatch(/^ {4}needs: \[test\]$/m)
-		expect(lines).toContain("pattern: coverage-blob-*")
-		expect(lines).toContain("merge-multiple: true")
-		expect(lines).toContain("path: packages/core/.vitest/blob/")
-		expect(ciSteps(lines).flatMap(({ command }) => (command === undefined ? [] : [command]))).toContain(MERGE)
-		expect(lines).not.toContain("--coverage.thresholds")
-		expect(runsSuites(lines)).toBe(false)
-	})
-})
+    const runs = ciSteps(lines).flatMap(({ command }) =>
+      command?.startsWith("bun run test:coverage") ? [command] : [],
+    );
 
-/* 0.19's consumers job ran K7's missing-peer cells, which run atlas and reach Postgres, with neither */
+    expect(runs).toHaveLength(1);
+    const run = runs[0] as string;
+    expect(run).toContain(`--shard=\${{ matrix.shard }}/${shards?.length}`);
+    expect(run).toContain("--reporter=blob");
+
+    for (const metric of ["lines", "branches", "functions", "statements"])
+      expect(run).toContain(`--coverage.thresholds.${metric}=0`);
+    expect(run).toContain("--coverage.thresholds.perFile=false");
+    expect(lines).toContain("path: packages/core/.vitest/blob/");
+    expect(lines).toContain("include-hidden-files: true");
+    expect(lines).toContain("if-no-files-found: error");
+  });
+
+  it("merges every shard's blob in one job after them, under the config's own thresholds", () => {
+    const lines = job("coverage");
+    expect(lines).toMatch(/^ {4}needs: \[test\]$/m);
+    expect(lines).toContain("pattern: coverage-blob-*");
+    expect(lines).toContain("merge-multiple: true");
+    expect(lines).toContain("path: packages/core/.vitest/blob/");
+    expect(ciSteps(lines).flatMap(({ command }) => (command === undefined ? [] : [command]))).toContain(MERGE);
+    expect(lines).not.toContain("--coverage.thresholds");
+    expect(runsSuites(lines)).toBe(false);
+  });
+});
+
+// 0.19's consumers job ran K7's missing-peer cells, which run atlas and reach Postgres, with neither
 describe("ci.yml's suite jobs", () => {
-	it("give every Linux job that runs a suite Atlas, a Postgres 17 service and DATABASE_TEST_PG_URL", () => {
-		const needs = [
-			"- name: install atlas v1.3.0",
-			"image: postgres:17",
-			"- name: test Postgres without fsync",
-			"DATABASE_TEST_PG_URL: postgres://database_test:database_test@localhost:5432/database_test?sslmode=disable",
-		]
-		const suites = ciJobs(readFileSync(join(WORKFLOWS, "ci.yml"), "utf8")).filter(
-			(job) => job.runsOn === "ubuntu-latest" && runsSuites(job.lines),
-		)
-		expect(suites.map((job) => job.name)).toContain("consumers")
-		expect(
-			suites.flatMap((job) => needs.filter((need) => !job.lines.includes(need)).map((need) => `${job.name}: ${need}`)),
-		).toEqual([])
-	})
-})
+  it("give every Linux job that runs a suite Atlas, a Postgres 17 service and DATABASE_TEST_PG_URL", () => {
+    const needs = [
+      "- name: install atlas v1.3.0",
+      "image: postgres:17",
+      "- name: test Postgres without fsync",
+      "DATABASE_TEST_PG_URL: postgres://database_test:database_test@localhost:5432/database_test?sslmode=disable",
+    ];
 
-/*
- * Plan 25's 2.6: the differential suites (vitest.differential.config.ts and their bun:sqlite twin) run in a job of
- * their own, beside the others with no `needs`, on Linux, in time for the plan's 3-minute budget per job, and in no
- * other job: `test:bun` leaves the twin out, and vitest.config.ts includes none of tests/differential.
- */
+    const suites = ciJobs(readFileSync(join(WORKFLOWS, "ci.yml"), "utf8")).filter(
+      (job) => job.runsOn === "ubuntu-latest" && runsSuites(job.lines),
+    );
+
+    expect(suites.map((job) => job.name)).toContain("consumers");
+    expect(
+      suites.flatMap((job) => needs.filter((need) => !job.lines.includes(need)).map((need) => `${job.name}: ${need}`)),
+    ).toEqual([]);
+  });
+});
+
+// Plan 25's 2.6: the differential suites (vitest.differential.config.ts and their bun:sqlite twin) run in a job of
+// their own, beside the others with no `needs`, on Linux, in time for the plan's 3-minute budget per job, and in no
+// other job: `test:bun` leaves the twin out, and vitest.config.ts includes none of tests/differential.
 describe("ci.yml's differential job", () => {
-	const jobs = ciJobs(readFileSync(join(WORKFLOWS, "ci.yml"), "utf8"))
-	const CORE = join(ROOT, "packages/core")
-	const scripts = (JSON.parse(readFileSync(join(CORE, "package.json"), "utf8")) as { scripts: Record<string, string> })
-		.scripts
+  const jobs = ciJobs(readFileSync(join(WORKFLOWS, "ci.yml"), "utf8"));
+  const CORE = join(ROOT, "packages/core");
 
-	it("runs test:differential on Linux, needing no other job, with a timeout that catches a hang", () => {
-		const runners = jobs.filter((job) => scriptsOf(job.lines).includes("test:differential"))
-		expect(runners.map(({ name, runsOn }) => [name, runsOn])).toEqual([["differential", "ubuntu-latest"]])
-		const lines = (runners[0] as { lines: string }).lines
-		expect(scriptsOf(lines)).toEqual(["test:differential"])
-		expect(lines).not.toMatch(/^ {4}needs:/m)
-		expect(Number(/^ {4}timeout-minutes: (\d+)$/m.exec(lines)?.[1])).toBeLessThanOrEqual(6)
-	})
+  const scripts = (JSON.parse(readFileSync(join(CORE, "package.json"), "utf8")) as { scripts: Record<string, string> })
+    .scripts;
 
-	it("is the only job that runs the differential suites", () => {
-		expect(scripts["test:differential"]).toBe(
-			"vitest run --config vitest.differential.config.ts && bun test tests/bun/differential-lists.test.ts",
-		)
-		expect(scripts["test:bun"]).toContain("--path-ignore-patterns=tests/bun/differential-lists.test.ts")
-		expect(readFileSync(join(CORE, "vitest.config.ts"), "utf8")).not.toContain("tests/differential")
-		expect(globSync("tests/differential/**/*.test.ts", { cwd: CORE }).length).toBeGreaterThan(0)
-	})
-})
+  it("runs test:differential on Linux, needing no other job, with a timeout that catches a hang", () => {
+    const runners = jobs.filter((job) => scriptsOf(job.lines).includes("test:differential"));
+    expect(runners.map(({ name, runsOn }) => [name, runsOn])).toEqual([["differential", "ubuntu-latest"]]);
+    const lines = (runners[0] as { lines: string }).lines;
+    expect(scriptsOf(lines)).toEqual(["test:differential"]);
+    expect(lines).not.toMatch(/^ {4}needs:/m);
+    expect(Number(/^ {4}timeout-minutes: (\d+)$/m.exec(lines)?.[1])).toBeLessThanOrEqual(6);
+  });
 
-/* plan 21 5.0: the remote libsql suites need the pinned sqld, which only the test job's own step provides */
+  it("is the only job that runs the differential suites", () => {
+    expect(scripts["test:differential"]).toBe(
+      "vitest run --config vitest.differential.config.ts && bun test tests/bun/differential-lists.test.ts",
+    );
+    expect(scripts["test:bun"]).toContain("--path-ignore-patterns=tests/bun/differential-lists.test.ts");
+    expect(readFileSync(join(CORE, "vitest.config.ts"), "utf8")).not.toContain("tests/differential");
+    expect(globSync("tests/differential/**/*.test.ts", { cwd: CORE }).length).toBeGreaterThan(0);
+  });
+});
+
+// plan 21 5.0: the remote libsql suites need the pinned sqld, which only the test job's own step provides
 /**
  * Each Postgres service's user and database in `yaml` that is a keyword. A check takes a server change
  * to a name its file spells for the file's, and every file holding `DATABASE` spells a role named
  * `database`: another test's grant to the server's own user then refuses that file (plan 50)
  */
 export function keywordIdentities(yaml: string): string[] {
-	return [...yaml.matchAll(/^\s*POSTGRES_(?:DB|USER):\s*(\S+)\s*$/gm)]
-		.map(([, name]) => name!)
-		.filter((name) => PG_KEYWORDS.includes(name.toLowerCase()))
+  return [...yaml.matchAll(/^\s*POSTGRES_(?:DB|USER):\s*(\S+)\s*$/gm)]
+    .map(([, name]) => name!)
+    .filter((name) => PG_KEYWORDS.includes(name.toLowerCase()));
 }
 
 describe("ci.yml's Postgres test server", () => {
-	it("logs in as a role, into a database, that no keyword names", () => {
-		const ci = readFileSync(join(WORKFLOWS, "ci.yml"), "utf8")
-		expect(ci).toMatch(/POSTGRES_USER:/)
-		expect([keywordIdentities(ci), keywordIdentities("  POSTGRES_USER: database\n  POSTGRES_DB: app\n")]).toEqual([
-			[],
-			["database"],
-		])
-	})
-})
+  it("logs in as a role, into a database, that no keyword names", () => {
+    const ci = readFileSync(join(WORKFLOWS, "ci.yml"), "utf8");
+    expect(ci).toMatch(/POSTGRES_USER:/);
+    expect([keywordIdentities(ci), keywordIdentities("  POSTGRES_USER: database\n  POSTGRES_DB: app\n")]).toEqual([
+      [],
+      ["database"],
+    ]);
+  });
+});
 
 describe("ci.yml's sqld", () => {
-	const jobs = ciJobs(readFileSync(join(WORKFLOWS, "ci.yml"), "utf8"))
-	const home = SQLD_PATH.slice(0, SQLD_PATH.indexOf(`/${SQLD_VERSION}/`) + SQLD_VERSION.length + 1).replace(
-		homedir(),
-		"~",
-	)
-	it("is fetched by tests/support/sqld.ts's version and archive sha256, cached by version, where test:coverage runs", () => {
-		const coverage = jobs.filter((job) => scriptsOf(job.lines).includes("test:coverage") && runsSuites(job.lines))
-		expect(coverage.map((job) => job.name)).toEqual(["test"])
-		const lines = (coverage[0] as { lines: string }).lines
-		const step = lines.slice(lines.indexOf(`- name: install sqld ${SQLD_VERSION}`))
-		expect(step).toContain(`curl -sSfL -o sqld.tar.xz ${SQLD_ARCHIVE.url}`)
-		expect(step).toContain(`echo "${SQLD_ARCHIVE.sha256}  sqld.tar.xz" | sha256sum -c -`)
-		expect(step).toContain(`cd ${home}`)
-		expect(lines).toContain(`path: ${home}`)
-		expect(lines).toContain(`key: sqld-${SQLD_VERSION}-x86_64-linux-gnu`)
-		expect(lines.indexOf(`install sqld ${SQLD_VERSION}`)).toBeLessThan(lines.indexOf("run: bun run test:coverage"))
-	})
-})
+  const jobs = ciJobs(readFileSync(join(WORKFLOWS, "ci.yml"), "utf8"));
 
-/* PA5 of r22: the Atlas floor cell needs the pinned v1.2.0 at its path, which only the test job's own step provides */
+  const home = SQLD_PATH.slice(0, SQLD_PATH.indexOf(`/${SQLD_VERSION}/`) + SQLD_VERSION.length + 1).replace(
+    homedir(),
+    "~",
+  );
+
+  it("is fetched by tests/support/sqld.ts's version and archive sha256, cached by version, where test:coverage runs", () => {
+    const coverage = jobs.filter((job) => scriptsOf(job.lines).includes("test:coverage") && runsSuites(job.lines));
+    expect(coverage.map((job) => job.name)).toEqual(["test"]);
+    const lines = (coverage[0] as { lines: string }).lines;
+    const step = lines.slice(lines.indexOf(`- name: install sqld ${SQLD_VERSION}`));
+    expect(step).toContain(`curl -sSfL -o sqld.tar.xz ${SQLD_ARCHIVE.url}`);
+    expect(step).toContain(`echo "${SQLD_ARCHIVE.sha256}  sqld.tar.xz" | sha256sum -c -`);
+    expect(step).toContain(`cd ${home}`);
+    expect(lines).toContain(`path: ${home}`);
+    expect(lines).toContain(`key: sqld-${SQLD_VERSION}-x86_64-linux-gnu`);
+    expect(lines.indexOf(`install sqld ${SQLD_VERSION}`)).toBeLessThan(lines.indexOf("run: bun run test:coverage"));
+  });
+});
+
+// PA5 of r22: the Atlas floor cell needs the pinned v1.2.0 at its path, which only the test job's own step provides
 describe("ci.yml's Atlas floor", () => {
-	const jobs = ciJobs(readFileSync(join(WORKFLOWS, "ci.yml"), "utf8"))
-	const file = ATLAS_FLOOR_PATH.replace(homedir(), "$HOME")
-	it("is fetched by tests/support/atlas-floor.ts's version and sha256 to its path, before test:coverage runs", () => {
-		const coverage = jobs.filter((job) => scriptsOf(job.lines).includes("test:coverage") && runsSuites(job.lines))
-		expect(coverage.map((job) => job.name)).toEqual(["test"])
-		const lines = (coverage[0] as { lines: string }).lines
-		const name = `- name: install atlas v${ATLAS_FLOOR_VERSION}`
-		expect(lines).toContain(name)
-		const step = lines.slice(lines.indexOf(name))
-		expect(step).toContain(
-			`curl -sSfL -o "${file}" https://release.ariga.io/atlas/atlas-linux-amd64-v${ATLAS_FLOOR_VERSION}`,
-		)
-		expect(step).toContain(`echo "${ATLAS_FLOOR_SHA256}  ${file}" | sha256sum -c -`)
-		expect(lines.indexOf(name)).toBeLessThan(lines.indexOf("run: bun run test:coverage"))
-	})
-})
+  const jobs = ciJobs(readFileSync(join(WORKFLOWS, "ci.yml"), "utf8"));
+  const file = ATLAS_FLOOR_PATH.replace(homedir(), "$HOME");
+  it("is fetched by tests/support/atlas-floor.ts's version and sha256 to its path, before test:coverage runs", () => {
+    const coverage = jobs.filter((job) => scriptsOf(job.lines).includes("test:coverage") && runsSuites(job.lines));
+    expect(coverage.map((job) => job.name)).toEqual(["test"]);
+    const lines = (coverage[0] as { lines: string }).lines;
+    const name = `- name: install atlas v${ATLAS_FLOOR_VERSION}`;
+    expect(lines).toContain(name);
+    const step = lines.slice(lines.indexOf(name));
+    expect(step).toContain(
+      `curl -sSfL -o "${file}" https://release.ariga.io/atlas/atlas-linux-amd64-v${ATLAS_FLOOR_VERSION}`,
+    );
+    expect(step).toContain(`echo "${ATLAS_FLOOR_SHA256}  ${file}" | sha256sum -c -`);
+    expect(lines.indexOf(name)).toBeLessThan(lines.indexOf("run: bun run test:coverage"));
+  });
+});
 
-/*
- * CI's runners are in UTC, so every local test run is too: a time-zone-dependent expectation that
- * passed in another zone passed verify and failed CI (U20's row 8). The vitest configs pin TZ before
- * their workers fork, and bun's preload pins it for its suites, whatever the shell's TZ.
- */
+// CI's runners are in UTC, so every local test run is too: a time-zone-dependent expectation that
+// passed in another zone passed verify and failed CI (U20's row 8). The vitest configs pin TZ before
+// their workers fork, and bun's preload pins it for its suites, whatever the shell's TZ.
 describe("the time zone every test run uses", () => {
-	const CORE = join(ROOT, "packages/core")
-	const PIN = 'process.env.TZ = "UTC"'
+  const CORE = join(ROOT, "packages/core");
+  const PIN = 'process.env.TZ = "UTC"';
 
-	it("is UTC in this run", () => {
-		expect(Intl.DateTimeFormat().resolvedOptions().timeZone).toBe("UTC")
-		expect(new Date(2000, 0, 1).getTimezoneOffset()).toBe(0)
-	})
+  it("is UTC in this run", () => {
+    expect(Intl.DateTimeFormat().resolvedOptions().timeZone).toBe("UTC");
+    expect(new Date(2000, 0, 1).getTimezoneOffset()).toBe(0);
+  });
 
-	it("is pinned in every vitest config and in bun's preload", () => {
-		const configs = readdirSync(CORE).filter((name) => /^vitest(\..+)?\.config\.ts$/.test(name))
-		expect(configs.length).toBeGreaterThanOrEqual(3)
-		for (const name of configs) expect(readFileSync(join(CORE, name), "utf8"), name).toContain(PIN)
-		const bunfig = readFileSync(join(CORE, "bunfig.toml"), "utf8")
-		const preload = /^preload = \["\.\/(.+?)"\]$/m.exec(bunfig)?.[1]
-		expect(preload).toBe("tests/bun/support/utc.ts")
-		expect(readFileSync(join(CORE, preload as string), "utf8")).toContain(PIN)
-	})
-})
+  it("is pinned in every vitest config and in bun's preload", () => {
+    const configs = readdirSync(CORE).filter((name) => /^vitest(\..+)?\.config\.ts$/.test(name));
+    expect(configs.length).toBeGreaterThanOrEqual(3);
 
-/*
- * The suites that page or read Date keys run a second time far from UTC (tests/support/off-utc.ts):
- * every one of them, found by its own text, so a new one cannot miss the pass, in a zone whose
- * offset is no whole hour, so no hour-rounding hides a bug.
- */
+    for (const name of configs) expect(readFileSync(join(CORE, name), "utf8"), name).toContain(PIN);
+    const bunfig = readFileSync(join(CORE, "bunfig.toml"), "utf8");
+    const preload = /^preload = \["\.\/(.+?)"\]$/m.exec(bunfig)?.[1];
+    expect(preload).toBe("tests/bun/support/utc.ts");
+    expect(readFileSync(join(CORE, preload as string), "utf8")).toContain(PIN);
+  });
+});
+
+// The suites that page or read Date keys run a second time far from UTC (tests/support/off-utc.ts):
+// every one of them, found by its own text, so a new one cannot miss the pass, in a zone whose
+// offset is no whole hour, so no hour-rounding hides a bug.
 describe("the pass of the Date-key suites off UTC", () => {
-	const CORE = join(ROOT, "packages/core")
+  const CORE = join(ROOT, "packages/core");
 
-	/** Every test file under `dir`, relative to packages/core */
-	const testFiles = (dir: string): string[] =>
-		(readdirSync(join(CORE, dir), { recursive: true }) as string[])
-			.filter((name) => name.endsWith(".test.ts"))
-			.map((name) => `${dir}/${name}`)
+  /** Every test file under `dir`, relative to packages/core */
+  const testFiles = (dir: string): string[] =>
+    (readdirSync(join(CORE, dir), { recursive: true }) as string[])
+      .filter((name) => name.endsWith(".test.ts"))
+      .map((name) => `${dir}/${name}`);
 
-	it("takes every suite that touches a Date key, and no other", () => {
-		const scanned = [...testFiles("src"), ...testFiles("tests/integration")]
-			.filter((file) => DATE_KEYS.test(readFileSync(join(CORE, file), "utf8")))
-			.toSorted()
-		expect([...OFF_UTC_UNIT, ...OFF_UTC_INTEGRATION, ...OFF_UTC_POSTGRES].toSorted()).toEqual(scanned)
-	})
+  it("takes every suite that touches a Date key, and no other", () => {
+    const scanned = [...testFiles("src"), ...testFiles("tests/integration")]
+      .filter((file) => DATE_KEYS.test(readFileSync(join(CORE, file), "utf8")))
+      .toSorted();
 
-	/* a function whose name ends in timestamp, as Postgres's clock_timestamp(), is no database timestamp column */
-	it("takes c.timestamp( as a Date key, and no name that only ends in timestamp(", () => {
-		expect(DATE_KEYS.test('c.timestamp("at")')).toBe(true)
-		expect(DATE_KEYS.test("timestamp(")).toBe(true)
-		expect(DATE_KEYS.test("DEFAULT clock_timestamp()")).toBe(false)
-		expect(DATE_KEYS.test("now_timestamp(")).toBe(false)
-		expect(DATE_KEYS.test("$timestamp(")).toBe(false)
-	})
+    expect([...OFF_UTC_UNIT, ...OFF_UTC_INTEGRATION, ...OFF_UTC_POSTGRES].toSorted()).toEqual(scanned);
+  });
 
-	it("runs them in a zone whose offset is a fraction of an hour, in each of the config's three projects", () => {
-		const offset = new Intl.DateTimeFormat("en-US", { timeZone: OFF_UTC_ZONE, timeZoneName: "longOffset" })
-			.formatToParts(new Date(2000, 0, 1))
-			.find((part) => part.type === "timeZoneName")?.value
-		expect(offset).toMatch(/^GMT[+-]\d{2}:(?!00)\d{2}$/)
-		const config = readFileSync(join(CORE, "vitest.config.ts"), "utf8")
-		expect(config.match(/env: \{ TZ: OFF_UTC_ZONE \}/g)).toHaveLength(3)
-		expect(config).toContain("include: OFF_UTC_UNIT")
-		expect(config).toContain("include: OFF_UTC_INTEGRATION")
-		expect(config).toContain("include: OFF_UTC_POSTGRES")
-	})
-})
+  // a function whose name ends in timestamp, as Postgres's clock_timestamp(), is no database timestamp column
+  it("takes c.timestamp( as a Date key, and no name that only ends in timestamp(", () => {
+    expect(DATE_KEYS.test('c.timestamp("at")')).toBe(true);
+    expect(DATE_KEYS.test("timestamp(")).toBe(true);
+    expect(DATE_KEYS.test("DEFAULT clock_timestamp()")).toBe(false);
+    expect(DATE_KEYS.test("now_timestamp(")).toBe(false);
+    expect(DATE_KEYS.test("$timestamp(")).toBe(false);
+  });
 
-/*
- * CI installs the bun package.json's packageManager pins: a local run on 1.4.4 passed a pack script and a failed
- * import that 1.3.11 fails. The pin is the one source: every setup-bun
- * step reads it by file, and mise reads it here through mise.toml, which names no version of its own.
- */
+  it("runs them in a zone whose offset is a fraction of an hour, in each of the config's three projects", () => {
+    const offset = new Intl.DateTimeFormat("en-US", { timeZone: OFF_UTC_ZONE, timeZoneName: "longOffset" })
+      .formatToParts(new Date(2000, 0, 1))
+      .find((part) => part.type === "timeZoneName")?.value;
+
+    expect(offset).toMatch(/^GMT[+-]\d{2}:(?!00)\d{2}$/);
+    const config = readFileSync(join(CORE, "vitest.config.ts"), "utf8");
+    expect(config.match(/env: \{ TZ: OFF_UTC_ZONE \}/g)).toHaveLength(3);
+    expect(config).toContain("include: OFF_UTC_UNIT");
+    expect(config).toContain("include: OFF_UTC_INTEGRATION");
+    expect(config).toContain("include: OFF_UTC_POSTGRES");
+  });
+});
+
+// CI installs the bun package.json's packageManager pins: a local run on 1.4.4 passed a pack script and a failed
+// import that 1.3.11 fails. The pin is the one source: every setup-bun
+// step reads it by file, and mise reads it here through mise.toml, which names no version of its own.
 describe("the bun every run uses", () => {
-	it("is package.json's packageManager pin, which every setup-bun step reads by file and mise reads here", () => {
-		const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { packageManager?: string }
-		expect(pkg.packageManager).toMatch(/^bun@\d+\.\d+\.\d+$/)
-		for (const name of readdirSync(WORKFLOWS).filter((file) => /\.ya?ml$/.test(file))) {
-			const yaml = readFileSync(join(WORKFLOWS, name), "utf8")
-			expect(yaml, name).not.toMatch(/BUN_VERSION|bun-version:/)
-			const steps = yaml.match(/uses: oven-sh\/setup-bun@.*/g) ?? []
-			const byFile = yaml.match(/uses: oven-sh\/setup-bun@.*\n\s+with:\n\s+bun-version-file: package\.json\n/g) ?? []
-			expect(byFile.length, name).toBe(steps.length)
-		}
-		const mise = readFileSync(join(ROOT, "mise.toml"), "utf8")
-		expect(mise).toMatch(/^idiomatic_version_file_enable_tools = \["bun"\]$/m)
-		expect(mise).not.toMatch(/^\[tools\]|^bun\b/m)
-	})
-})
+  it("is package.json's packageManager pin, which every setup-bun step reads by file and mise reads here", () => {
+    const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { packageManager?: string };
+    expect(pkg.packageManager).toMatch(/^bun@\d+\.\d+\.\d+$/);
 
-/* A local run leaves the machine usable: vitest takes half its cores, at least one; CI's runner is the job's alone */
+    for (const name of readdirSync(WORKFLOWS).filter((file) => /\.ya?ml$/.test(file))) {
+      const yaml = readFileSync(join(WORKFLOWS, name), "utf8");
+      expect(yaml, name).not.toMatch(/BUN_VERSION|bun-version:/);
+      const steps = yaml.match(/uses: oven-sh\/setup-bun@.*/g) ?? [];
+      const byFile = yaml.match(/uses: oven-sh\/setup-bun@.*\n\s+with:\n\s+bun-version-file: package\.json\n/g) ?? [];
+      expect(byFile.length, name).toBe(steps.length);
+    }
+
+    const mise = readFileSync(join(ROOT, "mise.toml"), "utf8");
+    expect(mise).toMatch(/^idiomatic_version_file_enable_tools = \["bun"\]$/m);
+    expect(mise).not.toMatch(/^\[tools\]|^bun\b/m);
+  });
+});
+
+// A local run leaves the machine usable: vitest takes half its cores, at least one; CI's runner is the job's alone
 describe("the vitest workers a run uses", () => {
-	it("are half the cores off CI, at least one, and vitest's own default on CI", () => {
-		expect(workers({}, 16)).toBe(8)
-		expect(workers({ CI: "false" }, 7)).toBe(3)
-		expect(workers({}, 1)).toBe(1)
-		expect(workers({ CI: "true" }, 16)).toBeUndefined()
-	})
+  it("are half the cores off CI, at least one, and vitest's own default on CI", () => {
+    expect(workers({}, 16)).toBe(8);
+    expect(workers({ CI: "false" }, 7)).toBe(3);
+    expect(workers({}, 1)).toBe(1);
+    expect(workers({ CI: "true" }, 16)).toBeUndefined();
+  });
 
-	it("are capped so in every vitest config", async () => {
-		const CORE = join(ROOT, "packages/core")
-		const configs = readdirSync(CORE).filter((name) => /^vitest(\..+)?\.config\.ts$/.test(name))
-		expect(configs.length).toBeGreaterThanOrEqual(4)
-		for (const name of configs) {
-			const config = ((await import(join(CORE, name))) as { default: { test?: { maxWorkers?: number } } }).default
-			expect(config.test?.maxWorkers, name).toBe(workers(process.env, availableParallelism()))
-		}
-	})
-})
+  it("are capped so in every vitest config", async () => {
+    const CORE = join(ROOT, "packages/core");
+    const configs = readdirSync(CORE).filter((name) => /^vitest(\..+)?\.config\.ts$/.test(name));
+    expect(configs.length).toBeGreaterThanOrEqual(4);
+
+    for (const name of configs) {
+      const config = ((await import(join(CORE, name))) as { default: { test?: { maxWorkers?: number } } }).default;
+      expect(config.test?.maxWorkers, name).toBe(workers(process.env, availableParallelism()));
+    }
+  });
+});

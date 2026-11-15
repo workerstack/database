@@ -6,13 +6,18 @@
  * ended by process.kill of it. The repo's lint refuses every spelling of it in test code, and a
  * spawned kill, which reaches the same pid by another road.
  */
-import { describe, expect, it } from "vitest"
-import { repoReports } from "./rule-harness.ts"
+import { describe, expect, it } from "vitest";
 
-const KILL = `'process.kill' is restricted from being used. A test signals a pid it recorded through tests/support/pid.ts, which knows the process by its start time; vi.spyOn(process, "kill") stubs it`
-const IS_ALIVE = `'isAlive' import from '../../src/migrate/core/cleanup.ts' is restricted from being used by a pattern. A test probes a pid it recorded through tests/support/pid.ts, which knows the process by its start time`
+import { repoReports } from "./rule-harness.ts";
+
+const KILL =
+  'A test signals a pid it recorded through tests/support/pid.ts, which knows the process by its start time; vi.spyOn(process, "kill") stubs it';
+
+const IS_ALIVE =
+  "A test probes a pid it recorded through tests/support/pid.ts, which knows the process by its start time";
+
 const SPAWNED =
-	"a test spawns no kill, pkill or killall of a pid: signal a recorded process through tests/support/pid.ts"
+  "a test spawns no kill, pkill or killall of a pid: signal a recorded process through tests/support/pid.ts";
 
 const SPELLINGS = `import { vi } from "vitest"
 
@@ -28,7 +33,7 @@ export function signals(pid: number): unknown[] {
 	const spy = vi.spyOn(process, "kill").mockImplementation(() => true)
 	return [k, kill, spy]
 }
-`
+`;
 
 const SPAWNS = `import * as cp from "node:child_process"
 import { exec, execFileSync, execSync, spawn, spawnSync } from "node:child_process"
@@ -48,66 +53,69 @@ export function spawns(pid: number): unknown[] {
 		execSync("echo skill"),
 	]
 }
-`
+`;
 
 const PROBE = `import { isAlive } from "../../src/migrate/core/cleanup.ts"
 
 export const alive = (pid: number): boolean => isAlive(pid)
-`
+`;
 
 describe("the repo's lint on a test's signal to a process", () => {
-	it("refuses every spelling of process.kill in test code, and allows a stub of it", () => {
-		const reports = repoReports({
-			"packages/core/tests/integration/d1/signals.test.ts": SPELLINGS,
-			"packages/core/src/migrate/core/signals.test.ts": SPELLINGS,
-			"packages/core/lint/signals.test.ts": SPELLINGS,
-			"packages/core/tests/support/signals.ts": SPELLINGS,
-		})
-		const lines = [4, 5, 6, 7, 8, 9, 10]
-		expect(reports).toEqual(
-			[
-				"packages/core/lint/signals.test.ts",
-				"packages/core/src/migrate/core/signals.test.ts",
-				"packages/core/tests/integration/d1/signals.test.ts",
-				"packages/core/tests/support/signals.ts",
-			].flatMap((file) => lines.map((line) => ({ file, line, message: KILL }))),
-		)
-	})
+  it("refuses every spelling of process.kill in test code, and allows a stub of it", () => {
+    const reports = repoReports({
+      "packages/core/lint/signals.test.ts": SPELLINGS,
+      "packages/core/src/migrate/core/signals.test.ts": SPELLINGS,
+      "packages/core/tests/integration/d1/signals.test.ts": SPELLINGS,
+      "packages/core/tests/support/signals.ts": SPELLINGS,
+    });
 
-	it("leaves process.kill to tests/support/pid.ts and to library code", () => {
-		const reports = repoReports({
-			"packages/core/tests/support/pid.ts": SPELLINGS,
-			"packages/core/src/migrate/core/signals.ts": "export const stop = (pid: number): boolean => process.kill(pid)\n",
-		})
-		expect(reports).toEqual([])
-	})
+    const lines = [4, 5, 6, 7, 8, 9, 10];
+    expect(reports).toEqual(
+      [
+        "packages/core/lint/signals.test.ts",
+        "packages/core/src/migrate/core/signals.test.ts",
+        "packages/core/tests/integration/d1/signals.test.ts",
+        "packages/core/tests/support/signals.ts",
+      ].flatMap((file) => lines.map((line) => ({ file, line, message: KILL }))),
+    );
+  });
 
-	it("refuses a spawned kill of any pid but the shell's own", () => {
-		const file = "packages/core/tests/integration/d1/spawns.test.ts"
-		expect(repoReports({ [file]: SPAWNS })).toEqual(
-			[6, 7, 8, 9, 10, 11, 12].map((line) => ({ file, line, message: SPAWNED })),
-		)
-	})
+  it("leaves process.kill to tests/support/pid.ts and to library code", () => {
+    const reports = repoReports({
+      "packages/core/src/migrate/core/signals.ts": "export const stop = (pid: number): boolean => process.kill(pid)\n",
+      "packages/core/tests/support/pid.ts": SPELLINGS,
+    });
 
-	it("refuses cleanup.ts's probe of a pid outside its own test", () => {
-		const reports = repoReports({
-			"packages/core/tests/integration/d1/probe.test.ts": PROBE,
-			"packages/core/src/migrate/core/cleanup.test.ts": PROBE.replace(
-				"../../src/migrate/core/cleanup.ts",
-				"./cleanup.ts",
-			),
-			"packages/core/src/migrate/core/other.test.ts": PROBE.replace(
-				"../../src/migrate/core/cleanup.ts",
-				"./cleanup.ts",
-			),
-		})
-		expect(reports).toEqual([
-			{
-				file: "packages/core/src/migrate/core/other.test.ts",
-				line: 1,
-				message: IS_ALIVE.replace("../../src/migrate/core/cleanup.ts", "./cleanup.ts"),
-			},
-			{ file: "packages/core/tests/integration/d1/probe.test.ts", line: 1, message: IS_ALIVE },
-		])
-	})
-})
+    expect(reports).toEqual([]);
+  });
+
+  it("refuses a spawned kill of any pid but the shell's own", () => {
+    const file = "packages/core/tests/integration/d1/spawns.test.ts";
+    expect(repoReports({ [file]: SPAWNS })).toEqual(
+      [6, 7, 8, 9, 10, 11, 12].map((line) => ({ file, line, message: SPAWNED })),
+    );
+  });
+
+  it("refuses cleanup.ts's probe of a pid outside its own test", () => {
+    const reports = repoReports({
+      "packages/core/src/migrate/core/cleanup.test.ts": PROBE.replace(
+        "../../src/migrate/core/cleanup.ts",
+        "./cleanup.ts",
+      ),
+      "packages/core/src/migrate/core/other.test.ts": PROBE.replace(
+        "../../src/migrate/core/cleanup.ts",
+        "./cleanup.ts",
+      ),
+      "packages/core/tests/integration/d1/probe.test.ts": PROBE,
+    });
+
+    expect(reports).toEqual([
+      {
+        file: "packages/core/src/migrate/core/other.test.ts",
+        line: 1,
+        message: IS_ALIVE.replace("../../src/migrate/core/cleanup.ts", "./cleanup.ts"),
+      },
+      { file: "packages/core/tests/integration/d1/probe.test.ts", line: 1, message: IS_ALIVE },
+    ]);
+  });
+});

@@ -1,4 +1,10 @@
 // pg/error-handler.d.ts
+/**
+ * PostgreSQL errors mapped to DatabaseErrors, one handler per SQLSTATE. The server's error is found
+ * by walking `.cause` past wrappers such as drizzle's; node-postgres, postgres.js and Bun.SQL
+ * name its fields differently, and `readPgError` reads all three.
+ * https://www.postgresql.org/docs/current/errcodes-appendix.html
+ */
 import { DatabaseError } from "../error.ts";
 import { type ConstraintMap } from "../types.ts";
 import { type PgErrorRead, readPgError } from "./read-error.ts";

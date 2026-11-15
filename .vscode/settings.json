@@ -1,0 +1,92 @@
+{
+  "js/ts.experimental.useTsgo": true,
+  "js/ts.tsdk.path": "./node_modules/typescript",
+  "editor.codeActionsOnSave": {
+    "source.fixAll.oxc": "explicit"
+  },
+  "editor.defaultFormatter": "wdomitrz.simple-lsp-client",
+  "editor.formatOnSave": true,
+  "editor.formatOnSaveMode": "file",
+  "files.eol": "\n",
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true,
+  "files.watcherExclude": {
+    "**/.turbo/**": true,
+    "**/.worktrees/**": true
+  },
+  "oxc.enable.oxfmt": false,
+  "search.exclude": {
+    "**/.turbo": true,
+    "**/.worktrees": true,
+    "**/coverage": true
+  },
+  "simpleLspClient.formatters": {
+    "bun": {
+      "cmd": [
+        "bun",
+        "fmt",
+        "--no-script",
+        "--stdin-filepath",
+        "${file}"
+      ],
+      "filetypes": [
+        "javascript",
+        "javascriptreact",
+        "typescript",
+        "typescriptreact",
+        "json",
+        "jsonc",
+        "css",
+        "tailwindcss",
+        "scss"
+      ]
+    }
+  },
+  "files.readonlyInclude": {
+    ".agents/agents/implementer-deep.md": true,
+    ".agents/agents/implementer-fast.md": true,
+    ".agents/agents/orchestrator.md": true,
+    ".agents/agents/researcher.md": true,
+    ".agents/agents/scout.md": true,
+    ".agents/hooks.json": true,
+    ".agents/mcp_config.json": true,
+    ".claude/agents/implementer-deep.md": true,
+    ".claude/agents/implementer-fast.md": true,
+    ".claude/agents/researcher.md": true,
+    ".claude/agents/scout.md": true,
+    ".claude/settings.json": true,
+    ".codex/agents/implementer-deep.toml": true,
+    ".codex/agents/implementer-fast.toml": true,
+    ".codex/agents/researcher.toml": true,
+    ".codex/agents/scout.toml": true,
+    ".codex/config.toml": true,
+    ".codex/hooks.json": true,
+    ".cursor/agents/implementer-deep.md": true,
+    ".cursor/agents/implementer-fast.md": true,
+    ".cursor/agents/researcher.md": true,
+    ".cursor/agents/scout.md": true,
+    ".cursor/hooks.json": true,
+    ".githooks/commit-msg": true,
+    ".githooks/pre-commit": true,
+    ".githooks/pre-push": true,
+    ".github/workflows/bench.yml": true,
+    ".grok/agents/implementer-deep.md": true,
+    ".grok/agents/implementer-fast.md": true,
+    ".grok/agents/orchestrator.md": true,
+    ".grok/agents/researcher.md": true,
+    ".grok/agents/scout.md": true,
+    ".grok/config.toml": true,
+    ".grok/hooks/orchestrate-parent.json": true,
+    ".grok/hooks/rtk.json": true,
+    ".grok/hooks/rulesync.json": true,
+    ".grok/roles/scout.toml": true,
+    ".oxfmtrc.jsonc": true,
+    ".oxlintrc.jsonc": true,
+    ".repo/.gitkeep": true,
+    ".repo/lessons/INDEX.md": true,
+    ".vscode/tasks.json": true,
+    "bunfig.toml": true,
+    "knip.jsonc": true,
+    "packages/core/README.md": true
+  }
+}

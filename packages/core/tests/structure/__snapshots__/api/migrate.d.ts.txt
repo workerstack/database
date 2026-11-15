@@ -1,6 +1,6 @@
 // migrate/index.d.ts
 export { type MigrateConfig, createProvider, DEFAULT_PG_DEV_URL, defineConfig, type LoadedConfig, loadConfig, parseConfig, resolveDatabaseConfig, } from "./config.ts";
-export { D1_HASH_TABLE, D1_MIGRATIONS_TABLE, d1HistoryTables, DRIZZLE_HISTORY_TABLE } from "./core/d1-history-tables.ts";
+export { D1_HASH_TABLE, D1_MIGRATIONS_TABLE, d1HistoryTables, DRIZZLE_HISTORY_TABLE, } from "./core/d1-history-tables.ts";
 export { applySqliteMigrationTransforms, checkAtlasInstalled, type DrizzleExportOptions, exportDrizzleSchema, generateSchemaDiff, getAtlasVersion, type SchemaDiffOptions, type SchemaDiffResult, } from "./core/atlas.ts";
 export { classifyMigration, extractDropStatements, extractSchema, generateMigrationHash, parseMigration, splitSqlStatements, } from "./core/parse.ts";
 export { loadPostgresParser } from "./core/pg-parser.ts";
@@ -95,7 +95,7 @@ import type { MigrateDialect } from "../types.ts";
 import { type PgTarget } from "./atlas-target.ts";
 import { type ProjectBin, type MigrateRun } from "./process.ts";
 export { applySqliteMigrationTransforms } from "./atlas-env.ts";
-export { generateIncrementalMigration, type MigrateDiffOptions, type MigrateDiffResult } from "./migrate-diff.ts";
+export { generateIncrementalMigration } from "./migrate-diff.ts";
 /** Whether `atlas version` runs and exits 0: the Atlas CLI is on PATH */
 export declare function checkAtlasInstalled(exec?: MigrateRun): Promise<boolean>;
 /** The version `atlas version` prints, as `v1.3.0`; null when Atlas does not run or prints none */
@@ -153,13 +153,13 @@ export declare function exportDrizzleSchema(options: DrizzleExportOptions): Prom
 export declare function exportWith(drizzleKit: ProjectBin, options: DrizzleExportOptions): Promise<string>;
 
 // migrate/core/parse.d.ts
-import { classifyMigration, type ClassifyOptions, extractDropStatements } from "./classify.ts";
+import type { ParsedMigration } from "../migration-types.ts";
 import type { Replayed } from "./classify-file.ts";
-import type { Placing } from "./pg-storage-types.ts";
+import { classifyMigration, type ClassifyOptions, extractDropStatements } from "./classify.ts";
 import { type FileRead } from "./pg-split.ts";
+import type { Placing } from "./pg-storage-types.ts";
 import { extractSchema } from "./schema.ts";
 import { splitSqlStatements } from "./sql-scan.ts";
-import type { ParsedMigration } from "../migration-types.ts";
 export { splitSqlStatements };
 /** The hash a migration is recorded under: its SQL with comments and layout normalized away */
 export declare function generateMigrationHash(sql: string): string;
@@ -681,7 +681,7 @@ export type MigrationConfig = {
     /** each database that database migrates, by the name `database migrate` takes */
     databases: Record<string, DatabaseConfig>;
 };
-export type MigrationStatus = "success" | "already_applied" | "repaired" | "failed" | "skipped";
+type MigrationStatus = "success" | "already_applied" | "repaired" | "failed" | "skipped";
 export type MigrationResult = {
     database: string;
     status: MigrationStatus;
@@ -699,6 +699,7 @@ export type CircuitBreakerState = {
     /** the failure rate and threshold it crossed, once tripped */
     tripReason?: string | undefined;
 };
+export {};
 
 // migrate/core/classify.d.ts
 /**
@@ -722,8 +723,8 @@ import type { MigrateDialect } from "../types.ts";
 import { type Replayed } from "./classify-file.ts";
 import type { TargetKind } from "./classify-target.ts";
 import { type Read } from "./classify-verdict.ts";
-import type { Placing } from "./pg-storage-types.ts";
 import { type PgRead } from "./pg-split.ts";
+import type { Placing } from "./pg-storage-types.ts";
 /** How `parseMigration`, `classifyMigration` and `extractDropStatements` read a migration file */
 type ClassifyOptions = {
     /** the schema the earlier migrations leave, which tells a lossless SQLite table rebuild from a drop */
@@ -864,8 +865,6 @@ declare const atlasUrls: (target: PgTarget) => {
     devUrl: string;
     url: string;
 };
-/** The atlas.hcl for `needs`: getenv for each URL, and the history pinned to `revisions` */
-declare function atlasConfig(needs: AtlasNeeds, revisions: string): string;
 /** Refuse `target` as pgUrlProblems does for `needs`, before anything reaches a database */
 declare function refuseUrlProblems(target: PgTarget, needs: AtlasNeeds): void;
 /**
@@ -878,7 +877,7 @@ declare function withAtlasEnv<T>(target: PgTarget, needs: AtlasNeeds, body: (atl
  * OSS may say it left part of a schema out of what it compared
  */
 declare const atlasNotices: (stderr: string) => string[];
-export { atlasConfig, type AtlasEnv, type AtlasNeeds, atlasNotices, atlasUrls, pgUrlProblems, type PgTarget, refuseUrlProblems, revisionsSchema, SHARED_REVISIONS, withAtlasEnv, };
+export { atlasNotices, atlasUrls, pgUrlProblems, type PgTarget, refuseUrlProblems, revisionsSchema, SHARED_REVISIONS, withAtlasEnv, };
 
 // migrate/core/process.d.ts
 /** An optional peer database spawns rather than imports */
@@ -1023,9 +1022,9 @@ export declare function generateIncrementalMigration(options: MigrateDiffOptions
  */
 import type { MigrateDialect } from "../types.ts";
 import type { Finding } from "./classify-alter.ts";
-import { type namingOf } from "./sql-code.ts";
 import { type TargetKind } from "./classify-target.ts";
 import type { Locked } from "./pg-held-types.ts";
+import { type namingOf } from "./sql-code.ts";
 /**
  * An FTS5 command, an insert into the table's own hidden column, that removes indexed rows
  * ('delete', 'delete-all') or whose command database cannot read is unsafe. SQLite runs it as an
@@ -1092,36 +1091,16 @@ type Replayed = {
 declare const createdOf: (codes: readonly string[], naming: ReturnType<typeof namingOf>) => Set<string>;
 export { createdOf, ftsCommandFindings, outsideRefusal, preview, PROCESS_PRAGMAS, type ReadStatement, refuseHeader, refuseOpenBlock, refuseUnrunnable, reindexedOf, type Replayed, };
 
-// migrate/core/pg-storage-types.d.ts
-/**
- * Where Postgres keeps a relation's rows, as the history shows it (pg-storage.ts) and as the target's
- * catalog says it (pg-live-storage.ts). Types only, so the declarations parse.ts and classify.ts
- * publish reach no further.
- */
-/**
- * Where a table or materialized view keeps its rows, as far as the history shows it:
- * whether it is logged, and its access method and tablespace, each undefined where the history
- * leaves it to the target (a temporary table, one made without USING or TABLESPACE, SET ACCESS
- * METHOD DEFAULT)
- */
-type Storage = {
-    accessMethod: string | undefined;
-    logged: boolean | undefined;
-    tablespace: string | undefined;
-};
-/** Where the target keeps its tables' and materialized views' rows, and its indexes', by key */
-type Placed = {
-    indexes: ReadonlyMap<string, string>;
-    relations: ReadonlyMap<string, Storage>;
-};
-/** Where the target's catalog says its relations are, and the statement of the history its applied files end before */
-type Placing = {
-    at: number;
-    placed: Placed;
-};
-export type { Placed, Placing, Storage };
-
 // migrate/core/pg-split.d.ts
+/**
+ * A Postgres file as Postgres runs it: the chunks Atlas sends one at a time (atlas-scan.ts),
+ * each split into the statements Postgres's parser reads in it, by each RawStmt's `stmt_location`
+ * and `stmt_len`, offsets in UTF-8 bytes. A chunk the parser cannot read stays one statement: the
+ * classifier rates it unsafe, and a history holding one fails the classification. Each file is
+ * parsed once: its read keeps every statement's parse tree, and extractSchema records the history's
+ * trees beside the schema it leaves (recordRead), which the history's facts read. A
+ * file database writes from such statements (atlasFile) is one Atlas sends each of alone.
+ */
 import type { MigrateDialect } from "../types.ts";
 type RawStmt = {
     stmt_len?: number | undefined;
@@ -1186,12 +1165,41 @@ declare function historyTree(statement: string): unknown;
  * the file's own, which its first line sets
  */
 declare function atlasFile(statements: readonly string[], head?: string): string;
-export { atlasFile, fileEnds, type FileRead, fileRead, historyTree, historyTrees, type PgRead, pgRead, type PgStatement, pgStatements, recordRead, };
+export { atlasFile, fileEnds, type FileRead, fileRead, historyTree, historyTrees, type PgRead, pgRead, pgStatements, recordRead, };
+
+// migrate/core/pg-storage-types.d.ts
+/**
+ * Where Postgres keeps a relation's rows, as the history shows it (pg-storage.ts) and as the target's
+ * catalog says it (pg-live-storage.ts). Types only, so the declarations parse.ts and classify.ts
+ * publish reach no further.
+ */
+/**
+ * Where a table or materialized view keeps its rows, as far as the history shows it:
+ * whether it is logged, and its access method and tablespace, each undefined where the history
+ * leaves it to the target (a temporary table, one made without USING or TABLESPACE, SET ACCESS
+ * METHOD DEFAULT)
+ */
+type Storage = {
+    accessMethod: string | undefined;
+    logged: boolean | undefined;
+    tablespace: string | undefined;
+};
+/** Where the target keeps its tables' and materialized views' rows, and its indexes', by key */
+type Placed = {
+    indexes: ReadonlyMap<string, string>;
+    relations: ReadonlyMap<string, Storage>;
+};
+/** Where the target's catalog says its relations are, and the statement of the history its applied files end before */
+type Placing = {
+    at: number;
+    placed: Placed;
+};
+export type { Placed, Placing, Storage };
 
 // migrate/core/schema.d.ts
-import { type FileRead } from "./pg-split.ts";
 import type { ExtractedSchema } from "../migration-types.ts";
 import type { MigrateDialect } from "../types.ts";
+import { type FileRead } from "./pg-split.ts";
 /**
  * The tables (with columns, keys and shape), indexes, dropped tables, triggers and routines a
  * migration leaves, after `from` when given, read as `readAs` names a dialect, SQLite by default.
@@ -1295,8 +1303,8 @@ export declare function getSqliteColumns(conn: MigrateConnection, table: string)
 export declare function getSqliteIndexes(conn: MigrateConnection): Promise<string[]>;
 
 // migrate/drivers/bun-sqlite.d.ts
-import type { Open } from "./local-db.ts";
 import type { BunSqliteProviderConfig, ConnectionProvider } from "../types.ts";
+import type { Open } from "./local-db.ts";
 /**
  * bun:sqlite's module, or the refusal naming Bun with the loader's error as its cause: Node's
  * loader answers a bun: URL with an error that names neither. Any failure is the refusal, as

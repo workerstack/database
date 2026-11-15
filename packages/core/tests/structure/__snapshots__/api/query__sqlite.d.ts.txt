@@ -104,7 +104,8 @@ export { conditionToSQL, filterToSQL, type FilterToSQLConfig };
  * exists in one and not the other. A column is described by what it stores (its kind)
  * and the SQL its values compare against.
  */
-import { Column, SQL, type SQLWrapper } from "drizzle-orm";
+import type { Column } from "drizzle-orm";
+import { SQL, type SQLWrapper } from "drizzle-orm";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import type { ListDialect } from "../list-dialect.ts";
 import type { FilterCondition } from "../types.ts";
@@ -129,7 +130,7 @@ declare const dialectOf: (column: Column) => ListDialect;
 declare function lowerOn(column: FilterColumn, condition: FilterCondition): SQL | null;
 /** One condition on one drizzle column; null when the operator or value is not one this column can take */
 declare const conditionToSQL: (condition: FilterCondition, column: SQLiteColumn) => SQL | null;
-export { COLUMN_KINDS, type ColumnKind, conditionToSQL, dialectOf, type FilterColumn, lowerOn };
+export { COLUMN_KINDS, type ColumnKind, conditionToSQL, dialectOf, lowerOn };
 
 // query/sqlite/filter-sql.d.ts
 /**
@@ -744,13 +745,13 @@ export { type ListDialect, listDialect };
  * cursors through closures over the options its builder was given, so logging or serializing a
  * built query shows no part of the secret.
  */
-import { type DecodedCursor } from "./cursor.ts";
+import type * as z from "zod";
 import { type ColumnCheck, type KeysetKind } from "./cursor-mint.ts";
 import { type CursorOptions } from "./cursor-seal.ts";
+import { type DecodedCursor } from "./cursor.ts";
 import { DATABASE_ID } from "./list-extras.ts";
 import type { paginationResponseSchema } from "./schema.ts";
 import type { ListQueryInput, ParsedFields, SortField } from "./types.ts";
-import type * as z from "zod";
 /**
  * The name of one column a builder selects for `paginate` to read, which no row it returns keeps: the
  * tiebreak, the gone-anchor flag, the count, each sort key's storage class, or its stored text
@@ -854,6 +855,91 @@ declare function paginate<T extends object>(items: readonly T[], built: {
 }): readonly [Array<ListRow<T>>, PaginationResponse];
 export { applySelect, DATABASE_ID, nextCursorOf, type ListExtra, type ListPagination, type ListRow, paginate, type PaginationFacts, type PaginationResponse, paginationOf, totalOf, };
 
+// query/cursor-mint.d.ts
+/**
+ * Minting a cursor that `readCursor` will open: one whose sealed length stays within
+ * MAX_CURSOR_LENGTH, a value too long for it carried by reference (cursor-ref.ts) on a table's
+ * list, and refused on a derived list, which no row holds to read a reference back from.
+ */
+import { type CursorOptions } from "./cursor-seal.ts";
+import type { SortField } from "./types.ts";
+/**
+ * The open's column check a builder hands the mint: the index of the first value, the tiebreak id last,
+ * its column does not hold, `carried` saying which the cursor flags as stored text; -1 when all fit
+ */
+type ColumnCheck = (values: readonly unknown[], carried: (index: number) => boolean) => number;
+/** paginate's choice for an overflowing key: by reference on a table, refused on a derived or a merged list */
+type KeysetKind = "derived" | "merged" | "table";
+/**
+ * Mint the cursor for the row after which the next page starts, as `paginate` does: its longest
+ * string values carried by reference while it passes the cap that `readCursor` holds; a 500 on a
+ * derived list (`keyset: "derived"`), or when no reference makes it fit; a 500 on a derived list's
+ * integer key past ±(2^53 − 1), which it binds as the driver rounded it
+ */
+declare function createCursor(row: Record<string, unknown>, sort: readonly SortField[], options: CursorOptions & {
+    /** the sort fields the list binds as the row read them, with no row to read a bound from; every one on a derived list */
+    asRead?: ReadonlySet<string> | undefined;
+    /** the sort fields a long value of may go by reference to its row; every one when not given */
+    byReference?: ReadonlySet<string> | undefined;
+    /** the sort fields whose value in `row` is the key's stored text, which the next page binds as itself */
+    carried?: ReadonlySet<string> | undefined;
+    /** the field of `row` that holds the tiebreak id; default `id` */
+    idField?: string | undefined;
+    /** how a value too long for the cap is carried: by reference on "table", the default; refused with a 500 on "derived" or "merged" */
+    keyset?: KeysetKind | undefined;
+}): string;
+/**
+ * createCursor for the row paginate typed, bound by its stored values: `read` is the row as the driver
+ * read it, whose value readCursor returns for a key bound otherwise
+ */
+declare function fitCursor(row: Record<string, unknown>, sort: readonly SortField[], options: Parameters<typeof createCursor>[2] & {
+    read?: Record<string, unknown> | undefined;
+}): string;
+/**
+ * fitCursor's every refusal of `row`, run with no seal, and what seals its cursor: the cap is measured
+ * on the plaintext (sealedLength), so a page checks each row it serves and seals the last alone
+ */
+declare function fittedCursor(row: Record<string, unknown>, sort: readonly SortField[], options: Parameters<typeof fitCursor>[2] & {
+    /** the open's column check, run on the record sealed; none on a row no builder read */
+    holds?: ColumnCheck | undefined;
+}): () => string;
+export { type ColumnCheck, createCursor, fitCursor, fittedCursor, type KeysetKind };
+
+// query/cursor-seal.d.ts
+/** What seals and opens the cursors of one list: the app's secret, and the list's scope (route plus tenant) */
+type CursorOptions = {
+    /** the list's name, its route and tenant, such as `members:${orgId}`; a cursor sealed under one opens under no other. Empty is a 500 */
+    cursorScope: string;
+    /** the app's secret, at least `MIN_CURSOR_SECRET_BYTES` bytes of UTF-8, the same on every worker; a shorter one is a 500 */
+    cursorSecret: string;
+    /**
+     * "exact" when the driver reads a SQLite REAL's ±Infinity back as Infinity (a local libsql file,
+     * bun:sqlite), so a null cursor is a real NULL and a list whose NULL anchor is deleted resumes
+     * right after it. Unset, as on D1, which reads ±Infinity as null, such a list resumes from the
+     * earliest value the null may stand for, repeating rows and skipping none.
+     */
+    nonFinite?: "exact" | undefined;
+};
+/** The shortest secret a cursor is sealed under, in UTF-8 bytes: the key's length */
+declare const MIN_CURSOR_SECRET_BYTES = 32;
+/** The 32-byte key HKDF-SHA256 derives from `secret`, with no salt and database's info */
+declare function cursorKey(secret: string): Uint8Array;
+/** Throw the 500 sealing throws when `options` cannot seal a cursor */
+declare function assertCursorWired(options: CursorOptions): void;
+/** The length of the cursor seal makes of `length` bytes of plaintext, which their count alone sets */
+declare const sealedLength: (length: number) => number;
+/**
+ * `plaintext` sealed under `options`, as base64url, padded with spaces up to a multiple of 256
+ * bytes first: AEAD hides the bytes, not their count, and a cursor carries a hidden column's
+ * value too. openSealed strips them: what seal takes ends in no space of its own.
+ */
+declare function seal(plaintext: Uint8Array, options: CursorOptions): string;
+/** Whether `cursor` has a sealed cursor's shape: what a check without the secret can know */
+declare const isSealedShape: (cursor: string) => boolean;
+/** What `cursor` holds, opened under `options`; null when it was not sealed under both */
+declare function openSealed(cursor: string, options: CursorOptions): Uint8Array | null;
+export { assertCursorWired, cursorKey, type CursorOptions, isSealedShape, MIN_CURSOR_SECRET_BYTES, openSealed, seal, sealedLength, };
+
 // query/cursor.d.ts
 import { CursorRef, RealText, type CursorId, type CursorValue } from "./cursor-codec.ts";
 import { type CursorOptions } from "./cursor-seal.ts";
@@ -950,87 +1036,7 @@ declare function readCompared(cursor: string, parsedSort: readonly SortField[], 
  * cursor's row (cursor-ref.ts), never bind as it is.
  */
 declare function readCursor(cursor: string, parsedSort: readonly SortField[], options: CursorOptions): DecodedCursor;
-export { CursorRef, CURSOR_TIEBREAK_COLUMN, MAX_CURSOR_LENGTH, cursorBytes, cursorProblem, effectiveNulls, encodeCursor, mintCursor, readCompared, readCursor, readKeyset, sortSignature, type CursorId, type CursorOptions, type CursorPayload, type CursorValue, type DecodedCursor, openCursor, };
-
-// query/cursor-mint.d.ts
-import { type CursorOptions } from "./cursor-seal.ts";
-import type { SortField } from "./types.ts";
-/**
- * The open's column check a builder hands the mint: the index of the first value, the tiebreak id last,
- * its column does not hold, `carried` saying which the cursor flags as stored text; -1 when all fit
- */
-type ColumnCheck = (values: readonly unknown[], carried: (index: number) => boolean) => number;
-/** paginate's choice for an overflowing key: by reference on a table, refused on a derived or a merged list */
-type KeysetKind = "derived" | "merged" | "table";
-/**
- * Mint the cursor for the row after which the next page starts, as `paginate` does: its longest
- * string values carried by reference while it passes the cap that `readCursor` holds; a 500 on a
- * derived list (`keyset: "derived"`), or when no reference makes it fit; a 500 on a derived list's
- * integer key past ±(2^53 − 1), which it binds as the driver rounded it
- */
-declare function createCursor(row: Record<string, unknown>, sort: readonly SortField[], options: CursorOptions & {
-    /** the sort fields the list binds as the row read them, with no row to read a bound from; every one on a derived list */
-    asRead?: ReadonlySet<string> | undefined;
-    /** the sort fields a long value of may go by reference to its row; every one when not given */
-    byReference?: ReadonlySet<string> | undefined;
-    /** the sort fields whose value in `row` is the key's stored text, which the next page binds as itself */
-    carried?: ReadonlySet<string> | undefined;
-    /** the field of `row` that holds the tiebreak id; default `id` */
-    idField?: string | undefined;
-    /** how a value too long for the cap is carried: by reference on "table", the default; refused with a 500 on "derived" or "merged" */
-    keyset?: KeysetKind | undefined;
-}): string;
-/**
- * createCursor for the row paginate typed, bound by its stored values: `read` is the row as the driver
- * read it, whose value readCursor returns for a key bound otherwise
- */
-declare function fitCursor(row: Record<string, unknown>, sort: readonly SortField[], options: Parameters<typeof createCursor>[2] & {
-    read?: Record<string, unknown> | undefined;
-}): string;
-/**
- * fitCursor's every refusal of `row`, run with no seal, and what seals its cursor: the cap is measured
- * on the plaintext (sealedLength), so a page checks each row it serves and seals the last alone
- */
-declare function fittedCursor(row: Record<string, unknown>, sort: readonly SortField[], options: Parameters<typeof fitCursor>[2] & {
-    /** the open's column check, run on the record sealed; none on a row no builder read */
-    holds?: ColumnCheck | undefined;
-}): () => string;
-export { type ColumnCheck, createCursor, fitCursor, fittedCursor, type KeysetKind };
-
-// query/cursor-seal.d.ts
-/** What seals and opens the cursors of one list: the app's secret, and the list's scope (route plus tenant) */
-type CursorOptions = {
-    /** the list's name, its route and tenant, such as `members:${orgId}`; a cursor sealed under one opens under no other. Empty is a 500 */
-    cursorScope: string;
-    /** the app's secret, at least `MIN_CURSOR_SECRET_BYTES` bytes of UTF-8, the same on every worker; a shorter one is a 500 */
-    cursorSecret: string;
-    /**
-     * "exact" when the driver reads a SQLite REAL's ±Infinity back as Infinity (a local libsql file,
-     * bun:sqlite), so a null cursor is a real NULL and a list whose NULL anchor is deleted resumes
-     * right after it. Unset, as on D1, which reads ±Infinity as null, such a list resumes from the
-     * earliest value the null may stand for, repeating rows and skipping none.
-     */
-    nonFinite?: "exact" | undefined;
-};
-/** The shortest secret a cursor is sealed under, in UTF-8 bytes: the key's length */
-declare const MIN_CURSOR_SECRET_BYTES = 32;
-/** The 32-byte key HKDF-SHA256 derives from `secret`, with no salt and database's info */
-declare function cursorKey(secret: string): Uint8Array;
-/** Throw the 500 sealing throws when `options` cannot seal a cursor */
-declare function assertCursorWired(options: CursorOptions): void;
-/** The length of the cursor seal makes of `length` bytes of plaintext, which their count alone sets */
-declare const sealedLength: (length: number) => number;
-/**
- * `plaintext` sealed under `options`, as base64url, padded with spaces up to a multiple of 256
- * bytes first: AEAD hides the bytes, not their count, and a cursor carries a hidden column's
- * value too. openSealed strips them: what seal takes ends in no space of its own.
- */
-declare function seal(plaintext: Uint8Array, options: CursorOptions): string;
-/** Whether `cursor` has a sealed cursor's shape: what a check without the secret can know */
-declare const isSealedShape: (cursor: string) => boolean;
-/** What `cursor` holds, opened under `options`; null when it was not sealed under both */
-declare function openSealed(cursor: string, options: CursorOptions): Uint8Array | null;
-export { assertCursorWired, cursorKey, type CursorOptions, isSealedShape, MIN_CURSOR_SECRET_BYTES, openSealed, seal, sealedLength, };
+export { CursorRef, CURSOR_TIEBREAK_COLUMN, MAX_CURSOR_LENGTH, cursorBytes, cursorProblem, effectiveNulls, encodeCursor, mintCursor, readCompared, readCursor, readKeyset, sortSignature, type CursorId, type CursorOptions, type CursorValue, type DecodedCursor, openCursor, };
 
 // query/list-extras.d.ts
 import type { SortField } from "./types.ts";
@@ -1084,7 +1090,7 @@ declare function carriedTexts(row: Record<string, unknown>, sort: readonly SortF
  * checked it; the merge compares typedKeys' numbers, the same parse of the same text
  */
 declare function cursorKeys(row: Record<string, unknown>, sort: readonly SortField[]): Record<string, unknown>;
-export { carriedTexts, cursorKeys, DATABASE_ID, INTEGER_TEXT, type KeyClass, malformed, refuseUnheld, storedClasses, typedKeys, unencoded, };
+export { carriedTexts, cursorKeys, DATABASE_ID, INTEGER_TEXT, malformed, refuseUnheld, storedClasses, typedKeys, unencoded, };
 
 // query/schema.d.ts
 /**
@@ -1246,22 +1252,16 @@ declare const REQUEST_BYTES: {
     readonly q: 600;
     readonly select: 500;
 };
-/**
- * `value`'s bytes as the widest common encoding writes it: a character either encoding escapes,
- * a space (%20 in a URL) and ~ or ! (%7E, %21 in a form) among them, as three per UTF-8 byte;
- * undefined for a lone surrogate, which no URL carries
- */
-declare function encodedBytes(value: string): number | undefined;
 /** Whether `value` takes at most `bytes` however a client encodes it */
 declare const withinBytes: (bytes: number) => (value: string) => boolean;
 declare const encodedMessage: (bytes: number) => string;
-export { encodedBytes, encodedMessage, LIST_QUERY_LIMITS, MAX_QUERY_BYTES, PAGINATION_DEFAULTS, REQUEST_BYTES, withinBytes, };
+export { encodedMessage, LIST_QUERY_LIMITS, MAX_QUERY_BYTES, PAGINATION_DEFAULTS, REQUEST_BYTES, withinBytes };
 
 // query/schema-types.d.ts
 /** The configs and outputs of the list and retrieve query schemas. Declaration-only. */
 import type * as z from "zod";
-import type { FilterLimits } from "./filter.ts";
 import type { LimitsGiven } from "./filter-validate.ts";
+import type { FilterLimits } from "./filter.ts";
 import type { RESERVED_LIST_KEYS, RESERVED_RETRIEVE_KEYS } from "./schema-params.ts";
 import type { FieldType, FilterAST, ParsedFields, SortDirection, SortField } from "./types.ts";
 /** The fields an endpoint's `select` may name; any other is a 400 naming it */
@@ -1427,55 +1427,6 @@ declare function pickExtended<T extends Record<string, z.ZodType>>(extendFields:
 };
 export { assertNotReserved, baseListQueryShape, filterAstSchema, langQueryField, limitSchemaFor, pageSchemaFor, parsedFieldsSchema, pickExtended, RESERVED_LIST_KEYS, RESERVED_RETRIEVE_KEYS, selectQueryFieldFor, sortDirectionEnum, };
 
-// query/filter.d.ts
-/**
- * PostgREST-style filters and sort orders: parse and validate. DB-agnostic: no SQL, only
- * the AST and its checks. The grammar lives in filter-parse.ts, the checks in filter-validate.ts.
- */
-import { FILTER_OPERATORS, parseFilter } from "./filter-parse.ts";
-import { parseFilterNumber } from "./filter-typed.ts";
-import { FILTER_LIMITS, OPERATORS_BY_TYPE, type FilterField, type FilterFieldSpec, type FilterLimits, type FilterValidationResult, type LimitsGiven, validateFilter } from "./filter-validate.ts";
-import type { SortField } from "./types.ts";
-/**
- * A regular expression taking every `order` parseOrder reads over the fields in `sort`, up to
- * `maxSortKeys` entries: the empty value, which reads as the default order, and each entry the field
- * and the suffixes orderEntries reads off it. A field named twice is refused, so no order holds more
- * entries than `sort` has fields; which field repeats needs a lookahead, which RE2 lacks, so the
- * pattern leaves that to the description
- */
-declare function orderPattern(sort: readonly string[], maxSortKeys: number): string;
-/**
- * Parse PostgREST-style `order` string into SortField array.
- *
- * Grammar:
- *   order  := entry ("," entry)*
- *   entry  := field ("." direction)? ("." nulls)?
- *   field  := any string not containing "." at the direction/nulls boundary
- *            (dotted relation paths OK: "author.name.asc")
- *   direction := "asc" | "desc"        (default "asc" when omitted)
- *   nulls     := "nullsfirst" | "nullslast"
- *
- * Examples:
- *   "name"                         → [{ field: "name", direction: "asc" }]
- *   "name.desc"                    → [{ field: "name", direction: "desc" }]
- *   "name.asc.nullslast"           → [{ field: "name", direction: "asc", nulls: "last" }]
- *   "col1.desc,col2.asc.nullsfirst"
- *     → [{field:"col1",direction:"desc"}, {field:"col2",direction:"asc",nulls:"first"}]
- *
- * An entry that is empty, names no field (`asc`, `.desc`, a trailing comma) or has whitespace around
- * it, and a field named twice, refuse the whole order as null, as parseFilter refuses a filter, rather
- * than drop it and widen the request to the default order.
- */
-declare function parseOrder(input: string | null | undefined): SortField[] | null;
-/** Each field `fields` names more than once, once each */
-declare function namedTwice(fields: readonly SortField[]): string[];
-/**
- * Each entry of `order` read as a sort field, or kept as its text when it is empty, names no field or
- * has whitespace around it, which the published pattern refuses too
- */
-declare function orderEntries(input: string | null | undefined): Array<SortField | string>;
-export { FILTER_LIMITS, FILTER_OPERATORS, OPERATORS_BY_TYPE, parseFilter, parseFilterNumber, namedTwice, orderEntries, orderPattern, parseOrder, validateFilter, type FilterField, type FilterFieldSpec, type FilterLimits, type FilterValidationResult, type LimitsGiven, };
-
 // query/filter-validate.d.ts
 import type { FieldType, FilterAST, FilterOperator } from "./types.ts";
 /** The operators each field type takes when its spec lists none; `is` takes null and notnull on every type */
@@ -1552,6 +1503,55 @@ declare function validateFilter(filterString: string | null | undefined, allowed
 /** validateFilter under `caps` its caller has already checked, as a list schema's limits are */
 declare function checkFilter(filterString: string | null | undefined, allowedFields: Record<string, FilterField>, caps: FilterLimits): FilterValidationResult | null;
 export { checkFilter, FILTER_LIMITS, limitsOver, OPERATORS_BY_TYPE, validateFilter, type FilterField, type FilterFieldSpec, type FilterLimits, type LimitsGiven, type FilterValidationResult, };
+
+// query/filter.d.ts
+/**
+ * PostgREST-style filters and sort orders: parse and validate. DB-agnostic: no SQL, only
+ * the AST and its checks. The grammar lives in filter-parse.ts, the checks in filter-validate.ts.
+ */
+import { FILTER_OPERATORS, parseFilter } from "./filter-parse.ts";
+import { parseFilterNumber } from "./filter-typed.ts";
+import { FILTER_LIMITS, OPERATORS_BY_TYPE, type FilterField, type FilterFieldSpec, type FilterLimits, type FilterValidationResult, type LimitsGiven, validateFilter } from "./filter-validate.ts";
+import type { SortField } from "./types.ts";
+/**
+ * A regular expression taking every `order` parseOrder reads over the fields in `sort`, up to
+ * `maxSortKeys` entries: the empty value, which reads as the default order, and each entry the field
+ * and the suffixes orderEntries reads off it. A field named twice is refused, so no order holds more
+ * entries than `sort` has fields; which field repeats needs a lookahead, which RE2 lacks, so the
+ * pattern leaves that to the description
+ */
+declare function orderPattern(sort: readonly string[], maxSortKeys: number): string;
+/**
+ * Parse PostgREST-style `order` string into SortField array.
+ *
+ * Grammar:
+ *   order  := entry ("," entry)*
+ *   entry  := field ("." direction)? ("." nulls)?
+ *   field  := any string not containing "." at the direction/nulls boundary
+ *            (dotted relation paths OK: "author.name.asc")
+ *   direction := "asc" | "desc"        (default "asc" when omitted)
+ *   nulls     := "nullsfirst" | "nullslast"
+ *
+ * Examples:
+ *   "name"                         → [{ field: "name", direction: "asc" }]
+ *   "name.desc"                    → [{ field: "name", direction: "desc" }]
+ *   "name.asc.nullslast"           → [{ field: "name", direction: "asc", nulls: "last" }]
+ *   "col1.desc,col2.asc.nullsfirst"
+ *     → [{field:"col1",direction:"desc"}, {field:"col2",direction:"asc",nulls:"first"}]
+ *
+ * An entry that is empty, names no field (`asc`, `.desc`, a trailing comma) or has whitespace around
+ * it, and a field named twice, refuse the whole order as null, as parseFilter refuses a filter, rather
+ * than drop it and widen the request to the default order.
+ */
+declare function parseOrder(input: string | null | undefined): SortField[] | null;
+/** Each field `fields` names more than once, once each */
+declare function namedTwice(fields: readonly SortField[]): string[];
+/**
+ * Each entry of `order` read as a sort field, or kept as its text when it is empty, names no field or
+ * has whitespace around it, which the published pattern refuses too
+ */
+declare function orderEntries(input: string | null | undefined): Array<SortField | string>;
+export { FILTER_LIMITS, FILTER_OPERATORS, OPERATORS_BY_TYPE, parseFilter, parseFilterNumber, namedTwice, orderEntries, orderPattern, parseOrder, validateFilter, type FilterField, type FilterFieldSpec, type FilterLimits, type FilterValidationResult, type LimitsGiven, };
 
 // query/filter-parse.d.ts
 /**

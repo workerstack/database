@@ -17,62 +17,64 @@
  * What a recognized statement writes, shadows or fires is the engine's to read: SQLite's in the
  * proof run, Postgres's parser in pg-tree.ts.
  */
-import type { ExtractedSchema } from "../migration-types.ts"
-import type { MigrateDialect } from "../types.ts"
-import type { Finding } from "./classify-alter.ts"
-import { nameKey, type Naming, pragmaOf, QNAME, unquote } from "./sql-code.ts"
-import { normalizeSql } from "./sql-scan.ts"
-import { SYNC_TRIGGER, syncTriggerOf } from "./fts-sync.ts"
+import type { ExtractedSchema } from "../migration-types.ts";
+import type { MigrateDialect } from "../types.ts";
+import type { Finding } from "./classify-alter.ts";
+import { SYNC_TRIGGER, syncTriggerOf } from "./fts-sync.ts";
+import { nameKey, type Naming, pragmaOf, QNAME, unquote } from "./sql-code.ts";
+import { normalizeSql } from "./sql-scan.ts";
 
 /** What the grammar needs from the file: the schema before it, and the FTS sync triggers it makes */
 type GrammarContext = {
-	before: ExtractedSchema | undefined
-	dialect: MigrateDialect
-	ftsTriggers: ReadonlySet<string>
-	naming: Naming
-	/** whether a Postgres parse-tree rule rated the whole statement (pg-tree.ts), which then needs no shape here */
-	treeRated?: boolean | undefined
-	/** on Postgres, the statement's kind as its parse tree's command tag names it */
-	kind?: string | undefined
-}
+  before: ExtractedSchema | undefined;
+  dialect: MigrateDialect;
+  ftsTriggers: ReadonlySet<string>;
+  naming: Naming;
+  /** whether a Postgres parse-tree rule rated the whole statement (pg-tree.ts), which then needs no shape here */
+  treeRated?: boolean | undefined;
+  /** on Postgres, the statement's kind as its parse tree's command tag names it */
+  kind?: string | undefined;
+};
 
 const RECOGNIZED = [
-	/^CREATE (?:UNIQUE )?INDEX\b/i,
-	/^CREATE (?:(?:TEMP|TEMPORARY|UNLOGGED) )?TABLE\b/i,
-	/^CREATE VIRTUAL TABLE\b/i,
-	/^CREATE (?:OR REPLACE )?(?:(?:TEMP|TEMPORARY) )?(?:RECURSIVE )?VIEW\b/i,
-	/^CREATE (?:MATERIALIZED VIEW|SCHEMA|SEQUENCE|TYPE|DOMAIN|EXTENSION)\b/i,
-	/^COMMENT ON\b/i,
-	/^ALTER (?:TABLE|INDEX|SEQUENCE|VIEW|MATERIALIZED VIEW|TYPE|SCHEMA|DOMAIN|EXTENSION)\b/i,
-	/^DROP (?:TABLE|INDEX|VIEW|MATERIALIZED VIEW|SCHEMA|SEQUENCE|TYPE|DOMAIN|EXTENSION|DATABASE|ROLE|USER|GROUP|OWNED|FOREIGN TABLE)\b/i,
-	/^(?:GRANT|REVOKE|TRUNCATE)\b/i,
-	/^(?:INSERT|UPDATE|DELETE|REPLACE|MERGE|SELECT|WITH|VALUES|CALL)\b/i,
-	/^(?:SET|RESET)\b/i,
-	/^(?:SAVEPOINT|RELEASE|ROLLBACK(?: TRANSACTION)? TO)\b/i,
-	/^(?:ANALYZE|ANALYSE|REINDEX|VACUUM|CLUSTER)\b/i,
-	/^(?:CREATE|ALTER|DROP) POLICY\b/i,
-]
+  /^CREATE (?:UNIQUE )?INDEX\b/i,
+  /^CREATE (?:(?:TEMP|TEMPORARY|UNLOGGED) )?TABLE\b/i,
+  /^CREATE VIRTUAL TABLE\b/i,
+  /^CREATE (?:OR REPLACE )?(?:(?:TEMP|TEMPORARY) )?(?:RECURSIVE )?VIEW\b/i,
+  /^CREATE (?:MATERIALIZED VIEW|SCHEMA|SEQUENCE|TYPE|DOMAIN|EXTENSION)\b/i,
+  /^COMMENT ON\b/i,
+  /^ALTER (?:TABLE|INDEX|SEQUENCE|VIEW|MATERIALIZED VIEW|TYPE|SCHEMA|DOMAIN|EXTENSION)\b/i,
+  /^DROP (?:TABLE|INDEX|VIEW|MATERIALIZED VIEW|SCHEMA|SEQUENCE|TYPE|DOMAIN|EXTENSION|DATABASE|ROLE|USER|GROUP|OWNED|FOREIGN TABLE)\b/i,
+  /^(?:GRANT|REVOKE|TRUNCATE)\b/i,
+  /^(?:INSERT|UPDATE|DELETE|REPLACE|MERGE|SELECT|WITH|VALUES|CALL)\b/i,
+  /^(?:SET|RESET)\b/i,
+  /^(?:SAVEPOINT|RELEASE|ROLLBACK(?: TRANSACTION)? TO)\b/i,
+  /^(?:ANALYZE|ANALYSE|REINDEX|VACUUM|CLUSTER)\b/i,
+  /^(?:CREATE|ALTER|DROP) POLICY\b/i,
+];
 
-/* Postgres's transaction control, which an `-- atlas:txmode none` file runs; SQLite's is refused (classify-file.ts) */
-const PG_TRANSACTION = /^(?:BEGIN|COMMIT|END|ROLLBACK|START TRANSACTION)\b/i
-/* Postgres's session statements over a cursor or a prepared statement, which change no schema or row:
-   where Postgres runs them is pg-outside-transaction.ts's, and an EXECUTE they leave unprepared pg-execute.ts's */
-const PG_SESSION = /^(?:DECLARE|FETCH|MOVE|CLOSE|DEALLOCATE|DISCARD)\b/i
+// Postgres's transaction control, which an `-- atlas:txmode none` file runs; SQLite's is refused (classify-file.ts)
+const PG_TRANSACTION = /^(?:BEGIN|COMMIT|END|ROLLBACK|START TRANSACTION)\b/i;
 
-/* recognized, and cautious: an extension's install or upgrade script runs as the migrating role,
-   and a new owner bypasses row level security (an ALTER TABLE's OWNER TO is classify-alter.ts's) */
+// Postgres's session statements over a cursor or a prepared statement, which change no schema or row:
+// where Postgres runs them is pg-outside-transaction.ts's, and an EXECUTE they leave unprepared pg-execute.ts's
+const PG_SESSION = /^(?:DECLARE|FETCH|MOVE|CLOSE|DEALLOCATE|DISCARD)\b/i;
+
+// recognized, and cautious: an extension's install or upgrade script runs as the migrating role,
+// and a new owner bypasses row level security (an ALTER TABLE's OWNER TO is classify-alter.ts's)
 const CAUTIOUS_SHAPES: ReadonlyArray<[RegExp, string]> = [
-	[/^(?:CREATE|ALTER) EXTENSION\b/i, "runs the extension's script"],
-	[/^ALTER (?!TABLE\b)(?:MATERIALIZED VIEW|\w+) \S+.* OWNER TO\b/i, "a new owner, who bypasses row level security"],
-]
+  [/^(?:CREATE|ALTER) EXTENSION\b/i, "runs the extension's script"],
+  [/^ALTER (?!TABLE\b)(?:MATERIALIZED VIEW|\w+) \S+.* OWNER TO\b/i, "a new owner, who bypasses row level security"],
+];
 
 // per-process-constant: a pattern composed from the name grammar, compiled once
 const FTS_EXTERNAL = /* @__PURE__ */ new RegExp(
-	`^CREATE VIRTUAL TABLE (?:IF NOT EXISTS )?(${QNAME}) USING fts5\\(.*\\bcontent ?= ?'[^']+'`,
-	"i",
-)
+  `^CREATE VIRTUAL TABLE (?:IF NOT EXISTS )?(${QNAME}) USING fts5\\(.*\\bcontent ?= ?'[^']+'`,
+  "i",
+);
+
 // per-process-constant: a pattern composed from the name grammar, compiled once
-const DROP_TRIGGER = /* @__PURE__ */ new RegExp(`^DROP TRIGGER (?:IF EXISTS )?(${QNAME})$`, "i")
+const DROP_TRIGGER = /* @__PURE__ */ new RegExp(`^DROP TRIGGER (?:IF EXISTS )?(${QNAME})$`, "i");
 
 /**
  * The sync triggers an external-content FTS5 table keeps, among a file's statements, by name: a
@@ -80,49 +82,64 @@ const DROP_TRIGGER = /* @__PURE__ */ new RegExp(`^DROP TRIGGER (?:IF EXISTS )?($
  * FTS5 table whose text lives in another table (one the history knows, or one the file makes)
  */
 function ftsTriggersOf(
-	statements: readonly string[],
-	before: ExtractedSchema | undefined,
-	naming: Naming,
+  statements: readonly string[],
+  before: ExtractedSchema | undefined,
+  naming: Naming,
 ): Set<string> {
-	/* read with their literals, since the 'delete' command is one, and without comments */
-	const codes = statements.map((statement) => normalizeSql(statement).replace(/;$/, ""))
-	const fts = new Set(before?.externalFts ?? [])
-	for (const code of codes) {
-		const table = FTS_EXTERNAL.exec(code)?.[1]
-		if (table !== undefined) fts.add(nameKey(table, naming))
-	}
-	const out = new Set<string>()
-	for (const code of codes) {
-		const name = syncTriggerOf(code, fts, naming)
-		if (name !== undefined) out.add(name)
-	}
-	return out
+  // read with their literals, since the 'delete' command is one, and without comments
+  const codes = statements.map((statement) => normalizeSql(statement).replace(/;$/, ""));
+  const fts = new Set(before?.externalFts ?? []);
+
+  for (const code of codes) {
+    const table = FTS_EXTERNAL.exec(code)?.[1];
+
+    if (table !== undefined) fts.add(nameKey(table, naming));
+  }
+
+  const out = new Set<string>();
+
+  for (const code of codes) {
+    const name = syncTriggerOf(code, fts, naming);
+
+    if (name !== undefined) out.add(name);
+  }
+
+  return out;
 }
 
 /** Whether `code` is an FTS sync trigger the file makes, or the drop of one the file makes or the history left */
 function isFtsSync(code: string, ctx: GrammarContext): boolean {
-	const made = SYNC_TRIGGER.exec(code)?.[1]
-	if (made !== undefined) return ctx.ftsTriggers.has(nameKey(made, ctx.naming))
-	const dropped = DROP_TRIGGER.exec(code)?.[1]
-	if (dropped === undefined) return false
-	const key = nameKey(dropped, ctx.naming)
-	return ctx.ftsTriggers.has(key) || (ctx.before?.triggers.some((t) => t.name === key && t.ftsSync) ?? false)
+  const made = SYNC_TRIGGER.exec(code)?.[1];
+
+  if (made !== undefined) return ctx.ftsTriggers.has(nameKey(made, ctx.naming));
+  const dropped = DROP_TRIGGER.exec(code)?.[1];
+
+  if (dropped === undefined) return false;
+  const key = nameKey(dropped, ctx.naming);
+
+  return ctx.ftsTriggers.has(key) || (ctx.before?.triggers.some((t) => t.name === key && t.ftsSync) ?? false);
 }
 
 // per-process-constant: a pattern composed from the name grammar, compiled once
 const POLICY = /* @__PURE__ */ new RegExp(
-	`^(CREATE|ALTER|DROP) POLICY (?:IF EXISTS )?${QNAME} ON (${QNAME})(?:.*?(?<!\\bRENAME )\\bTO ((?:${QNAME}|CURRENT_USER|CURRENT_ROLE|SESSION_USER|PUBLIC)(?:, ?(?:${QNAME}|CURRENT_USER|CURRENT_ROLE|SESSION_USER|PUBLIC))*))?`,
-	"i",
-)
+  `^(CREATE|ALTER|DROP) POLICY (?:IF EXISTS )?${QNAME} ON (${QNAME})(?:.*?(?<!\\bRENAME )\\bTO ((?:${QNAME}|CURRENT_USER|CURRENT_ROLE|SESSION_USER|PUBLIC)(?:, ?(?:${QNAME}|CURRENT_USER|CURRENT_ROLE|SESSION_USER|PUBLIC))*))?`,
+  "i",
+);
 
 /** Why a policy statement is cautious: whose rows it changes, on which table; undefined for any other statement */
 function policyNote(code: string): string | undefined {
-	const [, verb, table, roles] = POLICY.exec(code) ?? []
-	if (verb === undefined || table === undefined) return undefined
-	/* a policy made without TO applies to every role; an altered or dropped one keeps the roles it had */
-	const who = roles?.split(",").map((role) => unquote(role.trim())) ?? [/^CREATE$/i.test(verb) ? "public" : "its roles"]
-	const sees = who.length > 1 || who[0] === "its roles" ? "see" : "sees"
-	return `changes which rows ${who.join(", ")} ${sees} on ${unquote(table)}`
+  const [, verb, table, roles] = POLICY.exec(code) ?? [];
+
+  if (verb === undefined || table === undefined) return undefined;
+
+  // a policy made without TO applies to every role; an altered or dropped one keeps the roles it had
+  const who = roles?.split(",").map((role) => unquote(role.trim())) ?? [
+    /^CREATE$/i.test(verb) ? "public" : "its roles",
+  ];
+
+  const sees = who.length > 1 || who[0] === "its roles" ? "see" : "sees";
+
+  return `changes which rows ${who.join(", ")} ${sees} on ${unquote(table)}`;
 }
 
 /**
@@ -130,28 +147,31 @@ function policyNote(code: string): string | undefined {
  * or TEMPORARY left out; a Postgres statement is named by its parse tree's command tag
  */
 function kindOf(code: string): string {
-	return code
-		.replace(/^(CREATE )(?:TEMP|TEMPORARY) /i, "$1")
-		.split(" ")
-		.slice(0, 2)
-		.join(" ")
+  return code
+    .replace(/^(CREATE )(?:TEMP|TEMPORARY) /i, "$1")
+    .split(" ")
+    .slice(0, 2)
+    .join(" ");
 }
 
-/* the families default-deny rates unsafe by rule, whatever else database reads of them: made, replaced, altered or dropped */
+// the families default-deny rates unsafe by rule, whatever else database reads of them: made, replaced, altered or dropped
 const DENIED =
-	/^(?:(?:CREATE (?:OR REPLACE )?(?:(?:TEMP|TEMPORARY) )?(?:CONSTRAINT )?|ALTER |DROP )(TRIGGER|FUNCTION|PROCEDURE|RULE)\b|(DO)\b)/i
+  /^(?:(?:CREATE (?:OR REPLACE )?(?:(?:TEMP|TEMPORARY) )?(?:CONSTRAINT )?|ALTER |DROP )(TRIGGER|FUNCTION|PROCEDURE|RULE)\b|(DO)\b)/i;
 
 /**
  * Why database rates an unrecognized statement unsafe: the rule, for a trigger or a routine, which
  * another reading may describe as well; else that it does not recognize it
  */
 function unrecognized(code: string, kind = kindOf(code)): string {
-	/* a pragma database does not write is rated by its own rule too (classify-runtime.ts), never "not recognized" */
-	if (/^PRAGMA\b/i.test(code)) return "database rates every pragma it does not write unsafe; approve it in the file"
-	const [, family, block] = DENIED.exec(code) ?? []
-	if (block !== undefined) return "database rates every DO block unsafe; approve it in the file"
-	if (family !== undefined) return `database rates every ${family.toLowerCase()} change unsafe; approve it in the file`
-	return `database does not recognize ${kind}; approve it in the file`
+  // a pragma database does not write is rated by its own rule too (classify-runtime.ts), never "not recognized"
+  if (/^PRAGMA\b/i.test(code)) return "database rates every pragma it does not write unsafe; approve it in the file";
+  const [, family, block] = DENIED.exec(code) ?? [];
+
+  if (block !== undefined) return "database rates every DO block unsafe; approve it in the file";
+
+  if (family !== undefined) return `database rates every ${family.toLowerCase()} change unsafe; approve it in the file`;
+
+  return `database does not recognize ${kind}; approve it in the file`;
 }
 
 /**
@@ -160,33 +180,38 @@ function unrecognized(code: string, kind = kindOf(code)): string {
  * database runs a file in (classify-runtime.ts notes the ones SQLite reads off)
  */
 function foreignKeyPragma(code: string): boolean {
-	const pragma = pragmaOf(code)
-	if (pragma?.value === undefined || (pragma.schema !== undefined && pragma.schema !== "main")) return false
-	return (
-		pragma.name === "foreign_keys" ||
-		(pragma.name === "defer_foreign_keys" && /^(?:on|off|true|false|0|1)$/i.test(pragma.value))
-	)
+  const pragma = pragmaOf(code);
+
+  if (pragma?.value === undefined || (pragma.schema !== undefined && pragma.schema !== "main")) return false;
+
+  return (
+    pragma.name === "foreign_keys" ||
+    (pragma.name === "defer_foreign_keys" && /^(?:on|off|true|false|0|1)$/i.test(pragma.value))
+  );
 }
 
 /** What the grammar makes of one top-level statement: nothing when database recognizes it as it is */
 function grammarFindings(statement: string, ctx: GrammarContext): Finding[] {
-	/* an EXPLAIN is the statement it explains (ANALYZE runs it) */
-	const code = statement.replace(/^EXPLAIN (?:\([^)]*\) )?(?:(?:ANALYZE|ANALYSE|VERBOSE) )*/i, "")
-	const recognized = ctx.dialect === "postgres" ? [...RECOGNIZED, PG_TRANSACTION, PG_SESSION] : RECOGNIZED
-	/* a statement a parse-tree rule rates whole is recognized by that rule, whatever its kind */
-	if (
-		!recognized.some((shape) => shape.test(code)) &&
-		!foreignKeyPragma(code) &&
-		!isFtsSync(code, ctx) &&
-		ctx.treeRated !== true
-	)
-		return [{ level: "unsafe", note: unrecognized(code, ctx.kind) }]
-	const policy = policyNote(code)
-	/* a policy renamed keeps its roles and its predicate */
-	if (policy !== undefined)
-		return /^ALTER POLICY .* RENAME TO \S+$/i.test(code) ? [] : [{ level: "cautious", note: policy }]
-	const cautious = CAUTIOUS_SHAPES.find(([shape]) => shape.test(code))
-	return cautious === undefined ? [] : [{ level: "cautious", note: cautious[1] }]
+  // an EXPLAIN is the statement it explains (ANALYZE runs it)
+  const code = statement.replace(/^EXPLAIN (?:\([^)]*\) )?(?:(?:ANALYZE|ANALYSE|VERBOSE) )*/i, "");
+  const recognized = ctx.dialect === "postgres" ? [...RECOGNIZED, PG_TRANSACTION, PG_SESSION] : RECOGNIZED;
+
+  // a statement a parse-tree rule rates whole is recognized by that rule, whatever its kind
+  if (
+    !recognized.some((shape) => shape.test(code)) &&
+    !foreignKeyPragma(code) &&
+    !isFtsSync(code, ctx) &&
+    ctx.treeRated !== true
+  )
+    return [{ level: "unsafe", note: unrecognized(code, ctx.kind) }];
+  const policy = policyNote(code);
+
+  // a policy renamed keeps its roles and its predicate
+  if (policy !== undefined)
+    return /^ALTER POLICY .* RENAME TO \S+$/i.test(code) ? [] : [{ level: "cautious", note: policy }];
+  const cautious = CAUTIOUS_SHAPES.find(([shape]) => shape.test(code));
+
+  return cautious === undefined ? [] : [{ level: "cautious", note: cautious[1] }];
 }
 
-export { ftsTriggersOf, type GrammarContext, grammarFindings }
+export { ftsTriggersOf, grammarFindings };

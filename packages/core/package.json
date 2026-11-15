@@ -1,229 +1,231 @@
 {
-	"name": "@workerstack/database",
-	"version": "0.26.0",
-	"description": "Database framework for Cloudflare D1, PostgreSQL, and SQLite. Schema builders, error handling, D1 sessions, sharding, codegen, migrations.",
-	"keywords": [
-		"cloudflare-d1",
-		"database",
-		"drizzle",
-		"framework",
-		"migrations",
-		"postgresql",
-		"sharding",
-		"sqlite"
-	],
-	"homepage": "https://github.com/workerstack/database#readme",
-	"bugs": {
-		"url": "https://github.com/workerstack/database/issues"
-	},
-	"license": "MIT",
-	"author": "lovrozagar",
-	"repository": {
-		"type": "git",
-		"url": "git+https://github.com/workerstack/database.git",
-		"directory": "packages/core"
-	},
-	"bin": {
-		"database": "src/bin.ts"
-	},
-	"files": [
-		"docs",
-		"src",
-		"types",
-		"!src/**/*.test.ts",
-		"!src/**/__fixtures__/**",
-		"!docs/testing.md"
-	],
-	"type": "module",
-	"sideEffects": false,
-	"exports": {
-		".": {
-			"types@>=5.7": "./types/index.d.ts",
-			"types": "./types/typescript-floor-types.d.ts",
-			"default": "./src/index.ts"
-		},
-		"./cli": {
-			"types@>=5.7": "./types/cli/index.d.ts",
-			"types": "./types/typescript-floor-types.d.ts",
-			"default": "./src/cli/index.ts"
-		},
-		"./codegen": {
-			"types@>=5.7": "./types/codegen/index.d.ts",
-			"types": "./types/typescript-floor-types.d.ts",
-			"default": "./src/codegen/index.ts"
-		},
-		"./codegen/generators": {
-			"types@>=5.7": "./types/codegen/generators/index.d.ts",
-			"types": "./types/typescript-floor-types.d.ts",
-			"default": "./src/codegen/generators/index.ts"
-		},
-		"./meta": {
-			"types@>=5.7": "./types/meta.d.ts",
-			"types": "./types/typescript-floor-types.d.ts",
-			"default": "./src/meta.ts"
-		},
-		"./migrate": {
-			"types@>=5.7": "./types/migrate/index.d.ts",
-			"types": "./types/typescript-floor-types.d.ts",
-			"default": "./src/migrate/index.ts"
-		},
-		"./package.json": "./package.json",
-		"./pg/columns": {
-			"types@>=5.7": "./types/pg/columns.d.ts",
-			"types": "./types/typescript-floor-types.d.ts",
-			"default": "./src/pg/columns.ts"
-		},
-		"./pg/error-handler": {
-			"types@>=5.7": "./types/pg/error-handler.d.ts",
-			"types": "./types/typescript-floor-types.d.ts",
-			"default": "./src/pg/error-handler.ts"
-		},
-		"./query": {
-			"types@>=5.7": "./types/query/index.d.ts",
-			"types": "./types/typescript-floor-types.d.ts",
-			"default": "./src/query/index.ts"
-		},
-		"./query/sqlite": {
-			"types@>=5.7": "./types/query/sqlite/index.d.ts",
-			"types": "./types/typescript-floor-types.d.ts",
-			"default": "./src/query/sqlite/index.ts"
-		},
-		"./sqlite/columns": {
-			"types@>=5.7": "./types/sqlite/columns.d.ts",
-			"types": "./types/typescript-floor-types.d.ts",
-			"default": "./src/sqlite/columns.ts"
-		},
-		"./sqlite/constraint-handler": {
-			"types@>=5.7": "./types/sqlite/constraint-handler.d.ts",
-			"types": "./types/typescript-floor-types.d.ts",
-			"default": "./src/sqlite/constraint-handler.ts"
-		},
-		"./sqlite/constraints": {
-			"types@>=5.7": "./types/sqlite/constraints.d.ts",
-			"types": "./types/typescript-floor-types.d.ts",
-			"default": "./src/sqlite/constraints.ts"
-		},
-		"./sqlite/d1/bookmark": {
-			"types@>=5.7": "./types/sqlite/d1/bookmark.d.ts",
-			"types": "./types/typescript-floor-types.d.ts",
-			"default": "./src/sqlite/d1/bookmark.ts"
-		},
-		"./sqlite/d1/error-handler": {
-			"types@>=5.7": "./types/sqlite/d1/error-handler.d.ts",
-			"types": "./types/typescript-floor-types.d.ts",
-			"default": "./src/sqlite/d1/error-handler.ts"
-		},
-		"./sqlite/d1/session": {
-			"types@>=5.7": "./types/sqlite/d1/session.d.ts",
-			"types": "./types/typescript-floor-types.d.ts",
-			"default": "./src/sqlite/d1/session.ts"
-		},
-		"./sqlite/d1/sharding": {
-			"types@>=5.7": "./types/sqlite/d1/sharding/index.d.ts",
-			"types": "./types/typescript-floor-types.d.ts",
-			"default": "./src/sqlite/d1/sharding/index.ts"
-		},
-		"./states": {
-			"types@>=5.7": "./types/states.d.ts",
-			"types": "./types/typescript-floor-types.d.ts",
-			"default": "./src/states.ts"
-		},
-		"./types": {
-			"types@>=5.7": "./types/types.d.ts",
-			"types": "./types/typescript-floor-types.d.ts",
-			"default": "./src/types.ts"
-		}
-	},
-	"publishConfig": {
-		"access": "public"
-	},
-	"scripts": {
-		"prepack": "rm -rf types && cp ../../README.md ../../LICENSE . && bun run types:emit",
-		"postpack": "rm -rf types README.md LICENSE",
-		"test": "vitest run",
-		"test:bun": "bun test tests/bun --path-ignore-patterns=tests/bun/differential-lists.test.ts",
-		"test:differential": "vitest run --config vitest.differential.config.ts && bun test tests/bun/differential-lists.test.ts",
-		"test:coverage": "vitest run --coverage",
-		"test:consumers": "vitest run --config vitest.consumers.config.ts",
-		"test:e2e": "vitest run --config vitest.e2e.config.ts",
-		"test:posix": "vitest run --config vitest.posix.config.ts",
-		"test:all": "vitest run && bun test tests/bun",
-		"test:watch": "vitest",
-		"type:check": "tsc --noEmit",
-		"type:check:strict": "tsc --noEmit -p tsconfig.strict.json && tsc --noEmit -p tsconfig.es2022.json",
-		"types:emit": "tsc -p tsconfig.types.json"
-	},
-	"dependencies": {
-		"@types/pluralize": "0.0.33",
-		"pluralize": "8.0.0"
-	},
-	"devDependencies": {
-		"@cloudflare/workers-types": "catalog:",
-		"@hono/zod-validator": "catalog:",
-		"@libsql/client": "catalog:",
-		"@noble/ciphers": "catalog:",
-		"@noble/hashes": "catalog:",
-		"@total-typescript/ts-reset": "catalog:",
-		"@types/node": "catalog:",
-		"@types/pg": "catalog:",
-		"@types/semver": "catalog:",
-		"@vitest/coverage-v8": "catalog:",
-		"ajv": "catalog:",
-		"ajv-formats": "catalog:",
-		"bun-types": "catalog:",
-		"drizzle-kit": "catalog:",
-		"drizzle-orm": "catalog:",
-		"hono": "catalog:",
-		"libpg-query": "catalog:",
-		"miniflare": "catalog:",
-		"oxc-parser": "catalog:",
-		"pg": "catalog:",
-		"postgres": "catalog:",
-		"re2js": "catalog:",
-		"semver": "catalog:",
-		"ts-morph": "catalog:",
-		"typescript": "catalog:",
-		"vitest": "catalog:",
-		"wrangler": "catalog:",
-		"zod": "catalog:"
-	},
-	"peerDependencies": {
-		"@libsql/client": ">=0.17.4 <0.18",
-		"@noble/ciphers": ">=2.0.0 <3",
-		"@noble/hashes": ">=2.0.0 <3",
-		"drizzle-kit": "1.0.0-rc.4 || 1.0.0-rc.5 || ^1.0.0",
-		"drizzle-orm": "1.0.0-rc.4 || 1.0.0-rc.5 || ^1.0.0",
-		"libpg-query": ">=17.7.4 <18",
-		"postgres": ">=3.4.9 <4",
-		"ts-morph": ">=28.0.0 <29",
-		"typescript": ">=5.7.2",
-		"wrangler": ">=4.147.0 <5",
-		"zod": ">=4.6.0 <5"
-	},
-	"peerDependenciesMeta": {
-		"@libsql/client": {
-			"optional": true
-		},
-		"drizzle-kit": {
-			"optional": true
-		},
-		"libpg-query": {
-			"optional": true
-		},
-		"postgres": {
-			"optional": true
-		},
-		"ts-morph": {
-			"optional": true
-		},
-		"typescript": {
-			"optional": true
-		},
-		"wrangler": {
-			"optional": true
-		}
-	},
-	"engines": {
-		"node": ">=22.13"
-	}
+  "name": "@workerstack/database",
+  "version": "0.26.0",
+  "private": false,
+  "description": "Database framework for Cloudflare D1, PostgreSQL, and SQLite. Schema builders, error handling, D1 sessions, sharding, codegen, migrations.",
+  "keywords": [
+    "cloudflare-d1",
+    "database",
+    "drizzle",
+    "framework",
+    "migrations",
+    "postgresql",
+    "sharding",
+    "sqlite"
+  ],
+  "homepage": "https://github.com/workerstack/database#readme",
+  "bugs": {
+    "url": "https://github.com/workerstack/database/issues"
+  },
+  "license": "MIT",
+  "author": "lovrozagar",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/workerstack/database.git",
+    "directory": "packages/core"
+  },
+  "bin": {
+    "database": "src/bin.ts"
+  },
+  "files": [
+    "docs",
+    "src",
+    "types",
+    "!src/**/*.test.ts",
+    "!src/**/__fixtures__/**",
+    "!docs/testing.md"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types@>=5.7": "./types/index.d.ts",
+      "types": "./types/typescript-floor-types.d.ts",
+      "default": "./src/index.ts"
+    },
+    "./cli": {
+      "types@>=5.7": "./types/cli/index.d.ts",
+      "types": "./types/typescript-floor-types.d.ts",
+      "default": "./src/cli/index.ts"
+    },
+    "./codegen": {
+      "types@>=5.7": "./types/codegen/index.d.ts",
+      "types": "./types/typescript-floor-types.d.ts",
+      "default": "./src/codegen/index.ts"
+    },
+    "./codegen/generators": {
+      "types@>=5.7": "./types/codegen/generators/index.d.ts",
+      "types": "./types/typescript-floor-types.d.ts",
+      "default": "./src/codegen/generators/index.ts"
+    },
+    "./meta": {
+      "types@>=5.7": "./types/meta.d.ts",
+      "types": "./types/typescript-floor-types.d.ts",
+      "default": "./src/meta.ts"
+    },
+    "./migrate": {
+      "types@>=5.7": "./types/migrate/index.d.ts",
+      "types": "./types/typescript-floor-types.d.ts",
+      "default": "./src/migrate/index.ts"
+    },
+    "./package.json": "./package.json",
+    "./pg/columns": {
+      "types@>=5.7": "./types/pg/columns.d.ts",
+      "types": "./types/typescript-floor-types.d.ts",
+      "default": "./src/pg/columns.ts"
+    },
+    "./pg/error-handler": {
+      "types@>=5.7": "./types/pg/error-handler.d.ts",
+      "types": "./types/typescript-floor-types.d.ts",
+      "default": "./src/pg/error-handler.ts"
+    },
+    "./query": {
+      "types@>=5.7": "./types/query/index.d.ts",
+      "types": "./types/typescript-floor-types.d.ts",
+      "default": "./src/query/index.ts"
+    },
+    "./query/sqlite": {
+      "types@>=5.7": "./types/query/sqlite/index.d.ts",
+      "types": "./types/typescript-floor-types.d.ts",
+      "default": "./src/query/sqlite/index.ts"
+    },
+    "./sqlite/columns": {
+      "types@>=5.7": "./types/sqlite/columns.d.ts",
+      "types": "./types/typescript-floor-types.d.ts",
+      "default": "./src/sqlite/columns.ts"
+    },
+    "./sqlite/constraint-handler": {
+      "types@>=5.7": "./types/sqlite/constraint-handler.d.ts",
+      "types": "./types/typescript-floor-types.d.ts",
+      "default": "./src/sqlite/constraint-handler.ts"
+    },
+    "./sqlite/constraints": {
+      "types@>=5.7": "./types/sqlite/constraints.d.ts",
+      "types": "./types/typescript-floor-types.d.ts",
+      "default": "./src/sqlite/constraints.ts"
+    },
+    "./sqlite/d1/bookmark": {
+      "types@>=5.7": "./types/sqlite/d1/bookmark.d.ts",
+      "types": "./types/typescript-floor-types.d.ts",
+      "default": "./src/sqlite/d1/bookmark.ts"
+    },
+    "./sqlite/d1/error-handler": {
+      "types@>=5.7": "./types/sqlite/d1/error-handler.d.ts",
+      "types": "./types/typescript-floor-types.d.ts",
+      "default": "./src/sqlite/d1/error-handler.ts"
+    },
+    "./sqlite/d1/session": {
+      "types@>=5.7": "./types/sqlite/d1/session.d.ts",
+      "types": "./types/typescript-floor-types.d.ts",
+      "default": "./src/sqlite/d1/session.ts"
+    },
+    "./sqlite/d1/sharding": {
+      "types@>=5.7": "./types/sqlite/d1/sharding/index.d.ts",
+      "types": "./types/typescript-floor-types.d.ts",
+      "default": "./src/sqlite/d1/sharding/index.ts"
+    },
+    "./states": {
+      "types@>=5.7": "./types/states.d.ts",
+      "types": "./types/typescript-floor-types.d.ts",
+      "default": "./src/states.ts"
+    },
+    "./types": {
+      "types@>=5.7": "./types/types.d.ts",
+      "types": "./types/typescript-floor-types.d.ts",
+      "default": "./src/types.ts"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "prepack": "rm -rf types && cp ../../README.md ../../LICENSE . && bun run types:emit",
+    "postpack": "rm -rf types README.md LICENSE",
+    "test": "vitest run",
+    "test:bun": "bun test tests/bun --path-ignore-patterns=tests/bun/differential-lists.test.ts",
+    "test:differential": "vitest run --config vitest.differential.config.ts && bun test tests/bun/differential-lists.test.ts",
+    "test:coverage": "vitest run --coverage",
+    "test:consumers": "vitest run --config vitest.consumers.config.ts",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "test:posix": "vitest run --config vitest.posix.config.ts",
+    "test:all": "vitest run && bun test tests/bun",
+    "test:watch": "vitest",
+    "type:check": "tsc --noEmit",
+    "type:check:strict": "tsc --noEmit -p tsconfig.src.json && tsc --noEmit -p tsconfig.es2022.json",
+    "types:emit": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@types/pluralize": "0.0.33",
+    "pluralize": "8.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:",
+    "@hono/zod-validator": "catalog:",
+    "@libsql/client": "catalog:",
+    "@libsql/core": "catalog:",
+    "@noble/ciphers": "catalog:",
+    "@noble/hashes": "catalog:",
+    "@total-typescript/ts-reset": "catalog:",
+    "@types/node": "catalog:",
+    "@types/pg": "catalog:",
+    "@types/semver": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "ajv": "catalog:",
+    "ajv-formats": "catalog:",
+    "bun-types": "catalog:",
+    "drizzle-kit": "catalog:",
+    "drizzle-orm": "catalog:",
+    "hono": "catalog:",
+    "libpg-query": "catalog:",
+    "miniflare": "catalog:",
+    "oxc-parser": "catalog:",
+    "pg": "catalog:",
+    "postgres": "catalog:",
+    "re2js": "catalog:",
+    "semver": "catalog:",
+    "ts-morph": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "wrangler": "catalog:",
+    "zod": "catalog:"
+  },
+  "peerDependencies": {
+    "@libsql/client": ">=0.17.4 <0.18",
+    "@noble/ciphers": ">=2.0.0 <3",
+    "@noble/hashes": ">=2.0.0 <3",
+    "drizzle-kit": "1.0.0-rc.4 || 1.0.0-rc.5 || ^1.0.0",
+    "drizzle-orm": "1.0.0-rc.4 || 1.0.0-rc.5 || ^1.0.0",
+    "libpg-query": ">=17.7.4 <18",
+    "postgres": ">=3.4.9 <4",
+    "ts-morph": ">=28.0.0 <29",
+    "typescript": ">=5.7.2",
+    "wrangler": ">=4.147.0 <5",
+    "zod": ">=4.6.0 <5"
+  },
+  "peerDependenciesMeta": {
+    "@libsql/client": {
+      "optional": true
+    },
+    "drizzle-kit": {
+      "optional": true
+    },
+    "libpg-query": {
+      "optional": true
+    },
+    "postgres": {
+      "optional": true
+    },
+    "ts-morph": {
+      "optional": true
+    },
+    "typescript": {
+      "optional": true
+    },
+    "wrangler": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=22.13"
+  }
 }

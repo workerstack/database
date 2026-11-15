@@ -5,7 +5,7 @@
  * do not edit.
  */
 
-/* the names, space-separated, as one string: a set literal of 1718 would be as many lines */
+// the names, space-separated, as one string: a set literal of 1718 would be as many lines
 const NAMES = `
 abbrev abs aclcontains acldefault aclexplode aclinsert aclitemeq aclremove acos acosd acosh age
 any_value_transfn anyarray_send anycompatiblearray_send anytextcat area array_append array_cat array_dims
@@ -240,10 +240,10 @@ varbittypmodin varchar varcharsend varchartypmodin version void_send websearch_t
 xid xid8_larger xid8_smaller xid8cmp xid8eq xid8ge xid8gt xid8le xid8lt xid8ne xid8send xideq xideqint4 xidneq
 xidneqint4 xidsend xml xml_is_well_formed xml_is_well_formed_content xml_is_well_formed_document xml_send
 xmlcomment xmlconcat2 xmlexists xmltext xmlvalidate xpath xpath_exists
-`
+`;
 
 /** The set of the space-separated names in `text` */
-const setOf = (text: string): ReadonlySet<string> => new Set(text.trim().split(/\s+/))
+const setOf = (text: string): ReadonlySet<string> => new Set(text.trim().split(/\s+/));
 
 // lookup-table: the steady built-ins, by name
-export const STEADY_BUILTINS: ReadonlySet<string> = /* @__PURE__ */ setOf(NAMES)
+export const STEADY_BUILTINS: ReadonlySet<string> = /* @__PURE__ */ setOf(NAMES);

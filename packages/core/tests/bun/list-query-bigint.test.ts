@@ -1,94 +1,98 @@
 /// <reference types="bun-types" />
+import { Database } from "bun:sqlite";
+import { describe, expect, it } from "bun:test";
+
+import { drizzle } from "drizzle-orm/bun-sqlite";
+
+import { DatabaseError } from "../../src/error.ts";
+import {
+  bigRelations,
+  CREATE,
+  EXACTLY,
+  EXPECTED,
+  IDS,
+  KEYS,
+  pageAll,
+  ROUNDED,
+  viaBuilder,
+  viaDerived,
+  viaRelational,
+  walkEnding,
+} from "../integration/support/bigint.ts";
 /**
  * U22 on bun:sqlite's default mode, which reads an integer past 2^53 as a rounded JS number: every
  * order pages each row of an INTEGER key past 2^53 once through both builders, and a tiebreak id
  * past 2^53 mints no cursor. tests/integration runs the same on D1.
  */
-import { Database } from "bun:sqlite"
-import { describe, expect, it } from "bun:test"
-import { drizzle } from "drizzle-orm/bun-sqlite"
-import { DatabaseError } from "../../src/error.ts"
-import {
-	bigRelations,
-	CREATE,
-	EXACTLY,
-	EXPECTED,
-	IDS,
-	KEYS,
-	pageAll,
-	ROUNDED,
-	viaBuilder,
-	viaDerived,
-	viaRelational,
-	walkEnding,
-} from "../integration/support/bigint.ts"
+import { defined } from "../support/defined.ts";
 
 function seeded(seed: string) {
-	const client = new Database(":memory:")
-	client.run(CREATE)
-	client.run(seed)
-	return client
+  const client = new Database(":memory:");
+  client.run(CREATE);
+  client.run(seed);
+
+  return client;
 }
 
-/*
- * QL8: ascending, the rounded keys come on pages by cursor, which refuse them by name; descending, the
- * first is page 1's row, by number, which the page serves with no cursor while hasMore holds
- */
+// QL8: ascending, the rounded keys come on pages by cursor, which refuse them by name; descending, the
+// first is page 1's row, by number, which the page serves with no cursor while hasMore holds
 const ENDINGS: Record<string, { error?: unknown; ids: number[]; stranded?: true }> = {
-	"n.asc": {
-		error: expect.objectContaining({ cause: expect.stringMatching(ROUNDED), errorKey: "sort_not_wired" }),
-		ids: [1, 5],
-	},
-	"n.desc": { ids: [4], stranded: true },
-}
+  "n.asc": {
+    error: expect.objectContaining({ cause: expect.stringMatching(ROUNDED), errorKey: "sort_not_wired" }),
+    ids: [1, 5],
+  },
+  "n.desc": { ids: [4], stranded: true },
+};
 
 describe("keyset pagination over an integer key past 2^53, on bun:sqlite (U22)", () => {
-	for (const via of ["buildListQuery", "listOptions"] as const) {
-		for (const order of Object.keys(EXPECTED)) {
-			it(`pages ${order} through ${via} every row once`, async () => {
-				const client = seeded(KEYS)
-				const page =
-					via === "buildListQuery"
-						? viaBuilder(drizzle({ client }) as never)
-						: viaRelational(drizzle({ client, relations: bigRelations }) as never)
-				expect(await pageAll(page, order)).toEqual(EXPECTED[order] as number[])
-				client.close()
-			})
-		}
-	}
+  for (const via of ["buildListQuery", "listOptions"] as const) {
+    for (const order of Object.keys(EXPECTED)) {
+      it(`pages ${order} through ${via} every row once`, async () => {
+        const client = seeded(KEYS);
 
-	it("mints no cursor from a tiebreak id past 2^53, naming what reads it exactly", async () => {
-		const client = seeded(IDS)
-		const refused = await viaBuilder(drizzle({ client }) as never)("n.asc", undefined).catch((error: unknown) => error)
-		expect(refused).toBeInstanceOf(DatabaseError)
-		expect((refused as DatabaseError).errorKey).toBe("sort_not_wired")
-		expect(String((refused as DatabaseError).cause)).toMatch(EXACTLY)
-		client.close()
-	})
-})
+        const page =
+          via === "buildListQuery"
+            ? viaBuilder(drizzle({ client }) as never)
+            : viaRelational(drizzle({ client, relations: bigRelations }));
 
-/* Q1 of r19: a derived list with no anchor table binds the key as the driver read it */
+        expect(await pageAll(page, order)).toEqual(EXPECTED[order] as number[]);
+        client.close();
+      });
+    }
+  }
+
+  it("mints no cursor from a tiebreak id past 2^53, naming what reads it exactly", async () => {
+    const client = seeded(IDS);
+    const refused = await viaBuilder(drizzle({ client }) as never)("n.asc", undefined).catch((error: unknown) => error);
+    expect(refused).toBeInstanceOf(DatabaseError);
+    expect((refused as DatabaseError).errorKey).toBe("sort_not_wired");
+    expect(String((refused as DatabaseError).cause)).toMatch(EXACTLY);
+    client.close();
+  });
+});
+
+// Q1 of r19: a derived list with no anchor table binds the key as the driver read it
 describe("a derived list over an integer key past 2^53, on bun:sqlite", () => {
-	for (const order of Object.keys(EXPECTED)) {
-		it(`ends ${order} where a page meets a rounded key, never skipping rows or repeating one (QL8)`, async () => {
-			const client = seeded(KEYS)
-			expect(await walkEnding(viaDerived(drizzle({ client }) as never), order)).toEqual(ENDINGS[order])
-			client.close()
-		})
+  for (const order of Object.keys(EXPECTED)) {
+    it(`ends ${order} where a page meets a rounded key, never skipping rows or repeating one (QL8)`, async () => {
+      const client = seeded(KEYS);
+      expect(await walkEnding(viaDerived(drizzle({ client }) as never), order)).toEqual(defined(ENDINGS[order]));
+      client.close();
+    });
 
-		it(`pages ${order} every row once with an anchor table, which it reads the exact key back from`, async () => {
-			const client = seeded(KEYS)
-			expect(await pageAll(viaDerived(drizzle({ client }) as never, true), order)).toEqual(EXPECTED[order] as number[])
-			client.close()
-		})
+    it(`pages ${order} every row once with an anchor table, which it reads the exact key back from`, async () => {
+      const client = seeded(KEYS);
+      expect(await pageAll(viaDerived(drizzle({ client }) as never, true), order)).toEqual(EXPECTED[order] as number[]);
+      client.close();
+    });
 
-		it(`pages ${order} every row once where the keys are read as bigint (safeIntegers)`, async () => {
-			const client = new Database(":memory:", { safeIntegers: true })
-			client.run(CREATE)
-			client.run(KEYS)
-			const ids = await pageAll(viaDerived(drizzle({ client }) as never), order)
-			expect(ids.map(Number)).toEqual(EXPECTED[order] as number[])
-			client.close()
-		})
-	}
-})
+    it(`pages ${order} every row once where the keys are read as bigint (safeIntegers)`, async () => {
+      const client = new Database(":memory:", { safeIntegers: true });
+      client.run(CREATE);
+      client.run(KEYS);
+      const ids = await pageAll(viaDerived(drizzle({ client }) as never), order);
+      expect(ids.map(Number)).toEqual(EXPECTED[order] as number[]);
+      client.close();
+    });
+  }
+});

@@ -50,3 +50,29 @@ packages/core/types/
 
 # git worktrees
 .worktrees/
+
+# repo:ignore d5310730
+.tmp/
+.worktrees/
+coverage/
+**/.repo/plans/
+**/.repo/plans-fast/
+**/.repo/roadmaps/
+**/.repo/roadmaps-fast/
+**/.repo/handoffs/
+**/.repo/implementations/
+**/.repo/scratch/
+**/.repo/tmp/
+**/.repo/backlog.md
+node_modules/
+knip.jsonc
+knip.unignored-*.jsonc
+.oxfmtrc.jsonc
+.oxlintrc.jsonc
+.oxlintrc.unskipped-*.jsonc
+.agents/
+.claude/
+.codex/
+.cursor/
+.grok/
+# /repo:ignore

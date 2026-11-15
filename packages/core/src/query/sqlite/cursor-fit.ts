@@ -4,17 +4,18 @@
  * stale cursor, answered with a 400 before drizzle maps it (a string on a timestamp column would
  * otherwise throw a TypeError, a 500).
  */
-import { Column, type ColumnDataType, is, SQL, type SQLWrapper, sql } from "drizzle-orm"
-import { SQLiteColumn } from "drizzle-orm/sqlite-core"
+import type { SQL } from "drizzle-orm";
+import { Column, type ColumnDataType, is, type SQLWrapper, sql } from "drizzle-orm";
+import { SQLiteColumn } from "drizzle-orm/sqlite-core";
 
-import { DatabaseError } from "../../error.ts"
-import { CursorRef } from "../cursor.ts"
-import { RealText } from "../cursor-codec.ts"
-import { databaseErrorKeys } from "../../types.ts"
-import type { ListDialect } from "../list-dialect.ts"
-import { INTEGER_TEXT } from "../list-extras.ts"
-import { refersBack } from "./reads-back.ts"
-import { carriedStored, carriedText, heldApart, holdsText, inSeconds } from "./timestamp-column.ts"
+import { DatabaseError } from "../../error.ts";
+import { databaseErrorKeys } from "../../types.ts";
+import { RealText } from "../cursor-codec.ts";
+import { CursorRef } from "../cursor.ts";
+import type { ListDialect } from "../list-dialect.ts";
+import { INTEGER_TEXT } from "../list-extras.ts";
+import { refersBack } from "./reads-back.ts";
+import { carriedStored, carriedText, heldApart, holdsText, inSeconds } from "./timestamp-column.ts";
 
 /**
  * What a column of each drizzle `dataType` family holds, given its full `dataType`. Keyed by drizzle's
@@ -30,60 +31,60 @@ import { carriedStored, carriedText, heldApart, holdsText, inSeconds } from "./t
  * through its `toDriver`.
  */
 const HOLDS: Record<ColumnDataType, (value: unknown, dataType: string) => boolean> = {
-	array: () => false,
-	bigint: (value) => typeof value === "bigint",
-	boolean: (value) => typeof value === "boolean",
-	custom: (value) =>
-		["bigint", "boolean", "number", "string"].includes(typeof value) ||
-		value instanceof Date ||
-		value instanceof Uint8Array,
-	number: (value) =>
-		typeof value === "number" || typeof value === "bigint" || (typeof value === "string" && INTEGER_TEXT.test(value)),
-	object: (value, dataType) =>
-		(dataType === "object date" && value instanceof Date) ||
-		(dataType === "object buffer" && value instanceof Uint8Array),
-	string: (value, dataType) =>
-		typeof value === "string" ||
-		(dataType === "string numeric" && (typeof value === "bigint" || typeof value === "number")),
-}
+  array: () => false,
+  bigint: (value) => typeof value === "bigint",
+  boolean: (value) => typeof value === "boolean",
+  custom: (value) =>
+    ["bigint", "boolean", "number", "string"].includes(typeof value) ||
+    value instanceof Date ||
+    value instanceof Uint8Array,
+  number: (value) =>
+    typeof value === "number" || typeof value === "bigint" || (typeof value === "string" && INTEGER_TEXT.test(value)),
+  object: (value, dataType) =>
+    (dataType === "object date" && value instanceof Date) ||
+    (dataType === "object buffer" && value instanceof Uint8Array),
+  string: (value, dataType) =>
+    typeof value === "string" ||
+    (dataType === "string numeric" && (typeof value === "bigint" || typeof value === "number")),
+};
 
 /**
  * Whether `value` is what `column` holds (HOLDS), and on SQLite any text on a number column: SQLite orders
  * every TEXT after every number and compares a bound text as itself, which drizzle's number mappers bind as is
  */
 const fitsColumn = (column: Column, value: unknown): boolean =>
-	(is(column, SQLiteColumn) && column.dataType.startsWith("number") && typeof value === "string") ||
-	(HOLDS[column.dataType.split(" ")[0] as ColumnDataType]?.(value, column.dataType) ?? false)
+  (is(column, SQLiteColumn) && column.dataType.startsWith("number") && typeof value === "string") ||
+  (HOLDS[column.dataType.split(" ")[0] as ColumnDataType]?.(value, column.dataType) ?? false);
 
 /**
  * A derived sort key declared as time: its expression yields epoch milliseconds, and its cursor
  * value is a Date, bound as that number, or the number itself when the row selected it as one
  */
 class DateKey implements SQLWrapper {
-	readonly expression: SQLWrapper
+  readonly expression: SQLWrapper;
 
-	constructor(expression: SQLWrapper) {
-		this.expression = expression
-	}
+  constructor(expression: SQLWrapper) {
+    this.expression = expression;
+  }
 
-	getSQL(): SQL {
-		return this.expression.getSQL()
-	}
+  getSQL(): SQL {
+    return this.expression.getSQL();
+  }
 }
 
 const isInteger = (value: unknown) =>
-	typeof value === "bigint" ||
-	(typeof value === "number" && Number.isFinite(value)) ||
-	(typeof value === "string" && INTEGER_TEXT.test(value))
+  typeof value === "bigint" ||
+  (typeof value === "number" && Number.isFinite(value)) ||
+  (typeof value === "string" && INTEGER_TEXT.test(value));
 
 /**
  * Whether `value` is a time key's stored value as a list that binds the key as read carries it:
  * a Postgres date-mode column's text, or a SQLite timestamp's stored seconds or milliseconds
  */
 const carriedTime = (column: SQLWrapper, value: unknown): boolean =>
-	is(column, SQLiteColumn)
-		? holdsText(column) && typeof value === "number"
-		: is(column, Column) && column.dataType === "object date" && typeof value === "string"
+  is(column, SQLiteColumn)
+    ? holdsText(column) && typeof value === "number"
+    : is(column, Column) && column.dataType === "object date" && typeof value === "string";
 
 /**
  * Null fits every key. A column takes what its dataType holds, and a time column bound as read
@@ -95,20 +96,28 @@ const carriedTime = (column: SQLWrapper, value: unknown): boolean =>
  * held it: a timestamp's TEXT, a boolean's value but 0 or 1, a text's integer
  */
 function fits(
-	column: SQLWrapper,
-	value: unknown,
-	{ asRead, carried, table }: { asRead: boolean; carried: boolean; table: object | undefined },
+  column: SQLWrapper,
+  value: unknown,
+  { asRead, carried, table }: { asRead: boolean; carried: boolean; table: object | undefined },
 ): boolean {
-	if (value === null) return true
-	if (value instanceof CursorRef) return refersBack(column, table)
-	/* A REAL's text, as a list carries it: a timestamp's bound as read, a held key's read back */
-	if (value instanceof RealText) return asRead ? holdsText(column) : heldApart(column)
-	if (column instanceof DateKey) return value instanceof Date || isInteger(value)
-	if (asRead && carriedTime(column, value)) return true
-	if (readsRounded(column) && typeof value === "string") return NUMERIC_TEXT.test(value)
-	if (carriedText(column, value, { asRead, carried }) || carriedStored(column, value, { asRead, carried })) return true
-	if (is(column, Column)) return fitsColumn(column, value)
-	return ["string", "number", "boolean", "bigint"].includes(typeof value) || value instanceof Uint8Array
+  if (value === null) return true;
+
+  if (value instanceof CursorRef) return refersBack(column, table);
+
+  // A REAL's text, as a list carries it: a timestamp's bound as read, a held key's read back
+  if (value instanceof RealText) return asRead ? holdsText(column) : heldApart(column);
+
+  if (column instanceof DateKey) return value instanceof Date || isInteger(value);
+
+  if (asRead && carriedTime(column, value)) return true;
+
+  if (readsRounded(column) && typeof value === "string") return NUMERIC_TEXT.test(value);
+
+  if (carriedText(column, value, { asRead, carried }) || carriedStored(column, value, { asRead, carried })) return true;
+
+  if (is(column, Column)) return fitsColumn(column, value);
+
+  return ["string", "number", "boolean", "bigint"].includes(typeof value) || value instanceof Uint8Array;
 }
 
 /**
@@ -117,9 +126,10 @@ function fits(
  * SQLite stores NaN as NULL, so no SQLite row holds one)
  */
 function bindable(value: unknown): unknown {
-	if (typeof value === "number" && Number.isFinite(value) === false && !Number.isNaN(value))
-		return value > 0 ? sql`9e999` : sql`-9e999`
-	return typeof value === "bigint" && Number.isSafeInteger(Number(value)) ? Number(value) : value
+  if (typeof value === "number" && !Number.isFinite(value) && !Number.isNaN(value))
+    return value > 0 ? sql`9e999` : sql`-9e999`;
+
+  return typeof value === "bigint" && Number.isSafeInteger(Number(value)) ? Number(value) : value;
 }
 
 /**
@@ -128,10 +138,10 @@ function bindable(value: unknown): unknown {
  * cursor binds that. A SQLite numeric stores an INTEGER or a REAL, which its driver reads as stored
  */
 const readsRounded = (column: SQLWrapper | undefined): boolean =>
-	is(column, Column) && column.dataType === "number" && !is(column, SQLiteColumn)
+  is(column, Column) && column.dataType === "number" && !is(column, SQLiteColumn);
 
-/* the text Postgres prints a numeric as */
-const NUMERIC_TEXT = /^(?:-?\d+(?:\.\d+)?|NaN|-?Infinity)$/
+// the text Postgres prints a numeric as
+const NUMERIC_TEXT = /^(?:-?\d+(?:\.\d+)?|NaN|-?Infinity)$/;
 
 /**
  * Whether `column` is a Postgres `customType` column, which carries its text where Postgres's own type
@@ -139,7 +149,7 @@ const NUMERIC_TEXT = /^(?:-?\d+(?:\.\d+)?|NaN|-?Infinity)$/
  * Carried, the text binds as itself, typed as the column; as read, a value goes through its `toDriver`
  */
 const carriesOpaque = (column: SQLWrapper | undefined): boolean =>
-	is(column, Column) && column.dataType === "custom" && !is(column, SQLiteColumn)
+  is(column, Column) && column.dataType === "custom" && !is(column, SQLiteColumn);
 
 /**
  * `cast` as an operand of no affinity, as a bound parameter is: a CAST has its type's affinity, which
@@ -147,7 +157,7 @@ const carriesOpaque = (column: SQLWrapper | undefined): boolean =>
  * stored TEXT '10' as 10 and paged it out of the column's own order. The unary `+` drops the affinity
  * and keeps the index search
  */
-const affinityFree = (cast: SQL): SQL => sql`+${cast}`
+const affinityFree = (cast: SQL): SQL => sql`+${cast}`;
 
 /**
  * A cursor value as its key binds it. Stored text the list carried (`carried`, the cursor's flag)
@@ -157,17 +167,23 @@ const affinityFree = (cast: SQL): SQL => sql`+${cast}`
  * like a number included; a cursor with no flag, as every released database minted, holds only those
  */
 function boundCarried(column: SQLWrapper | undefined, value: unknown, carried: boolean): unknown {
-	/* one SQLite parse of the text the list checked reads back as the key, on every driver */
-	if (value instanceof RealText) return affinityFree(sql`cast(${value.text} as real)`)
-	if (carriedText(column, value, { asRead: false, carried })) return sql`${value}`
-	/* a mode's mapper binds the value as another (a boolean's as 0 or 1); D1 binds no bigint, so one past 2^53 goes as its digits */
-	if (carriedStored(column, value, { asRead: false, carried }))
-		return typeof value === "bigint" && !Number.isSafeInteger(Number(value))
-			? affinityFree(sql`cast(${String(value)} as integer)`)
-			: sql`${bindable(value)}`
-	if (!carried || typeof value !== "string" || !NUMERIC_TEXT.test(value)) return value
-	if (readsRounded(column)) return sql`${value}::numeric`
-	return carriesOpaque(column) ? sql`${value}` : value
+  // one SQLite parse of the text the list checked reads back as the key, on every driver
+  if (value instanceof RealText) return affinityFree(sql`cast(${value.text} as real)`);
+
+  if (carriedText(column, value, { asRead: false, carried })) return sql`${value}`;
+
+  // a mode's mapper binds the value as another (a boolean's as 0 or 1); D1 binds no bigint, so one past 2^53 goes as its digits
+  if (carriedStored(column, value, { asRead: false, carried })) {
+    return typeof value === "bigint" && !Number.isSafeInteger(Number(value))
+      ? affinityFree(sql`cast(${String(value)} as integer)`)
+      : sql`${bindable(value)}`;
+  }
+
+  if (!carried || typeof value !== "string" || !NUMERIC_TEXT.test(value)) return value;
+
+  if (readsRounded(column)) return sql`${value}::numeric`;
+
+  return carriesOpaque(column) ? sql`${value}` : value;
 }
 
 /**
@@ -175,7 +191,7 @@ function boundCarried(column: SQLWrapper | undefined, value: unknown, carried: b
  * would floor it to the second. A key the keyset can read from its row reads it there instead
  * (cursor-ref.ts), as a stored fraction below a millisecond is one no Date holds.
  */
-const exactSeconds = (value: Date): SQL => sql`${value.getTime() / 1000}`
+const exactSeconds = (value: Date): SQL => sql`${value.getTime() / 1000}`;
 
 /**
  * A cursor value as a key bound as read takes it: a Date on a seconds-mode timestamp as its seconds
@@ -183,9 +199,10 @@ const exactSeconds = (value: Date): SQL => sql`${value.getTime() / 1000}`
  * Postgres reading the text as the key's own type
  */
 function boundAsRead(column: SQLWrapper | undefined, value: unknown): unknown {
-	if (value instanceof Date) return inSeconds(column) ? exactSeconds(value) : value
-	const time = is(column, Column) && column.dataType === "object date"
-	return time && (typeof value === "string" || typeof value === "number") ? sql`${value}` : value
+  if (value instanceof Date) return inSeconds(column) ? exactSeconds(value) : value;
+  const time = is(column, Column) && column.dataType === "object date";
+
+  return time && (typeof value === "string" || typeof value === "number") ? sql`${value}` : value;
 }
 
 /**
@@ -193,36 +210,36 @@ function boundAsRead(column: SQLWrapper | undefined, value: unknown): unknown {
  * as a decimal string as that integer, exact, which SQLite would otherwise compare as text
  */
 const bindableAs = (column: SQLWrapper | undefined, value: unknown): unknown =>
-	bindable(
-		(column instanceof DateKey || (is(column, Column) && column.dataType.startsWith("number"))) &&
-			typeof value === "string" &&
-			INTEGER_TEXT.test(value)
-			? BigInt(value)
-			: value,
-	)
+  bindable(
+    (column instanceof DateKey || (is(column, Column) && column.dataType.startsWith("number"))) &&
+      typeof value === "string" &&
+      INTEGER_TEXT.test(value)
+      ? BigInt(value)
+      : value,
+  );
 
 /**
  * A cursor value as a key of a `dialect` list binds it: SQLite's way on SQLite (bindableAs), itself on
  * Postgres, whose own cast reads the 'Infinity' its driver writes
  */
 const bindableIn = (dialect: ListDialect, column: SQLWrapper | undefined, value: unknown): unknown =>
-	dialect === "sqlite" ? bindableAs(column, value) : value
+  dialect === "sqlite" ? bindableAs(column, value) : value;
 
 /**
  * The cursor's values as the keys of a `dialect` list bind them: a Date on a key declared as time as
  * its epoch milliseconds, any other as bindableIn binds it
  */
 const boundForKeys = (dialect: ListDialect, columns: readonly SQLWrapper[], values: readonly unknown[]): unknown[] =>
-	values.map((value, i) =>
-		columns[i] instanceof DateKey && value instanceof Date ? value.getTime() : bindableIn(dialect, columns[i], value),
-	)
+  values.map((value, i) =>
+    columns[i] instanceof DateKey && value instanceof Date ? value.getTime() : bindableIn(dialect, columns[i], value),
+  );
 
 /** Where a list's keys are read: which bind as read, which values the cursor flags as carried, and the table a reference reads back from */
 type FitAt = {
-	asRead?: ((index: number) => boolean) | undefined
-	carried?: ((index: number) => boolean) | undefined
-	table?: object | undefined
-}
+  asRead?: ((index: number) => boolean) | undefined;
+  carried?: ((index: number) => boolean) | undefined;
+  table?: object | undefined;
+};
 
 /**
  * The index of the first cursor value, the tiebreak id last, that does not fit its column, a reference
@@ -232,37 +249,37 @@ type FitAt = {
  * a cursor its next page refuses
  */
 function unfitIndex(columns: readonly SQLWrapper[], values: readonly unknown[], at: FitAt = {}): number {
-	const { asRead = () => false, carried = () => false, table } = at
-	return columns.findIndex(
-		(column, index) => !fits(column, values[index], { asRead: asRead(index), carried: carried(index), table }),
-	)
+  const { asRead = () => false, carried = () => false, table } = at;
+
+  return columns.findIndex(
+    (column, index) => !fits(column, values[index], { asRead: asRead(index), carried: carried(index), table }),
+  );
 }
 
 /** Throw a 400 unless every cursor value, the tiebreak id last, fits its column (unfitIndex) */
 function assertCursorFits(columns: readonly SQLWrapper[], values: readonly unknown[], at: FitAt = {}): void {
-	if (unfitIndex(columns, values, at) === -1) return
-	throw new DatabaseError({
-		cause: "Invalid cursor",
-		errorKey: databaseErrorKeys.INVALID_CURSOR,
-		status: "bad_request",
-	})
+  if (unfitIndex(columns, values, at) === -1) return;
+  throw new DatabaseError({
+    cause: "Invalid cursor",
+    errorKey: databaseErrorKeys.INVALID_CURSOR,
+    status: "bad_request",
+  });
 }
 
 /** A cursor value as `column`'s driver binds it: SQLite's way on a SQLite column, as it is elsewhere (Postgres reads 'Infinity') */
 const bindableOn = (column: SQLWrapper | undefined, value: unknown): unknown =>
-	is(column, SQLiteColumn) ? bindableAs(column, value) : value
+  is(column, SQLiteColumn) ? bindableAs(column, value) : value;
 
 export {
-	assertCursorFits,
-	bindable,
-	bindableAs,
-	bindableIn,
-	bindableOn,
-	boundAsRead,
-	boundCarried,
-	boundForKeys,
-	carriesOpaque,
-	DateKey,
-	readsRounded,
-	unfitIndex,
-}
+  assertCursorFits,
+  bindable,
+  bindableIn,
+  bindableOn,
+  boundAsRead,
+  boundCarried,
+  boundForKeys,
+  carriesOpaque,
+  DateKey,
+  readsRounded,
+  unfitIndex,
+};

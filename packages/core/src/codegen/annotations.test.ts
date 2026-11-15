@@ -1,305 +1,350 @@
-import { describe, expect, it } from "vitest"
-import * as z from "zod"
-import { fieldOf } from "./__fixtures__/runtime.ts"
-import { fieldConstraintsOf } from "./annotations.ts"
+import { describe, expect, expectTypeOf, it } from "vitest";
+import * as z from "zod";
 
-/* the schema the c.json columns below are given, exported beside the table so the reader finds it */
-const schema = z.object({})
+import type { PgColumns } from "../pg/columns.ts";
+import type { SqliteColumns } from "../sqlite/columns.ts";
+import type { EnumStates } from "../sqlite/constraints.ts";
+import { fieldOf } from "./__fixtures__/runtime.ts";
+import { type ConstraintKeys, fieldConstraintsOf } from "./annotations.ts";
+
+// the schema the c.json columns below are given, exported beside the table so the reader finds it
+const schema = z.object({});
 
 /** The constraints a column written as `source` gets, under the property `key` */
-const parseFieldConstraints = (source: string, key = "f") => fieldOf(key, source, { scope: { schema } }).constraints
+const parseFieldConstraints = (source: string, key = "f") => fieldOf(key, source, { scope: { schema } }).constraints;
 
 describe("parseFieldConstraints: validation constraints", () => {
-	it("extracts min/max from parameter constraints", () => {
-		const result = parseFieldConstraints('c.text("email", { min: 5, max: 254 })')
-		expect(result.min).toBe(5)
-		expect(result.max).toBe(254)
-	})
+  it("extracts min/max from parameter constraints", () => {
+    const result = parseFieldConstraints('c.text("email", { min: 5, max: 254 })');
+    expect(result.min).toBe(5);
+    expect(result.max).toBe(254);
+  });
 
-	it("extracts boolean constraints", () => {
-		const result = parseFieldConstraints('c.text("email", { email: true, trim: true, lowercase: true })')
-		expect(result.email).toBe(true)
-		expect(result.trim).toBe(true)
-		expect(result.lowercase).toBe(true)
-	})
+  it("extracts boolean constraints", () => {
+    const result = parseFieldConstraints('c.text("email", { email: true, trim: true, lowercase: true })');
+    expect(result.email).toBe(true);
+    expect(result.trim).toBe(true);
+    expect(result.lowercase).toBe(true);
+  });
 
-	it("extracts password constraint", () => {
-		const result = parseFieldConstraints('c.text("pw", { password: true })')
-		expect(result.password).toBe(true)
-	})
+  it("extracts password constraint", () => {
+    const result = parseFieldConstraints('c.text("pw", { password: true })');
+    expect(result.password).toBe(true);
+  });
 
-	it("extracts url constraint", () => {
-		const result = parseFieldConstraints('c.text("site", { url: true })')
-		expect(result.url).toBe(true)
-	})
+  it("extracts url constraint", () => {
+    const result = parseFieldConstraints('c.text("site", { url: true })');
+    expect(result.url).toBe(true);
+  });
 
-	it("extracts pattern string", () => {
-		const result = parseFieldConstraints('c.text("phone", { pattern: "/^\\\\+[1-9]/" })')
-		expect(result.pattern).toBe("/^\\+[1-9]/u")
-	})
-})
+  it("extracts pattern string", () => {
+    const result = parseFieldConstraints('c.text("phone", { pattern: "/^\\\\+[1-9]/" })');
+    expect(result.pattern).toBe("/^\\+[1-9]/u");
+  });
+});
 
 describe("parseFieldConstraints: write behavior", () => {
-	it("extracts autogenerate", () => {
-		const result = parseFieldConstraints('c.text("token", { autogenerate: true })')
-		expect(result.autogenerate).toBe(true)
-	})
+  it("extracts autogenerate", () => {
+    const result = parseFieldConstraints('c.text("token", { autogenerate: true })');
+    expect(result.autogenerate).toBe(true);
+  });
 
-	it("defaults autogenerate to true for timestamp fields", () => {
-		const result = parseFieldConstraints('c.createdAt("created_at")', "created_at")
-		expect(result.autogenerate).toBe(true)
-	})
+  it("defaults autogenerate to true for timestamp fields", () => {
+    const result = parseFieldConstraints('c.createdAt("created_at")', "created_at");
+    expect(result.autogenerate).toBe(true);
+  });
 
-	it("respects explicit autogenerate: false on timestamp", () => {
-		const result = parseFieldConstraints('c.createdAt("created_at", { autogenerate: false })', "created_at")
-		expect(result.autogenerate).toBe(false)
-	})
+  it("respects explicit autogenerate: false on timestamp", () => {
+    const result = parseFieldConstraints('c.createdAt("created_at", { autogenerate: false })', "created_at");
+    expect(result.autogenerate).toBe(false);
+  });
 
-	it("extracts nomutate", () => {
-		const result = parseFieldConstraints('c.text("id", { nomutate: true })')
-		expect(result.nomutate).toBe(true)
-	})
+  it("extracts nomutate", () => {
+    const result = parseFieldConstraints('c.text("id", { nomutate: true })');
+    expect(result.nomutate).toBe(true);
+  });
 
-	it("detects private from constraint", () => {
-		const result = parseFieldConstraints('c.text("secret", { private: true })')
-		expect(result.private).toBe(true)
-	})
+  it("detects private from constraint", () => {
+    const result = parseFieldConstraints('c.text("secret", { private: true })');
+    expect(result.private).toBe(true);
+  });
 
-	it("detects private from _ prefix", () => {
-		const result = parseFieldConstraints('c.text("_internal")', "_internal")
-		expect(result.private).toBe(true)
-	})
-})
+  it("detects private from _ prefix", () => {
+    const result = parseFieldConstraints('c.text("_internal")', "_internal");
+    expect(result.private).toBe(true);
+  });
+});
 
 describe("parseFieldConstraints: size and defaults", () => {
-	it("extracts maxBytes", () => {
-		const result = parseFieldConstraints('c.json("data", schema, { maxBytes: 1024 })')
-		expect(result.maxBytes).toBe(1024)
-	})
+  it("extracts maxBytes", () => {
+    const result = parseFieldConstraints('c.json("data", schema, { maxBytes: 1024 })');
+    expect(result.maxBytes).toBe(1024);
+  });
 
-	it("returns defaults for no constraints", () => {
-		const result = parseFieldConstraints('c.text("name")')
-		expect(result.min).toBeNull()
-		expect(result.max).toBeNull()
-		expect(result.email).toBe(false)
-		expect(result.password).toBe(false)
-		expect(result.url).toBe(false)
-		expect(result.pattern).toBeNull()
-		expect(result.trim).toBe(false)
-		expect(result.lowercase).toBe(false)
-		expect(result.uppercase).toBe(false)
-		expect(result.autogenerate).toBe(false)
-		expect(result.nomutate).toBe(false)
-		expect(result.private).toBe(false)
-		expect(result.maxBytes).toBeNull()
-	})
-})
+  it("returns defaults for no constraints", () => {
+    const result = parseFieldConstraints('c.text("name")');
+    expect(result.min).toBeNull();
+    expect(result.max).toBeNull();
+    expect(result.email).toBe(false);
+    expect(result.password).toBe(false);
+    expect(result.url).toBe(false);
+    expect(result.pattern).toBeNull();
+    expect(result.trim).toBe(false);
+    expect(result.lowercase).toBe(false);
+    expect(result.uppercase).toBe(false);
+    expect(result.autogenerate).toBe(false);
+    expect(result.nomutate).toBe(false);
+    expect(result.private).toBe(false);
+    expect(result.maxBytes).toBeNull();
+  });
+});
 
 describe("parseFieldConstraints: every key the column types allow, and no other (F3)", () => {
-	it("reads name and imageUri", () => {
-		expect(parseFieldConstraints('c.text("n", { name: true })')).toMatchObject({ imageUri: false, name: true })
-		expect(parseFieldConstraints('c.text("a", { imageUri: true })')).toMatchObject({ imageUri: true, name: false })
-	})
+  it("reads name and imageUri", () => {
+    expect(parseFieldConstraints('c.text("n", { name: true })')).toMatchObject({ imageUri: false, name: true });
+    expect(parseFieldConstraints('c.text("a", { imageUri: true })')).toMatchObject({ imageUri: true, name: false });
+  });
 
-	it("fails on a key it does not handle, naming it, rather than ignoring it", () => {
-		expect(() => parseFieldConstraints('c.text("n", { nmae: true })')).toThrow(
-			"/fixture/db.core.tables.ts: fixture.f: database reads no constraint named nmae",
-		)
-	})
+  it("fails on a key it does not handle, naming it, rather than ignoring it", () => {
+    expect(() => parseFieldConstraints('c.text("n", { nmae: true })')).toThrow(
+      "/fixture/db.core.tables.ts: fixture.f: database reads no constraint named nmae",
+    );
+  });
 
-	it("reads the column's own object argument, never one a later call takes", () => {
-		expect(parseFieldConstraints('c.json("m", schema).default({ max: 5 })').max).toBeNull()
-		expect(parseFieldConstraints('c.json("m", schema, { maxBytes: 9 }).default({ a: 1 })').maxBytes).toBe(9)
-		expect(parseFieldConstraints('c.text("e", { email: true }, 80)').email).toBe(true)
-	})
-})
+  it("reads the column's own object argument, never one a later call takes", () => {
+    expect(parseFieldConstraints('c.json("m", schema).default({ max: 5 })').max).toBeNull();
+    expect(parseFieldConstraints('c.json("m", schema, { maxBytes: 9 }).default({ a: 1 })').maxBytes).toBe(9);
+    expect(parseFieldConstraints('c.text("e", { email: true }, 80)').email).toBe(true);
+  });
+});
 
 describe("parseFieldConstraints: keys that contradict", () => {
-	it("refuses mutable and nomutate together", () => {
-		expect(() => parseFieldConstraints('c.ref("f", { mutable: true, nomutate: true })')).toThrow(
-			"/fixture/db.core.tables.ts: fixture.f: mutable and nomutate contradict; declare one",
-		)
-	})
+  it("refuses mutable and nomutate together", () => {
+    expect(() => parseFieldConstraints('c.ref("f", { mutable: true, nomutate: true })')).toThrow(
+      "/fixture/db.core.tables.ts: fixture.f: mutable and nomutate contradict; declare one",
+    );
+  });
 
-	/* C8 of r18: one casing would win without a word */
-	it("refuses lowercase and uppercase together", () => {
-		expect(() => parseFieldConstraints('c.text("f", { lowercase: true, uppercase: true })')).toThrow(
-			"/fixture/db.core.tables.ts: fixture.f: lowercase and uppercase contradict; declare one",
-		)
-		expect(parseFieldConstraints('c.text("f", { lowercase: true, uppercase: false })').lowercase).toBe(true)
-	})
-	/* CD5 of r23: a private tenant column published no tenant boundary, tenantColumn null, without a word */
-	it("refuses tenant and private together", () => {
-		expect(() => parseFieldConstraints('c.ref("f", { private: true, tenant: true })')).toThrow(
-			"/fixture/db.core.tables.ts: fixture.f: tenant and private contradict; the stamp publishes a tenant column as the table's boundary, and a private column is published nowhere",
-		)
-	})
-})
+  // C8 of r18: one casing would win without a word
+  it("refuses lowercase and uppercase together", () => {
+    expect(() => parseFieldConstraints('c.text("f", { lowercase: true, uppercase: true })')).toThrow(
+      "/fixture/db.core.tables.ts: fixture.f: lowercase and uppercase contradict; declare one",
+    );
+    expect(parseFieldConstraints('c.text("f", { lowercase: true, uppercase: false })').lowercase).toBe(true);
+  });
+  // CD5 of r23: a private tenant column published no tenant boundary, tenantColumn null, without a word
+  it("refuses tenant and private together", () => {
+    expect(() => parseFieldConstraints('c.ref("f", { private: true, tenant: true })')).toThrow(
+      "/fixture/db.core.tables.ts: fixture.f: tenant and private contradict; the stamp publishes a tenant column as the table's boundary, and a private column is published nowhere",
+    );
+  });
+});
 
-/* F57: a key may name its relation, as an identifier the generated relations can hold */
+// F57: a key may name its relation, as an identifier the generated relations can hold
 describe("parseFieldConstraints: a key's relation", () => {
-	it("records the name a key gives its relation, and none by default", () => {
-		expect(parseFieldConstraints('c.ref("f", { relation: "owner" }).references(() => user.id)').relation).toBe("owner")
-		expect(parseFieldConstraints('c.ref("f").references(() => user.id)').relation).toBeNull()
-	})
+  it("records the name a key gives its relation, and none by default", () => {
+    expect(parseFieldConstraints('c.ref("f", { relation: "owner" }).references(() => user.id)').relation).toBe("owner");
+    expect(parseFieldConstraints('c.ref("f").references(() => user.id)').relation).toBeNull();
+  });
 
-	it("refuses a relation that is no identifier", () => {
-		for (const relation of ["", "has space", "1st"])
-			expect(() =>
-				parseFieldConstraints(`c.ref("f", { relation: ${JSON.stringify(relation)} }).references(() => user.id)`),
-			).toThrow(
-				`/fixture/db.core.tables.ts: fixture.f: relation ${JSON.stringify(relation)} is no name a relation can take`,
-			)
-	})
-})
+  it("refuses a relation that is no identifier", () => {
+    for (const relation of ["", "has space", "1st"]) {
+      expect(() =>
+        parseFieldConstraints(`c.ref("f", { relation: ${JSON.stringify(relation)} }).references(() => user.id)`),
+      ).toThrow(
+        `/fixture/db.core.tables.ts: fixture.f: relation ${JSON.stringify(relation)} is no name a relation can take`,
+      );
+    }
+  });
+});
 
-/* C1, C4 of r17: every declared bound is checked once, where it is read, naming the column */
+// C1, C4 of r17: every declared bound is checked once, where it is read, naming the column
 describe("parseFieldConstraints: bounds", () => {
-	const at = "/fixture/db.core.tables.ts: fixture.f"
+  const at = "/fixture/db.core.tables.ts: fixture.f";
 
-	it.each([
-		['c.text("t", { min: 10, max: 2 })', "min 10 is past max 2: no value is both"],
-		['c.real("r", { min: 5, max: 1 })', "min 5 is past max 1: no value is both"],
-		['c.text("t", { min: -1, max: 3 })', "min -1 is no length: a length is a whole number from 0"],
-		['c.text("t", { max: 2.5 })', "max 2.5 is no length: a length is a whole number from 0"],
-		['c.json("j", schema, { maxBytes: -1 })', "maxBytes -1 is no size: it is a whole number from 1"],
-		['c.json("j", schema, { maxBytes: 0.5 })', "maxBytes 0.5 is no size: it is a whole number from 1"],
-	])("refuses %s", (source, reason) => {
-		expect(() => parseFieldConstraints(source)).toThrow(`${at}: ${reason}`)
-	})
+  it.each([
+    ['c.text("t", { min: 10, max: 2 })', "min 10 is past max 2: no value is both"],
+    ['c.real("r", { min: 5, max: 1 })', "min 5 is past max 1: no value is both"],
+    ['c.text("t", { min: -1, max: 3 })', "min -1 is no length: a length is a whole number from 0"],
+    ['c.text("t", { max: 2.5 })', "max 2.5 is no length: a length is a whole number from 0"],
+    ['c.json("j", schema, { maxBytes: -1 })', "maxBytes -1 is no size: it is a whole number from 1"],
+    ['c.json("j", schema, { maxBytes: 0.5 })', "maxBytes 0.5 is no size: it is a whole number from 1"],
+  ])("refuses %s", (source, reason) => {
+    expect(() => parseFieldConstraints(source)).toThrow(`${at}: ${reason}`);
+  });
 
-	it("takes bounds that hold a value: equal, fractional on a number, a length from 0", () => {
-		expect(parseFieldConstraints('c.text("t", { min: 0, max: 0 })')).toMatchObject({ max: 0, min: 0 })
-		expect(parseFieldConstraints('c.real("r", { min: -1.5, max: 2.5 })')).toMatchObject({ max: 2.5, min: -1.5 })
-		expect(parseFieldConstraints('c.json("j", schema, { maxBytes: 1 })').maxBytes).toBe(1)
-	})
-})
+  it("takes bounds that hold a value: equal, fractional on a number, a length from 0", () => {
+    expect(parseFieldConstraints('c.text("t", { min: 0, max: 0 })')).toMatchObject({ max: 0, min: 0 });
+    expect(parseFieldConstraints('c.real("r", { min: -1.5, max: 2.5 })')).toMatchObject({ max: 2.5, min: -1.5 });
+    expect(parseFieldConstraints('c.json("j", schema, { maxBytes: 1 })').maxBytes).toBe(1);
+  });
+});
 
-/* r18 K7: measure is required, and a JavaScript caller that leaves it out, or misspells it, is refused */
+// r18 K7: measure is required, and a JavaScript caller that leaves it out, or misspells it, is refused
 describe("fieldConstraintsOf's measure", () => {
-	it.each([undefined, "size"])("refuses a measure of %j", (measure) => {
-		const options = { fieldName: "title", filled: false, measure, place: "post.title" } as unknown as Parameters<
-			typeof fieldConstraintsOf
-		>[1]
-		expect(() => fieldConstraintsOf({}, options)).toThrow('post.title: measure must be "length" or "value"')
-	})
-})
+  it.each([undefined, "size"])("refuses a measure of %j", (measure) => {
+    const options = { fieldName: "title", filled: false, measure, place: "post.title" } as unknown as Parameters<
+      typeof fieldConstraintsOf
+    >[1];
+
+    expect(() => fieldConstraintsOf({}, options)).toThrow('post.title: measure must be "length" or "value"');
+  });
+});
 
 /** A thunk that reads a text column declared with `options` */
-const parsed = (options: string) => () => parseFieldConstraints(`c.text("f", ${options})`)
+const parsed = (options: string) => () => parseFieldConstraints(`c.text("f", ${options})`);
 
-/* C6 of r19: a text takes one kind, and a kind no key it would drop: each held silently for what the DTO then ignored */
+// C6 of r19: a text takes one kind, and a kind no key it would drop: each held silently for what the DTO then ignored
 describe("parseFieldConstraints: a text's kind", () => {
-	const at = "/fixture/db.core.tables.ts: fixture.f"
-	it.each([
-		["{ email: true, url: true }", "email and url contradict; declare one"],
-		["{ email: true, password: true }", "email and password contradict; declare one"],
-		["{ imageUri: true, url: true }", "imageUri and url contradict; declare one"],
-		["{ name: true, password: true }", "name and password contradict; declare one"],
-	])("refuses a second kind: %s", (options, said) => {
-		expect(parsed(options)).toThrow(`${at}: ${said}`)
-	})
+  const at = "/fixture/db.core.tables.ts: fixture.f";
+  it.each([
+    ["{ email: true, url: true }", "email and url contradict; declare one"],
+    ["{ email: true, password: true }", "email and password contradict; declare one"],
+    ["{ imageUri: true, url: true }", "imageUri and url contradict; declare one"],
+    ["{ name: true, password: true }", "name and password contradict; declare one"],
+  ])("refuses a second kind: %s", (options, said) => {
+    expect(parsed(options)).toThrow(`${at}: ${said}`);
+  });
 
-	it.each([
-		["{ email: true, uppercase: true }", "an email takes no uppercase: it is lowercased"],
-		["{ password: true, trim: true }", "a password takes no trim: it is kept as written"],
-		["{ lowercase: true, password: true }", "a password takes no lowercase: it is kept as written"],
-		["{ password: true, uppercase: true }", "a password takes no uppercase: it is kept as written"],
-		["{ lowercase: true, url: true }", "a url takes no lowercase: it is kept as written, but for its trim"],
-		["{ uppercase: true, url: true }", "a url takes no uppercase: it is kept as written, but for its trim"],
-	])("refuses a key the kind drops or a bound it overrides: %s", (options, said) => {
-		expect(parsed(options)).toThrow(`${at}: ${said}`)
-	})
+  it.each([
+    ["{ email: true, uppercase: true }", "an email takes no uppercase: it is lowercased"],
+    ["{ password: true, trim: true }", "a password takes no trim: it is kept as written"],
+    ["{ lowercase: true, password: true }", "a password takes no lowercase: it is kept as written"],
+    ["{ password: true, uppercase: true }", "a password takes no uppercase: it is kept as written"],
+    ["{ lowercase: true, url: true }", "a url takes no lowercase: it is kept as written, but for its trim"],
+    ["{ uppercase: true, url: true }", "a url takes no uppercase: it is kept as written, but for its trim"],
+  ])("refuses a key the kind drops or a bound it overrides: %s", (options, said) => {
+    expect(parsed(options)).toThrow(`${at}: ${said}`);
+  });
 
-	it.each([
-		"{ email: true, lowercase: true, trim: true }",
-		'{ email: true, max: 90, min: 8, pattern: "/@corp/" }',
-		"{ trim: true, url: true }",
-		'{ max: 72, password: true, pattern: "/x/", private: true }',
-		/* a hash past bcrypt's 72, as argon2id's and PBKDF2's are (C1 of r21) */
-		"{ max: 255, password: true }",
-		"{ imageUri: true, lowercase: true, trim: true }",
-		"{ name: true, trim: true, uppercase: true }",
-		"{ email: false, url: true }",
-	])("takes what a kind does hold: %s", (options) => {
-		expect(parsed(options)).not.toThrow()
-	})
-})
+  it.each([
+    "{ email: true, lowercase: true, trim: true }",
+    '{ email: true, max: 90, min: 8, pattern: "/@corp/" }',
+    "{ trim: true, url: true }",
+    '{ max: 72, password: true, pattern: "/x/", private: true }',
+    // a hash past bcrypt's 72, as argon2id's and PBKDF2's are (C1 of r21)
+    "{ max: 255, password: true }",
+    "{ imageUri: true, lowercase: true, trim: true }",
+    "{ name: true, trim: true, uppercase: true }",
+    "{ email: false, url: true }",
+  ])("takes what a kind does hold: %s", (options) => {
+    expect(parsed(options)).not.toThrow();
+  });
+});
 
-/*
- * CD9 of r22b: a helper takes the keys its own constraint type names and no other, so a JavaScript
- * caller's key, or a cast one, that the helper's type does not take fails codegen naming the
- * helper, where 0.20 took one known to any helper and dropped its rule, or published an example
- * the field refused
- */
+// CD9 of r22b: a helper takes the keys its own constraint type names and no other, so a JavaScript
+// caller's key, or a cast one, that the helper's type does not take fails codegen naming the
+// helper, where 0.20 took one known to any helper and dropped its rule, or published an example
+// the field refused
 describe("each c helper takes only the keys its constraint type names (CD9 of r22b; siblings: an unknown key, c.enum's flags)", () => {
-	it.each([
-		['c.integer("f", { email: true })', "c.integer takes no email"],
-		['c.real("f", { url: true, trim: true })', "c.real takes no url"],
-		['c.timestamp("f", { pattern: "/^x$/" })', "c.timestamp takes no pattern"],
-		['c.timestamp("f", { password: true })', "c.timestamp takes no password"],
-		['c.createdAt("created_at", { lowercase: true })', "c.createdAt takes no lowercase"],
-		['c.text("f", { maxBytes: 4 })', "c.text takes no maxBytes"],
-		['c.ref("f", { maxBytes: 4 })', "c.ref takes no maxBytes"],
-		['c.json("f", schema, { trim: true })', "c.json takes no trim"],
-		['c.json("f", schema, { min: 1 })', "c.json takes no min"],
-	])("refuses %s", (source, message) => {
-		expect(() => parseFieldConstraints(source)).toThrow(`fixture.f: ${message}`)
-	})
+  it.each([
+    ['c.integer("f", { email: true })', "c.integer takes no email"],
+    ['c.real("f", { url: true, trim: true })', "c.real takes no url"],
+    ['c.timestamp("f", { pattern: "/^x$/" })', "c.timestamp takes no pattern"],
+    ['c.timestamp("f", { password: true })', "c.timestamp takes no password"],
+    ['c.createdAt("created_at", { lowercase: true })', "c.createdAt takes no lowercase"],
+    ['c.text("f", { maxBytes: 4 })', "c.text takes no maxBytes"],
+    ['c.ref("f", { maxBytes: 4 })', "c.ref takes no maxBytes"],
+    ['c.json("f", schema, { trim: true })', "c.json takes no trim"],
+    ['c.json("f", schema, { min: 1 })', "c.json takes no min"],
+  ])("refuses %s", (source, message) => {
+    expect(() => parseFieldConstraints(source)).toThrow(`fixture.f: ${message}`);
+  });
 
-	it("takes every key of its own type, and still names a key no helper takes", () => {
-		expect(parseFieldConstraints('c.integer("f", { min: 1, max: 2, nomutate: true, private: true })')).toMatchObject({
-			max: 2,
-			min: 1,
-			nomutate: true,
-			private: true,
-		})
-		expect(parseFieldConstraints('c.timestamp("f", { min: 0, autogenerate: true })').min).toBe(0)
-		expect(parseFieldConstraints('c.json("f", schema, { maxBytes: 9, tenant: false })').maxBytes).toBe(9)
-		expect(parseFieldConstraints('c.enum("f", ["a"], { tenant: true })').tenant).toBe(true)
-		expect(() => parseFieldConstraints('c.integer("f", { colour: true })')).toThrow(
-			"fixture.f: database reads no constraint named colour",
-		)
-	})
+  it("takes every key of its own type, and still names a key no helper takes", () => {
+    expect(parseFieldConstraints('c.integer("f", { min: 1, max: 2, nomutate: true, private: true })')).toMatchObject({
+      max: 2,
+      min: 1,
+      nomutate: true,
+      private: true,
+    });
+    expect(parseFieldConstraints('c.timestamp("f", { min: 0, autogenerate: true })').min).toBe(0);
+    expect(parseFieldConstraints('c.json("f", schema, { maxBytes: 9, tenant: false })').maxBytes).toBe(9);
+    expect(parseFieldConstraints('c.enum("f", ["a"], { tenant: true })').tenant).toBe(true);
+    expect(() => parseFieldConstraints('c.integer("f", { colour: true })')).toThrow(
+      "fixture.f: database reads no constraint named colour",
+    );
+  });
 
-	it("refuses, from a direct call, a key on a drizzle column and a helper database has none of", () => {
-		const options = { fieldName: "f", filled: false, measure: "value", place: "t.f", values: null } as const
-		expect(() => fieldConstraintsOf({ min: 1 }, { ...options, helper: null })).toThrow(
-			"t.f: a drizzle column takes no min",
-		)
-		expect(() =>
-			fieldConstraintsOf(
-				{},
-				{ ...options, helper: "bigint" as unknown as Parameters<typeof fieldConstraintsOf>[1]["helper"] },
-			),
-		).toThrow("t.f: database has no helper c.bigint")
-	})
-})
+  it("refuses, from a direct call, a key on a drizzle column and a helper database has none of", () => {
+    const options = { fieldName: "f", filled: false, measure: "value", place: "t.f", values: null } as const;
+    expect(() => fieldConstraintsOf({ min: 1 }, { ...options, helper: null })).toThrow(
+      "t.f: a drizzle column takes no min",
+    );
+    expect(() =>
+      fieldConstraintsOf(
+        {},
+        { ...options, helper: "bigint" as unknown as Parameters<typeof fieldConstraintsOf>[1]["helper"] },
+      ),
+    ).toThrow("t.f: database has no helper c.bigint");
+  });
+});
 
-/* plan 24: fieldConstraintsOf returns a column's format; format-constraints.test.ts holds what it refuses. Each refusal is asserted whole, so formatOf's longer text cannot stand in for the key check's */
+// plan 24: fieldConstraintsOf returns a column's format; format-constraints.test.ts holds what it refuses. Each refusal is asserted whole, so formatOf's longer text cannot stand in for the key check's
 describe("parseFieldConstraints: a column's format and schema", () => {
-	const at = "/fixture/db.core.tables.ts: fixture.f"
+  const at = "/fixture/db.core.tables.ts: fixture.f";
 
-	it("returns the declared format, and null when none is", () => {
-		expect(parseFieldConstraints('c.text("f", { format: "iso4217" })').format).toBe("iso4217")
-		expect(parseFieldConstraints('c.enum("f", ["USD", "EUR"], { format: "iso4217" })').format).toBe("iso4217")
-		expect(parseFieldConstraints('c.integer("f", { format: "iso8601-weekday" })').format).toBe("iso8601-weekday")
-		expect(parseFieldConstraints('c.text("f")').format).toBeNull()
-		expect(parseFieldConstraints('c.integer("f")').format).toBeNull()
-	})
+  it("returns the declared format, and null when none is", () => {
+    expect(parseFieldConstraints('c.text("f", { format: "iso4217" })').format).toBe("iso4217");
+    expect(parseFieldConstraints('c.enum("f", ["USD", "EUR"], { format: "iso4217" })').format).toBe("iso4217");
+    expect(parseFieldConstraints('c.integer("f", { format: "iso8601-weekday" })').format).toBe("iso8601-weekday");
+    expect(parseFieldConstraints('c.text("f")').format).toBeNull();
+    expect(parseFieldConstraints('c.integer("f")').format).toBeNull();
+  });
 
-	it.each([
-		['c.ref("f", { format: "ulid" }).references(() => user.id)', "c.ref takes no format"],
-		['c.real("f", { format: "iso8601-month" })', "c.real takes no format"],
-		['c.text("f", { email: true, format: "iso4217" })', "format and email contradict; declare one"],
-		['c.text("f", { format: "bcp47", name: true })', "format and name contradict; declare one"],
-		['c.ref("f", { schema: z.string() }).references(() => user.id)', "c.ref takes no schema"],
-		['c.enum("f", ["a"], { schema: z.enum(["a"]) })', "c.enum takes no schema"],
-	])("refuses %s", (source, said) => {
-		expect(() => parseFieldConstraints(source)).toThrow(new Error(`${at}: ${said}`))
-	})
+  it.each([
+    ['c.ref("f", { format: "ulid" }).references(() => user.id)', "c.ref takes no format"],
+    ['c.real("f", { format: "iso8601-month" })', "c.real takes no format"],
+    ['c.text("f", { email: true, format: "iso4217" })', "format and email contradict; declare one"],
+    ['c.text("f", { format: "bcp47", name: true })', "format and name contradict; declare one"],
+    ['c.ref("f", { schema: z.string() }).references(() => user.id)', "c.ref takes no schema"],
+    ['c.enum("f", ["a"], { schema: z.enum(["a"]) })', "c.enum takes no schema"],
+  ])("refuses %s", (source, said) => {
+    expect(() => parseFieldConstraints(source)).toThrow(new Error(`${at}: ${said}`));
+  });
 
-	it("takes a format beside a narrowing pattern", () => {
-		expect(parseFieldConstraints('c.text("f", { format: "iso4217", pattern: "/^E/" })').pattern).toBe("/^E/u")
-	})
-})
+  it("takes a format beside a narrowing pattern", () => {
+    expect(parseFieldConstraints('c.text("f", { format: "iso4217", pattern: "/^E/" })').pattern).toBe("/^E/u");
+  });
+});
+
+// CD9 of r22b: the keys codegen lets each c helper take are the keys of the constraint type that
+// helper's own signature takes, on both dialects, so neither the sets nor the types drift: a key
+// added to a type and not to its set would be refused at codegen, and one in a set its type lacks
+// would be taken from a JavaScript caller alone. The compiler checks it; the test has nothing to run.
+describe("the key set of each c helper", () => {
+  it("is the keys of the constraint type its signature takes, on both dialects", () => {
+    type Columns = PgColumns | SqliteColumns;
+
+    /** The record a helper is given: its last parameter, after a c.json's schema or a c.enum's values; none for c.serialId */
+    type Given<K extends keyof SqliteColumns> = K extends "enum" | "json"
+      ? Parameters<Columns[K]>[2]
+      : Parameters<Columns[K]> extends [unknown, (infer C)?]
+        ? C
+        : Record<never, never>;
+
+    /** The keys that record names: c.enum's flags beside its state machine */
+    type Taken<K extends keyof SqliteColumns> = K extends "enum"
+      ? Exclude<keyof NonNullable<Given<K>>, keyof EnumStates>
+      : keyof NonNullable<Given<K>>;
+
+    type Set<K extends keyof ConstraintKeys> = ConstraintKeys[K][number];
+
+    expectTypeOf<Set<"boolean">>().toEqualTypeOf<Taken<"boolean">>();
+    expectTypeOf<Set<"createdAt">>().toEqualTypeOf<Taken<"createdAt">>();
+    expectTypeOf<Set<"deletedAt">>().toEqualTypeOf<Taken<"deletedAt">>();
+    expectTypeOf<Set<"enum">>().toEqualTypeOf<Taken<"enum">>();
+    expectTypeOf<Set<"id">>().toEqualTypeOf<Taken<"id">>();
+    expectTypeOf<Set<"integer">>().toEqualTypeOf<Taken<"integer">>();
+    expectTypeOf<Set<"json">>().toEqualTypeOf<Taken<"json">>();
+    expectTypeOf<Set<"real">>().toEqualTypeOf<Taken<"real">>();
+    expectTypeOf<Set<"ref">>().toEqualTypeOf<Taken<"ref">>();
+    expectTypeOf<Set<"serialId">>().toEqualTypeOf<Taken<"serialId">>();
+    expectTypeOf<Set<"text">>().toEqualTypeOf<Taken<"text">>();
+    expectTypeOf<Set<"timestamp">>().toEqualTypeOf<Taken<"timestamp">>();
+    expectTypeOf<Set<"updatedAt">>().toEqualTypeOf<Taken<"updatedAt">>();
+    // every helper is held: a helper added to c without a set fails here
+    expectTypeOf<keyof ConstraintKeys>().toEqualTypeOf<keyof SqliteColumns>();
+    expectTypeOf<keyof PgColumns>().toEqualTypeOf<keyof SqliteColumns>();
+  });
+});

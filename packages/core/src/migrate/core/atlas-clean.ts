@@ -4,12 +4,12 @@
  * URL to the target's schema (`search_path`), and Atlas calls a bound target clean while its schema
  * holds no table. Atlas OSS inspects no view or function, so those do not count.
  */
-import { explainAtlasFailure, NOT_CLEAN } from "./atlas-failure.ts"
-import { type PgTarget, withAtlasEnv } from "./atlas-target.ts"
-import type { MigrateRun } from "./process.ts"
+import { explainAtlasFailure, NOT_CLEAN } from "./atlas-failure.ts";
+import { type PgTarget, withAtlasEnv } from "./atlas-target.ts";
+import type { MigrateRun } from "./process.ts";
 
 /** The schemas `atlas schema inspect` reports, by name, with their tables */
-type Inspected = { schemas?: Array<{ name?: string | undefined; tables?: unknown[] | undefined }> | undefined }
+type Inspected = { schemas?: Array<{ name?: string | undefined; tables?: unknown[] | undefined }> | undefined };
 
 /**
  * Atlas's inspect JSON `stdout`, parsed as Atlas wrote it and never scrubbed: its names are
@@ -17,27 +17,31 @@ type Inspected = { schemas?: Array<{ name?: string | undefined; tables?: unknown
  * secret that spells a name or a key would otherwise change what database reads
  */
 function readInspect(stdout: string): Inspected {
-	try {
-		return JSON.parse(stdout) as Inspected
-	} catch {
-		// reason: unreadable output may hold anything Atlas printed, so it is not repeated
-		throw new Error("unexpected output from atlas schema inspect")
-	}
+  try {
+    return JSON.parse(stdout) as Inspected;
+  } catch {
+    // reason: unreadable output may hold anything Atlas printed, so it is not repeated
+    throw new Error("unexpected output from atlas schema inspect");
+  }
 }
 
 /** Refuses, with apply's baseline message, a database Atlas would call not clean; reads only */
 async function refuseUnclean(options: { exec: MigrateRun; target: PgTarget }): Promise<void> {
-	const { schemas = [] } = await withAtlasEnv(options.target, { url: true }, async (env) => {
-		const args = ["schema", "inspect", "--url", "env://url", "--format", "{{ json . }}", ...env.args]
-		const result = await options.exec("atlas", args, { env: env.env })
-		/* a failure's output is free text, scrubbed; a success's is JSON, parsed before anything is masked */
-		if (result.code !== 0)
-			throw new Error(
-				`atlas schema inspect: ${`${`${explainAtlasFailure(result.stderr, env.scrub)}${env.scrub(result.stdout)}`}`.trim()}`,
-			)
-		return readInspect(result.stdout)
-	})
-	if (schemas.some((schema) => (schema.tables ?? []).length > 0)) throw new Error(NOT_CLEAN)
+  const { schemas = [] } = await withAtlasEnv(options.target, { url: true }, async (env) => {
+    const args = ["schema", "inspect", "--url", "env://url", "--format", "{{ json . }}", ...env.args];
+    const result = await options.exec("atlas", args, { env: env.env });
+
+    // a failure's output is free text, scrubbed; a success's is JSON, parsed before anything is masked
+    if (result.code !== 0) {
+      throw new Error(
+        `atlas schema inspect: ${`${explainAtlasFailure(result.stderr, env.scrub)}${env.scrub(result.stdout)}`.trim()}`,
+      );
+    }
+
+    return readInspect(result.stdout);
+  });
+
+  if (schemas.some((schema) => (schema.tables ?? []).length > 0)) throw new Error(NOT_CLEAN);
 }
 
-export { type Inspected, readInspect, refuseUnclean }
+export { readInspect, refuseUnclean };

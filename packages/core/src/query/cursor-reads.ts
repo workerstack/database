@@ -5,23 +5,27 @@
  * A cursor minted before this encoding holds a Date's epoch milliseconds, or "invalid" for an
  * Invalid Date, in a slot; both still read.
  */
-import { carried, CursorRef, type CursorValue, decodeValue, encodeValue, sameValue } from "./cursor-codec.ts"
+import { carried, CursorRef, type CursorValue, decodeValue, encodeValue, sameValue } from "./cursor-codec.ts";
 
-/* the Date of a row that holds none, as a cursor minted before this encoding writes it */
-const INVALID_READ = "invalid"
+// the Date of a row that holds none, as a cursor minted before this encoding writes it
+const INVALID_READ = "invalid";
 
 /** A key's read value, or null for a key read as bound */
-type ReadSlot = readonly [CursorValue] | null
+type ReadSlot = readonly [CursorValue] | null;
 
 /** One key's slot from the wire, or undefined when it is none */
 function slotOf(slot: unknown, decode: (slot: unknown) => CursorValue | undefined): ReadSlot | undefined {
-	if (slot === null) return null
-	if (slot === INVALID_READ) return [new Date(Number.NaN)]
-	if (typeof slot === "number") return [new Date(slot)]
-	if (!Array.isArray(slot) || slot.length !== 1) return undefined
-	const value = decode(slot[0])
-	/* a reference stands for a value no row read; the bound carries it */
-	return value === undefined || value instanceof CursorRef ? undefined : [value]
+  if (slot === null) return null;
+
+  if (slot === INVALID_READ) return [new Date(Number.NaN)];
+
+  if (typeof slot === "number") return [new Date(slot)];
+
+  if (!Array.isArray(slot) || slot.length !== 1) return undefined;
+  const value = decode(slot[0]);
+
+  // a reference stands for a value no row read; the bound carries it
+  return value === undefined || value instanceof CursorRef ? undefined : [value];
 }
 
 /**
@@ -29,14 +33,16 @@ function slotOf(slot: unknown, decode: (slot: unknown) => CursorValue | undefine
  * carries none, null for one that is no cursor's
  */
 function readOf(
-	d: unknown,
-	count: number,
-	decode: (slot: unknown) => CursorValue | undefined,
+  d: unknown,
+  count: number,
+  decode: (slot: unknown) => CursorValue | undefined,
 ): ReadSlot[] | null | undefined {
-	if (d === undefined) return undefined
-	if (!Array.isArray(d) || d.length !== count) return null
-	const read = d.map((slot: unknown) => slotOf(slot, decode))
-	return read.includes(undefined) ? null : (read as ReadSlot[])
+  if (d === undefined) return undefined;
+
+  if (!Array.isArray(d) || d.length !== count) return null;
+  const read = d.map((slot: unknown) => slotOf(slot, decode));
+
+  return read.includes(undefined) ? null : (read as ReadSlot[]);
 }
 
 /**
@@ -45,8 +51,9 @@ function readOf(
  * the bound
  */
 function readSlot(read: unknown, bound: unknown): [unknown] | null {
-	if (read === undefined) return null
-	return sameValue(bound, read) || !carried(read, decodeValue) ? null : [encodeValue(read)]
+  if (read === undefined) return null;
+
+  return sameValue(bound, read) || !carried(read, decodeValue) ? null : [encodeValue(read)];
 }
 
 /**
@@ -54,14 +61,15 @@ function readSlot(read: unknown, bound: unknown): [unknown] | null {
  * goes by reference: a key read as bound carries none, so its reference keeps the cursor within the cap
  */
 function readsApart(
-	read: Record<string, unknown> | undefined,
-	row: Record<string, unknown>,
-	fields: readonly string[],
+  read: Record<string, unknown> | undefined,
+  row: Record<string, unknown>,
+  fields: readonly string[],
 ): Record<string, unknown> | undefined {
-	if (read === undefined) return undefined
-	return Object.fromEntries(
-		fields.filter((field) => readSlot(read[field], row[field]) !== null).map((field) => [field, read[field]]),
-	)
+  if (read === undefined) return undefined;
+
+  return Object.fromEntries(
+    fields.filter((field) => readSlot(read[field], row[field]) !== null).map((field) => [field, read[field]]),
+  );
 }
 
-export { readOf, readsApart, readSlot, type ReadSlot }
+export { readOf, readsApart, readSlot };

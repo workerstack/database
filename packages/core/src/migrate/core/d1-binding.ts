@@ -3,59 +3,60 @@
  * binding it names there, checked to read the migrations database reads, and where wrangler 4 keeps
  * its local database, which check and status must find before they read it (d1-history.ts).
  */
-import { createHash, createHmac } from "node:crypto"
-import { existsSync } from "node:fs"
-import { dirname, join, resolve } from "node:path"
-import { writeLocked } from "../drivers/local-db.ts"
-import type { MigrateConnection } from "../types.ts"
-import { compiledRefusal, refuseCompiled } from "./compiled.ts"
-import { endedWith, runChild } from "./node-child.ts"
-import { binEntry } from "./optional-peer.ts"
-import { type MigrateRun, type ProjectBin, run } from "./process.ts"
-import type { ConfigAnswer, ConfigInput } from "./wrangler-config-child.mjs"
-import { D1_MIGRATIONS_TABLE } from "./d1-history-tables.ts"
+import { createHash, createHmac } from "node:crypto";
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+
+import { writeLocked } from "../drivers/local-db.ts";
+import type { MigrateConnection } from "../types.ts";
+import { compiledRefusal, refuseCompiled } from "./compiled.ts";
+import { D1_MIGRATIONS_TABLE } from "./d1-history-tables.ts";
+import { endedWith, runChild } from "./node-child.ts";
+import { binEntry } from "./optional-peer.ts";
+import { type MigrateRun, type ProjectBin, run } from "./process.ts";
+import type { ConfigAnswer, ConfigInput } from "./wrangler-config-child.mjs";
 
 /** A D1 binding as wrangler's config reader returns it, for the environment asked */
 type WranglerD1 = {
-	binding: string
-	database_id?: string | undefined
-	database_name?: string | undefined
-	migrations_dir?: string | undefined
-	migrations_pattern?: string | undefined
-	migrations_table?: string | undefined
-	preview_database_id?: string | undefined
-}
+  binding: string;
+  database_id?: string | undefined;
+  database_name?: string | undefined;
+  migrations_dir?: string | undefined;
+  migrations_pattern?: string | undefined;
+  migrations_table?: string | undefined;
+  preview_database_id?: string | undefined;
+};
 
 /** What database reads of wrangler's resolved config */
-type WranglerConfig = { d1_databases: readonly WranglerD1[] }
+type WranglerConfig = { d1_databases: readonly WranglerD1[] };
 
 /** wrangler's `unstable_readConfig`; tests pass a fake */
-type ReadConfig = (args: { config: string; env?: string | undefined }) => WranglerConfig
+type ReadConfig = (args: { config: string; env?: string | undefined }) => WranglerConfig;
 
 /** The D1 database a command works on, as wrangler names and reaches it */
 type D1Target = {
-	/** the database's wrangler commands: the d1 execute connection, flags included */
-	conn: MigrateConnection
-	exec: MigrateRun
-	/** --local or --remote, then --config and --env */
-	flags: readonly string[]
-	/** whether another process holds the local database's write lock now, asked once a --local run failed (d1-lock.ts lockedOut) */
-	held: () => Promise<boolean>
-	migrationsDir: string
-	/** the binding's name or database_name, as every wrangler command takes it */
-	name: string
-	/** the wrangler the command checked, which every wrangler command of the target runs */
-	wrangler: ProjectBin
-	/** the wrangler config file */
-	wranglerConfig: string
-	wranglerEnv?: string | undefined
-}
+  /** the database's wrangler commands: the d1 execute connection, flags included */
+  conn: MigrateConnection;
+  exec: MigrateRun;
+  /** --local or --remote, then --config and --env */
+  flags: readonly string[];
+  /** whether another process holds the local database's write lock now, asked once a --local run failed (d1-lock.ts lockedOut) */
+  held: () => Promise<boolean>;
+  migrationsDir: string;
+  /** the binding's name or database_name, as every wrangler command takes it */
+  name: string;
+  /** the wrangler the command checked, which every wrangler command of the target runs */
+  wrangler: ProjectBin;
+  /** the wrangler config file */
+  wranglerConfig: string;
+  wranglerEnv?: string | undefined;
+};
 
-const CONFIG_NAMES = ["wrangler.json", "wrangler.jsonc", "wrangler.toml"]
+const CONFIG_NAMES = ["wrangler.json", "wrangler.jsonc", "wrangler.toml"];
 
 /** The wrangler config wrangler itself would read in `cwd`; undefined when there is none */
 function findWranglerConfig(cwd: string): string | undefined {
-	return CONFIG_NAMES.map((name) => join(cwd, name)).find((file) => existsSync(file))
+  return CONFIG_NAMES.map((name) => join(cwd, name)).find((file) => existsSync(file));
 }
 
 /**
@@ -63,19 +64,22 @@ function findWranglerConfig(cwd: string): string | undefined {
  * read the migrations database reads, and take every .sql file there. Returns its migrations table.
  */
 function resolveBinding(read: ReadConfig, target: D1Target): string {
-	const { d1, where } = bindingOf(read, target)
-	const dirName = d1.migrations_dir ?? "migrations"
-	const dir = resolve(dirname(target.wranglerConfig), dirName)
-	if (dir !== resolve(target.migrationsDir)) {
-		throw new Error(
-			`${where} applies ${target.name}'s migrations from ${dir}, but database reads them from ${resolve(target.migrationsDir)}; point migrations_dir at database's migrationsDir`,
-		)
-	}
-	const pattern = d1.migrations_pattern
-	if (pattern !== undefined && pattern.replace(/^\.\//, "") !== `${dirName.replace(/^\.\/|\/$/g, "")}/*.sql`) {
-		throw new Error(`${where} sets migrations_pattern ${pattern}; database applies every .sql file of ${dirName}`)
-	}
-	return d1.migrations_table ?? D1_MIGRATIONS_TABLE
+  const { d1, where } = bindingOf(read, target);
+  const dirName = d1.migrations_dir ?? "migrations";
+  const dir = resolve(dirname(target.wranglerConfig), dirName);
+
+  if (dir !== resolve(target.migrationsDir)) {
+    throw new Error(
+      `${where} applies ${target.name}'s migrations from ${dir}, but database reads them from ${resolve(target.migrationsDir)}; point migrations_dir at database's migrationsDir`,
+    );
+  }
+
+  const pattern = d1.migrations_pattern;
+
+  if (pattern !== undefined && pattern.replace(/^\.\//, "") !== `${dirName.replaceAll(/^\.\/|\/$/g, "")}/*.sql`)
+    throw new Error(`${where} sets migrations_pattern ${pattern}; database applies every .sql file of ${dirName}`);
+
+  return d1.migrations_table ?? D1_MIGRATIONS_TABLE;
 }
 
 /**
@@ -83,16 +87,16 @@ function resolveBinding(read: ReadConfig, target: D1Target): string {
  * cause, as database's other config loaders name theirs
  */
 function readNamed(read: ReadConfig, target: BindingRef): WranglerConfig {
-	try {
-		return read({ config: target.wranglerConfig, env: target.wranglerEnv })
-	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error)
-		throw new Error(`${target.wranglerConfig} failed to load: ${message}`, { cause: error })
-	}
+  try {
+    return read({ config: target.wranglerConfig, env: target.wranglerEnv });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`${target.wranglerConfig} failed to load: ${message}`, { cause: error });
+  }
 }
 
 /** What names a binding: its name, and the wrangler config and environment it is read from */
-type BindingRef = Pick<D1Target, "name" | "wranglerConfig" | "wranglerEnv">
+type BindingRef = Pick<D1Target, "name" | "wranglerConfig" | "wranglerEnv">;
 
 /**
  * `ref`'s wrangler config as `bin`'s wrangler reads it, the one the command checked and spawns, read once in a
@@ -100,40 +104,47 @@ type BindingRef = Pick<D1Target, "name" | "wranglerConfig" | "wranglerEnv">
  * The reader answers that read, and refuses one of another config or environment, which it never read
  */
 async function wranglerReader(
-	bin: ProjectBin,
-	ref: Pick<BindingRef, "wranglerConfig" | "wranglerEnv">,
-	{ exec = run, moduleUrl = import.meta.url }: { exec?: MigrateRun | undefined; moduleUrl?: string | undefined } = {},
+  bin: ProjectBin,
+  ref: Pick<BindingRef, "wranglerConfig" | "wranglerEnv">,
+  { exec = run, moduleUrl = import.meta.url }: { exec?: MigrateRun | undefined; moduleUrl?: string | undefined } = {},
 ): Promise<ReadConfig> {
-	refuseCompiled(moduleUrl, compiledRefusal([bin.peer]))
-	const answer = await runChild<ConfigAnswer>(new URL("./wrangler-config-child.mjs", import.meta.url), {
-		bin,
-		exec,
-		failed: (ran) => `${ref.wranglerConfig} failed to load: wrangler's config read on ${bin.runtime} ${endedWith(ran)}`,
-		inputOf: () =>
-			({ config: ref.wranglerConfig, env: ref.wranglerEnv, wrangler: binEntry(bin) }) satisfies ConfigInput,
-		prefix: "database-wrangler-config-",
-	})
-	return (args) => {
-		if (args.config !== ref.wranglerConfig || args.env !== ref.wranglerEnv)
-			throw new Error(
-				`wrangler's config was read for ${ref.wranglerConfig}${ref.wranglerEnv === undefined ? "" : ` (env ${ref.wranglerEnv})`}, not ${args.config}${args.env === undefined ? "" : ` (env ${args.env})`}`,
-			)
-		if ("error" in answer) throw new Error(answer.error)
-		return answer.config as WranglerConfig
-	}
+  refuseCompiled(moduleUrl, compiledRefusal([bin.peer]));
+
+  const answer = await runChild<ConfigAnswer>(new URL("./wrangler-config-child.mjs", import.meta.url), {
+    bin,
+    exec,
+    failed: (ran) => `${ref.wranglerConfig} failed to load: wrangler's config read on ${bin.runtime} ${endedWith(ran)}`,
+    inputOf: () =>
+      ({ config: ref.wranglerConfig, env: ref.wranglerEnv, wrangler: binEntry(bin) }) satisfies ConfigInput,
+    prefix: "database-wrangler-config-",
+  });
+
+  return (args) => {
+    if (args.config !== ref.wranglerConfig || args.env !== ref.wranglerEnv) {
+      throw new Error(
+        `wrangler's config was read for ${ref.wranglerConfig}${ref.wranglerEnv === undefined ? "" : ` (env ${ref.wranglerEnv})`}, not ${args.config}${args.env === undefined ? "" : ` (env ${args.env})`}`,
+      );
+    }
+
+    if ("error" in answer) throw new Error(answer.error);
+
+    return answer.config as WranglerConfig;
+  };
 }
 
 /** The binding `target` names in its wrangler config, and where database says it read it */
 function bindingOf(read: ReadConfig, target: BindingRef): { d1: WranglerD1; where: string } {
-	const config = readNamed(read, target)
-	const where = `${target.wranglerConfig}${target.wranglerEnv === undefined ? "" : ` (env ${target.wranglerEnv})`}`
-	const d1 = config.d1_databases.find((db) => db.database_name === target.name || db.binding === target.name)
-	if (d1 === undefined) throw new Error(`${where} has no D1 database named or bound as ${target.name}`)
-	return { d1, where }
+  const config = readNamed(read, target);
+  const where = `${target.wranglerConfig}${target.wranglerEnv === undefined ? "" : ` (env ${target.wranglerEnv})`}`;
+  const d1 = config.d1_databases.find((db) => db.database_name === target.name || db.binding === target.name);
+
+  if (d1 === undefined) throw new Error(`${where} has no D1 database named or bound as ${target.name}`);
+
+  return { d1, where };
 }
 
-/* the Durable Object class Miniflare keeps each local D1 database in */
-const D1_OBJECT = "miniflare-D1DatabaseObject"
+// the Durable Object class Miniflare keeps each local D1 database in
+const D1_OBJECT = "miniflare-D1DatabaseObject";
 
 /**
  * Where wrangler 4 keeps a binding's local database: Miniflare's D1 object under the config's
@@ -142,11 +153,12 @@ const D1_OBJECT = "miniflare-D1DatabaseObject"
  * naming, so a test holds it to the wrangler database pins.
  */
 function localD1Path(configDir: string, d1: WranglerD1): string {
-	const name = d1.preview_database_id ?? d1.database_id ?? d1.binding
-	const key = createHash("sha256").update(D1_OBJECT).digest()
-	const named = createHmac("sha256", key).update(name).digest().subarray(0, 16)
-	const id = Buffer.concat([named, createHmac("sha256", key).update(named).digest().subarray(0, 16)]).toString("hex")
-	return join(configDir, ".wrangler", "state", "v3", "d1", D1_OBJECT, `${id}.sqlite`)
+  const name = d1.preview_database_id ?? d1.database_id ?? d1.binding;
+  const key = createHash("sha256").update(D1_OBJECT).digest();
+  const named = createHmac("sha256", key).update(name).digest().subarray(0, 16);
+  const id = Buffer.concat([named, createHmac("sha256", key).update(named).digest().subarray(0, 16)]).toString("hex");
+
+  return join(configDir, ".wrangler", "state", "v3", "d1", D1_OBJECT, `${id}.sqlite`);
 }
 
 /**
@@ -155,23 +167,25 @@ function localD1Path(configDir: string, d1: WranglerD1): string {
  * there is no file to ask, and no lock database can see
  */
 function localHeld(
-	read: (ref: BindingRef) => Promise<ReadConfig>,
-	ref: Omit<BindingRef, "wranglerConfig"> & { wranglerConfig: string | undefined },
+  read: (ref: BindingRef) => Promise<ReadConfig>,
+  ref: Omit<BindingRef, "wranglerConfig"> & { wranglerConfig: string | undefined },
 ): () => Promise<boolean> {
-	return async () => {
-		const { wranglerConfig } = ref
-		if (wranglerConfig === undefined) return false
-		const bound = { ...ref, wranglerConfig }
-		return writeLocked(localD1Path(dirname(wranglerConfig), bindingOf(await read(bound), bound).d1))
-	}
+  return async () => {
+    const { wranglerConfig } = ref;
+
+    if (wranglerConfig === undefined) return false;
+    const bound = { ...ref, wranglerConfig };
+
+    return writeLocked(localD1Path(dirname(wranglerConfig), bindingOf(await read(bound), bound).d1));
+  };
 }
 
 /** Whether `target` is a local database wrangler keeps nowhere yet: its first `d1 execute --local` would create one */
 function localMissing(read: ReadConfig, target: D1Target): boolean {
-	return (
-		target.flags.includes("--local") &&
-		!existsSync(localD1Path(dirname(target.wranglerConfig), bindingOf(read, target).d1))
-	)
+  return (
+    target.flags.includes("--local") &&
+    !existsSync(localD1Path(dirname(target.wranglerConfig), bindingOf(read, target).d1))
+  );
 }
 
 /**
@@ -179,23 +193,21 @@ function localMissing(read: ReadConfig, target: D1Target): boolean {
  * `d1 execute --local` would create one
  */
 function assertLocalExists(read: ReadConfig, target: D1Target): void {
-	if (!localMissing(read, target)) return
-	const path = localD1Path(dirname(target.wranglerConfig), bindingOf(read, target).d1)
-	throw new Error(
-		`database cannot confirm ${target.name}'s local database exists: wrangler 4 keeps it at ${path}, and there is none; check and status open a database read-only, and create none`,
-	)
+  if (!localMissing(read, target)) return;
+  const path = localD1Path(dirname(target.wranglerConfig), bindingOf(read, target).d1);
+  throw new Error(
+    `database cannot confirm ${target.name}'s local database exists: wrangler 4 keeps it at ${path}, and there is none; check and status open a database read-only, and create none`,
+  );
 }
 
 export {
-	assertLocalExists,
-	type D1Target,
-	findWranglerConfig,
-	localD1Path,
-	localHeld,
-	localMissing,
-	type ReadConfig,
-	resolveBinding,
-	wranglerReader,
-	type WranglerConfig,
-	type WranglerD1,
-}
+  assertLocalExists,
+  type D1Target,
+  findWranglerConfig,
+  localD1Path,
+  localHeld,
+  localMissing,
+  type ReadConfig,
+  resolveBinding,
+  wranglerReader,
+};

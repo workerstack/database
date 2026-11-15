@@ -17,7 +17,7 @@ export type { ValidationResult } from "./utils/validate.ts";
  * it (runtime/read-tables.ts), then named as the generators ask (runtime/to-meta.ts). Generators
  * never load or read source themselves.
  */
-import type { AnalysisResult, TableMeta } from "./analyzer-types.ts";
+import type { AnalysisResult } from "./analyzer-types.ts";
 /**
  * Load and analyze a tables file. Loading runs the module in a child process, so it must be safe to
  * import: no top-level connection, server or side effect
@@ -27,7 +27,6 @@ declare function analyze(tablesPath: string, { cwd, }?: {
     cwd?: string | undefined;
 }): Promise<AnalysisResult>;
 export { analyze };
-export type { AnalysisResult, TableMeta };
 
 // codegen/config.d.ts
 /**
@@ -332,13 +331,13 @@ import type { ColumnMetaKind } from "../meta/column.ts";
 import type { ConstantValue, FieldConstraintsMeta } from "./analyzer-types.ts";
 /** Field constraints extracted from type arguments */
 export type FieldConstraints = FieldConstraintsMeta;
-export declare const NUMBER_KEYS: readonly ["autogenerate", "max", "min", "mutable", "nomutate", "private", "relation", "tenant"];
-export declare const REAL_KEYS: readonly ["autogenerate", "max", "min", "mutable", "nomutate", "private", "relation", "schema", "tenant"];
-export declare const INTEGER_KEYS: readonly ["autogenerate", "format", "max", "min", "mutable", "nomutate", "private", "relation", "schema", "tenant"];
-export declare const JSON_KEYS: readonly ["autogenerate", "maxBytes", "mutable", "nomutate", "private", "relation", "tenant"];
-export declare const ENUM_KEYS: readonly ["format", "nomutate", "private", "tenant"];
-export declare const REF_KEYS: readonly ["autogenerate", "email", "imageUri", "lowercase", "max", "min", "mutable", "name", "nomutate", "password", "pattern", "private", "relation", "tenant", "trim", "uppercase", "url"];
-export declare const TEXT_KEYS: readonly ["autogenerate", "email", "format", "imageUri", "lowercase", "max", "min", "mutable", "name", "nomutate", "password", "pattern", "private", "relation", "schema", "tenant", "trim", "uppercase", "url"];
+declare const NUMBER_KEYS: readonly ["autogenerate", "max", "min", "mutable", "nomutate", "private", "relation", "tenant"];
+declare const REAL_KEYS: readonly ["autogenerate", "max", "min", "mutable", "nomutate", "private", "relation", "schema", "tenant"];
+declare const INTEGER_KEYS: readonly ["autogenerate", "format", "max", "min", "mutable", "nomutate", "private", "relation", "schema", "tenant"];
+declare const JSON_KEYS: readonly ["autogenerate", "maxBytes", "mutable", "nomutate", "private", "relation", "tenant"];
+declare const ENUM_KEYS: readonly ["format", "nomutate", "private", "tenant"];
+declare const REF_KEYS: readonly ["autogenerate", "email", "imageUri", "lowercase", "max", "min", "mutable", "name", "nomutate", "password", "pattern", "private", "relation", "tenant", "trim", "uppercase", "url"];
+declare const TEXT_KEYS: readonly ["autogenerate", "email", "format", "imageUri", "lowercase", "max", "min", "mutable", "name", "nomutate", "password", "pattern", "private", "relation", "schema", "tenant", "trim", "uppercase", "url"];
 type Keys = typeof NUMBER_KEYS;
 type None = readonly [];
 /** The constraint keys each c helper takes, its constraint type's; a state machine is c.enum's own */
@@ -357,7 +356,6 @@ export type ConstraintKeys = {
     readonly timestamp: Keys;
     readonly updatedAt: Keys;
 };
-export declare const CONSTRAINT_KEYS: ConstraintKeys;
 /**
  * A column's declared constraints, checked and with database's defaults applied. Throws on a key the
  * helper does not take, a value of the wrong type, two keys that contradict, or bounds no value
@@ -806,8 +804,8 @@ export { FILTER_GRAMMAR, DATABASE_META_KEY, DATABASE_META_VERSION, type EntityMe
  * Reading database's facts off a JSON Schema. Returns null, never throws: a refused or malformed
  * payload degrades to "no facts", never to a confident wrong answer. See docs/meta-contract.md §4.
  */
-import { isRecord } from "./read-indexes.ts";
 import { type EntityMeta, type DatabaseMeta, type QueryMeta } from "./contract.ts";
+import { isRecord } from "./read-indexes.ts";
 /** How readDatabaseMeta, readEntityMeta and readQueryMeta read a payload */
 type ReadOptions = {
     /**

@@ -27,76 +27,85 @@
  * A trigger on a reached table fires on both the emptying and the refill. That nets out only for
  * an FTS trigger, which deletes and re-adds the same entry, so any other trigger there is refused.
  */
-import type { ExtractedSchema } from "../migration-types.ts"
-import type { FtsState } from "./fts-migration.ts"
-import { extractSchema } from "./schema.ts"
-import { NO_TRANSACTION, readCopy } from "./rebuild-copy.ts"
-import { outsideTransaction } from "./atlas-header.ts"
-import { kept, quote, type Rebuild, rowidCopy } from "./rebuild-rowids.ts"
-import { codeOf } from "../../sql-lexer.ts"
-import { nameKey, QNAME } from "./sql-code.ts"
-import { splitSqlStatements } from "./sql-scan.ts"
 
-const KEEP = "_database_keep_"
+import { codeOf } from "../../sql-lexer.ts";
+import type { ExtractedSchema } from "../migration-types.ts";
+import { outsideTransaction } from "./atlas-header.ts";
+import type { FtsState } from "./fts-migration.ts";
+import { NO_TRANSACTION, readCopy } from "./rebuild-copy.ts";
+import { kept, quote, type Rebuild, rowidCopy } from "./rebuild-rowids.ts";
+import { extractSchema } from "./schema.ts";
+import { nameKey, QNAME } from "./sql-code.ts";
+import { splitSqlStatements } from "./sql-scan.ts";
 
-const keep = (table: string): string => quote(`${KEEP}${table}`)
-const literal = (text: string): string => `'${text.replaceAll("'", "''")}'`
+const KEEP = "_database_keep_";
+
+const keep = (table: string): string => quote(`${KEEP}${table}`);
+const literal = (text: string): string => `'${text.replaceAll("'", "''")}'`;
 
 /** A rebuild in a file: the indexes of its copy, its drop and its rename among the file's statements */
-type Located = Rebuild & { copy: number; drop: number; rename: number }
+type Located = Rebuild & { copy: number; drop: number; rename: number };
 
 // per-process-constant: the drop and the rename of an Atlas rebuild, composed once; its copy is readCopy's
-const DROP = /* @__PURE__ */ new RegExp(`^DROP TABLE (?:IF EXISTS )?(${QNAME})$`, "i")
+const DROP = /* @__PURE__ */ new RegExp(`^DROP TABLE (?:IF EXISTS )?(${QNAME})$`, "i");
+
 // per-process-constant: see above
-const RENAME = /* @__PURE__ */ new RegExp(`^ALTER TABLE (${QNAME}) RENAME TO (${QNAME})$`, "i")
+const RENAME = /* @__PURE__ */ new RegExp(`^ALTER TABLE (${QNAME}) RENAME TO (${QNAME})$`, "i");
 
 /** The rebuilds among a file's statements and their codes: a copy of `T` into `temp`, a drop of `T`, `temp` renamed to `T` */
 function locateRebuilds(statements: readonly string[], codes: readonly string[]): Located[] {
-	const copies = new Map<string, { copy: number; drop?: number | undefined; table: string }>()
-	const out: Located[] = []
-	for (const [i, code] of codes.entries()) {
-		const read = /^INSERT INTO\b/i.test(code) ? readCopy(statements[i] as string, () => "") : undefined
-		if (read !== undefined) copies.set(read.into, { copy: i, table: read.from })
-		const dropped = DROP.exec(code)?.[1]
-		const open = [...copies.values()].find((c) => c.table === nameKey(dropped ?? "", "sqlite") && c.drop === undefined)
-		if (dropped !== undefined && open !== undefined) open.drop = i
-		const [, temp, to] = RENAME.exec(code) ?? []
-		const copy = temp === undefined ? undefined : copies.get(nameKey(temp, "sqlite"))
-		if (copy?.drop !== undefined && copy.table === nameKey(to as string, "sqlite")) {
-			out.push({
-				copy: copy.copy,
-				drop: copy.drop,
-				rename: i,
-				table: copy.table,
-				temp: nameKey(temp as string, "sqlite"),
-			})
-			copies.delete(nameKey(temp as string, "sqlite"))
-		}
-	}
-	return out
+  const copies = new Map<string, { copy: number; drop?: number | undefined; table: string }>();
+  const out: Located[] = [];
+
+  for (const [i, code] of codes.entries()) {
+    const read = /^INSERT INTO\b/i.test(code) ? readCopy(statements[i] as string, () => "") : undefined;
+
+    if (read !== undefined) copies.set(read.into, { copy: i, table: read.from });
+    const dropped = DROP.exec(code)?.[1];
+    const open = [...copies.values()].find((c) => c.table === nameKey(dropped ?? "", "sqlite") && c.drop === undefined);
+
+    if (dropped !== undefined && open !== undefined) open.drop = i;
+    const [, temp, to] = RENAME.exec(code) ?? [];
+    const copy = temp === undefined ? undefined : copies.get(nameKey(temp, "sqlite"));
+
+    if (copy?.drop !== undefined && copy.table === nameKey(to as string, "sqlite")) {
+      out.push({
+        copy: copy.copy,
+        drop: copy.drop,
+        rename: i,
+        table: copy.table,
+        temp: nameKey(temp as string, "sqlite"),
+      });
+      copies.delete(nameKey(temp as string, "sqlite"));
+    }
+  }
+
+  return out;
 }
 
 /** The schema at a rebuild's copy: `before`, then the file's statements ahead of it */
 const schemaAt = (statements: readonly string[], { copy }: Located, before: ExtractedSchema): ExtractedSchema =>
-	extractSchema(statements.slice(0, copy).join(";\n"), before)
+  extractSchema(statements.slice(0, copy).join(";\n"), before);
 
 /** The statements a guard puts before Atlas's DROP TABLE and after its RENAME */
-type Guard = { after: string[]; before: string[] }
+type Guard = { after: string[]; before: string[] };
 
 /** The tables a drop of `table` reaches, breadth first: each with a foreign-key path to it */
 function reached(table: string, schema: ExtractedSchema): string[] {
-	const out: string[] = []
-	const seen = new Set([table])
-	const queue = [table]
-	for (let parent = queue.shift(); parent !== undefined; parent = queue.shift()) {
-		for (const key of schema.foreignKeys) {
-			if (key.parent !== parent || seen.has(key.table)) continue
-			seen.add(key.table)
-			out.push(key.table)
-			queue.push(key.table)
-		}
-	}
-	return out
+  const out: string[] = [];
+  const seen = new Set([table]);
+  const queue = [table];
+
+  for (let parent = queue.shift(); parent !== undefined; parent = queue.shift()) {
+    for (const key of schema.foreignKeys) {
+      if (key.parent !== parent || seen.has(key.table)) continue;
+      seen.add(key.table);
+      out.push(key.table);
+      queue.push(key.table);
+    }
+  }
+
+  return out;
 }
 
 /**
@@ -105,16 +114,20 @@ function reached(table: string, schema: ExtractedSchema): string[] {
  * order, the breadth-first order reversed
  */
 function childrenFirst(closure: readonly string[], schema: ExtractedSchema): string[] {
-	const members = new Set(closure)
-	const childrenOf = (table: string) =>
-		schema.foreignKeys.filter((key) => key.parent === table && key.table !== table && members.has(key.table))
-	const left = closure.toReversed()
-	const out: string[] = []
-	while (left.length > 0) {
-		const ready = left.findIndex((table) => childrenOf(table).every((key) => out.includes(key.table)))
-		out.push(...left.splice(Math.max(ready, 0), 1))
-	}
-	return out
+  const members = new Set(closure);
+
+  const childrenOf = (table: string) =>
+    schema.foreignKeys.filter((key) => key.parent === table && key.table !== table && members.has(key.table));
+
+  const left = closure.toReversed();
+  const out: string[] = [];
+
+  while (left.length > 0) {
+    const ready = left.findIndex((table) => childrenOf(table).every((key) => out.includes(key.table)));
+    out.push(...left.splice(Math.max(ready, 0), 1));
+  }
+
+  return out;
 }
 
 /**
@@ -122,62 +135,72 @@ function childrenFirst(closure: readonly string[], schema: ExtractedSchema): str
  * references the rebuilt one, so its drop reaches nothing
  */
 function guardOf(
-	{ table, temp }: Rebuild,
-	schema: ExtractedSchema,
-	{ deferred = false, legacy = false }: { deferred?: boolean | undefined; legacy?: boolean | undefined } = {},
+  { table, temp }: Rebuild,
+  schema: ExtractedSchema,
+  { deferred = false, legacy = false }: { deferred?: boolean | undefined; legacy?: boolean | undefined } = {},
 ): Guard | undefined {
-	const closure = reached(table, schema)
-	if (closure.length === 0) return undefined
-	const sequence = schema.tableInfo.get(table)?.autoincrement === true
-	const save = (t: string) => {
-		const { columns, rowid } = kept(t, schema, legacy)
-		return `CREATE TABLE ${keep(t)} AS SELECT ${[...(rowid ? ["rowid AS `_database_rowid`"] : []), ...columns].join(", ")} FROM ${quote(t)}`
-	}
-	const refill = (t: string) => {
-		const { columns, rowid } = kept(t, schema, legacy)
-		const into = [...(rowid ? ["rowid"] : []), ...columns].join(", ")
-		const from = [...(rowid ? ["`_database_rowid`"] : []), ...columns].join(", ")
-		return `INSERT INTO ${quote(t === temp ? table : t)} (${into}) SELECT ${from} FROM ${keep(t)}`
-	}
-	const name = literal(table)
-	const emptying = childrenFirst(closure, schema)
-	const before = [
-		/* the refill's keys checked at commit, whatever order a cycle leaves, unless the file deferred them already */
-		...(legacy || deferred ? [] : ["PRAGMA defer_foreign_keys = on"]),
-		...closure.map(save),
-		...(sequence ? [`CREATE TABLE ${keep(table)} AS SELECT seq FROM sqlite_sequence WHERE name = ${name}`] : []),
-		...emptying.map((t) => `DELETE FROM ${quote(t)}`),
-	]
-	const after = [
-		...[...closure.filter((t) => t === temp), ...emptying.toReversed().filter((t) => t !== temp)].map(refill),
-		...(sequence
-			? [
-					`UPDATE sqlite_sequence SET seq = max(seq, coalesce((SELECT seq FROM ${keep(table)}), 0)) WHERE name = ${name}`,
-					`INSERT INTO sqlite_sequence (name, seq) SELECT ${name}, seq FROM ${keep(table)} WHERE NOT EXISTS (SELECT 1 FROM sqlite_sequence WHERE name = ${name})`,
-				]
-			: []),
-		...[...closure, ...(sequence ? [table] : [])].map((t) => `DROP TABLE ${keep(t)}`),
-	]
-	return { after, before }
+  const closure = reached(table, schema);
+
+  if (closure.length === 0) return undefined;
+  const sequence = schema.tableInfo.get(table)?.autoincrement === true;
+
+  const save = (t: string) => {
+    const { columns, rowid } = kept(t, schema, legacy);
+
+    return `CREATE TABLE ${keep(t)} AS SELECT ${[...(rowid ? ["rowid AS `_database_rowid`"] : []), ...columns].join(", ")} FROM ${quote(t)}`;
+  };
+
+  const refill = (t: string) => {
+    const { columns, rowid } = kept(t, schema, legacy);
+    const into = [...(rowid ? ["rowid"] : []), ...columns].join(", ");
+    const from = [...(rowid ? ["`_database_rowid`"] : []), ...columns].join(", ");
+
+    return `INSERT INTO ${quote(t === temp ? table : t)} (${into}) SELECT ${from} FROM ${keep(t)}`;
+  };
+
+  const name = literal(table);
+  const emptying = childrenFirst(closure, schema);
+
+  const before = [
+    // the refill's keys checked at commit, whatever order a cycle leaves, unless the file deferred them already
+    ...(legacy || deferred ? [] : ["PRAGMA defer_foreign_keys = on"]),
+    ...closure.map(save),
+    ...(sequence ? [`CREATE TABLE ${keep(table)} AS SELECT seq FROM sqlite_sequence WHERE name = ${name}`] : []),
+    ...emptying.map((t) => `DELETE FROM ${quote(t)}`),
+  ];
+
+  const after = [
+    ...[...closure.filter((t) => t === temp), ...emptying.toReversed().filter((t) => t !== temp)].map(refill),
+    ...(sequence
+      ? [
+          `UPDATE sqlite_sequence SET seq = max(seq, coalesce((SELECT seq FROM ${keep(table)}), 0)) WHERE name = ${name}`,
+          `INSERT INTO sqlite_sequence (name, seq) SELECT ${name}, seq FROM ${keep(table)} WHERE NOT EXISTS (SELECT 1 FROM sqlite_sequence WHERE name = ${name})`,
+        ]
+      : []),
+    ...[...closure, ...(sequence ? [table] : [])].map((t) => `DROP TABLE ${keep(t)}`),
+  ];
+
+  return { after, before };
 }
 
 /** The trigger names database's FTS groups own in `fts` */
 const ftsTriggers = (fts: FtsState | undefined): Set<string> =>
-	new Set([...(fts ?? [])].filter(([, object]) => object.kind === "trigger").map(([name]) => name))
+  new Set([...(fts ?? [])].filter(([, object]) => object.kind === "trigger").map(([name]) => name));
 
 /** A trigger a guard fires as it empties and refills a table */
-type Fired = { table: string; trigger: string }
+type Fired = { table: string; trigger: string };
 
 /** A trigger on the rebuilt table or a table its guard empties, one `synced` names aside: the guard fires it */
 function firedBy(table: string, schema: ExtractedSchema, synced: (name: string) => boolean): Fired | undefined {
-	const tables = new Set([table, ...reached(table, schema)])
-	const trigger = schema.triggers.find((t) => tables.has(t.table) && !synced(t.name))
-	return trigger === undefined ? undefined : { table: trigger.table, trigger: trigger.name }
+  const tables = new Set([table, ...reached(table, schema)]);
+  const trigger = schema.triggers.find((t) => tables.has(t.table) && !synced(t.name));
+
+  return trigger === undefined ? undefined : { table: trigger.table, trigger: trigger.name };
 }
 
 /** Why a rebuild's guard cannot keep `fired`'s table whole */
 const firesMessage = (table: string, { table: on, trigger }: Fired): string =>
-	`empties and refills ${on}, which fires its trigger ${trigger}; drop the trigger first, or change ${table} by hand`
+  `empties and refills ${on}, which fires its trigger ${trigger}; drop the trigger first, or change ${table} by hand`;
 
 /**
  * Refuses a rebuild the guard cannot keep whole, naming what stops it: a table already using the
@@ -185,29 +208,34 @@ const firesMessage = (table: string, { table: on, trigger }: Fired): string =>
  * than an FTS one on the rebuilt table or a reached one
  */
 function refuseUnguardable({ table }: Rebuild, schema: ExtractedSchema, fts: FtsState | undefined): void {
-	const reserved = [...schema.tables.keys()].find((name) => name.startsWith(KEEP))
-	if (reserved !== undefined) {
-		throw new Error(
-			`the schema has a table named ${reserved}; database's guard around a table rebuild reserves the ${KEEP} prefix`,
-		)
-	}
-	const closure = reached(table, schema)
-	const unknown = closure.find((t) => !schema.tables.has(t) || !schema.tableInfo.has(t))
-	if (unknown !== undefined) {
-		throw new Error(`a rebuild of ${table} reaches ${unknown}, whose columns the migrations do not show`)
-	}
-	const owned = ftsTriggers(fts)
-	const fired = firedBy(table, schema, (name) => owned.has(name))
-	if (fired !== undefined) throw new Error(`a rebuild of ${table} ${firesMessage(table, fired)}`)
+  const reserved = [...schema.tables.keys()].find((name) => name.startsWith(KEEP));
+
+  if (reserved !== undefined) {
+    throw new Error(
+      `the schema has a table named ${reserved}; database's guard around a table rebuild reserves the ${KEEP} prefix`,
+    );
+  }
+
+  const closure = reached(table, schema);
+  const unknown = closure.find((t) => !schema.tables.has(t) || !schema.tableInfo.has(t));
+
+  if (unknown !== undefined)
+    throw new Error(`a rebuild of ${table} reaches ${unknown}, whose columns the migrations do not show`);
+
+  const owned = ftsTriggers(fts);
+  const fired = firedBy(table, schema, (name) => owned.has(name));
+
+  if (fired !== undefined) throw new Error(`a rebuild of ${table} ${firesMessage(table, fired)}`);
 }
 
 /** Whether the statements before `at` leave the file's foreign-key checks deferred: its last defer pragma set on */
 function deferredAt(codes: readonly string[], at: number): boolean {
-	const set = codes
-		.slice(0, at)
-		.map((code) => /^PRAGMA (?:main\.)?defer_foreign_keys ?= ?(\w+)$/i.exec(code.trim())?.[1])
-		.findLast((value) => value !== undefined)
-	return set !== undefined && /^(?:on|true|1|yes)$/i.test(set)
+  const set = codes
+    .slice(0, at)
+    .map((code) => /^PRAGMA (?:main\.)?defer_foreign_keys ?= ?(\w+)$/i.exec(code.trim())?.[1])
+    .findLast((value) => value !== undefined);
+
+  return set !== undefined && /^(?:on|true|1|yes)$/i.test(set);
 }
 
 /**
@@ -216,48 +244,45 @@ function deferredAt(codes: readonly string[], at: number): boolean {
  * rebuild it cannot guard. Without `before`, or with no such rebuild, `sql` comes back unchanged.
  */
 function guardRebuilds(sql: string, before: ExtractedSchema | undefined, fts?: FtsState): string {
-	const statements = splitSqlStatements(sql)
-	const codes = statements.map((stmt) => codeOf(stmt, "sqlite"))
-	const rebuilds = before === undefined ? [] : locateRebuilds(statements, codes)
-	if (rebuilds.length > 0 && outsideTransaction(sql)) {
-		throw new Error(`${NO_TRANSACTION}: the file rebuilds ${rebuilds.map(({ table }) => table).join(", ")}`)
-	}
-	/* by statement index: what goes before a rebuild's drop, after its rename, and in place of its copy */
-	const ahead = new Map<number, string[]>()
-	const behind = new Map<number, string[]>()
-	const copies = new Map<number, string>()
-	for (const rebuild of rebuilds) {
-		const schema = schemaAt(statements, rebuild, before as ExtractedSchema)
-		const copy = rowidCopy(
-			{ code: codes[rebuild.copy] as string, stmt: statements[rebuild.copy] as string },
-			rebuild,
-			schema,
-		)
-		if (copy !== undefined) copies.set(rebuild.copy, copy)
-		const guard = guardOf(rebuild, schema, { deferred: deferredAt(codes, rebuild.drop) })
-		if (guard === undefined) continue
-		refuseUnguardable(rebuild, schema, fts)
-		ahead.set(rebuild.drop, guard.before)
-		behind.set(rebuild.rename, guard.after)
-	}
-	if (ahead.size === 0 && copies.size === 0) return sql
-	const out = statements.flatMap((stmt, i) => [
-		...(ahead.get(i) ?? []),
-		copies.get(i) ?? stmt,
-		...(behind.get(i) ?? []),
-	])
-	return `${out.join(";\n")};\n`
+  const statements = splitSqlStatements(sql);
+  const codes = statements.map((stmt) => codeOf(stmt, "sqlite"));
+  const rebuilds = before === undefined ? [] : locateRebuilds(statements, codes);
+
+  if (rebuilds.length > 0 && outsideTransaction(sql))
+    throw new Error(`${NO_TRANSACTION}: the file rebuilds ${rebuilds.map(({ table }) => table).join(", ")}`);
+
+  // by statement index: what goes before a rebuild's drop, after its rename, and in place of its copy
+  const ahead = new Map<number, string[]>();
+  const behind = new Map<number, string[]>();
+  const copies = new Map<number, string>();
+
+  for (const rebuild of rebuilds) {
+    const schema = schemaAt(statements, rebuild, before as ExtractedSchema);
+
+    const copy = rowidCopy(
+      { code: codes[rebuild.copy] as string, stmt: statements[rebuild.copy] as string },
+      rebuild,
+      schema,
+    );
+
+    if (copy !== undefined) copies.set(rebuild.copy, copy);
+    const guard = guardOf(rebuild, schema, { deferred: deferredAt(codes, rebuild.drop) });
+
+    if (guard === undefined) continue;
+    refuseUnguardable(rebuild, schema, fts);
+    ahead.set(rebuild.drop, guard.before);
+    behind.set(rebuild.rename, guard.after);
+  }
+
+  if (ahead.size === 0 && copies.size === 0) return sql;
+
+  const out = statements.flatMap((stmt, i) => [
+    ...(ahead.get(i) ?? []),
+    copies.get(i) ?? stmt,
+    ...(behind.get(i) ?? []),
+  ]);
+
+  return `${out.join(";\n")};\n`;
 }
 
-export {
-	deferredAt,
-	firedBy,
-	firesMessage,
-	type Guard,
-	guardOf,
-	guardRebuilds,
-	type Located,
-	locateRebuilds,
-	reached,
-	schemaAt,
-}
+export { deferredAt, firedBy, firesMessage, type Guard, guardOf, guardRebuilds, locateRebuilds, reached, schemaAt };

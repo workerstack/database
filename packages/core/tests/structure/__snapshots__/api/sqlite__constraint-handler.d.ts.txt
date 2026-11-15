@@ -1,4 +1,9 @@
 // sqlite/constraint-handler.d.ts
+/**
+ * SQLite constraint violations mapped to DatabaseErrors, one handler per extended result code.
+ * Shared by the libsql, bun:sqlite and D1 handlers: the engine is the same, only the way the
+ * driver carries the code differs, and `readSqliteError` absorbs that.
+ */
 import { DatabaseError } from "../error.ts";
 import { type ConstraintMap } from "../types.ts";
 import { resourceOutcome } from "./resource-outcome.ts";
