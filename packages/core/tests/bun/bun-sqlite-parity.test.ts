@@ -21,6 +21,7 @@ import { sqliteErrorHandler } from "../../src/sqlite/constraint-handler.ts"
 import type { ConstraintMap } from "../../src/types.ts"
 import { SEALED } from "../../src/query/__fixtures__/cursor-secret.ts"
 import { built } from "../../src/query/__fixtures__/built.ts"
+import { ELSEWHERE_CASES, ELSEWHERE_DDL, ELSEWHERE_MAPS } from "../integration/support/elsewhere-constraints.ts"
 import { acquirePgRunLock, PG_LOCK_WAIT_MS } from "../support/pg-lock.ts"
 import { pgUrl } from "../support/pg-url.ts"
 
@@ -315,5 +316,25 @@ describe("bun:sqlite answers a trigger's RAISE as libsql does", () => {
 			}
 		}
 		expect(thrown).toMatchObject({ cause: "qty must be positive", errorKey: "constraint_violation", status: 400 })
+	})
+})
+
+/* QE1 and QE2 of r23 on bun:sqlite: a constraint that fails in a row other than the statement's own */
+describe("bun:sqlite answers a constraint failing in another row as libsql does (QE1, QE2 of r23)", () => {
+	it.each([...ELSEWHERE_CASES])("answers $label", ({ expected, statement }) => {
+		const sqlite = new Database(":memory:")
+		for (const ddl of ELSEWHERE_DDL) sqlite.run(ddl)
+		let thrown: unknown
+		try {
+			drizzle({ client: sqlite }).run(sql.raw(statement))
+		} catch (error) {
+			try {
+				sqliteErrorHandler(error, ELSEWHERE_MAPS)
+			} catch (mapped) {
+				thrown = mapped
+			}
+		}
+		sqlite.close()
+		expect(thrown).toMatchObject(expected)
 	})
 })

@@ -151,10 +151,12 @@ function keyTextsOf(list: Finish, keys: readonly SortKey[]): ListExtras {
 /**
  * The extra that carries each stored value a key the list reads back holds apart from its read, a
  * SQLite key's value of a class its mode reads as another, a timestamp's TEXT or a boolean's value but
- * 0 or 1 among them (textKeysSQL); none where no key is one
+ * 0 or 1 among them (textKeysSQL); none where no key is one. A merged list carries it too, though it
+ * binds its keys as read: the merge orders a row by it as its shard did, and refuses it only on the
+ * page that serves it
  */
 function textKeysOf(list: Finish, keys: readonly SortKey[]): ListExtras {
-	const held = (column: SQLWrapper) => heldApart(column) && !boundAsRead(list, column)
+	const held = (column: SQLWrapper) => heldApart(column) && (list.merged !== undefined || !boundAsRead(list, column))
 	if (list.dialect !== "sqlite" || !keys.some(({ column }) => held(column))) return {}
 	return { _cursorTextKeys: textKeysSQL(keys, held).as("_cursorTextKeys") }
 }

@@ -708,11 +708,12 @@ import type { Sql } from "./pg-replay-database.ts";
 /** Writes by shared catalog: how many rows the open transaction inserted, updated or deleted in each */
 type Writes = Map<string, number>;
 /**
- * Whether the server counts this backend's writes, which with `track_counts` off read as none, and
- * the open transaction's writes to each shared catalog, pg_shdepend aside
+ * Whether the server counts this backend's writes, which with `track_counts` off read as none,
+ * whether the open transaction is read-only, and its writes to each shared catalog, pg_shdepend aside
  */
 declare function counts(sql: Sql): Promise<{
     on: boolean;
+    readOnly: boolean;
     writes: Writes;
 }>;
 /** The writes in `after` that `before` does not account for, by catalog */

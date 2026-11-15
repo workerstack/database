@@ -50,7 +50,14 @@ describe("orderParamMeta", () => {
 			examples: ["a.desc", "a.asc"],
 			pattern: expect.stringContaining("{0,0}"),
 		})
-		expect(orderParamMeta([], 0).examples).toEqual([".desc", ".asc"])
+	})
+
+	/* CS3 of r23: no sort key published "Sortable: ." with examples no order could meet */
+	it("takes at least one sortable key", () => {
+		// @ts-expect-error a list with no sort field publishes no order param
+		expect(() => orderParamMeta([], 1)).toThrow(
+			new TypeError("orderParamMeta: sort must name a field; a list with no sort field publishes no order param"),
+		)
 	})
 })
 

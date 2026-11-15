@@ -32,7 +32,7 @@ import { type Held, holdStatement } from "./pg-held.ts"
 import { heldScans } from "./pg-validate.ts"
 import { preview } from "./classify-file.ts"
 import { eventFindings, kindOf } from "./pg-events.ts"
-import { dynamicOf, executedNodes, executeFindings, firedBy } from "./pg-execute.ts"
+import { dynamicOf, executedNodes, executeFindings, firedBy, followPrepared, type Prepared } from "./pg-execute.ts"
 import { followParentage, reachFindings, useFinding } from "./pg-reach.ts"
 import { staysPut } from "./pg-storage.ts"
 import { flag } from "./pg-nodes.ts"
@@ -55,8 +55,8 @@ type TreeContext = {
 	fresh: Fresh
 	/** the locks the open transaction holds to its COMMIT, and what it made */
 	held: Held
-	/** the query each PREPARE so far holds, by the name Postgres keys it under, which an EXECUTE runs */
-	preparing: Map<string, Node>
+	/** the file's prepared statements so far, which an EXECUTE runs (pg-execute.ts) */
+	preparing: Prepared
 	/** the file's first statement so far that may PREPARE as it runs, named (pg-execute.ts) */
 	dynamic?: string | undefined
 	/** the temp relations the file made so far, which its later unqualified names resolve to (pg-temps.ts) */
@@ -260,14 +260,14 @@ function pgTreeFindings(
 		return { findings: [{ level: "unsafe", note }], grammar: { treeRated: true } }
 	}
 	const raws = tree.stmts as Array<{ stmt: Node }>
-	const nodes = executedNodes(raws, ctx.preparing)
+	const nodes = executedNodes(raws, ctx.preparing.queries)
 	const tops = raws.map((raw) => Object.entries(raw.stmt)[0] as [string, Node])
 	/* a DDL statement's event trigger runs before an EXECUTE under it looks its name up */
 	const dynamic = ctx.dynamic ?? firedBy(tops)
 	const findings = nodes.flatMap(([type, node]) => {
 		if (WRITES.test(type)) return writeFindings(type, node, ctx)
 		if (type === "ExecuteStmt")
-			return refusingAs(stmt, () => executeFindings(node, { dynamic, preparing: ctx.preparing }))
+			return refusingAs(stmt, () => executeFindings(node, { dynamic, prepared: ctx.preparing }))
 		return [
 			...(refusingAs(stmt, () => ddlFindings(type, node, ctx.facts)) ?? []),
 			...(type === "AlterTableStmt" ? [...constraintIndexWarnings(node, ctx), ...heldScans(node, ctx)] : []),
@@ -278,7 +278,7 @@ function pgTreeFindings(
 	/* the locks the statement takes last to its transaction's COMMIT, read before the history follows it */
 	for (const [type, node] of tops) {
 		holdStatement(type, node, ctx)
-		if (type === "PrepareStmt") ctx.preparing.set(String(node["name"]), node["query"] as Node)
+		followPrepared(type, node, ctx.preparing)
 	}
 	/* what the statement made new, attached and reparented counts for the statements after it */
 	for (const [type, node] of nodes) {

@@ -148,6 +148,11 @@ async function commit(run: Run, at: At): Promise<void> {
 	const { name, sent, stops } = at
 	/* two connections, one moment before COMMIT: the counts on the replay's, the committed catalogs on admin's, a round trip saved */
 	const [now, read] = await Promise.all([counts(run.sql), snapshot(run.admin)])
+	/* Atlas writes a file's revision in the file's transaction, after its statements: a read-only one refuses it */
+	if (sent === undefined && now.readOnly)
+		throw new ReplayFailed(
+			`${name}: write revision: cannot execute INSERT in a read-only transaction (25006): the file leaves its transaction read-only, and Atlas writes the file's revision in that transaction, so apply would fail there; drop the statement that makes it read-only; ${stops}`,
+		)
 	/* a superuser's file can turn the counts off for its transaction or its session */
 	if (!now.on)
 		throw new ReplayFailed(
@@ -177,15 +182,33 @@ async function commit(run: Run, at: At): Promise<void> {
 // lookup-table: the codes Postgres refuses a statement with in a transaction block that it runs bare: an outside-only class (25001), a COMMIT inside a DO block or a procedure (2D000)
 const BARE_ONLY: ReadonlySet<unknown> = /* @__PURE__ */ new Set(["25001", "2D000"])
 
+/* each sequence of the replay's database, its last value null until a nextval: a trial's advance survives its ROLLBACK */
+const SEQUENCES =
+	"SELECT format('%I.%I', schemaname, sequencename) AS name, start_value::text AS start, last_value::text AS last FROM pg_sequences"
+
+type Sequence = { last: string | null; name: string; start: string }
+
+/** Set back each sequence of `before` a rolled-back trial advanced, so the bare run takes the values apply's does */
+async function rewind(run: Run, before: readonly Sequence[]): Promise<void> {
+	const now = new Map(((await run.sql.unsafe(SEQUENCES, [])) as Sequence[]).map(({ last, name }) => [name, last]))
+	for (const { last, name, start } of before)
+		if (now.has(name) && now.get(name) !== last)
+			await run.sql.unsafe("SELECT setval($1::regclass, $2::bigint, $3)", [name, last ?? start, last !== null])
+}
+
+// lookup-table: the statements that run code, which may advance a sequence before Postgres refuses their COMMIT in a block
+const RUNS_CODE: ReadonlySet<string> = /* @__PURE__ */ new Set(["CallStmt", "DoStmt"])
+
 /**
  * A statement of a `txmode none` file `send` runs, first in a transaction of its own, refused before
  * its COMMIT as a file's is: a change it makes past its database never
  * commits. Postgres refuses only an outside-only class and a COMMIT inside a DO block or a procedure
- * in a block; that try rolled back whole, so it runs bare, as Atlas sends it, with the server's
- * catalogs read around it
+ * in a block; that try rolled back whole, each sequence it advanced set back, so it runs bare, as
+ * Atlas sends it, with the server's catalogs read around it
  */
-async function guarded(run: Run, at: At, send: () => Promise<void>): Promise<void> {
+async function guarded(run: Run, at: At, { send, type }: { send: () => Promise<void>; type: string }): Promise<void> {
 	await begin(run)
+	const before = RUNS_CODE.has(type) ? ((await run.sql.unsafe(SEQUENCES, [])) as Sequence[]) : undefined
 	const refused = await send().then(
 		() => undefined,
 		(error: unknown) => error,
@@ -193,6 +216,7 @@ async function guarded(run: Run, at: At, send: () => Promise<void>): Promise<voi
 	if (refused === undefined) return commit(run, at)
 	if (!BARE_ONLY.has((refused as { cause?: { code?: unknown } | undefined }).cause?.code)) throw refused
 	await run.sql.unsafe("ROLLBACK", [])
+	if (before !== undefined) await rewind(run, before)
 	await send()
 	return window(run, at)
 }

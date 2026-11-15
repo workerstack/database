@@ -1163,11 +1163,10 @@ export { carried, CursorRef, decodeId, decodeValue, encodeValue, RealText, realT
 import * as z from "zod";
 import { baseListQueryShape } from "./schema-params.ts";
 import type { ListQueryConfig, ListQueryOutput, OutputStableShape } from "./schema-types.ts";
-/** The params beside cursor, page and limit; each but `order` is present only where the config declares it */
-type OptionalShape = {
-    /** the sort, `field[.asc|.desc][.nullsfirst|.nullslast]` keys joined by commas */
+/** The params beside cursor, page and limit, each present only where the config declares it */
+type OptionalShape = Partial<{
+    /** the sort, `field[.asc|.desc][.nullsfirst|.nullslast]` keys joined by commas, present where the config's `sort` names a field */
     order: z.ZodOptional<z.ZodString>;
-} & Partial<{
     /** the filter expression, present where the config's `filter` names a field */
     filter: z.ZodOptional<z.ZodString>;
     /** the search text, present where the config has `search` */

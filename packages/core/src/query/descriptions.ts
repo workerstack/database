@@ -7,7 +7,7 @@
  * same config that validates the request, so the text cannot drift from what
  * the parser accepts — and stays when a publisher strips `x-*` extensions.
  */
-import { type FilterLimits, orderPattern } from "./filter.ts"
+import { type FilterLimits, orderPattern, validateFilter } from "./filter.ts"
 import { REQUEST_BYTES } from "./schema-limits.ts"
 import type { FieldsConfig } from "./schema-types.ts"
 import type { FieldType, FilterOperator } from "./types.ts"
@@ -107,7 +107,8 @@ function sampleCondition(field: string, type: FieldType): string {
 
 /**
  * The `filter` param's OpenAPI text: its grammar, each field with the operators its type takes, and
- * `limits`. Its examples are built from the first fields, so each parses on this endpoint
+ * `limits`. Its examples are built from the first fields, and each is kept only where it passes this
+ * endpoint's own fields and limits
  */
 function filterParamMeta(
 	fields: Record<string, FieldType>,
@@ -130,18 +131,23 @@ function filterParamMeta(
 	if (text) examples.add(sampleCondition(text[0], "string"))
 	if (samples.length > 1) examples.add(`or(${samples[0]},${samples[1]})`)
 
-	return { description, examples: [...examples] }
+	return {
+		description,
+		examples: [...examples].filter((example) => validateFilter(example, fields, limits)?.valid === true),
+	}
 }
 
 /** The `order` param's OpenAPI text over the sortable fields in `sort`, the first of which is the default, descending */
 function orderParamMeta(
-	sort: readonly string[],
+	sort: readonly [string, ...string[]],
 	maxSortKeys: number,
 ): ParamMeta & {
 	/** a regular expression matching every `order` this endpoint takes, up to `maxSortKeys` keys */
 	pattern: string
 } {
-	const [first = "", second] = sort
+	const [first, second] = sort
+	if (first === undefined)
+		throw new TypeError("orderParamMeta: sort must name a field; a list with no sort field publishes no order param")
 	return {
 		description: [
 			`Sort keys, comma-separated, each \`field[.asc|.desc][.nullsfirst|.nullslast]\` and each field at most once; at most ${maxSortKeys}.`,
@@ -156,11 +162,15 @@ function orderParamMeta(
 	}
 }
 
-/** The `q` param's OpenAPI text over the fields in `search`, with at most `maxTerms` words */
+// lookup-table: the `q` examples, by their number of terms
+/** The `q` param's examples, a search of one term and one of two */
+const SEARCH_EXAMPLES = ["acme", "acme corp"] as const
+
+/** The `q` param's OpenAPI text over the fields in `search`, with at most `maxTerms` words, which its examples keep to */
 function searchParamMeta(search: readonly string[], maxTerms: number): ParamMeta {
 	return {
 		description: `Free-text search over: ${search.join(", ")}. Whitespace-separated terms must all match; at most ${maxTerms} terms, and at most ${REQUEST_BYTES.q} bytes however a URL or a form encodes it.`,
-		examples: ["acme", "acme corp"],
+		examples: SEARCH_EXAMPLES.filter((example) => example.split(" ").length <= maxTerms),
 	}
 }
 

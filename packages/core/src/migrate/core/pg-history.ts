@@ -20,6 +20,7 @@ import { followIdentity, followSequence, owned } from "./pg-owned.ts"
 import { followForeign } from "./pg-foreign.ts"
 import { followIndexes } from "./pg-indexes.ts"
 import { followPartitioned } from "./pg-partitioned.ts"
+import { followTaken } from "./pg-taken.ts"
 import { followRoutine } from "./pg-routines.ts"
 import type { Placing } from "./pg-storage-types.ts"
 import { followStorage, placeStorage } from "./pg-storage.ts"
@@ -76,8 +77,9 @@ function followPartition(table: string, cmd: Node, facts: Facts): void {
 		facts.parents.delete(child)
 		return
 	}
-	facts.parents.set(child, [...(facts.parents.get(child) ?? []), { parent: table, partition: true }])
-	if (flag((partition["bound"] as Node | undefined)?.["is_default"])) facts.defaultPartitions.set(table, child)
+	const bound = partition["bound"] as Node | undefined
+	facts.parents.set(child, [...(facts.parents.get(child) ?? []), { bound, parent: table, partition: true }])
+	if (flag(bound?.["is_default"])) facts.defaultPartitions.set(table, child)
 }
 
 /** A CREATE TABLE: its parents, its columns, its checks, and what a table it is LIKE runs */
@@ -87,13 +89,13 @@ function followCreate(node: Node, facts: Facts): void {
 	const parents = ((node["inhRelations"] as Node[] | undefined) ?? []).map(
 		(each) => tableOf(each["RangeVar"], facts.schema).key,
 	)
+	const bound = node["partbound"] as Node | undefined
 	if (parents.length > 0)
 		facts.parents.set(
 			table,
-			parents.map((parent) => ({ parent, partition: node["partbound"] !== undefined })),
+			parents.map((parent) => ({ bound, parent, partition: bound !== undefined })),
 		)
-	if (flag((node["partbound"] as Node | undefined)?.["is_default"]))
-		facts.defaultPartitions.set(parents[0] as string, table)
+	if (flag(bound?.["is_default"])) facts.defaultPartitions.set(parents[0] as string, table)
 	for (const element of (node["tableElts"] as Node[] | undefined) ?? []) {
 		if (element["ColumnDef"] !== undefined) followColumn(table, element["ColumnDef"] as Node, facts)
 		const check =
@@ -240,6 +242,7 @@ function followTree(stmts: unknown, facts: Facts): void {
 		followReads(type, node, facts)
 		followDomainName(type, node, facts)
 		followPartitioned(type, node, facts)
+		followTaken(type, node, facts)
 		followIndexes(type, node, facts)
 		followForeign(type, node, facts)
 		followRoutine(type, node, facts)

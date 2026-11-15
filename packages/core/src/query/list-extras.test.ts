@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { carriedTexts, malformed, typedKeys } from "./list-extras.ts"
+import { carriedTexts, cursorKeys, malformed, refuseUnheld, typedKeys } from "./list-extras.ts"
 import type { SortField } from "./types.ts"
 
 const SORT: SortField[] = [
@@ -205,7 +205,8 @@ describe("typedKeys, carriedTexts and malformed: _cursorTextKeys (B2-3 of area B
 })
 
 /* AB4-2 of area B: an as-read list marks a value of a class its mode reads as another `!` and the class */
-describe("typedKeys: a stored class an as-read list marks (AB3-2, AB4-2 of area B; sibling: _cursorTextKeys)", () => {
+/* QL17 of r23: typedKeys refused such a row, so a merged list refused every page while any shard read one */
+describe("refuseUnheld and cursorKeys: a stored class an as-read list marks (AB3-2, AB4-2 of area B; QL17 of r23)", () => {
 	it("answers a 500 naming the key and the class it stores, under the classes or none", () => {
 		for (const stored of ["text", "integer", "real", "blob"]) {
 			const cause = expect.stringContaining(
@@ -220,23 +221,27 @@ describe("typedKeys: a stored class an as-read list marks (AB3-2, AB4-2 of area 
 					k: false,
 					name: "a",
 				},
-			])
-				expect(() => typedKeys(row, SORT), stored).toThrow(
-					expect.objectContaining({ cause, errorKey: "sort_not_wired", status: 500 }),
-				)
+			]) {
+				for (const refuse of [refuseUnheld, cursorKeys])
+					expect(() => refuse(row, SORT), stored).toThrow(
+						expect.objectContaining({ cause, errorKey: "sort_not_wired", status: 500 }),
+					)
+				/* the merge reads the row's keys for its order, which refuses nothing */
+				expect(() => typedKeys(row, SORT), stored).not.toThrow()
+			}
 		}
 	})
 
 	it("names the first key so marked, and takes a mark of no storage class for no refusal", () => {
 		const both = { _cursorId: 1, _cursorKeyTexts: "!text,!blob", k: false, name: "a" }
-		expect(() => typedKeys(both, SORT)).toThrow(
+		expect(() => refuseUnheld(both, SORT)).toThrow(
 			expect.objectContaining({ cause: expect.stringMatching(/^k stores a TEXT/) }),
 		)
 		const second = { _cursorId: 1, _cursorKeyTexts: ",!blob", k: 1, name: "a" }
-		expect(() => typedKeys(second, SORT)).toThrow(
+		expect(() => refuseUnheld(second, SORT)).toThrow(
 			expect.objectContaining({ cause: expect.stringMatching(/^name stores a BLOB/) }),
 		)
-		expect(() => typedKeys({ _cursorId: 1, _cursorKeyTexts: "text,", k: 1, name: "a" }, SORT)).not.toThrow()
+		expect(() => refuseUnheld({ _cursorId: 1, _cursorKeyTexts: "text,", k: 1, name: "a" }, SORT)).not.toThrow()
 	})
 })
 

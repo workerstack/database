@@ -9,6 +9,7 @@ import { filterParamMeta, orderParamMeta, searchParamMeta } from "./descriptions
 import { OPERATORS_BY_TYPE } from "./filter.ts"
 import { limitsOver } from "./filter-validate.ts"
 import { listQueryStamp, tiebreakOf } from "./list-meta.ts"
+import { refuseUnspelledNames } from "./list-names.ts"
 import { filterAstOf, parsedSortOf, reportOutputIssues, sortOrderByOf } from "./list-transform.ts"
 import { encodedMessage, LIST_QUERY_LIMITS, PAGINATION_DEFAULTS, REQUEST_BYTES, withinBytes } from "./schema-limits.ts"
 import {
@@ -31,11 +32,10 @@ import type { FieldType } from "./types.ts"
 type AdvertisedConfig = Pick<ListQueryConfig, "fields" | "filter" | "lang" | "search" | "sort">
 
 // Partial, not `?:`, as a zod shape's key is absent or a schema, never undefined
-/** The params beside cursor, page and limit; each but `order` is present only where the config declares it */
-type OptionalShape = {
-	/** the sort, `field[.asc|.desc][.nullsfirst|.nullslast]` keys joined by commas */
+/** The params beside cursor, page and limit, each present only where the config declares it */
+type OptionalShape = Partial<{
+	/** the sort, `field[.asc|.desc][.nullsfirst|.nullslast]` keys joined by commas, present where the config's `sort` names a field */
 	order: z.ZodOptional<z.ZodString>
-} & Partial<{
 	/** the filter expression, present where the config's `filter` names a field */
 	filter: z.ZodOptional<z.ZodString>
 	/** the search text, present where the config has `search` */
@@ -88,13 +88,18 @@ function optionalShapeFor(config: AdvertisedConfig, limits: ListQueryLimits): Op
 			})
 			.optional()
 			.meta(searchParamMeta(terms, limits.maxSearchTerms))
+	const [first, ...rest] = config.sort
 	return {
-		order: z
-			.string()
-			.max(200)
-			.refine(withinBytes(REQUEST_BYTES.order), { message: encodedMessage(REQUEST_BYTES.order) })
-			.optional()
-			.meta(orderParamMeta(config.sort, limits.maxSortKeys)),
+		...(first === undefined
+			? {}
+			: {
+					order: z
+						.string()
+						.max(200)
+						.refine(withinBytes(REQUEST_BYTES.order), { message: encodedMessage(REQUEST_BYTES.order) })
+						.optional()
+						.meta(orderParamMeta([first, ...rest], limits.maxSortKeys)),
+				}),
 		...(Object.keys(filterConfig).length > 0 ? { filter } : {}),
 		...(search ? { q: q(search) } : {}),
 		...(config.lang ? { lang: langQueryField } : {}),
@@ -138,15 +143,43 @@ function outputSchemaFor(sortConfig: readonly string[], extendFields: Record<str
 }
 
 /**
- * The schema's limits over the defaults, each a whole number from 0, and maxSortKeys from 1: no
- * order could meet a cap of 0 sort keys, while the published pattern admits one
+ * The schema's limits over the defaults, each a whole number from 0, and from 1 each cap of a param
+ * the config declares: no order could meet a cap of 0 sort keys, no filter one of 0 conditions and no
+ * q one of 0 terms, while each param publishes examples
  */
-function listLimitsOf(given: ListQueryConfig["limits"]): ListQueryLimits {
+function listLimitsOf({ filter = EMPTY_OBJ, limits: given, search }: ListQueryConfig): ListQueryLimits {
 	const limits = limitsOver("createListQuerySchema", LIST_QUERY_LIMITS, given)
-	if (limits.maxSortKeys >= 1) return limits
-	throw new TypeError(
-		`createListQuerySchema: limits.maxSortKeys must be a whole number from 1; got ${limits.maxSortKeys}`,
-	)
+	const zero = (
+		[
+			["maxSortKeys", ""],
+			["maxConditions", Object.keys(filter).length > 0 ? " where filter names a field" : undefined],
+			["maxSearchTerms", search ? " where search names a field" : undefined],
+		] as const
+	).find(([key, where]) => where !== undefined && limits[key] < 1)
+	if (zero === undefined) return limits
+	const [key, where] = zero
+	throw new TypeError(`createListQuerySchema: limits.${key} must be a whole number from 1${where}; got ${limits[key]}`)
+}
+
+/** The optional params as the request object holds them: each one only where the config publishes it */
+type OptionalParams = {
+	filter?: string | undefined
+	order?: string | undefined
+	lang?: string | undefined
+	q?: string | undefined
+	select?: unknown
+}
+
+/**
+ * The config's limits, a whole number from 0 each, which the query stamp publishes and its reader
+ * holds to, once the config is one a request can meet: no sort or filter name its param cannot
+ * spell, and no `extend` key the schema owns
+ */
+function checkedLimits(config: ListQueryConfig): ListQueryLimits {
+	const limits = listLimitsOf(config)
+	refuseUnspelledNames(config.sort, Object.keys(config.filter ?? EMPTY_OBJ))
+	assertNotReserved("createListQuerySchema", config.extend as Record<string, z.ZodType> | undefined, RESERVED_LIST_KEYS)
+	return limits
 }
 
 /**
@@ -161,10 +194,8 @@ function createListQuerySchema<
 	type TSortField = TSortFields[number]
 	type ExtendedOutput = ListQueryOutput<TSortField> & { [K in keyof T]: z.infer<T[K]> }
 	const { extend: extendFields, fields: fieldsConfig, filter: filterConfig = EMPTY_OBJ, sort: sortConfig } = config
-	/* a whole number from 0 each: the query stamp publishes them, and its reader refuses any other */
-	const limits = listLimitsOf(config.limits)
+	const limits = checkedLimits(config)
 	const extensions = extendFields as Record<string, z.ZodType> | undefined
-	assertNotReserved("createListQuerySchema", extensions, RESERVED_LIST_KEYS)
 
 	const shape = {
 		...baseListQueryShape,
@@ -177,15 +208,13 @@ function createListQuerySchema<
 
 	const { maxLimit = PAGINATION_DEFAULTS.maxLimit, maxPage = PAGINATION_DEFAULTS.maxPage } = config.pagination ?? {}
 	const piped = schema.transform((data, ctx): ExtendedOutput => {
-		/* Optional params exist on `data` only when advertised above. */
-		const optional = data as {
-			filter?: string | undefined
-			lang?: string | undefined
-			q?: string | undefined
-			select?: unknown
-		}
+		const optional = data as OptionalParams
 		const filterAst = filterAstOf(optional.filter, { fields: filterConfig, limits }, ctx)
-		const parsedSort = parsedSortOf<TSortField>(data.order, { maxSortKeys: limits.maxSortKeys, sort: sortConfig }, ctx)
+		const parsedSort = parsedSortOf<TSortField>(
+			optional.order,
+			{ maxSortKeys: limits.maxSortKeys, sort: sortConfig },
+			ctx,
+		)
 		/* cursor takes precedence over page — both accepted gracefully */
 		const select = typeof optional.select === "string" ? optional.select : undefined
 		const output = {

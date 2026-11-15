@@ -8,6 +8,7 @@
  * src/migrate/core/pg-indexes.test.ts holds database's facts to these lists, and
  * tests/integration/postgres/index-names-oracle.test.ts holds these lists to Postgres 17.
  */
+import { TAKEN_CASES } from "./pg-index-cases-taken.ts"
 
 const P =
 	"CREATE TABLE p (id int NOT NULL, at date NOT NULL, note text) PARTITION BY RANGE (at);\nCREATE TABLE p1 PARTITION OF p FOR VALUES FROM ('2020-01-01') TO ('2021-01-01');\n"
@@ -462,6 +463,7 @@ const INDEX_CASES: readonly IndexCase[] = [
 		indexes: ["p1a_pkey on p1a constraint"],
 		label: "a partition's partition dropped with its grandparent",
 	},
+	...TAKEN_CASES,
 ]
 
 export { INDEX_CASES, type IndexCase }

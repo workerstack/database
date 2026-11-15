@@ -7,7 +7,7 @@ import { type Base, type Build, keyed, metaOf, plain } from "./build-types.ts"
 import type { SchemaType, SharedName } from "./dto-types.ts"
 import { generateExampleMeta } from "./example-meta.ts"
 import { CIDR, pgWriteRule } from "./pg-types.ts"
-import { sqliteWriteRule } from "./sqlite-types.ts"
+import { sqliteWritePattern, sqliteWriteRule } from "./sqlite-types.ts"
 import { isMutative, isRead } from "./schema-type.ts"
 import { STORABLE_TEXT_RULE } from "../../../storable-text.ts"
 import {
@@ -266,6 +266,9 @@ export function writeRules(field: FieldMeta, dialect: Build["dialect"]): WriteRu
 	if (one.enumValues !== null) return UNBOUNDED
 	if (isJson(one)) return { ...UNBOUNDED, maxBytes: one.constraints.maxBytes }
 	if (dialect === "postgres" && one.databaseKind === null && pgWriteRule(one) !== undefined) return UNBOUNDED
+	/* a plain SQLite column's own rule is the regex the DTO's chain checks */
+	const sqlite = dialect === "sqlite" && one.databaseKind === null ? sqliteWritePattern(one) : undefined
+	if (sqlite !== undefined) return { ...UNBOUNDED, patterns: [sqlite] }
 	if (isNumeric(one)) return { ...UNBOUNDED, ...numberRules(one, dialect) }
 	if (one.dataType === "boolean") return UNBOUNDED
 	const { max, min, patterns } = textRules(one.constraints, one)

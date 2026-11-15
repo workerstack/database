@@ -86,10 +86,15 @@ const goneFiles = (status: AtlasStatus, copy: string, why: Pick<Report, "elsewhe
 		.filter((revision) => fileOf(copy, revision.version) === revision.version)
 		.map((revision) => `${revision.version} was applied, and its file is gone or renamed${goneWhy(why)}`)
 
-/** How checkHistory reports: `scrub` for Atlas's text it prints, every decision read raw; `gone` takes a gone file's line, as status does; `unread`, why another schema's history could not be read */
+/**
+ * How checkHistory reports: `scrub` for Atlas's text it prints, every decision read raw; `gone` takes
+ * a gone file's line, and `unresumable` a pending txmode none file's that Atlas would not resume, as
+ * status does, which check and apply refuse; `unread`, why another schema's history could not be read
+ */
 type Report = {
 	elsewhere?: boolean | undefined
 	gone?: ((line: string) => void) | undefined
+	unresumable?: ((line: string) => void) | undefined
 	scrub(text: string): string
 	unread?: string | undefined
 }
@@ -140,9 +145,13 @@ const topOf = (applied: readonly AtlasRevision[]): { name: string; version: stri
  * transaction only while that file's version, compared as text, is the highest it recorded, and
  * otherwise runs the next file in its place and reports nothing pending. So `partial` below another
  * applied version is refused, and so is a pending txmode none file whose version sorts below one
- * applied or run before it, which a failure halfway would leave so
+ * applied or run before it, which a failure halfway would leave so; that one goes to `sink` when given
  */
-function refuseUnresumable(status: AtlasStatus, copy: string, partial: AtlasRevision | undefined): void {
+function refuseUnresumable(
+	status: AtlasStatus,
+	{ copy, partial }: { copy: string; partial: AtlasRevision | undefined },
+	sink: Report["unresumable"],
+): void {
 	let top = topOf(status.applied.filter((revision) => revision !== partial))
 	if (partial !== undefined && top !== undefined && partial.version < top.version)
 		throw new Error(
@@ -150,10 +159,11 @@ function refuseUnresumable(status: AtlasStatus, copy: string, partial: AtlasRevi
 		)
 	for (const file of status.pending) {
 		const late = top !== undefined && file.Version !== partial?.version && file.Version < top.version
-		if (late && outsideTransaction(readFileSync(join(copy, file.Name), "utf8")))
-			throw new Error(
-				`${file.Name} runs outside a transaction (atlas:txmode none), yet its version sorts below ${top?.name}'s, which runs before it, and Atlas resumes such a file only while its version is the highest applied, so a failure halfway would stay; rename it so its version sorts above ${top?.version} and run atlas migrate hash`,
-			)
+		if (late && outsideTransaction(readFileSync(join(copy, file.Name), "utf8"))) {
+			const line = `${file.Name} runs outside a transaction (atlas:txmode none), yet its version sorts below ${top?.name}'s, which runs before it, and Atlas resumes such a file only while its version is the highest applied, so a failure halfway would stay; rename it so its version sorts above ${top?.version} and run atlas migrate hash`
+			if (sink === undefined) throw new Error(line)
+			sink(line)
+		}
 		if (top === undefined || file.Version > top.version) top = { name: file.Name, version: file.Version }
 	}
 }
@@ -205,7 +215,7 @@ function resumable(partial: AtlasRevision, copy: string, scrub: Report["scrub"])
 function checkHistory(
 	status: AtlasStatus,
 	copy: string,
-	{ elsewhere, gone, scrub, unread }: Report,
+	{ elsewhere, gone, scrub, unread, unresumable }: Report,
 ): string | undefined {
 	const partial = status.applied.find((revision) => revision.applied < revision.total && revision.error !== "")
 	/* a renamed or gone file first: a file named before a gone one is the gone one's doing */
@@ -222,7 +232,7 @@ function checkHistory(
 	for (const line of missing) gone?.(line)
 	if (missing.length > 0) return partial === undefined ? undefined : stoppedAt(partial, copy, scrub)
 	refuseEdited(status, copy, partial)
-	refuseUnresumable(status, copy, partial)
+	refuseUnresumable(status, { copy, partial }, unresumable)
 	return partial === undefined ? undefined : resumable(partial, copy, scrub)
 }
 

@@ -67,3 +67,32 @@ describe("sqliteErrorHandler: a statement that changes a key other tables refere
 		})
 	})
 })
+
+/* QE2 of r23: a REPLACE deletes each row its values conflict with, and a row another table
+   references fails on the delete side with the message its own key's failure has */
+describe("sqliteErrorHandler: a REPLACE into a table others reference (QE2 of r23)", () => {
+	const REPLACES = [
+		'replace into "store" ("id", "owner_id") values (?, ?)',
+		'insert or replace into "store" ("id", "owner_id") values (?, ?)',
+		'INSERT  OR  REPLACE INTO "store" ("id", "owner_id") values (?, ?)',
+	]
+
+	it("answers the neutral cause, whose side failed unknown", () => {
+		for (const query of REPLACES) expect(fk(query), query).toMatchObject(NEUTRAL)
+	})
+
+	it("blames the row's own key on a table no one references (sibling)", () => {
+		expect(fk('replace into "team" ("id", "org_id") values (?, ?)')).toMatchObject({
+			column: "org_id",
+			errorKey: "team_org_missing",
+		})
+	})
+
+	it("keeps today's answer under a map that lists no referenced columns (sibling)", () => {
+		const unlisted: ConstraintMap[] = [
+			{ store: { foreignKey: { owner_id: { cause: "x", errorKey: "store_owner_missing" } } } },
+		]
+		for (const query of REPLACES)
+			expect(fk(query, unlisted), query).toMatchObject({ column: "owner_id", errorKey: "store_owner_missing" })
+	})
+})

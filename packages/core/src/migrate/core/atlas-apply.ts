@@ -253,8 +253,10 @@ async function statusWithAtlas(
 		if (status.applied.length === 0 && status.pending.length > 0)
 			await refuseUnclean({ exec: options.exec ?? run, target: options.target })
 		const missing: string[] = []
+		const unresumable: string[] = []
 		const halfway = checkHistory(status, copy, {
 			gone: (line) => missing.push(line),
+			unresumable: (line) => unresumable.push(line),
 			scrub: scrubbing(options.target),
 			unread: foreign.unread,
 			elsewhere: foreign.elsewhere,
@@ -263,7 +265,7 @@ async function statusWithAtlas(
 			`Applied: ${status.applied.length}${status.applied.length > 0 ? ` (up to ${lastVersion(status)})` : ""}`,
 		)
 		options.print(`Pending: ${status.pending.map((file) => file.Name).join(", ") || "none"}`)
-		for (const line of missing) options.print(line)
+		for (const line of [...missing, ...unresumable]) options.print(line)
 		if (halfway !== undefined) options.print(`${halfway}; migrate apply resumes after them`)
 		return {
 			applied: status.applied.map((revision) => fileOf(copy, revision.version)),

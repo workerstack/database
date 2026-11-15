@@ -59,8 +59,9 @@ describe("counts, writesSince and addWrites", () => {
 	})
 
 	it("reads track_counts off, and no row as off with no writes", async () => {
-		expect(await counts(countsOf({ on: "off", writes: {} }))).toEqual({ on: false, writes: new Map() })
-		expect(await counts(countsOf())).toEqual({ on: false, writes: new Map() })
+		expect(await counts(countsOf({ on: "off", writes: {} }))).toEqual({ on: false, readOnly: false, writes: new Map() })
+		expect(await counts(countsOf())).toEqual({ on: false, readOnly: false, writes: new Map() })
+		expect((await counts(countsOf({ on: "on", read_only: "on", writes: {} }))).readOnly).toBe(true)
 		await expect(refuseUncounted(countsOf({ on: "off", writes: {} }), "check stops")).rejects.toThrow(
 			/track_counts is off.*; check stops$/,
 		)

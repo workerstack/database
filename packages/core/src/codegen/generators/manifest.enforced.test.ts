@@ -5,6 +5,7 @@
  */
 import fs from "node:fs"
 import path from "node:path"
+import { RE2JS } from "re2js"
 import { afterAll, describe, expect, it } from "vitest"
 import * as z from "zod"
 import { tableOf } from "../__fixtures__/runtime.ts"
@@ -41,7 +42,8 @@ const COLUMNS: Record<string, string> = {
 /* what one dialect has alone: a boolean SQLite stores as an integer, a Postgres array, and plain Postgres types with a rule of their own */
 const ONLY: Record<"postgres" | "sqlite", Record<string, string>> = {
 	postgres: { real: 'real("real")', tags: 'c.text("tags", { max: 5 }).array()', uid: 'uuid("uid")' },
-	sqlite: { flag: 'integer("flag", { mode: "boolean" })' },
+	/* CS4 of r23: a plain numeric, which the DTO holds to the digits SQLite's NUMERIC reads back as sent */
+	sqlite: { flag: 'integer("flag", { mode: "boolean" })', p_num: 'numeric("p_num")' },
 }
 
 /* the plain Postgres columns whose rule is their type's, which `kind` names: none is stated, as an inet's union or a numeric's exclusive bounds fit no field */
@@ -117,12 +119,9 @@ describe("the manifest states what the DTO enforces (C2 of r20)", () => {
 			expect(of(false)).toEqual(published)
 			const none = { max: null, maxBytes: null, min: null, patterns: [] }
 			expect(of(true)).toEqual(dialect === "postgres" ? { real: none, uid: none } : {})
-			expect(id).toEqual({
-				max: 48,
-				maxBytes: null,
-				min: 1,
-				patterns: [String.raw`^[^\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]{1,48}$`],
-			})
+			/* CS5 of r23: the id's pattern as the DTO publishes it, its blanks as characters, which RE2 reads */
+			const owner = table.fields.find((field) => field.name === "owner") as FieldMeta
+			expect(id).toEqual({ max: 48, maxBytes: null, min: 1, patterns: enforced(publishedOf(owner, dialect)).patterns })
 			/* the cases the review named, stated outright */
 			/* a password column holds the hash: its declared bounds and pattern, none of database's own (C1 of r21) */
 			expect(stated["pw"]).toEqual({ max: 255, maxBytes: null, min: null, patterns: [] })
@@ -130,6 +129,21 @@ describe("the manifest states what the DTO enforces (C2 of r20)", () => {
 			expect([stated["email"]?.min, stated["required"]?.min, stated["doc"]?.maxBytes]).toEqual([6, 1, 16])
 		},
 	)
+})
+
+/* CS5 of r23: an RE2 reader (Go's regexp, Rust's regex) refused the id pattern's \u escapes on every table */
+describe("every manifest pattern compiles under RE2 (CS5 of r23)", () => {
+	it.each(["sqlite", "postgres"] as const)("on %s, with no \\u escape", (dialect) => {
+		const table = tableOf("kinds", { ...COLUMNS, ...ONLY[dialect] }, { dialect, scope: { Profile } })
+		const patterns = (buildManifest([table], "test", dialect).entities[0]?.columns ?? []).flatMap((column) =>
+			column.patterns.map(sourceOf),
+		)
+		expect(patterns.length).toBeGreaterThan(0)
+		for (const pattern of patterns) {
+			expect(pattern).not.toContain("\\u")
+			expect(() => RE2JS.compile(pattern), pattern).not.toThrow()
+		}
+	})
 })
 
 /*

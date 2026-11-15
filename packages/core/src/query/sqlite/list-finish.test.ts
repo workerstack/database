@@ -165,9 +165,10 @@ describe("finish's SQLite timestamp keys holding TEXT (B2-3 of area B)", () => {
 		expect(anchorless["_cursorKeyTexts"]).toBe(
 			`case when typeof("ev_ms"."at") in ('integer', 'real') and abs("ev_ms"."at") < 9e999 then ${readBack(`"ev_ms"."at"`)} when (typeof("ev_ms"."at") in ('null', 'integer', 'real')) then '' else '!' || typeof("ev_ms"."at") end`,
 		)
-		expect(extrasOf("sqlite", [{ column: ev.at, direction: "asc" }], { merged: {} })).not.toHaveProperty(
-			"_cursorTextKeys",
-		)
+		/* a merged list binds as read, and carries the stored value too, which it merges by (QL17 of r23) */
+		const merged = extrasOf("sqlite", [{ column: ev.at, direction: "asc" }], { merged: {} })
+		expect(merged["_cursorTextKeys"]).toBe(held([{ column: ev.at, direction: "asc" }]))
+		expect(merged["_cursorKeyTexts"]).toMatch(/'!' \|\| typeof\("ev"\."at"\) end$/)
 		expect(extrasOf("sqlite", [{ column: ev.j, direction: "asc" }], { table: ev })).not.toHaveProperty(
 			"_cursorTextKeys",
 		)

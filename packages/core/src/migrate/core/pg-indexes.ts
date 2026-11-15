@@ -17,7 +17,6 @@ import {
 	indexesOn,
 	type IndexShape,
 	indexWanted,
-	lineage,
 	list,
 	make,
 	merged,
@@ -25,6 +24,7 @@ import {
 	same,
 	taken,
 } from "./pg-index-facts.ts"
+import { lineage } from "./pg-partition-order.ts"
 import { type Facts, flag, keyOf, names, type Node, tableOf } from "./pg-nodes.ts"
 
 /** The columns an index reads: its keys', its expressions' and its predicate's, and its INCLUDE columns */

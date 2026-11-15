@@ -17,7 +17,6 @@ import {
 	LEADING_SEED,
 	servedBooleans,
 } from "../support/boolean-keys.ts"
-import { startsOrder } from "../support/text-timestamps.ts"
 
 const shards: Client[] = []
 afterEach(() => {
@@ -47,23 +46,9 @@ describe("a SQLite boolean holding anything but 0 or 1 pages or is refused by na
 		},
 	)
 
-	it.each(["merged"] as const)(
-		"answers the %s list a 500 naming the key, never repeating or skipping a row",
-		async (shape) => {
-			for (const walk of BOOLEAN_WALKS) {
-				const { error, ids } = await servedBooleans(await dbsFor(shape), { ...walk, shape })
-				expect(error, JSON.stringify(walk)).toMatchObject({
-					cause: expect.stringContaining("b stores"),
-					errorKey: "sort_not_wired",
-					status: 500,
-				})
-				expect(startsOrder(ids, BOOLEAN_SERVED[walk.direction]), `${JSON.stringify(walk)} ${ids}`).toBe(true)
-			}
-		},
-	)
-
 	/* QL8: both ways a value but 0 or 1 leads the walk's one page by number, which serves it and mints no cursor */
-	it.each(["anchorless", "anchored joined"] as const)(
+	/* QL17 of r23: a merged list refused every page a shard read such a row on, served or not */
+	it.each(["anchorless", "anchored joined", "merged"] as const)(
 		"serves the %s list's first page by number, a value but 0 or 1, with no cursor while hasMore holds",
 		async (shape) => {
 			for (const walk of BOOLEAN_WALKS)
@@ -78,7 +63,7 @@ describe("a SQLite boolean holding anything but 0 or 1 pages or is refused by na
 /* AB3-5 of area B: a list that binds the key as read refused such a row only when it ended a page; QL8: a
    page by number checks only the row its cursor is minted from, a page by cursor every row it serves */
 describe("a boolean row holding a value but 0 or 1 is refused on the page by cursor that serves it (AB3-5 of area B; QL8)", () => {
-	it.each(["anchorless", "anchored joined"] as const)(
+	it.each(["anchorless", "anchored joined", "merged"] as const)(
 		"answers the %s list a 500 naming the key on the last page, which mints no cursor, of a walk that reaches such a row",
 		async (shape) => {
 			expect(
@@ -90,7 +75,7 @@ describe("a boolean row holding a value but 0 or 1 is refused on the page by cur
 		},
 	)
 
-	it.each(["table", "anchored own", "listOptions", "anchorless", "anchored joined"] as const)(
+	it.each(["table", "anchored own", "listOptions", "anchorless", "anchored joined", "merged"] as const)(
 		"serves the %s list's page by number such a row leads and a 0 ends, which mints no cursor",
 		async (shape) => {
 			expect(await firstPair(await dbsFor(shape, LEADING_SEED), { direction: "asc", shape })).toEqual({
@@ -98,15 +83,4 @@ describe("a boolean row holding a value but 0 or 1 is refused on the page by cur
 			})
 		},
 	)
-
-	/* a merged list checks every row a shard read as it merges them, wherever the page lands (QL17's class) */
-	it("answers the merged list a 500 naming the key on the page by number such a row leads", async () => {
-		expect(
-			(await firstPair(await dbsFor("merged", LEADING_SEED), { direction: "asc", shape: "merged" })).error,
-		).toMatchObject({
-			cause: expect.stringContaining("b stores"),
-			errorKey: "sort_not_wired",
-			status: 500,
-		})
-	})
 })

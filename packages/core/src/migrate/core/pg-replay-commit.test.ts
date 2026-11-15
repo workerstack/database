@@ -4,28 +4,43 @@ import { type Hidden, nothingHidden } from "./pg-replay-hidden.ts"
 import type { Run } from "./pg-replay-roles.ts"
 import { ReplayFailed } from "./replay-failed.ts"
 
-const COUNTS = "SELECT current_setting('track_counts') AS on, coalesce("
+const COUNTS = "SELECT current_setting('track_counts') AS on, "
 
 /* a snapshot row: its subject's noun and key, the names it is about, and the row */
 type Row = [noun: string, key: string, names: string[], row: Record<string, unknown>]
 
 /**
  * A replay's two connections, faked: what the replay connection sent, its shared-catalog counts
- * answering each read in turn, track_counts, whether a function it is asked of is none of pg_catalog's
+ * answering each read in turn, track_counts, transaction_read_only, whether a function it is asked of is none of pg_catalog's
  * alone (`outside`), and the snapshot the admin connection reads
  */
-function runOf(server: { counts?: number[]; on?: string; outside?: boolean; snapshot?: Row[] }): {
+function runOf(server: {
+	counts?: number[]
+	on?: string
+	outside?: boolean
+	readOnly?: string
+	sequences?: Array<Array<{ last: string | null; name: string; start: string }>>
+	snapshot?: Row[]
+}): {
 	run: Run
 	sent: string[]
 } {
 	const sent: string[] = []
 	const counts = [...(server.counts ?? [])]
+	const sequences = [...(server.sequences ?? [])]
 	const sql = {
 		end: async () => undefined,
-		unsafe: async (query: string) => {
-			sent.push(query)
+		unsafe: async (query: string, params: unknown[] = []) => {
+			sent.push(params.length === 0 ? query : `${query} ${JSON.stringify(params)}`)
+			if (query.endsWith("FROM pg_sequences")) return sequences.shift() ?? []
 			if (query.startsWith(COUNTS))
-				return [{ on: server.on ?? "on", writes: { pg_authid: String(counts.shift() ?? 0) } }]
+				return [
+					{
+						on: server.on ?? "on",
+						read_only: server.readOnly ?? "off",
+						writes: { pg_authid: String(counts.shift() ?? 0) },
+					},
+				]
 			if (query.includes("pg_proc")) return [{ hidden: server.outside ?? false }]
 			return []
 		},
@@ -75,6 +90,23 @@ describe("begin and commit", () => {
 		expect(run.ours.writes).toEqual(new Map([["pg_authid", 4]]))
 		await commit(run, at(["kept"]))
 		expect(sent.filter((query) => !query.startsWith("SELECT"))).toEqual(["BEGIN", "COMMIT"])
+	})
+
+	/* PA5 of r23: Atlas writes a file's revision in its transaction, which a read-only tail refuses */
+	it("refuses a file's transaction left read-only, as Atlas's revision write is, before its COMMIT", async () => {
+		const { run, sent } = runOf({ readOnly: "on" })
+		await begin(run)
+		expect(await refusal(commit(run, at([])))).toBe(
+			"2_b.sql: write revision: cannot execute INSERT in a read-only transaction (25006): the file leaves its transaction read-only, and Atlas writes the file's revision in that transaction, so apply would fail there; drop the statement that makes it read-only; check stops here",
+		)
+		expect(sent).not.toContain("COMMIT")
+	})
+
+	it("commits a txmode none statement's transaction left read-only, which no revision write shares (sibling)", async () => {
+		const { run, sent } = runOf({ readOnly: "on" })
+		await begin(run)
+		await commit(run, at([], "SET TRANSACTION READ ONLY"))
+		expect(sent).toContain("COMMIT")
 	})
 
 	it("refuses a transaction that turned track_counts off, before reading anything else", async () => {
@@ -234,12 +266,15 @@ const sends = (...codes: string[]) => {
 }
 const control = (sent: string[]) => sent.filter((query) => !query.startsWith("SELECT"))
 
+/** A sequence as the replay reads it, starting at 1 */
+const seq = (name: string, last: string | null) => ({ last, name, start: "1" })
+
 /* the amendment to P1 of r22: a txmode none file's statement runs in a transaction of its own first */
 describe("guarded", () => {
 	it("commits a statement that ran in its transaction", async () => {
 		const { run, sent } = runOf({ snapshot: [["role", "kept", ["kept"], { rolconnlimit: -1 }]] })
 		const { send, tried } = sends()
-		await guarded(run, at([]), send)
+		await guarded(run, at([]), { send, type: "IndexStmt" })
 		expect({ control: control(sent), tried: tried.times }).toEqual({ control: ["BEGIN", "COMMIT"], tried: 1 })
 	})
 
@@ -248,15 +283,41 @@ describe("guarded", () => {
 		async (code) => {
 			const { run, sent } = runOf({ snapshot: [["role", "kept", ["kept"], { rolconnlimit: -1 }]] })
 			const { send, tried } = sends(code)
-			await guarded(run, at([]), send)
+			await guarded(run, at([]), { send, type: "IndexStmt" })
 			expect({ control: control(sent), tried: tried.times }).toEqual({ control: ["BEGIN", "ROLLBACK"], tried: 2 })
 		},
 	)
 
+	/* PR2 of r23: a sequence the trial advanced keeps its advance past ROLLBACK */
+	it("sets back each sequence a DO's or a CALL's trial advanced before the bare run, and none it left", async () => {
+		for (const type of ["DoStmt", "CallStmt"]) {
+			const { run, sent } = runOf({
+				sequences: [
+					[seq("public.a_id_seq", null), seq("public.b_id_seq", "4"), seq("public.c_id_seq", "2")],
+					[seq("public.a_id_seq", "1"), seq("public.b_id_seq", "5"), seq("public.c_id_seq", "2"), seq("public.d", "1")],
+				],
+			})
+			await guarded(run, at([]), { send: sends("2D000").send, type })
+			expect(
+				sent.filter((query) => query.startsWith("SELECT setval")),
+				type,
+			).toEqual([
+				'SELECT setval($1::regclass, $2::bigint, $3) ["public.a_id_seq","1",false]',
+				'SELECT setval($1::regclass, $2::bigint, $3) ["public.b_id_seq","4",true]',
+			])
+		}
+	})
+
+	it("reads no sequence for a statement that runs no code (sibling)", async () => {
+		const { run, sent } = runOf({})
+		await guarded(run, at([]), { send: sends("25001").send, type: "IndexStmt" })
+		expect(sent.filter((query) => query.includes("pg_sequences"))).toEqual([])
+	})
+
 	it("refuses any other failure as it is, without a bare try", async () => {
 		const { run, sent } = runOf({})
 		const { send, tried } = sends("42P01")
-		expect(await refusal(guarded(run, at([]), send))).toBe("devUrl refused it")
+		expect(await refusal(guarded(run, at([]), { send, type: "IndexStmt" }))).toBe("devUrl refused it")
 		expect({ control: control(sent), tried: tried.times }).toEqual({ control: ["BEGIN"], tried: 1 })
 	})
 })

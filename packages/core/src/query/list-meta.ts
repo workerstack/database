@@ -2,6 +2,7 @@
  * The query facts a list query schema publishes on `x-database`. Every value comes from the config
  * that parses the request, so the published facts cannot drift from behavior (docs §6).
  */
+import { refuseUnspelledTiebreak } from "./list-names.ts"
 import { FILTER_GRAMMAR, type DatabaseMetaStamp, type QueryMeta, databaseMeta } from "../meta.ts"
 import { EMPTY_OBJ } from "../empty.ts"
 import { CURSOR_TIEBREAK_COLUMN } from "./cursor.ts"
@@ -33,10 +34,10 @@ function selectableFrom(fieldsConfig: FieldsConfig | undefined): string[] {
 	return fieldsConfig ? [...fieldsConfig.scalars] : []
 }
 
-/** The tiebreak the list publishes: the config's, or `id` without one; an empty one names no column */
+/** The tiebreak the list publishes: the config's, or `id` without one; an empty one names no column, and one no order can spell is refused */
 function tiebreakOf(tiebreak: string | undefined): string {
 	if (tiebreak === undefined) return CURSOR_TIEBREAK_COLUMN
-	if (tiebreak !== "") return tiebreak
+	if (tiebreak !== "") return refuseUnspelledTiebreak(tiebreak)
 	throw new TypeError(`createListQuerySchema: tiebreak must name the column the list breaks ties on; got ""`)
 }
 

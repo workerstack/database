@@ -16,18 +16,22 @@ import { ReplayFailed } from "./replay-failed.ts"
 /** Writes by shared catalog: how many rows the open transaction inserted, updated or deleted in each */
 type Writes = Map<string, number>
 
-/* the counts in one read, a round trip each guarded statement and file saves: track_counts, and the open transaction's writes by shared catalog */
+/* the counts in one read, a round trip each guarded statement and file saves: track_counts, whether the open transaction is read-only, and its writes by shared catalog */
 const COUNTS =
-	"SELECT current_setting('track_counts') AS on, coalesce((SELECT json_object_agg(s.relname, s.n_tup_ins + s.n_tup_upd + s.n_tup_del) FROM pg_stat_xact_sys_tables s JOIN pg_class c ON c.oid = s.relid WHERE c.relisshared AND c.relkind = 'r' AND s.relname <> 'pg_shdepend'), '{}') AS writes"
+	"SELECT current_setting('track_counts') AS on, current_setting('transaction_read_only') AS read_only, coalesce((SELECT json_object_agg(s.relname, s.n_tup_ins + s.n_tup_upd + s.n_tup_del) FROM pg_stat_xact_sys_tables s JOIN pg_class c ON c.oid = s.relid WHERE c.relisshared AND c.relkind = 'r' AND s.relname <> 'pg_shdepend'), '{}') AS writes"
 
 /**
- * Whether the server counts this backend's writes, which with `track_counts` off read as none, and
- * the open transaction's writes to each shared catalog, pg_shdepend aside
+ * Whether the server counts this backend's writes, which with `track_counts` off read as none,
+ * whether the open transaction is read-only, and its writes to each shared catalog, pg_shdepend aside
  */
-async function counts(sql: Sql): Promise<{ on: boolean; writes: Writes }> {
+async function counts(sql: Sql): Promise<{ on: boolean; readOnly: boolean; writes: Writes }> {
 	const [row] = await sql.unsafe(COUNTS, [])
 	const writes = (row?.["writes"] ?? {}) as Record<string, number>
-	return { on: row?.["on"] === "on", writes: new Map(Object.entries(writes).map(([name, n]) => [name, Number(n)])) }
+	return {
+		on: row?.["on"] === "on",
+		readOnly: row?.["read_only"] === "on",
+		writes: new Map(Object.entries(writes).map(([name, n]) => [name, Number(n)])),
+	}
 }
 
 /** The writes in `after` that `before` does not account for, by catalog */

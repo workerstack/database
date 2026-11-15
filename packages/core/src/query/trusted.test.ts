@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { assertPageWithin, assertSchemaParsed } from "./trusted.ts"
+import { assertLimitWithin, assertPageWithin, assertSchemaParsed } from "./trusted.ts"
 
 const ast = {
 	root: {
@@ -41,9 +41,6 @@ describe("assertPageWithin: a page no schema bounded (C4)", () => {
 		expect(() => assertPageWithin({ page: 50_001, pageBound: 50_000 })).toThrow(
 			expect.objectContaining({ errorKey: "page_too_deep", status: 400 }),
 		)
-		expect(() => assertPageWithin({ page: 1, pageBound: Number.NaN })).toThrow(
-			expect.objectContaining({ errorKey: "page_too_deep" }),
-		)
 		expect(() => assertPageWithin({})).not.toThrow()
 	})
 })
@@ -75,6 +72,45 @@ describe("assertPageWithin: a page that is no page", () => {
 				errorKey: "invalid_page",
 				status: 400,
 			}),
+		)
+	})
+})
+
+/** The 500 for a stated bound, its cause naming `key` */
+const notWired = (key: string) =>
+	expect.objectContaining({ cause: expect.stringContaining(key), errorKey: "page_not_wired", status: 500 })
+
+/* QL9 of r23: a stated bound that is no safe whole number, or whose last offset passes 2^53, was trusted */
+describe("a stated pageBound or limitBound no list schema could state (QL9 of r23)", () => {
+	it.each([Number.NaN, Number.POSITIVE_INFINITY, 2.5, 0, -1])(
+		"refuses pageBound %s on the page and the limit",
+		(pageBound) => {
+			expect(() => assertPageWithin({ page: 1, pageBound })).toThrow(notWired("pageBound"))
+			expect(() => assertLimitWithin({ limit: 1, pageBound })).toThrow(notWired("pageBound"))
+		},
+	)
+
+	it.each([Number.NaN, Number.POSITIVE_INFINITY, 2.5, 0, -1])(
+		"refuses limitBound %s on the page and the limit",
+		(limitBound) => {
+			expect(() => assertPageWithin({ limitBound, page: 1 })).toThrow(notWired("limitBound"))
+			expect(() => assertLimitWithin({ limit: 1, limitBound })).toThrow(notWired("limitBound"))
+		},
+	)
+
+	it("refuses bounds whose last offset passes 2^53 - 1, and passes the largest that does not", () => {
+		const big = { limitBound: 2 ** 26, pageBound: 2 ** 27 + 2 }
+		expect(() => assertPageWithin({ ...big, page: 1 })).toThrow(notWired("(pageBound - 1) * limitBound"))
+		expect(() => assertLimitWithin({ ...big, limit: 1 })).toThrow(notWired("(pageBound - 1) * limitBound"))
+		const edge = { limitBound: 1, pageBound: Number.MAX_SAFE_INTEGER }
+		expect(() => assertPageWithin({ ...edge, page: 1 })).not.toThrow()
+		expect(() => assertLimitWithin({ ...edge, limit: 1 })).not.toThrow()
+	})
+
+	it("holds a stated pageBound alone against the default maxLimit (sibling)", () => {
+		expect(() => assertPageWithin({ page: 50_000, pageBound: 50_000 })).not.toThrow()
+		expect(() => assertPageWithin({ page: 1, pageBound: Number.MAX_SAFE_INTEGER })).toThrow(
+			notWired("(pageBound - 1) * limitBound"),
 		)
 	})
 })

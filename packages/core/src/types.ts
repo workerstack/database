@@ -112,6 +112,8 @@ export type ConstraintMap = {
 		 * Foreign keys, by the SQL name of each one's first column. SQLite and D1 name no foreign key
 		 * in their message, so there an entry is blamed only when it is the table's one listed key
 		 * and the statement sets that column; list every foreign key of the table, as codegen does.
+		 * A failure a trigger makes in another table is blamed on that key too, as the message cannot
+		 * tell the two apart.
 		 */
 		foreignKey?: Record<string, ConstraintMapEntry> | undefined
 		/**
@@ -130,8 +132,9 @@ export type ConstraintMap = {
 		private?: readonly string[] | undefined
 		/**
 		 * The columns of this table some foreign key points at, by SQL name: an UPDATE, or an
-		 * upsert's DO UPDATE, that assigns one may have failed on a row referencing the old value,
-		 * so SQLite's handler answers it with the neutral cause. Codegen writes it.
+		 * upsert's DO UPDATE, that assigns one may have failed on a row referencing the old value, as
+		 * may a REPLACE or INSERT OR REPLACE, which deletes the rows its values conflict with, so
+		 * SQLite's handler answers each with the neutral cause. Codegen writes it.
 		 */
 		referenced?: readonly string[] | undefined
 		/** Unique constraints, by their columns' SQL names comma-joined (`org_id,slug`); a unique index on an expression by its index name */

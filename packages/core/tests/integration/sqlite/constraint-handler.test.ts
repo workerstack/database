@@ -12,6 +12,7 @@ import {
 	sqliteErrorHandler,
 } from "../../../src/sqlite/constraint-handler.ts"
 import type { ConstraintMap } from "../../../src/types.ts"
+import { ELSEWHERE_CASES, ELSEWHERE_DDL, ELSEWHERE_MAPS } from "../support/elsewhere-constraints.ts"
 import { type LibsqlHarness, libsqlMemory } from "../support/libsql.ts"
 
 const DDL = [
@@ -286,6 +287,19 @@ describe("sqliteErrorHandler on libsql: a trigger's RAISE", () => {
 			})
 		},
 	)
+})
+
+/* QE1 and QE2 of r23: a constraint that fails in a row other than the statement's own */
+describe("sqliteErrorHandler on libsql: a constraint failing in another row (QE1, QE2 of r23)", () => {
+	it.each(ELSEWHERE_CASES)("answers $label", async ({ expected, statement }) => {
+		const harness = libsqlMemory()
+		try {
+			for (const ddl of ELSEWHERE_DDL) await harness.client.execute(ddl)
+			expect(await classify(harness, statement, { maps: ELSEWHERE_MAPS })).toMatchObject(expected)
+		} finally {
+			harness.close()
+		}
+	})
 })
 
 describe("names outside [A-Za-z0-9_] (R6)", () => {

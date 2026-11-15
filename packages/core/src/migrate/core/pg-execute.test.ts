@@ -93,3 +93,33 @@ describe("an EXECUTE of a statement its file does not prepare (AE2-9 of r22)", (
 		)
 	})
 })
+
+/** Why check refuses an EXECUTE of `name` after `by` removed what its file prepared under it */
+const removed = (name: string, by: string) =>
+	`${by} before it in its file removes the statement prepared as ${name}: Postgres fails the file with "prepared statement "${name}" does not exist"; PREPARE it again after the ${by}`
+
+/* PA8 of r23: a DEALLOCATE or DISCARD removes what a PREPARE made, and apply failed 26000 at the EXECUTE after it */
+describe("an EXECUTE after its prepared statement is removed (PA8 of r23)", () => {
+	it.each([
+		["DEALLOCATE p;", "DEALLOCATE p"],
+		["DEALLOCATE PREPARE p;", "DEALLOCATE p"],
+		["DEALLOCATE ALL;", "DEALLOCATE ALL"],
+		["DISCARD PLANS;", "DISCARD PLANS"],
+	])("refuses one after %j at check", (removal, by) => {
+		expect(() => rate(`PREPARE p AS SELECT 1;\n${removal}\nEXECUTE p;`)).toThrow(`EXECUTE p: ${removed("p", by)}`)
+	})
+
+	it("refuses one after a DISCARD ALL in a txmode none file", () => {
+		expect(() => rate("-- atlas:txmode none\n\nPREPARE p AS SELECT 1;\nDISCARD ALL;\nEXECUTE p;")).toThrow(
+			`EXECUTE p: ${removed("p", "DISCARD ALL")}`,
+		)
+	})
+
+	/* database rates a DEALLOCATE and a DISCARD as statements it does not recognize, the EXECUTE by its SELECT */
+	it("rates one prepared again after the removal, one another DEALLOCATE leaves, and one after DISCARD TEMP (siblings)", () => {
+		for (const between of ["DEALLOCATE p;\nPREPARE p AS SELECT 1;", "DEALLOCATE q;", "DISCARD TEMP;"]) {
+			const { unsafeStatements } = rate(`PREPARE p AS SELECT 1;\nPREPARE q AS SELECT 2;\n${between}\nEXECUTE p;`)
+			expect(unsafeStatements.filter((line) => line.startsWith("EXECUTE"))).toEqual([])
+		}
+	})
+})

@@ -156,6 +156,22 @@ export function findNamed(
 	return undefined
 }
 
+/** Each table whose `kind` entry is named `name`, with that entry: the first map's where two list one table, a pattern left out as findNamed leaves it */
+export function findAllNamed(
+	maps: readonly ConstraintMap[],
+	kind: "check" | "unique",
+	name: string | undefined,
+): Array<{ entry: ConstraintMapEntry; table: string }> {
+	const found = new Map<string, ConstraintMapEntry>()
+	for (const map of maps) {
+		for (const [table, t] of Object.entries(map)) {
+			const entry = table.endsWith("*") || found.has(table) ? undefined : own(t[kind], name)
+			if (entry !== undefined) found.set(table, entry)
+		}
+	}
+	return [...found].map(([table, entry]) => ({ entry, table }))
+}
+
 /** The DatabaseError for what a handler found; `source` is the original error, kept for logs. */
 export function toDatabaseError({ column, entry, fallback, table }: Found, source: unknown): DatabaseError {
 	if (entry === undefined) return new DatabaseError({ ...fallback, column, source, table })

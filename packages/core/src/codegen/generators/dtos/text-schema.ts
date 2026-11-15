@@ -22,13 +22,23 @@ type TextRange = { max: number | null; min: number | null }
 
 /*
  * An id: 1 to 48 characters, none of ECMAScript's blanks (its WhiteSpace and LineTerminator, what
- * \S refuses), each written out, as Go's RE2 reads \S as ASCII alone. The manifest
- * states it with escapes. The chain hands it to RegExp as a string, as Bun parses no regex literal
- * holding U+2028 or U+2029, and publishes it as the characters themselves: a RegExp's source
- * writes those two as \u escapes, which RE2 does not read
+ * \S refuses), each written out, as Go's RE2 reads \S as ASCII alone. The chain hands it to RegExp
+ * as a string, as Bun parses no regex literal holding U+2028 or U+2029, and publishes it as the
+ * characters themselves: a RegExp's source writes those two as \u escapes, which RE2 does not read.
+ * The manifest states it as the chain publishes it, each blank a character
  */
 const ID_SOURCE = "^[^\\t\\n\\v\\f\\r \\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff]{1,48}$"
-const ID_PATTERN = `/${ID_SOURCE}/u`
+// lookup-table: the one-letter escapes ID_SOURCE writes, as the characters a string literal reads them as
+const LETTER_ESCAPES: Readonly<Record<string, string>> = { f: "\f", n: "\n", r: "\r", t: "\t", v: "\v" }
+/** ID_SOURCE as the string literal the chain writes it in reads: each escape its character */
+function idPublished(): string {
+	return ID_SOURCE.replaceAll(/\\(u[0-9a-f]{4}|[fnrtv])/gu, (_, escape: string) =>
+		escape.length === 1
+			? (LETTER_ESCAPES[escape] as string)
+			: String.fromCodePoint(Number.parseInt(escape.slice(1), 16)),
+	)
+}
+const ID_PATTERN = `/${/* @__PURE__ */ idPublished()}/u`
 /* the published pattern before the guard, so a field's own trailing meta stays the dedup's to strip */
 const ID_CHECK = `.regex(new RegExp("${ID_SOURCE}", "u")).meta({ pattern: "${ID_SOURCE}" })${TEXT_GUARD}`
 /* the regexes a kind holds a written text to, as the chain writes each: under u, as JSON Schema reads them */

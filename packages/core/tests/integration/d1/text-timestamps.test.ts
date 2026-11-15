@@ -76,7 +76,7 @@ describe("TEXT in a SQLite timestamp column pages or is refused by name (B2-3 of
 	it.each(["anchorless", "anchored joined", "merged"] as const)(
 		"answers the %s list a 500 naming the key on the page by cursor that serves a TEXT row, never repeating or skipping one",
 		async (shape) => {
-			for (const walk of WALKS.filter(({ direction }) => shape === "merged" || direction === "asc")) {
+			for (const walk of WALKS.filter(({ direction }) => direction === "asc")) {
 				const { error, ids } = await servedText(await dbsFor(shape), { ...walk, shape })
 				expect(error, JSON.stringify(walk)).toMatchObject({
 					cause: expect.stringContaining(`${walk.key satisfies TextKey} stores a TEXT value`),
@@ -89,7 +89,8 @@ describe("TEXT in a SQLite timestamp column pages or is refused by name (B2-3 of
 	)
 
 	/* QL8: descending, a TEXT row leads the walk's one page by number, which serves it and mints no cursor */
-	it.each(["anchorless", "anchored joined"] as const)(
+	/* QL17 of r23: a merged list refused every page a shard read a TEXT row on, served or not */
+	it.each(["anchorless", "anchored joined", "merged"] as const)(
 		"serves the %s list's first page by number, a TEXT row, with no cursor while hasMore holds",
 		async (shape) => {
 			for (const walk of WALKS.filter(({ direction }) => direction === "desc"))
@@ -148,7 +149,7 @@ describe("a TEXT row is refused on the page by cursor that serves it, wherever i
 		},
 	)
 
-	it.each(["table", "anchored own", "listOptions", "anchorless", "anchored joined"] as const)(
+	it.each(["table", "anchored own", "listOptions", "anchorless", "anchored joined", "merged"] as const)(
 		"serves the %s list's page by number a TEXT row leads and a number ends, its cursor minted from the number",
 		async (shape) => {
 			for (const key of ["s", "m"] as const)
@@ -157,19 +158,6 @@ describe("a TEXT row is refused on the page by cursor that serves it, wherever i
 				})
 		},
 	)
-
-	/* a merged list checks every row a shard read as it merges them, wherever the page lands (QL17's class) */
-	it("answers the merged list a 500 naming the key on the page by number a TEXT row leads", async () => {
-		for (const key of ["s", "m"] as const)
-			expect(
-				(await firstPair(await dbsFor("merged", LEADING_SEED), { direction: "desc", key, shape: "merged" })).error,
-				key,
-			).toMatchObject({
-				cause: expect.stringContaining(`${key} stores a TEXT value`),
-				errorKey: "sort_not_wired",
-				status: 500,
-			})
-	})
 })
 
 /* AB4-7 of area B: D1 prints some REALs in no text that reads back, and binds a JS number of others as another */

@@ -2,13 +2,13 @@
  * A migration file's header as Atlas reads it, the one reader of it in database: the run
  * of comment lines, `--` or `#`, that opens the file, closed by a line empty once spaces and tabs are
  * trimmed, CRLF read as LF; comment lines that run into a statement are that statement's, and no
- * header. A directive is a header line, trimmed, that matches Atlas's own pattern, `atlas:<name>`
+ * header. A directive is a header line its line break ends, trimmed, that matches Atlas's own pattern, `atlas:<name>`
  * after printable ASCII and its value after spaces, so a tab before `atlas:` makes it a comment. The
  * pinned Atlas holds this to its own reading (tests/structure/atlas-header.test.ts).
  */
 
-/* Atlas's directive pattern (sql/migrate/dir.go, reDirective), as Go's RE2 reads it */
-const DIRECTIVE = /^([ -~]*)atlas:(\w+)(?: +(.+))*/
+/* Atlas's directive pattern (sql/migrate/dir.go, reDirective), as Go's RE2 reads it: its `.` takes a CR, as JS's does not */
+const DIRECTIVE = /^([ -~]*)atlas:(\w+)(?: +([^\n]+))*/
 
 /** How Atlas runs a file: in one transaction, outside any, or not at all, with Atlas's own error */
 type Txmode = "file" | "none" | { refused: string }
@@ -44,7 +44,7 @@ function atlasHeader(file: string): AtlasHeader {
 	let end = 0
 	for (const line of linesOf(file)) {
 		if (!line.startsWith("--") && !line.startsWith("#")) break
-		comments.push(line.trim())
+		comments.push(line)
 		end += line.length
 	}
 	/* Atlas's header closes on a line empty once spaces and tabs are trimmed, or at the file's end; otherwise its comments are the first statement's */
@@ -54,8 +54,9 @@ function atlasHeader(file: string): AtlasHeader {
 		if (!/^[ \t]*\r?\n?$/.test(line)) break
 		blank += line.length
 	}
+	/* a file's last line, which no line break ends, is no directive line to Atlas */
 	const directives = comments.flatMap((comment) => {
-		const [, , name, value] = DIRECTIVE.exec(comment) ?? []
+		const [, , name, value] = (comment.endsWith("\n") ? DIRECTIVE.exec(comment.trim()) : null) ?? []
 		return name === undefined ? [] : [{ name, value: value ?? "" }]
 	})
 	const txmodes = directives.filter(({ name }) => name === "txmode").map(({ value }) => value)

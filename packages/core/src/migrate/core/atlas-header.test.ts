@@ -14,13 +14,23 @@ describe("atlasHeader", () => {
 		})
 	})
 
+	/* PA4 of r23: Atlas reads no directive on a last line that no line break ends */
 	it("reads a file of comments alone as all header, with or without a last line break", () => {
 		expect(atlasHeader("-- atlas:txmode none")).toEqual({
-			directives: [{ name: "txmode", value: "none" }],
+			directives: [],
 			text: "-- atlas:txmode none",
-			txmode: "none",
+			txmode: "file",
 		})
 		expect(atlasHeader("-- atlas:txmode file\n").text).toBe("-- atlas:txmode file\n")
+	})
+
+	/* PA4 of r23: Go's `.` takes a CR, so a bare CR is inside the directive's value, as Atlas reads it */
+	it("keeps a bare CR inside a directive's value and drops a CRLF's", () => {
+		expect(atlasHeader("-- atlas:txmode none\rVACUUM;\n").txmode).toEqual({
+			refused: 'unknown txmode "none\\rVACUUM;" found in file directive',
+		})
+		expect(atlasHeader("-- atlas:txmode none\r\n\r\nVACUUM;\n").txmode).toBe("none")
+		expect(atlasHeader("-- atlas:txmode none\r\rVACUUM;\r").txmode).toBe("file")
 	})
 
 	it.each([

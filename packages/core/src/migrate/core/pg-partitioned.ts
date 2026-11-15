@@ -5,7 +5,7 @@
  * CREATE INDEX CONCURRENTLY, ADD … USING INDEX and DROP INDEX CONCURRENTLY of a partitioned index.
  * Its indexes are pg-indexes.ts's.
  */
-import { lineage } from "./pg-index-facts.ts"
+import { lineage } from "./pg-partition-order.ts"
 import { type Facts, flag, keyOf, names, type Node, tableOf, written } from "./pg-nodes.ts"
 
 /** A partitioned table made, renamed, moved or dropped, followed into `facts`; a table dropped takes its partitions */
@@ -89,4 +89,16 @@ function partitionedRefusal(type: string, node: Node, facts: Facts): string | un
 		: undefined
 }
 
-export { followPartitioned, partitionedKeyRecipe, partitionedRecipe, partitionedRefusal }
+/**
+ * Why database refuses a REINDEX INDEX in a transaction of an index whose name it may have swapped
+ * with another clone's (pg-index-facts.ts IndexFact `unsure`): a transaction refuses it of a
+ * partitioned index and runs it of a plain one, and which this is rests on an order database cannot
+ * tell; undefined for any other statement
+ */
+function unsureRefusal(type: string, node: Node, facts: Facts): string | undefined {
+	if (type !== "ReindexStmt" || node["kind"] !== "REINDEX_OBJECT_INDEX") return undefined
+	if (facts.indexes.get(tableOf(node["relation"], facts.schema).key)?.unsure !== true) return undefined
+	return `database cannot tell whether Postgres gave ${written(node["relation"])} to a partitioned index or to a partition's, as the partitions' order rests on bounds it cannot compare, and a transaction refuses REINDEX INDEX of a partitioned index; put the statement in its own -- atlas:txmode none file, where Postgres runs either, or set devUrl so check replays it`
+}
+
+export { followPartitioned, partitionedKeyRecipe, partitionedRecipe, partitionedRefusal, unsureRefusal }

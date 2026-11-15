@@ -226,7 +226,6 @@ function typedKeys(row: Record<string, unknown>, sort: readonly SortField[]): Re
 	const held = textKeysOf(row)
 	if (stored === undefined && typeof texts !== "string" && held === undefined) return row
 	const carried = typeof texts === "string" ? texts.split(",") : []
-	refuseUnread(row, sort)
 	const typed = [...sort.map(({ field }) => field), DATABASE_ID]
 		.map((field, i) => {
 			const own = held?.[i]
@@ -262,7 +261,7 @@ function carriedTexts(row: Record<string, unknown>, sort: readonly SortField[]):
  * checked it; the merge compares typedKeys' numbers, the same parse of the same text
  */
 function cursorKeys(row: Record<string, unknown>, sort: readonly SortField[]): Record<string, unknown> {
-	refuseUnprinted(row, sort)
+	refuseUnheld(row, sort)
 	const typed = typedKeys(row, sort)
 	const texts = row["_cursorKeyTexts"]
 	const carried = typeof texts === "string" ? texts.split(",") : []

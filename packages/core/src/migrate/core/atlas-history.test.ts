@@ -316,6 +316,22 @@ describe("a txmode none file Atlas would not resume", () => {
 		).toThrow(below("20260101000000_b.sql"))
 	})
 
+	/* PA10 of r23: status hands the refusal to its sink and goes on; check and apply give none, and it throws */
+	it("hands each pending txmode none file it would refuse to the unresumable sink, given one", () => {
+		snapshot({ "20260101000000_b.sql": "SELECT 1;\n", "20260101_none.sql": NONE, "2026_x.sql": "SELECT 2;\n" })
+		const status = listing(history([applied("20260101000000_b.sql")]), "20260101_none.sql", "2026_x.sql")
+		const lines: string[] = []
+		expect(checkHistory(status, dir, { scrub: kept, unresumable: (line) => lines.push(line) })).toBeUndefined()
+		expect(lines).toEqual([
+			expect.stringMatching(new RegExp(`^${below("20260101000000_b.sql").replace(/[.()]/g, "\\$&")}`)),
+		])
+		const half2 = half("20260101_none.sql", "17=")
+		const halfway = listing(history([applied("20260101000000_b.sql"), half2]), "20260101_none.sql")
+		expect(() => checkHistory(halfway, dir, { scrub: kept, unresumable: () => undefined })).toThrow(
+			"Atlas will not resume it",
+		)
+	})
+
 	it("passes a txmode none file whose version is the highest so far, and a transactional one below", () => {
 		snapshot({ "20260101000000_b.sql": "SELECT 1;\n", "20260101_a.sql": "SELECT 2;\n", "20260102_none.sql": NONE })
 		const status = listing(history([applied("20260101000000_b.sql")]), "20260101_a.sql", "20260102_none.sql")

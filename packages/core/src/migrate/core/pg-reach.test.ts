@@ -7,6 +7,7 @@ const FACTS: Facts = {
 	casts: new Map([["mt", { automatic: true, fn: "tomt" }]]),
 	code: new Map([["c", "f"]]),
 	columnTypes: new Map(),
+	constraintNames: new Map(),
 	defined: new Set(),
 	eventTriggers: new Map(),
 	foreignKeys: [],
@@ -22,6 +23,7 @@ const FACTS: Facts = {
 	views: new Map(),
 	partitioned: new Set(),
 	primaryKeys: new Map(),
+	relations: new Set(),
 	indexes: new Map(),
 	parents: new Map([
 		["c", [{ parent: "p", partition: true }]],

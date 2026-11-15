@@ -660,15 +660,16 @@ declare function limitParamMeta(defaultLimit: number, maxLimit: number): {
 declare function selectParamMeta(fields: FieldsConfig): ParamMeta;
 /**
  * The `filter` param's OpenAPI text: its grammar, each field with the operators its type takes, and
- * `limits`. Its examples are built from the first fields, so each parses on this endpoint
+ * `limits`. Its examples are built from the first fields, and each is kept only where it passes this
+ * endpoint's own fields and limits
  */
 declare function filterParamMeta(fields: Record<string, FieldType>, operatorsFor: (type: FieldType) => readonly FilterOperator[], limits: FilterLimits): ParamMeta;
 /** The `order` param's OpenAPI text over the sortable fields in `sort`, the first of which is the default, descending */
-declare function orderParamMeta(sort: readonly string[], maxSortKeys: number): ParamMeta & {
+declare function orderParamMeta(sort: readonly [string, ...string[]], maxSortKeys: number): ParamMeta & {
     /** a regular expression matching every `order` this endpoint takes, up to `maxSortKeys` keys */
     pattern: string;
 };
-/** The `q` param's OpenAPI text over the fields in `search`, with at most `maxTerms` words */
+/** The `q` param's OpenAPI text over the fields in `search`, with at most `maxTerms` words, which its examples keep to */
 declare function searchParamMeta(search: readonly string[], maxTerms: number): ParamMeta;
 export { CURSOR_DESCRIPTION, filterParamMeta, LANG_DESCRIPTION, LANG_EXAMPLES, limitParamMeta, orderParamMeta, PAGE_DESCRIPTION, PAGE_EXAMPLES, searchParamMeta, SELECT_DESCRIPTION, selectParamMeta, };
 
@@ -933,11 +934,10 @@ export type { FieldsConfig, ListQueryConfig, ListQueryLimits, ListQueryOutput, O
 import * as z from "zod";
 import { baseListQueryShape } from "./schema-params.ts";
 import type { ListQueryConfig, ListQueryOutput, OutputStableShape } from "./schema-types.ts";
-/** The params beside cursor, page and limit; each but `order` is present only where the config declares it */
-type OptionalShape = {
-    /** the sort, `field[.asc|.desc][.nullsfirst|.nullslast]` keys joined by commas */
+/** The params beside cursor, page and limit, each present only where the config declares it */
+type OptionalShape = Partial<{
+    /** the sort, `field[.asc|.desc][.nullsfirst|.nullslast]` keys joined by commas, present where the config's `sort` names a field */
     order: z.ZodOptional<z.ZodString>;
-} & Partial<{
     /** the filter expression, present where the config's `filter` names a field */
     filter: z.ZodOptional<z.ZodString>;
     /** the search text, present where the config has `search` */

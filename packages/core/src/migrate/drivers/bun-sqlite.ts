@@ -14,6 +14,7 @@ import type {
 	ResolvedDatabaseConfig,
 } from "../types.ts"
 
+/* a specifier TypeScript does not resolve: a Node consumer compiles this without bun-types */
 const BUN_SQLITE = "bun:sqlite"
 
 type SqliteParam = string | number | bigint | boolean | null | Uint8Array
@@ -37,6 +38,23 @@ type BunDatabase = {
 	prepare(sql: string): { all(...params: SqliteParam[]): unknown[] }
 	run(sql: string, params?: SqliteParam[]): unknown
 	transaction(run: () => void): { immediate(): void }
+}
+
+/** The refusal a process that cannot load bun:sqlite meets, Node among them */
+const NEEDS_BUN =
+	"The bun-sqlite provider needs Bun: bun:sqlite loads under Bun alone, and this process cannot load it. Run this command under bun, or set the provider to libsql or turso."
+
+/**
+ * bun:sqlite's module, or the refusal naming Bun with the loader's error as its cause: Node's
+ * loader answers a bun: URL with an error that names neither. Any failure is the refusal, as
+ * Node and vitest each answer with an error code of their own
+ */
+async function loadBunSqlite(load: () => Promise<unknown> = () => import(BUN_SQLITE)): Promise<{ Database: unknown }> {
+	try {
+		return (await load()) as { Database: unknown }
+	} catch (cause) {
+		throw new Error(NEEDS_BUN, { cause })
+	}
 }
 
 function bunSqliteConnection(db: BunDatabase): MigrateConnection {
@@ -73,8 +91,7 @@ export function createBunSqliteProvider(config: BunSqliteProviderConfig): Connec
 			await pastStop()
 			/* an in-memory database holds nothing to protect, and bun opens none read-only */
 			const readonly = dbConfig?.readonly === true && config.path !== ":memory:"
-			/* a specifier TypeScript does not resolve: a Node consumer compiles this without bun-types */
-			const { Database } = (await import(BUN_SQLITE)) as {
+			const { Database } = (await loadBunSqlite()) as {
 				Database: new (path: string, options?: { readonly?: boolean | undefined }) => BunDatabase
 			}
 			const open = () => {
@@ -103,7 +120,7 @@ function once<T>(db: BunLocal, sql: string, use: (stmt: ReturnType<BunLocal["pre
 
 /** How bun:sqlite opens a private database file, or `:memory:`; with `create` false, only a file that is there (local-db.ts) */
 async function bunLocal(): Promise<Open> {
-	const { Database } = (await import(BUN_SQLITE)) as {
+	const { Database } = (await loadBunSqlite()) as {
 		Database: new (path: string, options?: { create: boolean; readwrite: boolean }) => BunLocal
 	}
 	return (file, create) => {
@@ -120,4 +137,4 @@ async function bunLocal(): Promise<Open> {
 	}
 }
 
-export { bunLocal }
+export { bunLocal, loadBunSqlite }

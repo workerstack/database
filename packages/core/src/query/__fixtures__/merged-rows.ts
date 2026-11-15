@@ -15,13 +15,16 @@ export function stored(value: unknown): string {
 
 /**
  * Hand-made rows as a shard reads them through the merged builder: the tiebreak, the storage class
- * of each of `sort`'s keys and of the id, and each row's shard count on an offset page; none on a page by cursor
+ * of each of `sort`'s keys and of the id, each key read back as stored (no value held apart), and
+ * each row's shard count on an offset page; none on a page by cursor
  */
 export const read = <T extends { id: unknown }>(rows: readonly T[], total: number | null = rows.length, sort = ["k"]) =>
 	rows.map((row) => ({
 		...row,
 		_cursorId: row.id,
-		...(sort.length === 0 ? {} : { _cursorKeyTexts: sort.map(() => "").join(",") }),
+		...(sort.length === 0
+			? {}
+			: { _cursorKeyTexts: sort.map(() => "").join(","), _cursorTextKeys: JSON.stringify(sort.map(() => null)) }),
 		_cursorKeyTypes: [...sort.map((field) => stored((row as Record<string, unknown>)[field])), stored(row.id)].join(
 			",",
 		),

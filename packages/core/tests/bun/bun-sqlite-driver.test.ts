@@ -8,7 +8,7 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { ensureMigrationsTable } from "../../src/migrate/core/apply.ts"
-import { createBunSqliteProvider } from "../../src/migrate/drivers/bun-sqlite.ts"
+import { createBunSqliteProvider, loadBunSqlite } from "../../src/migrate/drivers/bun-sqlite.ts"
 
 const DB = { migrationsDir: "m", name: "local", provider: { path: ":memory:", type: "bun-sqlite" as const } }
 
@@ -89,5 +89,21 @@ describe("ensureMigrationsTable on bun:sqlite, which names no columns for an emp
 		const { rows } = await conn.execute("SELECT name FROM pragma_table_info('__drizzle_migrations') ORDER BY cid")
 		expect(rows).toEqual([["id"], ["hash"], ["created_at"], ["name"], ["hash_v"]])
 		await conn.close()
+	})
+})
+
+/* KC5 of r23: Bun loads bun:sqlite, so the refusal a Node run meets is reached here by a failing loader */
+describe("loadBunSqlite where the process cannot load bun:sqlite (KC5 of r23)", () => {
+	it("refuses naming Bun, with the loader's error as its cause", async () => {
+		const failure = new Error("Cannot find package 'bun:sqlite'")
+		const refused = await loadBunSqlite(async () => {
+			throw failure
+		}).catch((error: unknown) => error)
+		expect((refused as Error).message).toStartWith("The bun-sqlite provider needs Bun:")
+		expect((refused as Error).cause).toBe(failure)
+	})
+
+	it("hands back bun:sqlite's module where Bun loads it (sibling)", async () => {
+		expect((await loadBunSqlite()).Database).toBe((await import("bun:sqlite")).Database)
 	})
 })

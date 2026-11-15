@@ -16,7 +16,6 @@ import {
 	type BooleanShape,
 	servedBooleans,
 } from "../integration/support/boolean-keys.ts"
-import { startsOrder } from "../integration/support/text-timestamps.ts"
 
 const clients: Database[] = []
 afterEach(() => {
@@ -46,23 +45,9 @@ describe("a SQLite boolean holding anything but 0 or 1 pages or is refused by na
 		},
 	)
 
-	it.each(["merged"] as const)(
-		"answers the %s list a 500 naming the key, never repeating or skipping a row",
-		async (shape) => {
-			for (const walk of BOOLEAN_WALKS) {
-				const { error, ids } = await servedBooleans(dbsFor(shape), { ...walk, shape })
-				expect(error, JSON.stringify(walk)).toMatchObject({
-					cause: expect.stringContaining("b stores"),
-					errorKey: "sort_not_wired",
-					status: 500,
-				})
-				expect(startsOrder(ids, BOOLEAN_SERVED[walk.direction]), `${JSON.stringify(walk)} ${ids}`).toBe(true)
-			}
-		},
-	)
-
 	/* QL8: both ways a value but 0 or 1 leads the walk's one page by number, which serves it and mints no cursor */
-	it.each(["anchorless", "anchored joined"] as const)(
+	/* QL17 of r23: a merged list refused every page a shard read such a row on, served or not */
+	it.each(["anchorless", "anchored joined", "merged"] as const)(
 		"serves the %s list's first page by number, a value but 0 or 1, with no cursor while hasMore holds",
 		async (shape) => {
 			for (const walk of BOOLEAN_WALKS)

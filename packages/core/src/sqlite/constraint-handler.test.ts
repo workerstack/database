@@ -242,12 +242,11 @@ describe("constraintError: a CHECK name two tables share", () => {
 			})
 	})
 
-	it("searches every table only when the statement's table is unknown", () => {
+	/* QE1 of r23: first-match named a table that may not have failed */
+	it("answers generic with no table when the statement's table is unknown and both name it", () => {
 		expect(
 			constraintError(engine("SQLITE_CONSTRAINT_CHECK", "CHECK constraint failed: status_check"), shared),
-		).toMatchObject({
-			errorKey: "invoice_status_invalid",
-		})
+		).toMatchObject({ errorKey: "check_constraint_violation", table: undefined })
 	})
 })
 

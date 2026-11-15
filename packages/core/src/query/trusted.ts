@@ -33,6 +33,40 @@ function assertSchemaParsed(parsed: Parsed): void {
 	}
 }
 
+/** The maxPage and maxLimit a list schema states on its output; either absent is the default */
+type Bounds = { limitBound?: number | undefined; pageBound?: number | undefined }
+
+/** The 500 for a stated bound no list schema could state, which would hold the page or the limit to nothing */
+function boundNotWired(cause: string): DatabaseError {
+	return new DatabaseError({
+		cause: `${cause}: spread createListQuerySchema's output, or state bounds its pagination config would take`,
+		errorKey: databaseErrorKeys.PAGE_NOT_WIRED,
+		status: "internal_server_error",
+	})
+}
+
+/**
+ * The stated bounds, defaults filled, or a 500: a list schema states each as a safe whole number
+ * from 1 whose last offset, (pageBound - 1) * limitBound, is at most 2^53 - 1, as pageSchemaFor
+ * holds its config to
+ */
+function boundsOf(parsed: Bounds): { limitBound: number; pageBound: number } {
+	const pageBound = parsed.pageBound ?? PAGINATION_DEFAULTS.maxPage
+	const limitBound = parsed.limitBound ?? PAGINATION_DEFAULTS.maxLimit
+	for (const [key, bound] of [
+		["pageBound", pageBound],
+		["limitBound", limitBound],
+	] as const) {
+		if (!Number.isSafeInteger(bound) || bound < 1)
+			throw boundNotWired(`${key} ${String(bound)} is not a safe whole number from 1`)
+	}
+	if ((pageBound - 1) * limitBound > Number.MAX_SAFE_INTEGER)
+		throw boundNotWired(
+			`pageBound ${pageBound} and limitBound ${limitBound} put the last offset, (pageBound - 1) * limitBound, past 2^53 - 1`,
+		)
+	return { limitBound, pageBound }
+}
+
 /**
  * Throw a 400 for a page that is not a whole number from 1, which would bind a negative or
  * fractional offset, or that passes the default maxPage: an offset that deep makes the database
@@ -40,16 +74,17 @@ function assertSchemaParsed(parsed: Parsed): void {
  * maxPage as `pageBound`, which replaces the default here, so a spread of it stays held to that
  * number; `validated` says the filter and the order were checked, never the page.
  */
-function assertPageWithin(parsed: {
-	page?: number | null | undefined
-	pageBound?: number | undefined
-	/** the filter's and the order's check, which says nothing of the page: not read here */
-	validated?: true | undefined
-}): void {
+function assertPageWithin(
+	parsed: Bounds & {
+		page?: number | null | undefined
+		/** the filter's and the order's check, which says nothing of the page: not read here */
+		validated?: true | undefined
+	},
+): void {
 	const page = parsed.page ?? 1
 	if (!Number.isInteger(page) || page < 1) throw invalidPage(page)
-	const bound = parsed.pageBound ?? PAGINATION_DEFAULTS.maxPage
-	if (!(page <= bound)) throw pageTooDeep(page, bound)
+	const bound = boundsOf(parsed).pageBound
+	if (page > bound) throw pageTooDeep(page, bound)
 }
 
 /**
@@ -57,7 +92,7 @@ function assertPageWithin(parsed: {
  * page does; a schema's own limit is one already. The key is the page's, so an app's
  * map of error keys needs no new one
  */
-function assertLimitWithin(parsed: { limit: number; limitBound?: number | undefined }): void {
+function assertLimitWithin(parsed: Bounds & { limit: number }): void {
 	if (!Number.isInteger(parsed.limit) || parsed.limit < 1) {
 		throw new DatabaseError({
 			cause: `limit ${String(parsed.limit)} is not a whole number from 1`,
@@ -66,7 +101,7 @@ function assertLimitWithin(parsed: { limit: number; limitBound?: number | undefi
 		})
 	}
 	/* a limit no schema bounded is held to the default maxLimit, as such a page is to maxPage */
-	const bound = parsed.limitBound ?? PAGINATION_DEFAULTS.maxLimit
+	const bound = boundsOf(parsed).limitBound
 	if (parsed.limit <= bound) return
 	throw new DatabaseError({
 		cause: `limit ${parsed.limit} is past ${bound}; page by cursor, or bound it in the list schema`,

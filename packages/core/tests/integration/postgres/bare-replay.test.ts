@@ -263,3 +263,34 @@ describe("a bare change to a row the file names by keyword is the file's (AE6; s
 		})
 	}, 60_000)
 })
+
+/* PR2 of r23: the trial in a transaction advanced a sequence, which its ROLLBACK keeps, so the bare
+   rerun wrote other ids than apply's and a later statement naming them failed check alone */
+describe("a statement retried bare after its trial writes the ids apply writes (PR2 of r23)", () => {
+	const PLANS = `${T}CREATE TABLE plans (id serial PRIMARY KEY, name text NOT NULL);
+CREATE PROCEDURE backfill() LANGUAGE plpgsql AS $$ BEGIN FOR i IN 1..3 LOOP INSERT INTO plans (name) VALUES ('plan ' || i); COMMIT; END LOOP; END $$;\n`
+	const NAMING =
+		"CREATE TABLE accounts (id int PRIMARY KEY, plan_id int REFERENCES plans (id));\nINSERT INTO accounts VALUES (1, 1), (3, 3);\n"
+
+	it.each([
+		[
+			"a DO block that commits per row",
+			"DO $$ BEGIN FOR i IN 1..3 LOOP INSERT INTO plans (name) VALUES ('plan ' || i); COMMIT; END LOOP; END $$;\n",
+		],
+		["a CALL of a procedure that commits per row", "CALL backfill();\n"],
+		["a DO block calling that procedure", "DO $$ BEGIN CALL backfill(); END $$;\n"],
+	])(
+		"passes %s, then a statement naming ids 1 and 3, as apply runs them",
+		async (_, body) => {
+			expect(await checkThenApply(PLANS, `${NONE}${body}${NAMING}`)).toEqual({ apply: undefined, check: undefined })
+		},
+		60_000,
+	)
+
+	it("leaves a sequence the statement never advanced where it was (sibling)", async () => {
+		const body = "DO $$ BEGIN UPDATE t SET w = 1; COMMIT; END $$;\nINSERT INTO plans (name) VALUES ('first');\n"
+		const first =
+			"CREATE TABLE accounts (id int PRIMARY KEY, plan_id int REFERENCES plans (id));\nINSERT INTO accounts VALUES (1, 1);\n"
+		expect(await checkThenApply(PLANS, `${NONE}${body}${first}`)).toEqual({ apply: undefined, check: undefined })
+	}, 60_000)
+})

@@ -27,11 +27,11 @@ import { runtimeFindings } from "./classify-runtime.ts"
 import { followAdds, type Fresh, freshStart } from "./classify-write.ts"
 import { type Facts, historyFacts } from "./pg-history.ts"
 import type { Placing } from "./pg-storage-types.ts"
-import type { Node } from "./pg-nodes.ts"
 import { scopeReader } from "./pg-scope.ts"
 import { partitionedRecipe } from "./pg-partitioned.ts"
 import { pgTreeFindings } from "./pg-tree.ts"
 import type { Temps } from "./pg-temps.ts"
+import type { Prepared } from "./pg-execute.ts"
 import { type Held, heldStart, measured } from "./pg-held.ts"
 import { extractSchema } from "./schema.ts"
 import { type Rebuilds, rebuildsOf } from "./rebuild-copy.ts"
@@ -68,8 +68,8 @@ type FileContext = RebuildContext & {
 	schema: ExtractedSchema
 	/** external-content FTS5 tables the file creates again and rebuilds from their content: a drop of one loses nothing */
 	reindexed: Set<string>
-	/** on Postgres, the query each PREPARE so far holds, by the name Postgres keys it under (pg-tree.ts) */
-	preparing: Map<string, Node>
+	/** on Postgres, the file's prepared statements so far (pg-execute.ts) */
+	preparing: Prepared
 	/** on Postgres, the temp relations the file made so far (pg-temps.ts) */
 	temps: Temps
 }
@@ -227,7 +227,7 @@ function readFile(
 		dialect,
 		facts: historyFacts(dialect === "postgres" ? before : undefined, schema, placing),
 		held: heldStart(),
-		preparing: new Map(),
+		preparing: { queries: new Map(), removed: new Map() },
 		temps: new Map(),
 		naming,
 		schema: before ?? extractSchema("", undefined, { dialect, schema }),

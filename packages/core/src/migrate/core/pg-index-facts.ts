@@ -8,6 +8,7 @@
  */
 import { clipped, objectName } from "./pg-foreign.ts"
 import { type Facts, flag, keyOf, names, type Node } from "./pg-nodes.ts"
+import { partitionsOf } from "./pg-partition-order.ts"
 
 /** What an index is: a plain or unique index, or the index of a primary key, unique or exclusion constraint */
 type IndexKind = "exclusion" | "index" | "primary" | "unique"
@@ -32,7 +33,10 @@ type IndexShape = {
 /**
  * An index, by key in Facts.indexes: its table, its kind, its shape, its columns as the index names
  * them (which a clone copies, and a column's RENAME leaves alone), the partitioned index it is
- * attached to, and the tablespace the history put it in, undefined where it left that to the target
+ * attached to, and the tablespace the history put it in, undefined where it left that to the target.
+ * `unsure` marks a clone whose name database may have swapped with another's: clones whose names
+ * cut to one, on partitions it cannot order, some partitioned and some not, so it cannot tell which
+ * of those names is a partitioned index's
  */
 type IndexFact = {
 	columns: string[]
@@ -41,6 +45,7 @@ type IndexFact = {
 	shape: IndexShape
 	table: string
 	tablespace?: string | undefined
+	unsure?: boolean | undefined
 }
 
 /** An index a statement asks for: its fact, its name when the statement gives one, and what makes it the same as another */
@@ -88,19 +93,33 @@ function columnNames(written: ReadonlyArray<string | undefined>): string[] {
 /** The label ChooseIndexName gives an index of `kind` */
 const LABELS: Readonly<Record<IndexKind, string>> = { exclusion: "excl", index: "idx", primary: "pkey", unique: "key" }
 
+/** Each constraint name pg_constraint holds outside the indexes: foreign keys', CHECKs', constraint triggers' and domains', each by its owner */
+function* constraintNames(facts: Facts): Generator<[string, string]> {
+	for (const fk of facts.foreignKeys) yield [fk.table, fk.name]
+	for (const [table, held] of facts.constraintNames) for (const name of held) yield [table, name]
+	for (const [domain, { constraints }] of facts.domains) for (const name of constraints.keys()) yield [domain, name]
+}
+
 /** Whether `key` is a relation's in its schema, or for a constraint, a constraint's */
 function taken(facts: Facts, key: string, constraint: boolean): boolean {
-	if (facts.tables.has(key) || facts.views.has(key) || facts.indexes.has(key)) return true
-	return constraint && facts.foreignKeys.some((fk) => besideTable(fk.table, fk.name, facts.schema) === key)
+	const { indexes, relations, tables, views } = facts
+	if (tables.has(key) || views.has(key) || indexes.has(key) || relations.has(key)) return true
+	if (!constraint) return false
+	for (const [owner, name] of constraintNames(facts)) if (besideTable(owner, name, facts.schema) === key) return true
+	return false
+}
+
+/** The name ChooseIndexName tries for `fact` on its `pass`th try, numbered from the second */
+function candidate(fact: IndexFact, pass: number): string {
+	const label = pass === 0 ? LABELS[fact.kind] : `${LABELS[fact.kind]}${pass}`
+	const columns = fact.kind === "primary" ? "" : fact.columns.join("_")
+	return objectName(fact.table.split(".").at(-1) as string, columns, label)
 }
 
 /** The key Postgres names `fact` under on its table: ChooseRelationName's, numbered past every name taken */
 function chosen(facts: Facts, fact: IndexFact): string {
-	const bare = fact.table.split(".").at(-1) as string
-	const columns = fact.kind === "primary" ? "" : fact.columns.join("_")
 	for (let pass = 0; ; pass += 1) {
-		const label = pass === 0 ? LABELS[fact.kind] : `${LABELS[fact.kind]}${pass}`
-		const key = besideTable(fact.table, objectName(bare, columns, label), facts.schema)
+		const key = besideTable(fact.table, candidate(fact, pass), facts.schema)
 		if (!taken(facts, key, fact.kind !== "index")) return key
 	}
 }
@@ -108,28 +127,30 @@ function chosen(facts: Facts, fact: IndexFact): string {
 /** Whether two indexes match as CompareIndexInfo matches them */
 const same = (one: IndexFact, two: IndexFact): boolean => JSON.stringify(one.shape) === JSON.stringify(two.shape)
 
-/** Each partition of `table`, in the order the history attached them */
-const partitionsOf = (facts: Facts, table: string): string[] =>
-	[...facts.parents]
-		.filter(([, parents]) => parents.some((each) => each.partition && each.parent === table))
-		.map(([child]) => child)
-
-/** `table` and every partition under it */
-const lineage = (facts: Facts, table: string): string[] => [
-	table,
-	...partitionsOf(facts, table).flatMap((child) => lineage(facts, child)),
-]
-
 /** The indexes on `table` */
 const indexesOn = (facts: Facts, table: string): IndexFact[] =>
 	[...facts.indexes.values()].filter((each) => each.table === table)
 
 /** `fact` cloned onto `table`, attached to it when `attached`, and on to each partition of `table` */
-function clone(facts: Facts, fact: IndexFact, { attached, table }: { attached: boolean; table: string }): void {
+function clone(facts: Facts, fact: IndexFact, { attached, table }: { attached: boolean; table: string }): IndexFact {
 	const copy: IndexFact = { columns: [...fact.columns], kind: fact.kind, shape: structuredClone(fact.shape), table }
 	if (attached) copy.parent = fact
 	facts.indexes.set(chosen(facts, copy), copy)
 	spread(facts, copy)
+	return copy
+}
+
+/** `clones` marked unsure where their names cut to one across partitioned and plain partitions */
+function markUnsure(facts: Facts, clones: readonly IndexFact[]): void {
+	const groups = new Map<string, IndexFact[]>()
+	for (const each of clones) {
+		const key = candidate(each, 0)
+		groups.set(key, [...(groups.get(key) ?? []), each])
+	}
+	for (const group of groups.values()) {
+		const partitioned = group.filter((each) => facts.partitioned.has(each.table)).length
+		if (partitioned > 0 && partitioned < group.length) for (const each of group) each.unsure = true
+	}
 }
 
 /**
@@ -138,13 +159,16 @@ function clone(facts: Facts, fact: IndexFact, { attached, table }: { attached: b
  * clone of it is made there
  */
 function spread(facts: Facts, fact: IndexFact): void {
-	for (const child of partitionsOf(facts, fact.table)) {
+	const { children, sure } = partitionsOf(facts, fact.table)
+	const clones: IndexFact[] = []
+	for (const child of children) {
 		const match = indexesOn(facts, child).find(
 			(each) => each.parent === undefined && same(each, fact) && (fact.kind === "index" || each.kind !== "index"),
 		)
-		if (match === undefined) clone(facts, fact, { attached: true, table: child })
+		if (match === undefined) clones.push(clone(facts, fact, { attached: true, table: child }))
 		else match.parent = fact
 	}
+	if (!sure) markUnsure(facts, clones)
 }
 
 /** An index made: under `name` when given, else the one Postgres chooses, and on to its table's partitions when `recurse` */
@@ -267,7 +291,6 @@ export {
 	type IndexFact,
 	type IndexShape,
 	indexWanted,
-	lineage,
 	list,
 	make,
 	merged,

@@ -28,8 +28,8 @@ const LOCALE = {
 const OWNER = [{ pid: 7, start: "9", version: 170000 }]
 
 /* the server's counts: whether it keeps them, and a transaction's writes to the shared catalogs */
-const COUNTS = "SELECT current_setting('track_counts') AS on, coalesce("
-const COUNTED = expect.stringMatching(/^SELECT current_setting\('track_counts'\) AS on, coalesce\(/)
+const COUNTS = "SELECT current_setting('track_counts') AS on, "
+const COUNTED = expect.stringMatching(/^SELECT current_setting\('track_counts'\) AS on, /)
 
 /* the server's shared catalogs read as committed, around every file and bare statement (P1 and P2 of r22) */
 const SNAPSHOT = "EXECUTE database_snapshot"

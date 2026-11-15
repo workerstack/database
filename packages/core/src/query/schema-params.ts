@@ -162,7 +162,11 @@ function pageSchema(maxPage: number): z.ZodOptional<CountParam> {
 		.number()
 		.int()
 		.min(1)
-		.meta({ description: PAGE_DESCRIPTION, examples: PAGE_EXAMPLES, maximum: maxPage })
+		.meta({
+			description: PAGE_DESCRIPTION,
+			examples: PAGE_EXAMPLES.filter((example) => example <= maxPage),
+			maximum: maxPage,
+		})
 	return z.preprocess((raw) => pageFrom(raw, maxPage), page).optional()
 }
 

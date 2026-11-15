@@ -3,6 +3,7 @@ import {
 	checkedOnce,
 	defineConstraintMaps,
 	entryOf,
+	findAllNamed,
 	findNamed,
 	lookup,
 	own,
@@ -46,6 +47,28 @@ describe("findNamed", () => {
 		expect(findNamed(MAPS, "check", "b_n_check")).toMatchObject({ entry: { errorKey: "b_n_invalid" }, table: "b" })
 		expect(findNamed(MAPS, "check", "nope")).toBeUndefined()
 		expect(findNamed(MAPS, "unique", undefined)).toBeUndefined()
+	})
+})
+
+/* QE1 of r23: a trigger's CHECK is answered by the one other table that names it */
+describe("findAllNamed", () => {
+	const shared: ConstraintMap[] = [
+		{
+			"p_*": { check: { n_check: { cause: "p", errorKey: "p_n" } } },
+			a: { check: { n_check: { cause: "a", errorKey: "a_n" } } },
+		},
+		{
+			a: { check: { n_check: { cause: "a again", errorKey: "a_n_again" } } },
+			b: { check: { n_check: { cause: "b", errorKey: "b_n" } } },
+		},
+	]
+
+	it("lists each table naming it once, its first map's entry, a pattern left out", () => {
+		expect(findAllNamed(shared, "check", "n_check")).toEqual([
+			{ entry: { cause: "a", errorKey: "a_n" }, table: "a" },
+			{ entry: { cause: "b", errorKey: "b_n" }, table: "b" },
+		])
+		expect(findAllNamed(shared, "check", undefined)).toEqual([])
 	})
 })
 

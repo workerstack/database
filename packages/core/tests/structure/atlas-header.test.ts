@@ -43,6 +43,22 @@ const SHAPES: Readonly<Record<string, string>> = {
 	"an indented statement right after": "-- atlas:txmode none\n   ",
 }
 
+/* PA4 of r23: whole files whose header lines end in a bare CR, which Atlas reads as no line end */
+const CR_FILES: Readonly<Record<string, string>> = {
+	"a CR-only blank line and statement, ending in CR": "-- atlas:txmode none\r\rVACUUM;\r",
+	"a CR-only blank line and statement, ending in none": "-- atlas:txmode none\r\rVACUUM;",
+	"a CR-only blank line, the statement's line LF-ended": "-- atlas:txmode none\r\rVACUUM;\n",
+	"a CR before the statement on the directive's LF line": "-- atlas:txmode none\rVACUUM;\n",
+	"LF then a CRLF blank line": "-- atlas:txmode none\n\r\nVACUUM;\n",
+	"CRLF then the statement": "-- atlas:txmode none\r\nVACUUM;\n",
+	"a trailing CR before the LF blank line": "-- atlas:txmode none\r\n\nVACUUM;\n",
+	"a directive with a CR inside its value": "-- atlas:txmode no\rne\n\nVACUUM;\n",
+	"a space after the value": "-- atlas:txmode none \n\nVACUUM;\n",
+	"a tab after the value": "-- atlas:txmode none\t\n\nVACUUM;\n",
+	"a header alone, its directive unterminated": "-- atlas:txmode bogus",
+	"a header alone, its directive CR-ended": "-- atlas:txmode bogus\r",
+}
+
 /* each Atlas the shapes are read by, by its version: the range's floor, and the one on PATH */
 const ATLASES: Readonly<Record<string, string>> = {
 	[`v${ATLAS_FLOOR_VERSION}`]: requireAtlasFloor(),
@@ -64,21 +80,23 @@ function ran(binary: string, args: readonly string[], env: NodeJS.ProcessEnv) {
 	return run
 }
 
-/** How the Atlas `binary` ran `head` before a VACUUM, as a txmode; any other failure throws Atlas's words */
-function atlasRead(head: string, binary: string): Txmode {
+/** How the Atlas `binary` ran `file`, a header and a VACUUM, as a txmode; any other failure throws Atlas's words */
+function atlasRead(file: string, binary: string): Txmode {
 	const dir = mkdtempSync(path.join(os.tmpdir(), "database-atlas-header-"))
 	try {
 		const migrations = path.join(dir, "m")
 		mkdirSync(migrations)
 		writeFileSync(path.join(migrations, "20260101000000_t.sql"), "CREATE TABLE t (x int);\n")
-		writeFileSync(path.join(migrations, "20260102000000_v.sql"), `${head}VACUUM;\n`)
+		writeFileSync(path.join(migrations, "20260102000000_v.sql"), file)
 		const at = ["--dir", `file://${migrations}`]
 		const env = { ...process.env, TMPDIR: dir }
 		const hash = ran(binary, ["migrate", "hash", ...at], env)
 		if (hash.status !== 0) throw new Error(`${binary} migrate hash exited ${hash.status}: ${hash.stderr}`)
 		const apply = ran(binary, ["migrate", "apply", "--url", `sqlite://${path.join(dir, "db")}`, ...at], env)
 		const said = `${apply.stdout}${apply.stderr}`
-		if (!said.includes("Error")) return "none"
+		/* a header Atlas did not read is sent as the statement's own text, which SQLite may read as all comment and run
+		   nothing: Postgres ends a comment at a CR too and runs the VACUUM, in the file's transaction (PA4 of r23) */
+		if (!said.includes("Error")) return /-> (?:--|#)[^\n]*atlas:/.test(said) ? "file" : "none"
 		if (said.includes("cannot VACUUM from within a transaction")) return "file"
 		/* Atlas names the file, which database's refusal leaves to the line that reports it */
 		const refused = /^Error: (.*txmode.*)$/m.exec(said)?.[1]?.replace(' "20260102000000_v.sql"', "")
@@ -89,12 +107,20 @@ function atlasRead(head: string, binary: string): Txmode {
 	}
 }
 
+/** How each Atlas read `file`, by its version */
+const readByAtlas = (file: string) =>
+	Object.fromEntries(Object.entries(ATLASES).map(([version, binary]) => [version, atlasRead(file, binary)]))
+
+/** How database reads `file`, under each Atlas's version */
+const readBoth = (file: string) =>
+	Object.fromEntries(Object.keys(ATLASES).map((version) => [version, atlasHeader(file).txmode]))
+
 describe("database reads a txmode header as Atlas does (PA3; sibling: database's own -- database:allow-unsafe: line)", () => {
 	it.each(Object.entries(SHAPES))("%s", (_, head) => {
-		const reads = Object.fromEntries(
-			Object.entries(ATLASES).map(([version, binary]) => [version, atlasRead(head, binary)]),
-		)
-		const database = atlasHeader(`${head}VACUUM;\n`).txmode
-		expect(Object.fromEntries(Object.keys(ATLASES).map((version) => [version, database]))).toEqual(reads)
+		expect(readBoth(`${head}VACUUM;\n`)).toEqual(readByAtlas(`${head}VACUUM;\n`))
+	})
+
+	it.each(Object.entries(CR_FILES))("%s (PA4 of r23)", (_, file) => {
+		expect(readBoth(file)).toEqual(readByAtlas(file))
 	})
 })

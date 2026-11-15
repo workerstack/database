@@ -52,6 +52,7 @@ describe("buildListQuery's merged list", () => {
 			"_cursorId",
 			"_cursorKeyTexts",
 			"_cursorKeyTypes",
+			"_cursorTextKeys",
 			"_total",
 		])
 		expect(merged({ limit: "3" })).toMatchObject({ limit: 4, offset: 0 })
@@ -190,13 +191,7 @@ describe("paginateMerged's count and projection", () => {
 
 /* Q1 of the 0.14.1 review: a shard that resumed before the cursor, as one reading a gone anchor at -Infinity does */
 /** A row of key `k`, with its storage class and its text id's */
-const row = (id: string, k: number) => ({
-	_cursorId: id,
-	_cursorKeyTexts: "",
-	_cursorKeyTypes: `${stored(k)},text`,
-	id,
-	k,
-})
+const row = (id: string, k: number) => ({ ...read([{ id, k }], null)[0], _cursorKeyTypes: `${stored(k)},text` })
 
 describe("paginateMerged past a cursor a shard resumed before", () => {
 	const first = paginateMerged(

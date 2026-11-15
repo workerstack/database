@@ -40,11 +40,11 @@ describe("a Postgres history's statement triggers", () => {
 		const read = facts(
 			"CREATE TABLE p (id int) PARTITION BY RANGE (id);\nCREATE TABLE c PARTITION OF p FOR VALUES FROM (1) TO (2);\nALTER TABLE p RENAME TO q;",
 		)
-		expect(read.parents.get("c")).toEqual([{ parent: "q", partition: true }])
+		expect(read.parents.get("c")).toEqual([{ bound: expect.anything(), parent: "q", partition: true }])
 		const other = facts(
 			"CREATE TABLE p (id int) PARTITION BY RANGE (id);\nCREATE TABLE c PARTITION OF p FOR VALUES FROM (1) TO (2);\nCREATE SCHEMA app;\nCREATE TABLE app.x (id int);\nALTER TABLE app.x RENAME TO y;\nALTER TRIGGER gone ON y RENAME TO still;",
 		)
-		expect(other.parents.get("c")).toEqual([{ parent: "p", partition: true }])
+		expect(other.parents.get("c")).toEqual([{ bound: expect.anything(), parent: "p", partition: true }])
 		expect(other.triggers).toEqual(new Map())
 	})
 
@@ -84,7 +84,7 @@ describe("a Postgres history's names under a renamed schema", () => {
 			"CREATE SCHEMA app;\nCREATE TABLE app.users (id int);\nCREATE TRIGGER t AFTER INSERT ON app.users FOR EACH ROW EXECUTE FUNCTION f();\nCREATE TABLE app.p (id int) PARTITION BY RANGE (id);\nCREATE TABLE app.c PARTITION OF app.p FOR VALUES FROM (1) TO (2);\nCREATE FUNCTION app.g(int) RETURNS int LANGUAGE sql AS 'SELECT 1';\nCREATE TRIGGER k AFTER INSERT ON users FOR EACH ROW EXECUTE FUNCTION f();\nALTER SCHEMA app RENAME TO app2;",
 		)
 		expect([...read.triggers.keys()].toSorted()).toEqual(["app2.users", "users"])
-		expect(read.parents.get("app2.c")).toEqual([{ parent: "app2.p", partition: true }])
+		expect(read.parents.get("app2.c")).toEqual([{ bound: expect.anything(), parent: "app2.p", partition: true }])
 		expect([...read.parents.keys()]).toEqual(["app2.c"])
 		expect(read.defined).toEqual(new Set(["app.g", "app2.g"]))
 		const code = facts(

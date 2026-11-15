@@ -54,10 +54,10 @@ describe("what a Postgres history's parents, casts, operators and domains are", 
 		)
 		expect(read.parents).toEqual(
 			new Map([
-				["s.c", [{ parent: "p", partition: true }]],
+				["s.c", [{ bound: expect.anything(), parent: "p", partition: true }]],
 				["j", [{ parent: "i", partition: false }]],
 				["k", [{ parent: "i", partition: false }]],
-				["a", [{ parent: "p", partition: true }]],
+				["a", [{ bound: expect.anything(), parent: "p", partition: true }]],
 			]),
 		)
 	})

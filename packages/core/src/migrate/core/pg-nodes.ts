@@ -46,6 +46,7 @@ const emptyFacts = (schema: string): Facts => ({
 	casts: new Map(),
 	code: new Map(),
 	columnTypes: new Map(),
+	constraintNames: new Map(),
 	defined: new Set(),
 	defaultPartitions: new Map(),
 	domains: new Map(),
@@ -59,6 +60,7 @@ const emptyFacts = (schema: string): Facts => ({
 	proofs: new Map(),
 	indexes: new Map(),
 	reads: new Map(),
+	relations: new Set(),
 	routines: new Map(),
 	schema,
 	storage: new Map(),
@@ -141,6 +143,10 @@ type Facts = {
 	defaultPartitions: Map<string, string>
 	/** each partitioned table, by key */
 	partitioned: Set<string>
+	/** each table's named CHECKs and constraint triggers, whose names a constraint's index numbers past */
+	constraintNames: Map<string, Set<string>>
+	/** each sequence and composite type, by key: the relations no other fact keys, whose names an index numbers past */
+	relations: Set<string>
 	/** each table's primary key, which a REFERENCES without columns names */
 	primaryKeys: Map<string, PrimaryKey>
 	/**
@@ -148,8 +154,8 @@ type Facts = {
 	 * partitioned table has no storage of its own
 	 */
 	indexes: Map<string, IndexFact>
-	/** each table's parents, and whether it is their partition */
-	parents: Map<string, Array<{ parent: string; partition: boolean }>>
+	/** each table's parents, whether it is their partition, and its bound as written when it is */
+	parents: Map<string, Array<{ bound?: Node | undefined; parent: string; partition: boolean }>>
 	/** the schema an unqualified name resolves in, the one each key leaves out */
 	schema: string
 	/** each table the history's trees made, with its columns */

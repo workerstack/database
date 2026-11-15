@@ -6,7 +6,7 @@
 import type { TriggerEvent } from "../migration-types.ts"
 import { moveReads } from "./pg-cascade.ts"
 import { moveDomains } from "./pg-domains.ts"
-import { lineage } from "./pg-index-facts.ts"
+import { lineage } from "./pg-partition-order.ts"
 import { type Facts, flag, keyOf, names, type Node, num, tableOf } from "./pg-nodes.ts"
 
 // lookup-table: the bits of a trigger's events, as pg_trigger numbers them
@@ -21,6 +21,7 @@ function moveTable(facts: Facts, from: string, to: string): void {
 	const maps = [
 		facts.code,
 		facts.columnTypes,
+		facts.constraintNames,
 		facts.parents,
 		facts.partitionKeys,
 		facts.proofs,
@@ -68,6 +69,7 @@ function moveSchema(facts: Facts, from: string, to: string): void {
 		facts.casts,
 		facts.code,
 		facts.columnTypes,
+		facts.constraintNames,
 		facts.domains,
 		facts.operators,
 		facts.parents,
@@ -94,10 +96,11 @@ function moveSchema(facts: Facts, from: string, to: string): void {
 	for (const [key, fn] of facts.operators) facts.operators.set(key, move(fn))
 	moveDomains(facts, move)
 	for (const key of Array.from(facts.defined)) facts.defined.add(move(key))
-	for (const key of Array.from(facts.partitioned)) {
-		facts.partitioned.delete(key)
-		facts.partitioned.add(move(key))
-	}
+	for (const set of [facts.partitioned, facts.relations])
+		for (const key of Array.from(set)) {
+			set.delete(key)
+			set.add(move(key))
+		}
 	for (const index of facts.indexes.values()) index.table = move(index.table)
 	moveDefaults(facts, move)
 	moveReads(facts, move)
@@ -205,6 +208,7 @@ function followDrop(node: Node, facts: Facts): void {
 	for (const table of tables) {
 		facts.parents.delete(table)
 		facts.triggers.delete(table)
+		facts.constraintNames.delete(table)
 		facts.tables.delete(table)
 		facts.columnTypes.delete(table)
 		facts.views.delete(table)

@@ -714,9 +714,9 @@ format's floor, an id's 1 to 48), an integer's clamped to what the column
 holds on the dialect, a timestamp's to a JS number's exact range, and none on a boolean, an enum
 or a timestamp database fills. A plain Postgres column whose type has a write rule of its own (a uuid, a date, an inet, a real, a numeric with a precision) states none either: its
 rule is its type's, which `kind` and `sqlType` name together, as a precision, a time zone, an interval's fields and a numeric's scale each change it, and as an inet's union of formats or a numeric's exclusive
-bounds fit no `min`, `max` or pattern; a reader applies the type's own check. `patterns` lists every regex the value must match, the declared one and
+bounds fit no `min`, `max` or pattern; a reader applies the type's own check. A plain SQLite numeric states the one pattern its DTO checks, the digits SQLite's NUMERIC reads back as sent. `patterns` lists every regex the value must match, the declared one and
 the kind's own (an id's, a url's https, a name's, an image URI's), as regex literals in the order
-the chain checks them; an email's own check is its format, which `textKind` names. A password
+the chain checks them, each one RE2 compiles: no `\u` escape, every character written as itself; an email's own check is its format, which `textKind` names. A password
 column stores the hash, so it is held to its declared bounds and pattern alone, with a required
 one's 1, and `textKind: "password"` implies no rule of database's on the plaintext. `maxBytes` is a `c.json` column's byte limit. A test holds each column's values to
 the JSON Schema the create DTO publishes, on both dialects. All of them bind a value after its

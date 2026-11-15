@@ -1268,6 +1268,14 @@ export declare function getSqliteIndexes(conn: MigrateConnection): Promise<strin
 import type { Open } from "./local-db.ts";
 import type { BunSqliteProviderConfig, ConnectionProvider } from "../types.ts";
 /**
+ * bun:sqlite's module, or the refusal naming Bun with the loader's error as its cause: Node's
+ * loader answers a bun: URL with an error that names neither. Any failure is the refusal, as
+ * Node and vitest each answer with an error code of their own
+ */
+declare function loadBunSqlite(load?: () => Promise<unknown>): Promise<{
+    Database: unknown;
+}>;
+/**
  * A bun:sqlite database's provider, by file path or `:memory:`; it runs on Bun alone. Each connection
  * enforces foreign keys and waits up to 5 s for a lock another process holds. A file is created when
  * missing, except by a reader, which opens it read-only and throws `DatabaseMissing` when it is not there
@@ -1275,7 +1283,7 @@ import type { BunSqliteProviderConfig, ConnectionProvider } from "../types.ts";
 export declare function createBunSqliteProvider(config: BunSqliteProviderConfig): ConnectionProvider;
 /** How bun:sqlite opens a private database file, or `:memory:`; with `create` false, only a file that is there (local-db.ts) */
 declare function bunLocal(): Promise<Open>;
-export { bunLocal };
+export { bunLocal, loadBunSqlite };
 
 // migrate/core/classify-verdict.d.ts
 /**

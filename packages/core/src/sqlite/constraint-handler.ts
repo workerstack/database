@@ -7,6 +7,7 @@ import {
 	checkedOnce,
 	entryOf,
 	type Found,
+	findAllNamed,
 	findNamed,
 	lookup,
 	own,
@@ -123,10 +124,12 @@ function check(v: Violation): DatabaseError {
 	} as const
 	/* CHECK names are only unique per table: look in the statement's table before any other */
 	const table = statementTable(v.read.query, "sqlite")?.table
-	if (table !== undefined)
-		return toError(v, { entry: lookup(v.maps, table, (t) => own(t.check, name)), fallback, table })
-	const found = findNamed(v.maps, "check", name)
-	return toError(v, { entry: found?.entry, fallback, table: found?.table })
+	const entry = lookup(v.maps, table, (t) => own(t.check, name))
+	if (entry !== undefined) return toError(v, { entry, fallback, table })
+	/* a trigger's write may fail another table's: the one other naming it; of two, which failed is unknown */
+	const [other, another] = findAllNamed(v.maps, "check", name).filter((found) => found.table !== table)
+	if (other !== undefined && another === undefined) return toError(v, { ...other, fallback })
+	return toError(v, { entry: undefined, fallback, table: other === undefined ? table : undefined })
 }
 
 function notNull(v: Violation): DatabaseError {
@@ -158,6 +161,14 @@ function insertLeaves(query: string | undefined, column: string | undefined): bo
 	return column === undefined || !inserted.some((name) => asciiFolded(name) === asciiFolded(column))
 }
 
+/* whether the statement changes a key other tables reference, so a row referencing the old value may be what
+   failed: an UPDATE or DO UPDATE assigning one, or a REPLACE, which deletes the rows its values conflict with */
+function changesReferencedKey(v: Violation, table: string | undefined, assigned: string[] | undefined): boolean {
+	const referenced = new Set(v.maps.flatMap((map) => entryOf(map, table)?.referenced ?? []).map(asciiFolded))
+	if (/^(?:replace|insert\s+or\s+replace)\b/i.test(statementHead(v.read.query ?? ""))) return referenced.size > 0
+	return (assigned ?? upsertColumns(v.read.query) ?? []).some((name) => referenced.has(asciiFolded(name)))
+}
+
 /* SQLite's FOREIGN KEY message names neither table nor column; the statement's target table
  * does, and a table with one foreign key leaves no doubt about the column. A DELETE can only
  * fail on the other side, a row that references the deleted one, so no key of its own is blamed.
@@ -180,26 +191,11 @@ function foreignKey(v: Violation): DatabaseError {
 	const folded = new Set(keys?.map(asciiFolded))
 	const unlisted = assigned !== undefined && !assigned.some((name) => folded.has(asciiFolded(name)))
 	const unset = insertLeaves(v.read.query, column)
-	/* a statement that changes a key other tables reference may have failed on a row that references
-	   the old value, its own key valid: which side failed is unknown */
-	const referenced = new Set(v.maps.flatMap((map) => entryOf(map, table)?.referenced ?? []).map(asciiFolded))
-	const changesReferenced = (assigned ?? upsertColumns(v.read.query) ?? []).some((name) =>
-		referenced.has(asciiFolded(name)),
-	)
-	if (/^delete\b/i.test(statementHead(v.read.query ?? ""))) {
-		const fallback = {
-			cause: STILL_REFERENCED,
-			errorKey: databaseErrorKeys.FOREIGN_KEY_VIOLATION,
-			status: "conflict",
-		} as const
-		return toError(v, { entry: undefined, fallback, table })
-	}
-	const fallback = {
-		cause: MISSING_OR_REFERENCED,
-		errorKey: databaseErrorKeys.FOREIGN_KEY_VIOLATION,
-		status: "conflict",
-	} as const
-	if (unlisted || unset || changesReferenced) return toError(v, { entry: undefined, fallback, table })
+	const changesReferenced = changesReferencedKey(v, table, assigned)
+	const deletes = /^delete\b/i.test(statementHead(v.read.query ?? ""))
+	const cause = deletes ? STILL_REFERENCED : MISSING_OR_REFERENCED
+	const fallback = { cause, errorKey: databaseErrorKeys.FOREIGN_KEY_VIOLATION, status: "conflict" } as const
+	if (deletes || unlisted || unset || changesReferenced) return toError(v, { entry: undefined, fallback, table })
 	return toError(v, {
 		column: entry === undefined ? undefined : shownColumn(v.maps, table, column),
 		entry,

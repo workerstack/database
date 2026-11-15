@@ -8,12 +8,38 @@
  * which may PREPARE any name. A refusal is as sound as a rating, so database refuses no file Postgres
  * runs: a DML statement fires triggers, a DDL statement fires event triggers (under a CREATE TABLE
  * AS, at ddl_command_start, before its EXECUTE's lookup), and a DO block, a CALL, a function call or
- * a resolved EXECUTE runs code of its own; only a PREPARE, a DEALLOCATE, a transaction statement, a
- * SET and a SHOW run none.
+ * a resolved EXECUTE runs code of its own; only a PREPARE, a DEALLOCATE, a DISCARD, a transaction statement, a
+ * SET and a SHOW run none. A DEALLOCATE removes the name it gives, DEALLOCATE ALL, DISCARD ALL and
+ * DISCARD PLANS every name, so an EXECUTE after one fails as Postgres fails it; DISCARD TEMP keeps them.
  */
 import type { Finding } from "./classify-alter.ts"
 import { kindOf, tagOf } from "./pg-events.ts"
 import { names, type Node, nodesOf } from "./pg-nodes.ts"
+
+/**
+ * A file's prepared statements so far: the query each PREPARE holds, by the name Postgres keys it
+ * under, which an EXECUTE runs, and each name a DEALLOCATE or DISCARD removed since, with that statement
+ */
+type Prepared = { queries: Map<string, Node>; removed: Map<string, string> }
+
+// lookup-table: the DISCARD targets that remove every prepared statement, as their statement reads
+const DISCARDS: Readonly<Record<string, string>> = { DISCARD_ALL: "DISCARD ALL", DISCARD_PLANS: "DISCARD PLANS" }
+
+/** `prepared` after a top-level statement: a PREPARE adds its name, a DEALLOCATE or DISCARD removes */
+function followPrepared(type: string, node: Node, prepared: Prepared): void {
+	if (type === "PrepareStmt") {
+		prepared.queries.set(String(node["name"]), node["query"] as Node)
+		prepared.removed.delete(String(node["name"]))
+		return
+	}
+	const all = type === "DeallocateStmt" && node["name"] === undefined ? "DEALLOCATE ALL" : undefined
+	const by = all ?? (type === "DiscardStmt" ? DISCARDS[String(node["target"])] : undefined)
+	if (by !== undefined) {
+		for (const name of prepared.queries.keys()) prepared.removed.set(name, by)
+		prepared.queries.clear()
+	} else if (type === "DeallocateStmt" && prepared.queries.delete(String(node["name"])))
+		prepared.removed.set(String(node["name"]), `DEALLOCATE ${String(node["name"])}`)
+}
 
 /**
  * Every node of `stmts`, a statement's parse trees: a PREPARE as itself, never as the query it holds,
@@ -30,16 +56,21 @@ const executedNodes = (
 	})
 
 /**
- * An ExecuteStmt `node`'s own findings: none when `preparing` holds its query, which executedNodes
+ * An ExecuteStmt `node`'s own findings: none when `prepared` holds its query, which executedNodes
  * rates; unsafe when `dynamic`, the file's first statement before it that may PREPARE, names one;
  * else a refusal, as Postgres fails the file
  */
 function executeFindings(
 	node: Node,
-	{ dynamic, preparing }: { dynamic?: string | undefined; preparing: ReadonlyMap<string, Node> },
+	{ dynamic, prepared }: { dynamic?: string | undefined; prepared: Prepared },
 ): Finding[] {
 	const name = String(node["name"])
-	if (preparing.has(name)) return []
+	if (prepared.queries.has(name)) return []
+	const by = prepared.removed.get(name)
+	if (by !== undefined && dynamic === undefined)
+		throw new Error(
+			`${by} before it in its file removes the statement prepared as ${name}: Postgres fails the file with "prepared statement "${name}" does not exist"; PREPARE it again after the ${by}`,
+		)
 	if (dynamic === undefined)
 		throw new Error(
 			`no statement before it in its file prepares ${name}, and database applies each file in a session of its own, so an earlier file's PREPARE never reaches it: Postgres fails the file with "prepared statement "${name}" does not exist"; PREPARE it in this file`,
@@ -49,7 +80,7 @@ function executeFindings(
 }
 
 /** The top-level statements that run no user code: a PREPARE runs its query only when an EXECUTE does */
-const INERT = /^(?:Prepare|Deallocate|Transaction|VariableSet|VariableShow)Stmt$/
+const INERT = /^(?:Prepare|Deallocate|Discard|Transaction|VariableSet|VariableShow)Stmt$/
 
 /** A command tag with its article: an INSERT, a CREATE TABLE */
 const an = (kind: string): string => `${/^[AEIOU]/.test(kind) ? "an" : "a"} ${kind}`
@@ -77,4 +108,4 @@ function dynamicOf(tops: ReadonlyArray<[string, Node]>, nodes: ReadonlyArray<[st
 	return firedBy([top]) ?? `user code ${an(kindOf(...top))} runs`
 }
 
-export { dynamicOf, executedNodes, executeFindings, firedBy }
+export { dynamicOf, executedNodes, executeFindings, firedBy, followPrepared, type Prepared }

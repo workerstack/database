@@ -128,7 +128,7 @@ async function replayFile(run: Run, { name, sql: text }: HistoryFile, replay: Re
 			block = blockAfter(block, type, node)
 			if (type === "TransactionStmt") await locks.moved(node, block)
 			await window(run, { ...file, sent })
-		} else await guarded(run, { ...file, sent }, send)
+		} else await guarded(run, { ...file, sent }, { send, type })
 	}
 	if (inFile) await commit(run, { ...file, sent: undefined })
 }
