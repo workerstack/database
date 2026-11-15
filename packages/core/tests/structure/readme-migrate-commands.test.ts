@@ -71,12 +71,11 @@ async function reach(target: MigrateTarget, cwd: string): Promise<void> {
 		mode: "apply" as const,
 	}
 	const { config, dir } = d1Config(request, target)
-	const read = await wranglerReader(wranglerBin())
-	resolveBinding(read, {
+	const ref = { wranglerConfig: config.wranglerConfig as string, wranglerEnv: config.wranglerEnv }
+	resolveBinding(await wranglerReader(wranglerBin(), ref), {
+		...ref,
 		migrationsDir: dir,
 		name: config.databaseName,
-		wranglerConfig: config.wranglerConfig as string,
-		wranglerEnv: config.wranglerEnv,
 	} as D1Target)
 }
 

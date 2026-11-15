@@ -111,8 +111,16 @@ describe("readPending's moves (PA17 of r22b, 16.3 c)", () => {
 		expect(placedWarnings(["2_b.sql", "3_c.sql"], PLACED).warned[1]).toHaveLength(2)
 	})
 
-	it("says no pending file moves a relation for a SET LOGGED, whose no-op the history alone reads", () => {
-		write([MADE, "ALTER TABLE a SET LOGGED;\n"])
-		expect(placedWarnings(["2_b.sql"], PLACED)).toEqual({ moves: false, warned: [[]] })
+	/* PA1 of r23: a DO block the history ran may have flipped it, which its text cannot show */
+	it("reads the catalog for a SET LOGGED, whose no-op the catalog says after code the history cannot read", () => {
+		const FLIPPED = `${MADE}DO $$ BEGIN EXECUTE 'ALTER TABLE a SET UNLOGGED'; END $$;\n`
+		const unlogged: Placed = {
+			...PLACED,
+			relations: new Map([["a", { ...PLACED.relations.get("a")!, logged: false }]]),
+		}
+		write([FLIPPED, "ALTER TABLE a SET LOGGED;\n"])
+		expect(placedWarnings(["2_b.sql"], PLACED)).toEqual({ moves: true, warned: [[]] })
+		expect(placedWarnings(["2_b.sql"], unlogged).warned[0]).toHaveLength(1)
+		expect(placedWarnings(["2_b.sql"]).warned[0]).toHaveLength(1)
 	})
 })

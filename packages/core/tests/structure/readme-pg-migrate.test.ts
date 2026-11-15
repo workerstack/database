@@ -82,9 +82,19 @@ describe("the README's Postgres lock warnings (AE2-12)", () => {
 
 	it("says check and apply read where the target's default put a relation (PA17 of r22b, 16.3 c)", () => {
 		expect(warnings).toContain(
-			"where the target's catalog says its default put it, which `check` and `apply` read when the `postgres` package is installed",
+			"where the target's catalog says it is, which `check` and `apply` read when the `postgres` package is installed",
 		)
 		expect(warnings).toContain("for a relation a pending file makes, such a move warns")
+	})
+
+	/* PA1 and PA2 of r23 */
+	it("says a DO block, a CALL or a history function's call leaves a move and an ATTACH's proof to the catalog or a warning", () => {
+		expect(warnings).toContain(
+			"or whose place a `DO` block, a `CALL` or a call of a function the history defined may have changed since",
+		)
+		expect(warnings).toContain(
+			"with no `DO` block, `CALL` or call of a history function after the `CHECK`, any of which may drop it",
+		)
 	})
 })
 

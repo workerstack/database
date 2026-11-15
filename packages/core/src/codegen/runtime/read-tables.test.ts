@@ -381,11 +381,14 @@ describe("snapshotOf: an error the reader did not mean", () => {
 /* F9 of the 0.14.1 review: c.enum takes the flags every other c helper does, beside its state machine */
 describe("c.enum's options", () => {
 	it("reads private, nomutate and tenant beside the state machine, on both dialects", () => {
-		const source = 'c.enum("s", ["a", "b"], { initial: "a", nomutate: true, private: true, tenant: true })'
-		for (const dialect of ["sqlite", "postgres"] as const) {
-			const field = parseField("s", source, { dialect })
-			expect(field.constraints, dialect).toMatchObject({ nomutate: true, private: true, tenant: true })
-			expect(field.states, dialect).toEqual({ initial: "a", terminal: null, transitions: null })
+		/* tenant and private contradict, so each is read beside nomutate on its own */
+		for (const flag of ["private", "tenant"] as const) {
+			const source = `c.enum("s", ["a", "b"], { initial: "a", nomutate: true, ${flag}: true }).notNull()`
+			for (const dialect of ["sqlite", "postgres"] as const) {
+				const field = parseField("s", source, { dialect })
+				expect(field.constraints, dialect).toMatchObject({ nomutate: true, [flag]: true })
+				expect(field.states, dialect).toEqual({ initial: "a", terminal: null, transitions: null })
+			}
 		}
 		expect(parseField("s", 'c.enum("s", ["a"], { private: true })').states).toBeNull()
 	})

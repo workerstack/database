@@ -70,13 +70,19 @@ async function readPlaced(
 	}
 }
 
-// lookup-table: the moves whose no-op the history cannot see for a relation made without USING or TABLESPACE
-const UNNAMED_MOVES: ReadonlySet<unknown> = /* @__PURE__ */ new Set(["AT_SetAccessMethod", "AT_SetTableSpace"])
+/* lookup-table: the moves whose no-op the history cannot always see: an access method or tablespace for a
+   relation made without USING or TABLESPACE, and a persistence after code the history cannot read ran */
+const CATALOG_MOVES: ReadonlySet<unknown> = /* @__PURE__ */ new Set([
+	"AT_SetAccessMethod",
+	"AT_SetLogged",
+	"AT_SetTableSpace",
+	"AT_SetUnLogged",
+])
 
-/** Whether a parse tree among `trees` moves a relation to an access method or a tablespace */
+/** Whether a parse tree among `trees` moves a relation to an access method, a tablespace or a persistence */
 const movesStorage = (trees: readonly unknown[]): boolean =>
 	trees.some((tree) =>
-		nodesOf(tree).some(([type, node]) => type === "AlterTableCmd" && UNNAMED_MOVES.has((node as Node)["subtype"])),
+		nodesOf(tree).some(([type, node]) => type === "AlterTableCmd" && CATALOG_MOVES.has((node as Node)["subtype"])),
 	)
 
 export { movesStorage, placedOf, type ReadPlaced, readPlaced }

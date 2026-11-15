@@ -1,4 +1,5 @@
 import type { SQL } from "drizzle-orm"
+import { PgDialect, pgTable, text as pgText } from "drizzle-orm/pg-core"
 import { SQLiteDialect, sqliteTable, text } from "drizzle-orm/sqlite-core"
 import { describe, expect, it } from "vitest"
 import { patternToSQL } from "./pattern.ts"
@@ -44,5 +45,18 @@ describe("patternToSQL: a fixed text", () => {
 
 	it("binds a non-string value as its text", () => {
 		expect(lowered("like", 42).params).toEqual(["42"])
+	})
+})
+
+/* QL1 of r23: a Postgres column takes LIKE and ILIKE, a fixed text included */
+describe("patternToSQL on a Postgres column", () => {
+	const item = pgTable("item", { title: pgText("title") })
+	const pg = new PgDialect()
+	it("lowers like to LIKE and ilike to ILIKE, escaping % and _", () => {
+		expect(pg.sqlToQuery(patternToSQL(item.title, "like", "*pie*"))).toEqual({
+			params: ["%pie%"],
+			sql: '"item"."title" LIKE $1 ESCAPE \'\\\'',
+		})
+		expect(pg.sqlToQuery(patternToSQL(item.title, "ilike", "50%_*")).sql).toContain("ILIKE")
 	})
 })

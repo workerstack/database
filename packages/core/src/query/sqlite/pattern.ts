@@ -1,20 +1,45 @@
 /**
- * The one lowering of `like` / `ilike` for SQLite. Every filter path calls this,
+ * The one lowering of `like` / `ilike`, for SQLite and Postgres. Every filter path calls this,
  * so the two operators cannot drift apart between builders.
  *
+ * On Postgres, `like` is LIKE and `ilike` ILIKE, `*` written as `%` and LIKE's own specials escaped:
+ * Postgres caps no pattern's length, so a fixed text needs no other form.
+ *
+ * On SQLite:
  * A value whose only `*` are at its ends is a fixed text to find, not a pattern: it lowers
  * to `instr`, `substr` or `=`, which no length cap limits, where D1 refuses a LIKE or GLOB
  * pattern over 50 bytes. `like` stays case-sensitive, as GLOB is; `ilike` compares both sides
  * through `lower()`, ASCII as LIKE folds. A NULL column matches neither, as it matches no pattern.
  */
-import { type SQL, type SQLWrapper, sql } from "drizzle-orm"
+import { Column, is, type SQL, type SQLWrapper, sql } from "drizzle-orm"
 
 import { FIXED, globPattern, likePattern } from "../like.ts"
+import type { ListDialect } from "../list-dialect.ts"
 import { countLiteral } from "./keyset.ts"
 
-/** `like` → GLOB (case-sensitive). `ilike` → LIKE (ASCII case-insensitive). A fixed text → a search for it. */
+/**
+ * `like` → GLOB on SQLite, LIKE on Postgres (case-sensitive). `ilike` → LIKE on SQLite (ASCII
+ * case-insensitive), ILIKE on Postgres. A fixed text on SQLite → a search for it. A Postgres
+ * column lowers as Postgres; any other SQL as SQLite
+ */
 function patternToSQL(column: SQLWrapper, operator: "like" | "ilike", value: unknown): SQL {
+	const dialect = is(column, Column) && column.columnType.startsWith("Pg") ? "postgres" : "sqlite"
+	return patternOn({ dialect, sql: column }, operator, value)
+}
+
+/** `patternToSQL` on a column of a known `dialect` */
+function patternOn(
+	{ dialect, sql: column }: { dialect: ListDialect; sql: SQLWrapper },
+	operator: "like" | "ilike",
+	value: unknown,
+): SQL {
 	const raw = String(value)
+	if (dialect === "postgres") {
+		const pattern = likePattern(raw)
+		return operator === "like"
+			? sql`${column} LIKE ${pattern} ESCAPE '\\'`
+			: sql`${column} ILIKE ${pattern} ESCAPE '\\'`
+	}
 	const fixed = FIXED.exec(raw)
 	if (fixed !== null) return fixedToSQL(column, operator === "ilike", fixed)
 	if (operator === "like") return sql`${column} GLOB ${globPattern(raw)}`
@@ -39,4 +64,4 @@ function fixedToSQL(column: SQLWrapper, folded: boolean, [, head, text, tail]: R
 	return sql`${side} = ${find} COLLATE BINARY`
 }
 
-export { patternToSQL }
+export { patternOn, patternToSQL }

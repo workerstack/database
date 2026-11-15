@@ -108,7 +108,7 @@ describe("an enum format: each value one the standard writes", () => {
 
 	it.each([
 		'c.enum("f", ["USD", "EUR"], { format: "iso4217" })',
-		'c.enum("f", ["h12", "h23"], { format: "uts35-hc", tenant: true })',
+		'c.enum("f", ["h12", "h23"], { format: "uts35-hc", tenant: true }).notNull()',
 	])("takes values the format takes as written: %s", (source) => {
 		expect(reading(source)).not.toThrow()
 	})

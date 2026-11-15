@@ -288,7 +288,7 @@ describe("README peer install upgrade item", () => {
 	})
 
 	/* D5-2 follow-up: the commands item 2 says are refused are those whose peer table row loads a peer, drizzle-kit
-	   alone being one database only spawns (wrangler's module database loads, through importBin) */
+	   alone being one database only spawns (wrangler's module database loads, in wranglerReader's child) */
 	it("names, per provider, exactly the commands its peer table row loads no peer for", () => {
 		const commands = [...new Set(Object.values(PEERS).flatMap((row) => Object.keys(row)))].sort() as Command[]
 		const expected = Object.fromEntries(

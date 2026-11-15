@@ -30,7 +30,7 @@ describe("validateTables: state machines in every form the docs allow (M-M5, M-M
 	it("catches a typo in a machine whose values are as const", async () => {
 		const result = await validate(`export const t = sqliteTable("t", {
 	id: c.id("ttt"),
-	status: c.enum("status", ["queued", "sent"] as const, { initial: "queued", terminal: ["dotypo"] }),
+	status: c.enum("status", ["queued", "sent"] as const, { initial: "queued", terminal: ["dotypo"] }).notNull(),
 })`)
 		expect(result.errors).toEqual(['t.status: terminal names "dotypo", which is not a declared value'])
 	})
@@ -42,14 +42,14 @@ describe("validateTables: state machines in every form the docs allow (M-M5, M-M
 	terminal: ["sent"],
 	transitions: { queued: ["sending"], sendng: ["sent"] },
 } as const
-export const t = sqliteTable("t", { id: c.id("ttt"), status: c.enum("status", deliveryStates.values, deliveryStates) })`)
+export const t = sqliteTable("t", { id: c.id("ttt"), status: c.enum("status", deliveryStates.values, deliveryStates).notNull() })`)
 		expect(result.errors).toEqual(['t.status: transitions names "sendng", which is not a declared value'])
 	})
 
 	it("accepts dotted state names", async () => {
 		const result = await validate(`export const t = sqliteTable("t", {
 	id: c.id("ttt"),
-	status: c.enum("status", ["open", "payment.failed"], { initial: "open", terminal: ["payment.failed"], transitions: { open: ["payment.failed"] } }),
+	status: c.enum("status", ["open", "payment.failed"], { initial: "open", terminal: ["payment.failed"], transitions: { open: ["payment.failed"] } }).notNull(),
 })`)
 		expect(result).toEqual({ errors: [], warnings: [] })
 	})
@@ -67,7 +67,7 @@ export const t = sqliteTable("t", { id: c.id("ttt"), status: c.enum("status", de
 describe("validateTables: state machines without a full map, and dead ends", () => {
 	it("checks a machine without a terminal list or an initial state", async () => {
 		const onlyInitial = await validate(
-			`export const t = sqliteTable("t", { id: c.id("ttt"), status: c.enum("status", ["a", "b"], { initial: "zz" }) })`,
+			`export const t = sqliteTable("t", { id: c.id("ttt"), status: c.enum("status", ["a", "b"], { initial: "zz" }).notNull() })`,
 		)
 		expect(onlyInitial.errors).toEqual(['t.status: initial names "zz", which is not a declared value'])
 		const full = await validate(
@@ -85,7 +85,7 @@ describe("validateTables: state machines without a full map, and dead ends", () 
 
 	it("rejects a dead end in a map declared in full", async () => {
 		const result = await validate(
-			`export const t = sqliteTable("t", { id: c.id("ttt"), status: c.enum("status", ["a", "b", "c"], { initial: "a", terminal: ["c"], transitions: { a: ["b", "c"], b: [] } }) })`,
+			`export const t = sqliteTable("t", { id: c.id("ttt"), status: c.enum("status", ["a", "b", "c"], { initial: "a", terminal: ["c"], transitions: { a: ["b", "c"], b: [] } }).notNull() })`,
 		)
 		expect(result.errors).toEqual(['t.status: "b" has no outgoing transitions and is not terminal'])
 	})

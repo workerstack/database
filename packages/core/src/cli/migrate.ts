@@ -67,24 +67,28 @@ function starterFiles(dialect: Dialect): ReadonlyArray<readonly [string, string]
 	]
 }
 
+// lookup-table: the drizzle config names a project without a configured one is looked up by, in order
+const DRIZZLE_CONFIGS = ["drizzle.config.ts", "drizzle.config.js", "drizzle.config.mjs", "drizzle.config.json"]
+
 /**
  * Write each starter file of the dialect --dialect names that does not exist yet, refused when the
- * drizzle config already there states the other dialect
+ * drizzle config already there, the first of DRIZZLE_CONFIGS as diff reads it, states the other dialect;
+ * beside one, it writes no drizzle.config.ts, which diff would read in its place
  */
 function migrateInit(argv: readonly string[], io: CliContext): void {
 	const option = parseArgs(argv, "migrate init").options["dialect"] ?? "sqlite"
 	if (option !== "sqlite" && option !== "postgres")
 		throw new CliError(`Unknown --dialect "${String(option)}": use sqlite or postgres`)
 	const dialect: Dialect = option
-	const config = path.join(io.cwd, "drizzle.config.ts")
-	const stated = fs.existsSync(config) ? literalDialect(fs.readFileSync(config, "utf8")) : undefined
-	if (stated !== undefined) {
+	const config = DRIZZLE_CONFIGS.map((name) => path.join(io.cwd, name)).find((file) => fs.existsSync(file))
+	const stated = config === undefined ? undefined : literalDialect(fs.readFileSync(config, "utf8"))
+	if (config !== undefined && stated !== undefined) {
 		const but = `migrate init --dialect ${dialect} writes a ${DIALECT_NAMES[dialect]} project`
 		checkDialect(config, stated, { but, dialect, otherwise: ", or remove it and run init again" })
 	}
 	for (const [name, content] of starterFiles(dialect)) {
 		const file = path.join(io.cwd, name)
-		if (fs.existsSync(file)) continue
+		if (fs.existsSync(file) || (name === "drizzle.config.ts" && config !== undefined)) continue
 		fs.writeFileSync(file, content)
 		io.out(`Created: ${name}`)
 	}
@@ -158,9 +162,6 @@ async function diffIn(migrationsDir: string, dryRun: boolean, diff: (dir: string
 		removeCopy()
 	}
 }
-
-// lookup-table: the drizzle config names a project without a configured one is looked up by, in order
-const DRIZZLE_CONFIGS = ["drizzle.config.ts", "drizzle.config.js", "drizzle.config.mjs", "drizzle.config.json"]
 
 /**
  * The drizzle config a diff exports with: the database's, which must exist, else the first of

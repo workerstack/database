@@ -6,10 +6,11 @@
  */
 import type { FieldMeta } from "../../analyzer-types.ts"
 import { inetRule } from "./ip-patterns.ts"
+import { type IntervalField, ISO_DATE, intervalRule, timeRule, timestampRule } from "./pg-time-rules.ts"
 
 /**
  * A Postgres type's modifier, parsed once from drizzle's `getSQLType()` so every rule reads the
- * same value and none matches the text: a time's precision and zone, a
+ * same value and none matches the text: a time's precision (Postgres's 6 where none is declared) and zone, a
  * numeric's precision and signed scale (Postgres 15 takes a scale past the precision, or below 0),
  * an interval's last field and precision, a bit string's length
  */
@@ -17,14 +18,18 @@ export type PgModifier =
 	| { base: "bit"; length: number }
 	| { base: "interval"; field: IntervalField | null; precision: number | null }
 	| { base: "numeric"; precision: number | null; scale: number }
-	| { base: "time" | "timestamp"; precision: number | null; withTimeZone: boolean }
+	| { base: "time" | "timestamp"; precision: number; withTimeZone: boolean }
 	| { base: "other" }
-
-/** An interval's last field, below which Postgres drops every part without an error */
-type IntervalField = "day" | "hour" | "minute" | "month" | "second" | "year"
 
 const INTERVAL_FIELDS =
 	/^interval(?: (year|month|day|hour|minute|second)(?: to (month|hour|minute|second))?)?(?:\((\d+)\))?$/
+
+/**
+ * The digits after the second's point a time, timestamp or interval declared with no precision
+ * keeps: Postgres's MAX_TIME_PRECISION, MAX_TIMESTAMP_PRECISION and MAX_INTERVAL_PRECISION, past
+ * which it rounds, as a declared precision does (`23:59:59.9999995` into a plain time is `24:00:00`)
+ */
+const DEFAULT_PRECISION = 6
 
 /** The modifier drizzle's SQL type `sqlType` declares; a type database reads none of is `other` */
 export function pgModifierOf(sqlType: string): PgModifier {
@@ -33,7 +38,7 @@ export function pgModifierOf(sqlType: string): PgModifier {
 	if (time !== null)
 		return {
 			base: time[1] as "time" | "timestamp",
-			precision: time[2] === undefined ? null : Number(time[2]),
+			precision: time[2] === undefined ? DEFAULT_PRECISION : Number(time[2]),
 			withTimeZone: time[3] !== undefined,
 		}
 	const numeric = /^numeric(?:\((\d+)(?:, ?(-?\d+))?\))?$/.exec(sqlType)
@@ -59,120 +64,6 @@ function modifierAs<B extends PgModifier["base"]>(sqlType: string, base: B): Ext
 	const modifier = pgModifierOf(sqlType)
 	if (modifier.base !== base) throw new TypeError(`database reads no ${base} modifier in ${sqlType}`)
 	return modifier as Extract<PgModifier, { base: B }>
-}
-
-/*
- * an offset as RFC 3339 writes one, Z or ±hh:mm, as JSON Schema's time and date-time formats and
- * z.iso.datetime take it, its hours at most 15 as Postgres holds one: the
- * one source a timetz and a timestamptz read, so they take one spelling
- */
-const OFFSET = "(?:Z|[+-](?:0[0-9]|1[0-5]):[0-5][0-9])"
-
-/*
- * zod's ISO date, date-time and time regexes, each \d written as [0-9] and nothing else changed (a test
- * holds each copy to zod's own, read as it runs): zod's publish \d, which Rust's regex reads as any
- * Unicode digit, so database publishes its own, which ECMAScript, Go's RE2 and Rust's regex read alike.
- * Each is a z.stringFormat of zod's format name, which checks and publishes the regex it
- * is given: zod's types refuse a `pattern` param on z.iso.*, which a consumer's tsc reads. One
- * departure: the date's year is 0001 at least, as Postgres's year 0000 is a 22008
- */
-const YEAR = "(?:000[1-9]|00[1-9][0-9]|0[1-9][0-9]{2}|[1-9][0-9]{3})"
-const ISO_DATE = `(?:(?:[0-9][0-9][2468][048]|[0-9][0-9][13579][26]|[0-9][0-9]0[48]|(?:[2468][048]|0[48])00|[13579][26]00)-02-29|${YEAR}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|(?:02)-(?:0[1-9]|1[0-9]|2[0-8])))`
-const ISO_CLOCK = "(?:[01][0-9]|2[0-3]):[0-5][0-9]"
-const ISO_SECOND = "(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]+)?"
-const ISO_WALL = `${ISO_CLOCK}(?::[0-5][0-9](?:\\.[0-9]+)?)?`
-const ISO_TIME = `^${ISO_WALL}$`
-const ISO_LOCAL = `^${ISO_DATE}T(?:${ISO_SECOND}(?:Z)|${ISO_WALL})$`
-const ISO_OFFSET = `^${ISO_DATE}T(?:${ISO_SECOND}(?:Z|([+-](?:[01][0-9]|2[0-3]):[0-5][0-9])))$`
-
-/** A second's fraction of at most `precision` digits, any length for none, as a regex piece */
-const fractionOf = (precision: number | null): string =>
-	precision === null ? "(?:\\.[0-9]+)?" : precision === 0 ? "" : `(?:\\.[0-9]{1,${precision}})?`
-
-/** Why a fraction past `precision` digits is refused: Postgres would round it, maybe into the next day */
-const roundedBy = (type: string, precision: number): string =>
-	precision === 0
-		? `Must have no fraction of a second, which ${type}(0) would round`
-		: `Must have at most ${precision} digits after the second's point, which ${type}(${precision}) would round`
-
-/**
- * A time's fraction held to its precision, checked at the end of the value, before `tail` (its
- * offset, if any): its last two digits not after a point, or a fraction of at most `precision`
- * digits. A refine of no lookaround, which every regex engine reads
- */
-function fractionRule(type: string, precision: number | null, tail: string): string {
-	if (precision === null) return ""
-	const fraction = precision === 0 ? "" : `|\\.[0-9]{1,${precision}}`
-	return `.regex(/(?:[^.0-9][0-9][0-9]${fraction})${tail}$/u, { message: "${roundedBy(type, precision)}" })`
-}
-
-/* a time with an offset, which z.iso.time does not take: hh:mm[:ss[.f]], then the offset */
-const timetz = (precision: number | null): string =>
-	`z.string().regex(/^(?:[01][0-9]|2[0-3]):[0-5][0-9](?::[0-5][0-9]${fractionOf(precision)})?${OFFSET}$/u${precision === null ? "" : `, { message: "Must be a time with an offset${precision === 0 ? " and no fraction of a second" : ` and at most ${precision} digits after the second's point`}, which time(${precision}) with time zone would round" }`})`
-
-/*
- * A timestamp keeps no zone: given an offset or Z it discards it, so the instant is lost. A
- * timestamptz given a local time reads it in the session's TimeZone, so the instant depends on
- * the server's config. Each takes only the form whose instant it keeps, and a precision rounds a
- * longer fraction, perhaps into the next day, so each takes none.
- */
-function timestampRule({ precision, withTimeZone }: { precision: number | null; withTimeZone: boolean }): string {
-	const type = withTimeZone ? "timestamp with time zone" : "timestamp"
-	if (!withTimeZone)
-		return `z.stringFormat("datetime", /${ISO_LOCAL}/u).regex(/[^Zz]$/u, { message: "Must be a local date-time, with no offset or Z, which timestamp would discard" })${fractionRule(type, precision, "")}`
-	return `z.stringFormat("datetime", /${ISO_OFFSET}/u).regex(/${OFFSET}$/u, { message: "Must have an offset of at most 15:59, as Postgres holds one" })${fractionRule(type, precision, OFFSET)}`
-}
-
-/** A time, local or with its offset, its fraction held to its precision */
-function timeRule({ precision, withTimeZone }: { precision: number | null; withTimeZone: boolean }): string {
-	return withTimeZone
-		? timetz(precision)
-		: `z.stringFormat("time", /${ISO_TIME}/u)${fractionRule("time", precision, "")}`
-}
-
-/* an ISO 8601 duration as z.iso.duration takes one, with no lookaround, so RE2 compiles it:
- * weeks alone, or at least one date or time part, the seconds alone taking a fraction. Its
- * decimal mark is `.` alone, as Postgres refuses ISO 8601's comma with a 22007. Each
- * part takes at most the digits whose every value Postgres holds alone, past which it is a 22015:
- * 8 for years and weeks, 9 for months, days and hours, 11 for minutes, 12 for whole
- * seconds. A sum past its range is the handler's 400, a 22008 or 22015 */
-const YEARS = "[0-9]{1,8}"
-const MONTHS = "[0-9]{1,9}"
-const WEEKS = "[0-9]{1,8}"
-const DAYS = "[0-9]{1,9}"
-const HOURS = "[0-9]{1,9}"
-const MINUTES = "[0-9]{1,11}"
-const SECONDS = "[0-9]{1,12}(?:\\.[0-9]+)?S"
-const TIME_PART = `T(?:${HOURS}H(?:${MINUTES}M)?(?:${SECONDS})?|${MINUTES}M(?:${SECONDS})?|${SECONDS})`
-const DURATION = `^P(?:${WEEKS}W|(?:${YEARS}Y(?:${MONTHS}M)?(?:${DAYS}D)?|${MONTHS}M(?:${DAYS}D)?|${DAYS}D)(?:${TIME_PART})?|${TIME_PART})$`
-
-// lookup-table: the ISO 8601 duration an interval's last field keeps, as a regex of no lookaround
-const KEPT_BY: Readonly<Record<Exclude<IntervalField, "second">, string>> = {
-	day: "^P[^T]*$",
-	hour: "^P[^T]*(?:T[0-9]+H)?$",
-	minute: "^P[^T]*(?:T(?:[0-9]+H)?(?:[0-9]+M)?)?$",
-	month: "^P(?:[0-9]+Y)?(?:[0-9]+M)?$",
-	year: "^P[0-9]+Y$",
-}
-
-/**
- * An interval: an ISO 8601 duration with no part below its last field, which Postgres drops
- * (`PT1H` into an `interval day` is stored as 0), and no fraction of a second past its precision,
- * which it rounds. A string and its pattern, with no `format: "duration"`: that format
- * is RFC 3339's, whose seconds take no fraction, where Postgres keeps one. Its precision is the
- * declared one: drizzle's SQL type writes `precision: 0` as no precision, which keeps a fraction,
- * so the DTO alone holds whole seconds
- */
-function intervalRule({ field, precision }: { field: IntervalField | null; precision: number | null }): string {
-	const fields =
-		field === null || field === "second"
-			? ""
-			: `.regex(/${KEPT_BY[field]}/u, { message: "Must hold no part below its ${field}s, which an interval of ${field}s drops" })`
-	const fraction =
-		precision === null
-			? ""
-			: `.regex(/^[^.]*${precision === 0 ? "" : `(?:\\.[0-9]{1,${precision}}S)?`}$/u, { message: "${roundedBy("interval", precision)}" })`
-	return `z.string().regex(/${DURATION}/u, { message: "Must be an ISO 8601 duration" })${fields}${fraction}`
 }
 
 /**
@@ -278,7 +169,10 @@ const RULES: Readonly<Record<string, (field: FieldMeta) => string | undefined>> 
 	"string inet": inetRule,
 	"string interval": ({ intervalPrecision, sqlType }) => {
 		const modifier = modifierAs(sqlType, "interval")
-		return intervalRule({ field: modifier.field, precision: intervalPrecision ?? modifier.precision })
+		return intervalRule({
+			field: modifier.field,
+			precision: intervalPrecision ?? modifier.precision ?? DEFAULT_PRECISION,
+		})
 	},
 	"string macaddr": macaddr,
 	"string macaddr8": macaddr8,

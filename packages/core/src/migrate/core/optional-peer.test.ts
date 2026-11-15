@@ -11,7 +11,6 @@ import {
 	type OptionalPeer,
 	optionalPeer,
 	binOf,
-	importBin,
 	projectBin,
 	requirePeers,
 	resolvePeer,
@@ -314,29 +313,6 @@ describe("projectBin and binOf", () => {
 		const bin = { bin: "/w.js", manifest: "/package.json", peer: "wrangler", runtime: "node" } as const
 		expect(binOf({ wrangler: bin }, "wrangler")).toBe(bin)
 		expect(() => binOf({}, "drizzle-kit")).toThrow("database resolved no drizzle-kit for this command")
-	})
-
-	it("imports the package a bin peer resolved to, by its entry", async () => {
-		const manifest = inFolder(join(ROOT, "imports"), {
-			bin: { wrangler: "w.js" },
-			name: "wrangler",
-			version: "4.150.0",
-		})
-		const bin = { bin: join(manifest, "../w.js"), manifest, peer: "wrangler", runtime: "node" } as const
-		await expect(importBin<{ answer: number }>(bin)).resolves.toMatchObject({ answer: 42 })
-		const broken = inFolder(join(ROOT, "broken"), { bin: { wrangler: "w.js" }, name: "wrangler", version: "4.150.0" })
-		writeFileSync(join(broken, "../index.js"), "throw new Error('boom')\n")
-		await expect(importBin({ ...bin, manifest: broken })).rejects.toThrow("boom")
-	})
-
-	/* D4-5 of the area D round-four review: wrangler's module cannot be loaded from the project inside a compiled executable */
-	it("refuses to import a peer from a Bun single-file executable, before any import, saying why", async () => {
-		const bin = { bin: "/nowhere/w.js", manifest: "/nowhere/package.json", peer: "wrangler", runtime: "node" } as const
-		await expect(importBin(bin, "file:///$bunfs/root/app-exe")).rejects.toThrow(
-			new Error(
-				"database loads wrangler from the project, which a Bun single-file executable cannot do: run it with bun or node, not from a compiled executable",
-			),
-		)
 	})
 })
 

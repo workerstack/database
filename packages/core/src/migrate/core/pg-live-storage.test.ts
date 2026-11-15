@@ -70,7 +70,8 @@ describe("movesStorage", () => {
 		["ALTER TABLE t SET ACCESS METHOD heap", true],
 		["ALTER MATERIALIZED VIEW mv SET TABLESPACE fast", true],
 		["ALTER INDEX i SET TABLESPACE fast", true],
-		["ALTER TABLE t SET LOGGED", false],
+		["ALTER TABLE t SET LOGGED", true],
+		["ALTER TABLE t SET UNLOGGED", true],
 		["ALTER TABLE t ADD COLUMN c int", false],
 	])("reads %j as a move the target's catalog places: %s", (sql, moves) => {
 		expect(movesStorage([parsePostgres(sql).stmts, undefined])).toBe(moves)

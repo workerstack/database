@@ -76,7 +76,7 @@ function buildConditionSQL(condition: FilterCondition, config: FilterSQLConfig):
 			`buildFilterSQL: columnMap.${condition.field} has no kind database knows (${COLUMN_KINDS.join(", ")}); \`unit: "s"\` is \`kind: "date-s"\` since 0.16`,
 		)
 	return lowerOn(
-		{ kind, sql: sql`${sql.raw(quoteIdent(config.tableAlias))}.${sql.raw(quoteIdent(column))}` },
+		{ dialect: "sqlite", kind, sql: sql`${sql.raw(quoteIdent(config.tableAlias))}.${sql.raw(quoteIdent(column))}` },
 		condition,
 	)
 }

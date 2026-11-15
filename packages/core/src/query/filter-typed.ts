@@ -15,8 +15,9 @@ const MAX_EPOCH_MS = 8.64e15
 /**
  * A number field's value: finite (1e999 reads as Infinity, which no column holds), 0 or normal
  * (1e-400 reads as 0, which would match the rows holding 0), and within
- * ±(2^53 − 1), past which a double binds a neighbouring value. The value is read, not its
- * spelling: `9007199254740993.0` and `9.007199254740993e15` are the same unsafe integer.
+ * ±(2^53 − 1), past which a double binds a neighbouring value, and no finer than a double holds it
+ * (`1.000000000000000001` would bind as 1). The value is read, not its spelling:
+ * `9007199254740993.0` and `9.007199254740993e15` are the same unsafe integer.
  */
 function parseFilterNumber(raw: string):
 	| {
@@ -37,7 +38,25 @@ function parseFilterNumber(raw: string):
 	if (nonzero && Math.abs(value) < MIN_NORMAL) {
 		return { error: `expects a number of magnitude 0 or at least ${MIN_NORMAL}, got '${raw}'` }
 	}
+	/* digits past the ones a double holds would bind the double beside them: 1.000000000000000001 as 1 */
+	if (decimalOf(raw) !== decimalOf(String(value))) {
+		return { error: `expects a number a double holds as written, got '${raw}', which binds as ${value}` }
+	}
 	return { value }
+}
+
+/**
+ * The decimal `text` writes, however spelled: its sign, its digits without leading or trailing zeros,
+ * and the power of ten of the last one, so `1.50`, `15e-1` and `1.5` are one decimal
+ */
+function decimalOf(text: string): string {
+	const [mantissa = "", exponent = "0"] = text.toLowerCase().split("e")
+	const [whole = "", fraction = ""] = mantissa.replace(/^-/, "").split(".")
+	const digits = `${whole}${fraction}`.replace(/^0+/, "")
+	if (digits === "") return "0"
+	const significant = digits.replace(/0+$/, "")
+	const power = Number(exponent) - fraction.length + digits.length - significant.length
+	return `${mantissa.startsWith("-") ? "-" : ""}${significant}e${power}`
 }
 
 /**

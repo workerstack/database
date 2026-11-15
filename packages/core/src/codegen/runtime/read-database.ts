@@ -97,12 +97,13 @@ function columnSchemaOf(
 const STATE_KEYS = ["initial", "terminal", "transitions", "values"]
 
 /** What fills a column a write leaves out: a value or SQL default, a default function, an update function */
-type Fill = { default?: unknown; defaultFn?: unknown; onUpdateFn?: unknown }
+type Fill = { default?: unknown; defaultFn?: unknown; notNull?: boolean | undefined; onUpdateFn?: unknown }
 
 /**
  * A state column's fill is its machine's `initial`, the value a row starts at: a
- * literal default other than it, or a fill database cannot read as a value, is an error naming the column;
- * a machine that declares no `initial` starts anywhere
+ * literal default other than it, or a fill database cannot read as a value, is an error naming the column,
+ * as is a nullable column with no default, where a create that leaves it out stores null, a row in no
+ * state; a machine that declares no `initial` starts anywhere
  */
 function refuseOtherStart(initial: string | null, fill: Fill, at: string): void {
 	if (initial === null) return
@@ -114,6 +115,10 @@ function refuseOtherStart(initial: string | null, fill: Fill, at: string): void 
 	if (fill.default !== undefined && fill.default !== initial)
 		throw new Error(
 			`${at}: its default ${JSON.stringify(fill.default)} is not its state machine's initial "${initial}"; a row starts at initial`,
+		)
+	if (fill.default === undefined && fill.notNull === false)
+		throw new Error(
+			`${at}: a create that leaves it out stores null, a row in no state of its machine; write .default("${initial}"), or .notNull() so a create sends "${initial}"`,
 		)
 }
 

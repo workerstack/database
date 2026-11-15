@@ -223,7 +223,7 @@ describe("tenantColumn is declared, never inferred", () => {
 		const meta = await metaFor(`
 export const post = createTable("post", {
 	id: c.id("pst"),
-	org_id: c.ref("org_id", { tenant: true }),
+	org_id: c.ref("org_id", { tenant: true }).notNull(),
 	title: c.text("title"),
 })
 `)
@@ -251,8 +251,8 @@ export const post = createTable("post", {
 		const meta = await metaFor(`
 export const post = createTable("post", {
 	id: c.id("pst"),
-	org_id: c.ref("org_id", { tenant: true }),
-	workspace_id: c.ref("workspace_id", { tenant: true }),
+	org_id: c.ref("org_id", { tenant: true }).notNull(),
+	workspace_id: c.ref("workspace_id", { tenant: true }).notNull(),
 })
 `)
 		expect(meta?.tenantColumn).toBeNull()
@@ -264,8 +264,8 @@ describe("tenantColumn is declared, never inferred: validation and DTOs", () => 
 		const result = await validateSource(`
 export const post = createTable("post", {
 	id: c.id("pst"),
-	org_id: c.ref("org_id", { tenant: true }),
-	workspace_id: c.ref("workspace_id", { tenant: true }),
+	org_id: c.ref("org_id", { tenant: true }).notNull(),
+	workspace_id: c.ref("workspace_id", { tenant: true }).notNull(),
 })
 `)
 		expect(result.errors.join("\n")).toMatch(/2 columns declare \{ tenant: true \}/)
@@ -274,7 +274,7 @@ export const post = createTable("post", {
 
 	it("accepts a single declaration without complaint", async () => {
 		const result = await validateSource(
-			`export const post = createTable("post", { id: c.id("pst"), org_id: c.ref("org_id", { tenant: true }) })`,
+			`export const post = createTable("post", { id: c.id("pst"), org_id: c.ref("org_id", { tenant: true }).notNull() })`,
 		)
 		expect(result.errors).toEqual([])
 	})
@@ -282,7 +282,7 @@ export const post = createTable("post", {
 	it("reaches the generated read schema", async () => {
 		const generated = generatedFile(
 			await analyzeSource(
-				`export const post = createTable("post", { id: c.id("pst"), org_id: c.ref("org_id", { tenant: true }), title: c.text("title") })`,
+				`export const post = createTable("post", { id: c.id("pst"), org_id: c.ref("org_id", { tenant: true }).notNull(), title: c.text("title") })`,
 			),
 			"post",
 		)
@@ -298,7 +298,7 @@ export const delivery = createTable("delivery", {
 		initial: "queued",
 		terminal: ["sent"],
 		transitions: { queued: ["sending"], sending: ["sent"] },
-	}),
+	}).notNull(),
 })
 `
 
@@ -437,7 +437,7 @@ export const post = sqliteTable("post", { id: c.id("pst"), orgId: ${column}, tit
 			await expect(
 				entityChannels(
 					`cd1-mutable-${dialect}`,
-					TABLES[dialect]('c.ref("org_id", { mutable: true, tenant: true }).references(() => org.id)'),
+					TABLES[dialect]('c.ref("org_id", { mutable: true, tenant: true }).notNull().references(() => org.id)'),
 					{ dialect, entity: "post" },
 				),
 			).rejects.toThrow(/orgId.*a tenant column is set once; a row does not move between tenants/s)

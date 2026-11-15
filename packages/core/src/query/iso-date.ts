@@ -2,25 +2,39 @@
  * An ISO 8601 date or date-time as an ISO date filter takes it: a
  * real day and time by the proleptic Gregorian calendar, read as the instant it names in
  * `toISOString()`'s form, so every spelling of one instant compares as one. A bare date is midnight
- * UTC; a fraction past milliseconds is cut, as a JS Date holds none.
+ * UTC. A JS Date holds no fraction past milliseconds, so the instant keeps its millisecond and says
+ * whether digits past it were cut, which a filter compares by.
  */
 
 /**
  * An ISO date filter's value as validateFilter types it: the instant, by its epoch milliseconds and
  * its `toISOString()` text, so a lowering binds whichever its column stores. A bare date is
- * midnight UTC, and a fraction past milliseconds is cut. It writes itself as its text, in a string
- * and in JSON
+ * midnight UTC. A fraction past milliseconds is cut from `ms` and `text`, and kept in `fraction`:
+ * `cut` says the instant lies between `ms` and the millisecond after it, which a filter compares
+ * exactly by. It writes itself as its text, in a string and in JSON
  */
 class IsoInstant {
-	/** the instant in epoch milliseconds */
+	/** whether the instant lies past `ms`, by digits past the millisecond that `ms` and `text` cut */
+	readonly cut: boolean
+	/** the instant's fraction of its second, in nine digits: nanoseconds */
+	readonly fraction: string
+	/** the instant in epoch milliseconds, its fraction past them cut */
 	readonly ms: number
-	/** the instant as `toISOString()` writes it, in UTC */
+	/** the instant as `toISOString()` writes it, in UTC, its fraction past milliseconds cut */
 	readonly text: string
 
-	/** The instant `ms` epoch milliseconds name */
-	constructor(ms: number) {
+	/**
+	 * The instant `ms` epoch milliseconds name, or, with `fraction`, the instant `fraction` digits
+	 * into the second of `ms`, whose milliseconds they must start with
+	 */
+	constructor(ms: number, fraction?: string) {
 		this.ms = ms
 		this.text = new Date(ms).toISOString()
+		const millisecond = String(((ms % 1000) + 1000) % 1000).padStart(3, "0")
+		this.fraction = (fraction ?? millisecond).padEnd(9, "0")
+		if (!/^\d{9}$/.test(this.fraction) || this.fraction.slice(0, 3) !== millisecond)
+			throw new RangeError(`IsoInstant: fraction "${fraction}" is not the second's fraction of ${this.text}`)
+		this.cut = /[1-9]/.test(this.fraction.slice(3))
 	}
 
 	/** The instant's ISO text */
@@ -98,7 +112,7 @@ function isoInstant(raw: string): IsoInstant | undefined {
 		fields.second,
 		Number(fraction.padEnd(3, "0").slice(0, 3)),
 	)
-	return new IsoInstant(at.getTime())
+	return new IsoInstant(at.getTime(), fraction)
 }
 
 export { IsoInstant, isoInstant }

@@ -95,13 +95,17 @@ function searchWhere(q: string | undefined, search: LikeSearchResolver | undefin
  * the rows, so a computed sort, which no row carries, would merge by id alone; and the id breaks ties
  * across shards, so a table without one cannot be merged at all
  */
-function refuseUnmergeable(sort: readonly SortField[], idColumn: SQLiteColumn | undefined): void {
+function refuseUnmergeable(
+	sort: readonly SortField[],
+	idColumn: SQLiteColumn | undefined,
+	tiebreakColumn: string,
+): void {
 	const computed = sort.find(({ field }) => field.startsWith("@"))
 	const cause =
 		computed !== undefined
 			? `a merged list orders by values paginateMerged reads from the rows: sort it by columns only, not ${computed.field}`
 			: idColumn === undefined
-				? `a merged list needs an "${CURSOR_TIEBREAK_COLUMN}" column to break ties across shards, and this table has none`
+				? `a merged list needs an "${tiebreakColumn}" column to break ties across shards, and this table has none`
 				: undefined
 	if (cause !== undefined)
 		throw new DatabaseError({ cause, errorKey: databaseErrorKeys.SORT_NOT_WIRED, status: "internal_server_error" })
@@ -109,8 +113,9 @@ function refuseUnmergeable(sort: readonly SortField[], idColumn: SQLiteColumn | 
 
 /**
  * A table's list query from a parsed request: its WHERE (base, filter, search and cursor), ORDER BY
- * with the `id` tiebreak, LIMIT, OFFSET and the extras `paginate` reads. A sort, filter or `q` the
- * schema accepted that the options cannot run is a 500, as is a cursor on a table with no `id` column
+ * with the list schema's tiebreak (`id` by default), LIMIT, OFFSET and the extras `paginate` reads. A sort,
+ * filter or `q` the schema accepted that the options cannot run is a 500, as is a cursor on a table
+ * without the tiebreak column
  */
 function buildListQuery<TTable extends SQLiteTable>(
 	opts: BuildListQueryOpts<TTable> & {
@@ -120,8 +125,9 @@ function buildListQuery<TTable extends SQLiteTable>(
 ): MergedListQueryResult
 /**
  * A table's list query from a parsed request: its WHERE (base, filter, search and cursor), ORDER BY
- * with the `id` tiebreak, LIMIT, OFFSET and the extras `paginate` reads. A sort, filter or `q` the
- * schema accepted that the options cannot run is a 500, as is a cursor on a table with no `id` column
+ * with the list schema's tiebreak (`id` by default), LIMIT, OFFSET and the extras `paginate` reads. A sort,
+ * filter or `q` the schema accepted that the options cannot run is a 500, as is a cursor on a table
+ * without the tiebreak column
  */
 function buildListQuery<TTable extends SQLiteTable>(
 	opts: BuildListQueryOpts<TTable> & {
@@ -138,18 +144,19 @@ function buildListQuery<TTable extends SQLiteTable>(
 	/* the schema decided the order: an empty sort orders by the tiebreak alone, as listOptions and paginate do */
 	const sort = parsed.parsedSort
 
-	const idColumn = own(columns, CURSOR_TIEBREAK_COLUMN)
+	const tiebreakColumn = parsed.tiebreak ?? CURSOR_TIEBREAK_COLUMN
+	const idColumn = own(columns, tiebreakColumn)
 	if (parsed.cursor && !idColumn) {
 		/* Without a tiebreak column there is no predicate to add, and ignoring the
 		   cursor would quietly re-serve the first page. This is a schema mistake. */
 		throw new DatabaseError({
-			cause: `Table has no "${CURSOR_TIEBREAK_COLUMN}" property to break ties on`,
+			cause: `Table has no "${tiebreakColumn}" property to break ties on`,
 			errorKey: databaseErrorKeys.CURSOR_PAGINATION_UNSUPPORTED,
 			status: "internal_server_error",
 		})
 	}
 
-	if (opts.merged !== undefined) refuseUnmergeable(sort, idColumn)
+	if (opts.merged !== undefined) refuseUnmergeable(sort, idColumn, tiebreakColumn)
 	const tiebreak: SortKey | null = idColumn ? { column: idColumn, direction: sort[0]?.direction ?? "desc" } : null
 	const planned = planSort(sort, columns, opts.computedSorts)
 	const keyset: Keyset = {

@@ -67,7 +67,9 @@ const CASES: Case[] = [
 	/* stricter than Postgres, listed since 0.15 (F11): the end of a day, which Postgres reads as the next one's start */
 	["ts", "2024-01-01T24:00:00", false, true],
 	["tz", "2024-01-01T10:00:00+02:00", true, true],
-	["tz", "2024-01-01T10:00:00.1234567Z", true, true],
+	/* stricter than Postgres, listed in the 0.25 upgrade (CD1 of r23): a 7th digit, which Postgres rounds, perhaps into the next day */
+	["tz", "2024-01-01T10:00:00.1234567Z", false, true],
+	["tz", "2024-01-01T10:00:00.123456Z", true, true],
 	["tz", "2024-01-01T25:00:00Z", false, false],
 	/* stricter than Postgres, listed in the 0.14 changelog: a local time's instant depends on the session's TimeZone */
 	["tz", "2024-01-01T10:00:00", false, true],

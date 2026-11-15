@@ -65,6 +65,12 @@ function checkFields(table: TableMeta, report: ValidationResult): void {
 				`A table scopes to at most one tenant column.`,
 		)
 	}
+	/* a create may leave a nullable column out or send null, a row in no tenant */
+	for (const field of table.fields)
+		if (field.constraints.tenant && !field.isNotNull)
+			report.errors.push(
+				`${table.varName}.${field.name}: a tenant column must be NOT NULL, or a create may leave it out or send null, a row in no tenant; add .notNull()`,
+			)
 }
 
 function checkPrimaryKey(table: TableMeta, report: ValidationResult): void {

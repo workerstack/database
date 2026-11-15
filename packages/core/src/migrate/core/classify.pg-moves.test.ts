@@ -138,3 +138,34 @@ describe("a move the history does not show is a no-op (siblings of PA17 of r22b)
 		}
 	})
 })
+
+/* PA1 of r23: a history statement whose effect its text cannot show (a DO block, a CALL, a call of a function
+   the history defined) may have flipped a table's persistence, which PG17 then rewrote on the move back while
+   check and apply rated it safe. Its persistence is unknown after one, unless the target's catalog says it */
+describe("persistence after a history statement its text cannot show (PA1 of r23)", () => {
+	const OPAQUE = [
+		"DO $$ BEGIN EXECUTE 'ALTER TABLE scratch SET LOGGED'; EXECUTE 'ALTER TABLE plain SET UNLOGGED'; END $$;\n",
+		"CREATE PROCEDURE flip() LANGUAGE plpgsql AS $$ BEGIN EXECUTE 'ALTER TABLE scratch SET LOGGED'; END $$;\nCALL flip();\n",
+		"CREATE FUNCTION flip() RETURNS void LANGUAGE plpgsql AS $$ BEGIN EXECUTE 'ALTER TABLE scratch SET LOGGED'; END $$;\nSELECT flip();\n",
+	]
+
+	it.each(OPAQUE)("warns of the rewrite for a move after %j, where no catalog is read", (more) => {
+		for (const later of ["ALTER TABLE scratch SET UNLOGGED;", "ALTER TABLE plain SET LOGGED;"])
+			expect(rate(later, more).lockWarnings, later).toEqual([`${later.slice(0, -1)} (${REWRITES})`])
+	})
+
+	it("warns of the rewrite for a move after such a statement in its own file", () => {
+		const sql = `${OPAQUE[0]}ALTER TABLE scratch SET UNLOGGED;`
+		expect(rate(sql).lockWarnings).toContain(`ALTER TABLE scratch SET UNLOGGED (${REWRITES})`)
+	})
+
+	it("keeps what the history's text shows after one of its functions is only defined, not called", () => {
+		const more = "CREATE FUNCTION flip() RETURNS void LANGUAGE sql AS 'SELECT 1';\n"
+		expect(rate("ALTER TABLE scratch SET UNLOGGED;", more).lockWarnings).toEqual([])
+	})
+
+	it("follows the text again for a statement after it that shows the move", () => {
+		const more = `${OPAQUE[0]}ALTER TABLE scratch SET UNLOGGED;\n`
+		expect(rate("ALTER TABLE scratch SET UNLOGGED;", more).lockWarnings).toEqual([])
+	})
+})

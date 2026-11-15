@@ -190,7 +190,7 @@ export const delivery = createTable("delivery", {
 		initial: "queued",
 		terminal: ["sent"],
 		transitions: { queued: ["sending"], sending: ["sent"] },
-	}),
+	}).notNull(),
 })
 `)
 		expect(result.errors).toEqual([])
@@ -200,7 +200,7 @@ export const delivery = createTable("delivery", {
 		const result = await validateMachine(`
 export const delivery = createTable("delivery", {
 	id: c.id(),
-	status: c.enum("status", ["queued", "sent"], { initial: "draft", terminal: ["done"] }),
+	status: c.enum("status", ["queued", "sent"], { initial: "draft", terminal: ["done"] }).notNull(),
 })
 `)
 		expect(result.errors.join("\n")).toContain('initial names "draft"')
@@ -230,7 +230,7 @@ export const delivery = createTable("delivery", {
 		initial: "queued",
 		terminal: ["sent"],
 		transitions: { queued: ["sending"], sending: ["sent"], orphaned: ["sent"] },
-	}),
+	}).notNull(),
 })
 `)
 		expect(result.errors.join("\n")).toContain('"orphaned" is neither initial nor reachable')

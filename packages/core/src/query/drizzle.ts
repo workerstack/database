@@ -67,11 +67,15 @@ type DrizzleListOptions = {
 
 /**
  * The sort keys and tiebreak against the queried table; a sort field it lacks is a wiring mistake,
- * `sort_not_wired` as buildListQuery answers it. A table with no `id` has no tiebreak,
- * which listOptions needs on every request, so it is refused by its own cause, keyed as buildListQuery
- * keys a cursor over it
+ * `sort_not_wired` as buildListQuery answers it. A table without the list schema's tiebreak column
+ * has no tiebreak, which listOptions needs on every request, so it is refused by its own cause, keyed
+ * as buildListQuery keys a cursor over it
  */
-function keysOn(table: RelationalTable, sort: readonly SortField[]): { keys: SortKey[]; tiebreak: SortKey } {
+function keysOn(
+	table: RelationalTable,
+	sort: readonly SortField[],
+	tiebreakColumn: string,
+): { keys: SortKey[]; tiebreak: SortKey } {
 	const column = (field: string): SQLWrapper => {
 		if (Object.hasOwn(table, field)) return (table as Record<string, SQLWrapper>)[field] as SQLWrapper
 		throw new DatabaseError({
@@ -81,13 +85,13 @@ function keysOn(table: RelationalTable, sort: readonly SortField[]): { keys: Sor
 		})
 	}
 	const keys = sort.map(({ direction, field, nulls }) => ({ column: column(field), direction, nulls }))
-	if (!Object.hasOwn(table, CURSOR_TIEBREAK_COLUMN))
+	if (!Object.hasOwn(table, tiebreakColumn))
 		throw new DatabaseError({
-			cause: "listOptions breaks ties on the table's `id` column, which this table lacks",
+			cause: `listOptions breaks ties on the table's \`${tiebreakColumn}\` column, which this table lacks`,
 			errorKey: databaseErrorKeys.CURSOR_PAGINATION_UNSUPPORTED,
 			status: "internal_server_error",
 		})
-	return { keys, tiebreak: { column: column(CURSOR_TIEBREAK_COLUMN), direction: sort[0]?.direction ?? "desc" } }
+	return { keys, tiebreak: { column: column(tiebreakColumn), direction: sort[0]?.direction ?? "desc" } }
 }
 
 /**
@@ -105,9 +109,9 @@ function refuseComputed(sort: readonly SortField[]): void {
 }
 
 /** The id a cursor resumes from: the tiebreak itself, decoded as its column decodes */
-function tiebreakOf(table: RelationalTable): SQL {
+function tiebreakOf(table: RelationalTable, tiebreakColumn: string): SQL {
 	/* drizzle's relational callbacks hand over the table's columns, each a decoder */
-	const column = keysOn(table, []).tiebreak.column as Column
+	const column = keysOn(table, [], tiebreakColumn).tiebreak.column as Column
 	return sql`${column}`.mapWith(column)
 }
 
@@ -116,17 +120,20 @@ function tiebreakOf(table: RelationalTable): SQL {
  * callbacks, and the check positionOn opens the next cursor by, run on that table's columns, so the next
  * page never refuses a cursor minted here; rows no query of these options read hold no column to check
  */
-function checkedOn(sort: readonly SortField[]): { holds: ColumnCheck; idOf: (table: RelationalTable) => SQL } {
+function checkedOn(
+	sort: readonly SortField[],
+	tiebreakColumn: string,
+): { holds: ColumnCheck; idOf: (table: RelationalTable) => SQL } {
 	let readFrom: RelationalTable | undefined
 	return {
 		holds: (values, carried) => {
 			if (readFrom === undefined) return -1
-			const { keys, tiebreak } = keysOn(readFrom, sort)
+			const { keys, tiebreak } = keysOn(readFrom, sort, tiebreakColumn)
 			return unfitIndex([...keys.map(({ column }) => column), tiebreak.column], values, { carried })
 		},
 		idOf: (table) => {
 			readFrom = table
-			return tiebreakOf(table)
+			return tiebreakOf(table, tiebreakColumn)
 		},
 	}
 }
@@ -139,15 +146,15 @@ const countOver = (): SQL<number> => sql<number>`cast(count(*) over() as integer
  * timestamp's TEXT, which the next cursor binds, in the
  * dialect the table's columns are of; none on a list with no sort
  */
-function textsOf(sort: readonly SortField[]) {
+function textsOf(sort: readonly SortField[], tiebreakColumn: string) {
 	if (sort.length === 0) return {}
 	const keyTexts = (table: RelationalTable) => {
-		const { keys, tiebreak } = keysOn(table, sort)
+		const { keys, tiebreak } = keysOn(table, sort, tiebreakColumn)
 		return keyTextsSQL(keys, is(tiebreak.column, SQLiteColumn) ? "sqlite" : "postgres")
 	}
 	return {
 		_cursorKeyTexts: keyTexts,
-		_cursorTextKeys: (table: RelationalTable) => textKeysSQL(keysOn(table, sort).keys),
+		_cursorTextKeys: (table: RelationalTable) => textKeysSQL(keysOn(table, sort, tiebreakColumn).keys),
 	}
 }
 
@@ -162,14 +169,15 @@ function drizzleListOptions(query: ListQueryInput, options: CursorOptions): Driz
 	/* options that cannot seal are a wiring mistake on page 1 too, not only once a cursor comes back */
 	assertCursorWired(options)
 	const sort = query.parsedSort
+	const tiebreakColumn = query.tiebreak ?? CURSOR_TIEBREAK_COLUMN
 	refuseComputed(sort)
 	const orderBy = (table: RelationalTable) => {
-		const { keys, tiebreak } = keysOn(table, sort)
+		const { keys, tiebreak } = keysOn(table, sort, tiebreakColumn)
 		return orderByKeys(keys, tiebreak)
 	}
 	/* every row carries what paginate reads, and a page whose rows do not is refused; the return checks `extras` */
-	const texts = textsOf(sort)
-	const { holds, idOf } = checkedOn(sort)
+	const texts = textsOf(sort, tiebreakColumn)
+	const { holds, idOf } = checkedOn(sort, tiebreakColumn)
 	const base = <E extends object>(given: E) => {
 		const extras = { ...given, ...texts }
 		return {
@@ -192,7 +200,7 @@ function drizzleListOptions(query: ListQueryInput, options: CursorOptions): Driz
 	}
 	const cursor = readKeyset(query.cursor, sort, options)
 	const positionOn = (table: RelationalTable) => {
-		const { keys, tiebreak } = keysOn(table, sort)
+		const { keys, tiebreak } = keysOn(table, sort, tiebreakColumn)
 		/* the cursor is client input: each value must be what its column holds, or it is a 400 */
 		assertCursorFits([...keys.map(({ column }) => column), tiebreak.column], [...cursor.values, cursor.id], {
 			carried: (i) => cursor.carried[i] === true,

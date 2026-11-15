@@ -61,8 +61,8 @@ export async function migrateD1(
 	/* the provider's databaseName, the D1 database its connection reaches whatever the environment is called */
 	const name = config.databaseName
 	const exec = io.run ?? runProcess
-	const read = await wranglerReader(wrangler)
 	const ref = { name, wranglerConfig: config.wranglerConfig as string, wranglerEnv: config.wranglerEnv }
+	const read = await wranglerReader(wrangler, ref, { exec })
 	const held = localHeld(async () => read, ref)
 	const target: D1Target = {
 		...ref,

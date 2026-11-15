@@ -25,8 +25,9 @@ import type { SQLiteTable } from "drizzle-orm/sqlite-core";
 import type { BuildDerivedListQueryOpts, BuildListQueryOpts, ListExtras, ListQueryResult, MergedListQueryResult } from "./build-list-query-types.ts";
 /**
  * A table's list query from a parsed request: its WHERE (base, filter, search and cursor), ORDER BY
- * with the `id` tiebreak, LIMIT, OFFSET and the extras `paginate` reads. A sort, filter or `q` the
- * schema accepted that the options cannot run is a 500, as is a cursor on a table with no `id` column
+ * with the list schema's tiebreak (`id` by default), LIMIT, OFFSET and the extras `paginate` reads. A sort,
+ * filter or `q` the schema accepted that the options cannot run is a 500, as is a cursor on a table
+ * without the tiebreak column
  */
 declare function buildListQuery<TTable extends SQLiteTable>(opts: BuildListQueryOpts<TTable> & {
     /** the shards' list, which `paginateMerged` pages */
@@ -34,8 +35,9 @@ declare function buildListQuery<TTable extends SQLiteTable>(opts: BuildListQuery
 }): MergedListQueryResult;
 /**
  * A table's list query from a parsed request: its WHERE (base, filter, search and cursor), ORDER BY
- * with the `id` tiebreak, LIMIT, OFFSET and the extras `paginate` reads. A sort, filter or `q` the
- * schema accepted that the options cannot run is a 500, as is a cursor on a table with no `id` column
+ * with the list schema's tiebreak (`id` by default), LIMIT, OFFSET and the extras `paginate` reads. A sort,
+ * filter or `q` the schema accepted that the options cannot run is a 500, as is a cursor on a table
+ * without the tiebreak column
  */
 declare function buildListQuery<TTable extends SQLiteTable>(opts: BuildListQueryOpts<TTable> & {
     /** absent: one database's list, which `paginate` pages */
@@ -102,8 +104,9 @@ export { conditionToSQL, filterToSQL, type FilterToSQLConfig };
  * exists in one and not the other. A column is described by what it stores (its kind)
  * and the SQL its values compare against.
  */
-import { type SQL, type SQLWrapper } from "drizzle-orm";
+import { Column, SQL, type SQLWrapper } from "drizzle-orm";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
+import type { ListDialect } from "../list-dialect.ts";
 import type { FilterCondition } from "../types.ts";
 /**
  * What a column stores, which decides how a validated value binds: text; a number (`numeric`, text
@@ -113,17 +116,20 @@ import type { FilterCondition } from "../types.ts";
 type ColumnKind = "as-is" | "date-ms" | "date-s" | "number" | "numeric" | "text";
 /** Every ColumnKind, for a boundary that takes one from JavaScript */
 declare const COLUMN_KINDS: readonly ColumnKind[];
-/** A column a condition lowers onto: what it stores, and the SQL a value compares against */
+/** A column a condition lowers onto: what it stores, the SQL a value compares against, and its database */
 type FilterColumn = {
+    dialect: ListDialect;
     kind: ColumnKind;
     /** a drizzle column binds a value through its own mapper; any other SQL binds it as it is */
     sql: SQLWrapper;
 };
+/** The database a drizzle column is of */
+declare const dialectOf: (column: Column) => ListDialect;
 /** One condition on one column; null when the operator or value is not one this column can take */
 declare function lowerOn(column: FilterColumn, condition: FilterCondition): SQL | null;
 /** One condition on one drizzle column; null when the operator or value is not one this column can take */
 declare const conditionToSQL: (condition: FilterCondition, column: SQLiteColumn) => SQL | null;
-export { COLUMN_KINDS, type ColumnKind, conditionToSQL, type FilterColumn, lowerOn };
+export { COLUMN_KINDS, type ColumnKind, conditionToSQL, dialectOf, type FilterColumn, lowerOn };
 
 // query/sqlite/filter-sql.d.ts
 /**
@@ -235,18 +241,32 @@ export { AnchorBound, anchorGone, countLiteral, integerLiteral, type KeysetPosit
 
 // query/sqlite/pattern.d.ts
 /**
- * The one lowering of `like` / `ilike` for SQLite. Every filter path calls this,
+ * The one lowering of `like` / `ilike`, for SQLite and Postgres. Every filter path calls this,
  * so the two operators cannot drift apart between builders.
  *
+ * On Postgres, `like` is LIKE and `ilike` ILIKE, `*` written as `%` and LIKE's own specials escaped:
+ * Postgres caps no pattern's length, so a fixed text needs no other form.
+ *
+ * On SQLite:
  * A value whose only `*` are at its ends is a fixed text to find, not a pattern: it lowers
  * to `instr`, `substr` or `=`, which no length cap limits, where D1 refuses a LIKE or GLOB
  * pattern over 50 bytes. `like` stays case-sensitive, as GLOB is; `ilike` compares both sides
  * through `lower()`, ASCII as LIKE folds. A NULL column matches neither, as it matches no pattern.
  */
 import { type SQL, type SQLWrapper } from "drizzle-orm";
-/** `like` → GLOB (case-sensitive). `ilike` → LIKE (ASCII case-insensitive). A fixed text → a search for it. */
+import type { ListDialect } from "../list-dialect.ts";
+/**
+ * `like` → GLOB on SQLite, LIKE on Postgres (case-sensitive). `ilike` → LIKE on SQLite (ASCII
+ * case-insensitive), ILIKE on Postgres. A fixed text on SQLite → a search for it. A Postgres
+ * column lowers as Postgres; any other SQL as SQLite
+ */
 declare function patternToSQL(column: SQLWrapper, operator: "like" | "ilike", value: unknown): SQL;
-export { patternToSQL };
+/** `patternToSQL` on a column of a known `dialect` */
+declare function patternOn({ dialect, sql: column }: {
+    dialect: ListDialect;
+    sql: SQLWrapper;
+}, operator: "like" | "ilike", value: unknown): SQL;
+export { patternOn, patternToSQL };
 
 // query/sqlite/search.d.ts
 /**
@@ -695,6 +715,24 @@ type MergedListQueryResult = Omit<ListQueryResult, "pagination"> & {
     };
 };
 export type { BuildDerivedListQueryOpts, BuildListQueryOpts, ListExtras, ListQueryResult, MergedListQueryResult };
+
+// query/list-dialect.d.ts
+/**
+ * The dialect a derived list is built for: the columns its id, anchor and keys hold decide,
+ * wherever drizzle's SQL holds them (nested SQL, an aliased expression, a subquery's field), and a list
+ * that holds none states it. A where's columns do not count: they are not what the cursor binds. Reads
+ * only drizzle's public surface: `is()`, `Column.columnType`, `SQL.queryChunks`, `SQL.Aliased.sql`, and
+ * a `Table` or `View` chunk's columns through `getTableColumns` and `getViewSelectedFields`.
+ */
+import { type SQLWrapper } from "drizzle-orm";
+type ListDialect = "postgres" | "sqlite";
+/**
+ * The dialect of the list whose id and keys are `holders`: theirs, or `stated` where they hold no
+ * column. The app's wiring, so a TypeError on every build: no column and no `dialect`, columns of
+ * both dialects, a column of neither, or a `dialect` its columns contradict
+ */
+declare function listDialect(holders: readonly SQLWrapper[], stated: ListDialect | undefined): ListDialect;
+export { type ListDialect, listDialect };
 
 // query/pagination.d.ts
 /**
@@ -1547,8 +1585,9 @@ type Typed = {
 /**
  * A number field's value: finite (1e999 reads as Infinity, which no column holds), 0 or normal
  * (1e-400 reads as 0, which would match the rows holding 0), and within
- * ±(2^53 − 1), past which a double binds a neighbouring value. The value is read, not its
- * spelling: `9007199254740993.0` and `9.007199254740993e15` are the same unsafe integer.
+ * ±(2^53 − 1), past which a double binds a neighbouring value, and no finer than a double holds it
+ * (`1.000000000000000001` would bind as 1). The value is read, not its spelling:
+ * `9007199254740993.0` and `9.007199254740993e15` are the same unsafe integer.
  */
 declare function parseFilterNumber(raw: string): {
     /** the number `raw` names */

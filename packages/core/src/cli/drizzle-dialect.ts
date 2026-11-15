@@ -30,7 +30,8 @@ export async function statedDialect(file: string): Promise<unknown> {
 export function literalDialect(source: string): string | undefined {
 	/* each string kept and each comment dropped, so a dialect commented out is not read and a URL's // ends no line */
 	const code = source.replace(STRING_OR_COMMENT, (_match, string: string | undefined) => string ?? " ")
-	return /\bdialect\s*:\s*["'`]([\w-]+)["'`]/.exec(code)?.[1]
+	/* a quoted key too, as a .json config writes one */
+	return /(?:\bdialect|(["'])dialect\1)\s*:\s*["'`]([\w-]+)["'`]/.exec(code)?.[2]
 }
 
 /** A string literal (captured) or a comment, whichever starts first */

@@ -45,16 +45,14 @@ ${columns}
 	})
 })
 
-describe("validateTables: keys, tenants and tables it cannot read", () => {
+/** validateTables of a tables file holding `source`, in a directory each test of the calling describe gets afresh */
+function tablesFile(): (source: string) => ReturnType<typeof validateTables> {
 	let dir: string
-
 	beforeEach(() => {
 		dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-validate-keys-"))
 	})
-
 	afterEach(() => fs.rmSync(dir, { force: true, recursive: true }))
-
-	function validate(source: string) {
+	return (source) => {
 		const file = path.join(dir, "db.test.tables.ts")
 		fs.writeFileSync(
 			file,
@@ -62,6 +60,10 @@ describe("validateTables: keys, tenants and tables it cannot read", () => {
 		)
 		return validateTables(file)
 	}
+}
+
+describe("validateTables: keys and tables it cannot read", () => {
+	const validate = tablesFile()
 
 	it("warns that a primary key under another property cannot be cursor-paginated, unless it is composite", async () => {
 		const natural = await validate(
@@ -73,17 +75,6 @@ describe("validateTables: keys, tenants and tables it cannot read", () => {
 		)
 		expect(composite.warnings).toEqual([
 			"m: composite primary key, so no entity stamp is published (docs/meta-contract.md §6.4)",
-		])
-	})
-
-	it("rejects two tenant columns on one table", async () => {
-		const result = await validate(`export const t = sqliteTable("t", {
-	id: c.id("ttt"),
-	org_id: c.ref("org_id", { tenant: true }),
-	team_id: c.ref("team_id", { tenant: true }),
-})`)
-		expect(result.errors).toEqual([
-			"t: 2 columns declare { tenant: true } (org_id, team_id). A table scopes to at most one tenant column.",
 		])
 	})
 
@@ -101,6 +92,36 @@ export const t = sqliteTable("t", { id: c.id("ttt"), prefs: c.json("prefs", hidd
 				`export const t = sqliteTable("a", { id: c.id("aaa") })\nexport const t = sqliteTable("b", { id: c.id("bbb") })`,
 			),
 		).rejects.toThrow("database could not load")
+	})
+})
+
+describe("validateTables: tenant columns", () => {
+	const validate = tablesFile()
+
+	it("rejects two tenant columns on one table", async () => {
+		const result = await validate(`export const t = sqliteTable("t", {
+	id: c.id("ttt"),
+	org_id: c.ref("org_id", { tenant: true }).notNull(),
+	team_id: c.ref("team_id", { tenant: true }).notNull(),
+})`)
+		expect(result.errors).toEqual([
+			"t: 2 columns declare { tenant: true } (org_id, team_id). A table scopes to at most one tenant column.",
+		])
+	})
+
+	/* CD5 of r23: a nullable tenant column let a create leave it out, a row in no tenant scope while
+	   the stamp published the column as the table's tenant boundary */
+	it("rejects a nullable tenant column, a row of which is in no tenant", async () => {
+		for (const column of ['c.ref("org_id", { tenant: true })', 'c.text("org_id", { tenant: true }).default("o1")']) {
+			const result = await validate(`export const t = sqliteTable("t", { id: c.id("ttt"), org_id: ${column} })`)
+			expect(result.errors, column).toEqual([
+				"t.org_id: a tenant column must be NOT NULL, or a create may leave it out or send null, a row in no tenant; add .notNull()",
+			])
+		}
+		const kept = await validate(
+			`export const t = sqliteTable("t", { id: c.id("ttt"), org_id: c.ref("org_id", { tenant: true }).notNull() })`,
+		)
+		expect(kept.errors).toEqual([])
 	})
 })
 

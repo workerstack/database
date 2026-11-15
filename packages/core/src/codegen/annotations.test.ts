@@ -128,6 +128,12 @@ describe("parseFieldConstraints: keys that contradict", () => {
 		)
 		expect(parseFieldConstraints('c.text("f", { lowercase: true, uppercase: false })').lowercase).toBe(true)
 	})
+	/* CD5 of r23: a private tenant column published no tenant boundary, tenantColumn null, without a word */
+	it("refuses tenant and private together", () => {
+		expect(() => parseFieldConstraints('c.ref("f", { private: true, tenant: true })')).toThrow(
+			"/fixture/db.core.tables.ts: fixture.f: tenant and private contradict; the stamp publishes a tenant column as the table's boundary, and a private column is published nowhere",
+		)
+	})
 })
 
 /* F57: a key may name its relation, as an identifier the generated relations can hold */

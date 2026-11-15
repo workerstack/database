@@ -519,21 +519,30 @@ export { escapeLike, FIXED, globPattern, likePattern, patternOf };
  * An ISO 8601 date or date-time as an ISO date filter takes it: a
  * real day and time by the proleptic Gregorian calendar, read as the instant it names in
  * `toISOString()`'s form, so every spelling of one instant compares as one. A bare date is midnight
- * UTC; a fraction past milliseconds is cut, as a JS Date holds none.
+ * UTC. A JS Date holds no fraction past milliseconds, so the instant keeps its millisecond and says
+ * whether digits past it were cut, which a filter compares by.
  */
 /**
  * An ISO date filter's value as validateFilter types it: the instant, by its epoch milliseconds and
  * its `toISOString()` text, so a lowering binds whichever its column stores. A bare date is
- * midnight UTC, and a fraction past milliseconds is cut. It writes itself as its text, in a string
- * and in JSON
+ * midnight UTC. A fraction past milliseconds is cut from `ms` and `text`, and kept in `fraction`:
+ * `cut` says the instant lies between `ms` and the millisecond after it, which a filter compares
+ * exactly by. It writes itself as its text, in a string and in JSON
  */
 declare class IsoInstant {
-    /** the instant in epoch milliseconds */
+    /** whether the instant lies past `ms`, by digits past the millisecond that `ms` and `text` cut */
+    readonly cut: boolean;
+    /** the instant's fraction of its second, in nine digits: nanoseconds */
+    readonly fraction: string;
+    /** the instant in epoch milliseconds, its fraction past them cut */
     readonly ms: number;
-    /** the instant as `toISOString()` writes it, in UTC */
+    /** the instant as `toISOString()` writes it, in UTC, its fraction past milliseconds cut */
     readonly text: string;
-    /** The instant `ms` epoch milliseconds name */
-    constructor(ms: number);
+    /**
+     * The instant `ms` epoch milliseconds name, or, with `fraction`, the instant `fraction` digits
+     * into the second of `ms`, whose milliseconds they must start with
+     */
+    constructor(ms: number, fraction?: string);
     /** The instant's ISO text */
     toJSON(): string;
     /** The instant's ISO text */
@@ -1128,8 +1137,9 @@ type Typed = {
 /**
  * A number field's value: finite (1e999 reads as Infinity, which no column holds), 0 or normal
  * (1e-400 reads as 0, which would match the rows holding 0), and within
- * ±(2^53 − 1), past which a double binds a neighbouring value. The value is read, not its
- * spelling: `9007199254740993.0` and `9.007199254740993e15` are the same unsafe integer.
+ * ±(2^53 − 1), past which a double binds a neighbouring value, and no finer than a double holds it
+ * (`1.000000000000000001` would bind as 1). The value is read, not its spelling:
+ * `9007199254740993.0` and `9.007199254740993e15` are the same unsafe integer.
  */
 declare function parseFilterNumber(raw: string): {
     /** the number `raw` names */

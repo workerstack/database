@@ -64,6 +64,20 @@ describe("create takes only a state column's initial (CD4; sibling: the update D
 			)
 		})
 
+		/* CD3 of r23: a nullable state column with no default stored NULL for a create that left it
+		   out, a row in no state, from which assertTransition refuses every move */
+		it("refuses a nullable state column with no default, naming the column", async () => {
+			await expect(generatedDtos(`cd3-nullable-${dialect}`, table(dialect, ""), { dialect })).rejects.toThrow(
+				'job.status: a create that leaves it out stores null, a row in no state of its machine; write .default("queued"), or .notNull() so a create sends "queued"',
+			)
+		})
+
+		it("takes a nullable state column with a default of initial", async () => {
+			const dtos = await generatedDtos(`cd3-default-${dialect}`, table(dialect, '.default("queued")'), { dialect })
+			const create = dtos["job"]?.["jobDtoCreateSchema"] as z.ZodObject
+			expect(create.safeParse({ id: "j1" }).success).toBe(true)
+		})
+
 		it("refuses a default function, which database cannot hold to initial, naming the column", async () => {
 			await expect(
 				generatedDtos(`cd4-fn-${dialect}`, table(dialect, '.notNull().$defaultFn(() => "queued")'), { dialect }),

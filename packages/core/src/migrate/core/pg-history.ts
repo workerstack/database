@@ -23,6 +23,7 @@ import { followPartitioned } from "./pg-partitioned.ts"
 import { followRoutine } from "./pg-routines.ts"
 import type { Placing } from "./pg-storage-types.ts"
 import { followStorage, placeStorage } from "./pg-storage.ts"
+import { forgetUnseen, runsUnseen } from "./pg-unseen.ts"
 import {
 	columnTypeOf,
 	emptyFacts,
@@ -232,7 +233,9 @@ function followRelation(type: string, node: Node, facts: Facts): boolean {
 /** `facts` after one statement's parse tree, the functions it defines among them */
 function followTree(stmts: unknown, facts: Facts): void {
 	const defined = facts.defined
-	for (const [type, node] of nodesOf(stmts)) {
+	const nodes = nodesOf(stmts)
+	const unseen = runsUnseen(nodes, facts)
+	for (const [type, node] of nodes) {
 		followCascade(type, node, facts)
 		followReads(type, node, facts)
 		followDomainName(type, node, facts)
@@ -248,6 +251,7 @@ function followTree(stmts: unknown, facts: Facts): void {
 		else if (type === "AlterTableStmt") followAlter(node, facts)
 		else if (!followRelation(type, node, facts)) followDefinition(type, node, facts)
 	}
+	if (unseen) forgetUnseen(facts)
 }
 
 // lru-cache: each history's facts under each schema, read once per schema object, released with it

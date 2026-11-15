@@ -13,7 +13,6 @@
 import { existsSync, readFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import { dirname, join } from "node:path"
-import { pathToFileURL } from "node:url"
 import { childRefusal, compiledRefusal, refuseCompiled } from "./compiled.ts"
 import { ATLAS, type BinNeed, type Command, type Need, needsOf, type Provider, type Requirement } from "./peer-needs.ts"
 import { admits, installedVersion, manifestOf } from "./peer-version.ts"
@@ -261,16 +260,9 @@ function binOf(peers: Peers, peer: BinPeer): ProjectBin {
 /** The entry module of the package `bin` is from: the one package database checked and spawns */
 const binEntry = (bin: ProjectBin): string => createRequire(bin.manifest).resolve(dirname(bin.manifest))
 
-/** The module of the package `bin` is from, by its entry; refused in a compiled executable, which `moduleUrl` (database's own) tells */
-async function importBin<T>(bin: ProjectBin, moduleUrl: string = import.meta.url): Promise<T> {
-	refuseCompiled(moduleUrl, compiledRefusal([bin.peer]))
-	return (await import(pathToFileURL(binEntry(bin)).href)) as T
-}
-
 export {
 	binEntry,
 	binOf,
-	importBin,
 	MissingPeerError,
 	missingPeer,
 	OPTIONAL_PEER_RANGES,

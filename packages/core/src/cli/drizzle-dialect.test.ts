@@ -46,7 +46,7 @@ async function diffWith(config: string, dialect: string | undefined) {
 }
 
 /* KC1 of r22b: drizzle-kit exports none of the other dialect's tables, so 0.20's diff wrote DROP TABLE for each, exit 0 */
-describe("diff refuses a drizzle config of the other dialect (KC1; sibling: init over an init of the other dialect)", () => {
+describe("diff refuses a drizzle config of the other dialect (KC1)", () => {
 	it("refuses a sqlite drizzle config for a Postgres database, naming the file and both dialects, before drizzle-kit runs", async () => {
 		const { code, dir, drizzleKit, errors, wrote } = await diffWith(PG_CORE, "sqlite")
 		expect(code).toBe(1)
@@ -79,7 +79,9 @@ describe("diff refuses a drizzle config of the other dialect (KC1; sibling: init
 			`${join(dir, "drizzle.config.ts")} states dialect "postgresql", but a diff with no database.migrate.config.ts is SQLite: set dialect: "sqlite" in it`,
 		])
 	})
+})
 
+describe("init refuses a drizzle config of the other dialect, whichever file init finds (KC4 of r23)", () => {
 	it("refuses init --dialect postgres over a SQLite init, and the reverse, naming the file and writing nothing", async () => {
 		const dir = project()
 		expect(await runCliWithFakes(["migrate", "init"], makeIo(dir))).toBe(0)
@@ -96,6 +98,35 @@ describe("diff refuses a drizzle config of the other dialect (KC1; sibling: init
 		expect(sqlite.errors).toEqual([
 			`${join(other, "drizzle.config.ts")} states dialect "postgresql", but migrate init --dialect sqlite writes a SQLite project: set dialect: "sqlite" in it, or remove it and run init again`,
 		])
+	})
+
+	/* KC4 of r23: init read drizzle.config.ts alone, so beside a Postgres drizzle.config.js it wrote a SQLite
+	   drizzle.config.ts, which diff then read first, shadowing the project's own */
+	it.each([
+		{ name: "drizzle.config.js", source: 'export default { dialect: "postgresql", schema: "./src/db.ts" }\n' },
+		{ name: "drizzle.config.mjs", source: "export default { dialect: 'postgresql' }\n" },
+		{ name: "drizzle.config.json", source: '{ "dialect": "postgresql" }\n' },
+	])(
+		"refuses init --dialect sqlite beside a Postgres $name, naming it and writing nothing",
+		async ({ name, source }) => {
+			const dir = project()
+			writeFileSync(join(dir, name), source)
+			const io = makeIo(dir)
+			expect(await runCliWithFakes(["migrate", "init", "--dialect", "sqlite"], io)).toBe(1)
+			expect(io.errors).toEqual([
+				`${join(dir, name)} states dialect "postgresql", but migrate init --dialect sqlite writes a SQLite project: set dialect: "sqlite" in it, or remove it and run init again`,
+			])
+			expect(readdirSync(dir)).toEqual([name])
+		},
+	)
+
+	it("writes no drizzle.config.ts beside a drizzle config of its dialect, which diff would read in its place", async () => {
+		const dir = project()
+		writeFileSync(join(dir, "drizzle.config.js"), 'export default { dialect: "sqlite" }\n')
+		const io = makeIo(dir)
+		expect(await runCliWithFakes(["migrate", "init"], io)).toBe(0)
+		expect(io.outputs).toEqual(["Created: atlas-migrations/"])
+		expect(readdirSync(dir).sort()).toEqual(["atlas-migrations", "drizzle.config.js"])
 	})
 })
 

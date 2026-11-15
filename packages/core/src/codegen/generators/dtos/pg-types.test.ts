@@ -29,8 +29,8 @@ describe("pgWriteRule: a plain Postgres column's write rule by its data type (F5
 		expect(rule('timestamp("v", { mode: "string", withTimezone: true, precision: 3 })')).toMatch(
 			/^z\.stringFormat\("datetime", \/\^.*Z\|\(\[\+-\].*\$\/u\)\.regex\(/,
 		)
-		expect(rule('time("v")')).toBe(
-			String.raw`z.stringFormat("time", /^(?:[01][0-9]|2[0-3]):[0-5][0-9](?::[0-5][0-9](?:\.[0-9]+)?)?$/u)`,
+		expect(rule('time("v")')).toMatch(
+			/^z\.stringFormat\("time", \/\^\(\?:\[01\]\[0-9\]\|2\[0-3\]\):\[0-5\]\[0-9\].*\$\/u\)\.regex\(/,
 		)
 		expect(rule('time("v", { withTimezone: true })')).toMatch(/^z\.string\(\)\.regex\(.*\(\?:Z\|\[\+-\]/)
 		expect(rule('text("v")')).toBeUndefined()
@@ -118,7 +118,7 @@ const takes = (source: string, values: string[]) => {
 /* CD5, CD6 of r22b: the PG17 suite (pg-typmods) holds each rule to Postgres; these hold the parse and each branch */
 describe("a Postgres type modifier is parsed once (CD5, CD6; sibling: numeric's scale bound)", () => {
 	it.each([
-		["time", { base: "time", precision: null, withTimeZone: false }],
+		["time", { base: "time", precision: 6, withTimeZone: false }],
 		["time(3) with time zone", { base: "time", precision: 3, withTimeZone: true }],
 		["timestamp (0)", { base: "timestamp", precision: 0, withTimeZone: false }],
 		["timestamp(6) with time zone", { base: "timestamp", precision: 6, withTimeZone: true }],
@@ -142,7 +142,7 @@ describe("a time's rules read the parsed modifier (CD5, CD6; sibling: a timestam
 	it("holds a time's fraction to its precision, local or with an offset", () => {
 		expect(takes('time("v", { precision: 0 })', ["10:00", "10:00:01", "10:00:01.5"])).toEqual([true, true, false])
 		expect(takes('time("v", { precision: 2 })', ["10:00:01.25", "10:00:01.255"])).toEqual([true, false])
-		expect(takes('time("v")', ["10:00:01.123456789"])).toEqual([true])
+		expect(takes('time("v")', ["10:00:01.123456", "10:00:01.123456789"])).toEqual([true, false])
 		expect(takes('time("v", { precision: 0, withTimezone: true })', ["10:00:01Z", "10:00:01.5Z"])).toEqual([
 			true,
 			false,
@@ -311,5 +311,36 @@ describe("an ISO rule's issue, as z.stringFormat raises it (AA7 of r22)", () => 
 		expect(Object.keys(issue ?? {}).sort()).toEqual(["code", "format", "message", "path"])
 		expect(Object.keys(own ?? {}).sort()).toEqual(["code", "format", "message", "origin", "path", "pattern"])
 		expect(issue).toEqual({ ...own, origin: undefined, pattern: undefined })
+	})
+})
+
+/* CD1 of r23: a time, timestamp or interval declared with no precision holds 6 digits, Postgres's
+   default, and rounds a 7th, perhaps into the next day: `23:59:59.9999995` is stored as `24:00:00` */
+/** What `schema` says of a timestamp 7 digits past the second's point */
+const messages = (schema: z.ZodType) =>
+	schema.safeParse("2026-12-31T23:59:59.9999995").error?.issues.map((issue) => issue.message)
+
+describe("a time, timestamp or interval of no declared precision holds 6 digits, as Postgres does (CD1)", () => {
+	it.each([
+		['timestamp("v", { mode: "string" })', "2026-12-31T23:59:59.999999", "2026-12-31T23:59:59.9999995"],
+		[
+			'timestamp("v", { mode: "string", withTimezone: true })',
+			"2026-12-31T23:59:59.999999Z",
+			"2026-12-31T23:59:59.9999995Z",
+		],
+		['time("v")', "23:59:59.999999", "23:59:59.9999995"],
+		['time("v", { withTimezone: true })', "23:59:59.999999+02:00", "23:59:59.9999995+02:00"],
+		['interval("v")', "PT0.000001S", "PT0.0000004S"],
+	])("%s takes 6 digits after the second's point and refuses a 7th", (column, six, seven) => {
+		expect(takes(column, [six, seven])).toEqual([true, false])
+	})
+
+	it("tells why, as a declared precision 6 does", () => {
+		const plain = new Function("z", `return ${rule('timestamp("v", { mode: "string" })')}`)(z) as z.ZodType
+		const six = new Function("z", `return ${rule('timestamp("v", { mode: "string", precision: 6 })')}`)(z) as z.ZodType
+		expect(messages(plain)).toEqual([
+			"Must have at most 6 digits after the second's point, which timestamp(6) would round",
+		])
+		expect(messages(plain)).toEqual(messages(six))
 	})
 })

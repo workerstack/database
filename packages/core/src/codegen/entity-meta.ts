@@ -58,7 +58,7 @@ function isExcludedFromUpdate(field: FieldMeta): boolean {
  */
 function tenantColumnOf(table: TableMeta): string | null {
 	const declared = table.fields.filter((f) => f.constraints.tenant)
-	if (declared.length !== 1 || declared[0]!.constraints.private) return null
+	if (declared.length !== 1) return null
 	return declared[0]!.name
 }
 

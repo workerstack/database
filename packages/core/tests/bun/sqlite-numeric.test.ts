@@ -45,9 +45,12 @@ const POOL = [
 	"-0",
 	"0.5",
 	"123456789012345",
+	"123456789012.5",
+	"0.1234567890123",
+	"0.000000123",
+	/* CD4 of r23: a fraction past 13 digits, which SQLite 3.53 reads back as another decimal */
 	"12345678901234.5",
 	"0.123456789012345",
-	"0.000000123",
 	/* past 15 digits, which SQLite's REAL, or a driver's JS number, does not keep */
 	"1234567890123456",
 	"0.1234567890123456",
@@ -65,7 +68,7 @@ const POOL = [
 
 describe("a SQLite numeric column's write DTO, by what SQLite stores (A2-12)", () => {
 	for (const type of ["create", "update"] as const)
-		it(`${type} takes only a value SQLite keeps, refusing more than 15 digits and any other spelling`, () => {
+		it(`${type} takes only a value SQLite keeps, refusing more than 15 digits, a fraction of more than 13 and any other spelling`, () => {
 			const schema = written(type)
 			const client = new Database(":memory:")
 			client.run("CREATE TABLE row (id INTEGER PRIMARY KEY, n NUMERIC NOT NULL)")
@@ -83,4 +86,37 @@ describe("a SQLite numeric column's write DTO, by what SQLite stores (A2-12)", (
 			})
 			expect(taken).toEqual(POOL.slice(0, 10))
 		})
+})
+
+/* CD4 of r23: drizzle reads a numeric as `cast(n as text)`, and SQLite 3.53 writes a REAL whose 15
+   digits it does not read back as itself with 17, so 57.2505567882849 read back as 57.250556788284897.
+   A fraction of at most 13 significant digits reads back as sent; 14 and 15 did not */
+describe("a SQLite numeric fraction reads back as sent (CD4)", () => {
+	let seed = 11
+	const random = (): number => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31
+	/** A decimal of `digits` significant digits, its point anywhere in them or before them */
+	const decimal = (digits: number): string => {
+		const text = Array.from({ length: digits }, (_, at) =>
+			String(at === 0 ? 1 + Math.floor(random() * 9) : Math.floor(random() * 10)),
+		).join("")
+		const point = Math.floor(random() * digits)
+		return point === 0 ? `0.${text}` : `${text.slice(0, point)}.${text.slice(point)}`
+	}
+
+	it("takes a fraction of at most 13 digits, reads each back as its value, and refuses 14 or 15", () => {
+		const schema = written("create")
+		const client = new Database(":memory:")
+		client.run("CREATE TABLE row (id INTEGER PRIMARY KEY, n NUMERIC NOT NULL)")
+		const db = drizzle({ client })
+		let id = 0
+		for (const digits of [12, 13, 14, 15])
+			for (let each = 0; each < 2000; each++) {
+				const value = decimal(digits)
+				const taken = schema.safeParse(value).success
+				expect(taken, value).toBe(digits <= 13)
+				if (!taken) continue
+				const [stored] = db.insert(row).values({ id: ++id, n: value }).returning({ n: row.n }).all()
+				expect(valueOf(stored?.n as string), `${value} read back as ${stored?.n}`).toBe(valueOf(value))
+			}
+	})
 })

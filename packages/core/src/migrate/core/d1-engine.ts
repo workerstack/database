@@ -2,21 +2,20 @@
  * Each pending D1 file proven on D1's own engine: after the bun:sqlite proof, the
  * files run in order on a scratch local D1 that the checked wrangler's own Miniflare opens, holding the
  * live schema and the proof's seed rows (proof-copy.ts). Miniflare runs on node, as wrangler's apply runs
- * it, whatever runtime database runs on: the proof is a node child (d1-engine-child.mjs) started through
- * process.ts, handed its input as JSON in the proof's scratch directory, and answering D1's refusal in
- * D1's words. What D1 refuses is refused, with no override: D1's authorizer, functions, modules and
+ * it, whatever runtime database runs on: the proof is a node child (d1-engine-child.mjs, through
+ * node-child.ts), answering D1's refusal in D1's words. What D1 refuses is refused, with no override: D1's authorizer, functions, modules and
  * limits are the engine's, with no list of database's to keep. A file whose text wrangler would rewrite is
  * refused before anything runs.
  */
-import { existsSync, readFileSync, writeFileSync } from "node:fs"
+import { writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { refuseCompiled } from "./compiled.ts"
 import type { ProofInput, ProofResult } from "./d1-engine-child.mjs"
+import { endedWith, runChild } from "./node-child.ts"
 import { binEntry } from "./optional-peer.ts"
 import { type ProjectBin, type MigrateRun, run } from "./process.ts"
 import { copyScript, type LiveObject } from "./proof-copy.ts"
 import { quote } from "./proof-seed.ts"
-import { scratchDir } from "./cleanup.ts"
 
 /** A pending file: its name, and its text as the migrations directory holds it */
 type File = { name: string; sql: string }
@@ -33,14 +32,6 @@ const TRIMMED = "BEGIN TRANSACTION"
 
 /* a literal, a quoted name or a comment, as SQLite reads each */
 const NOT_CODE = /'(?:[^']|'')*'|"(?:[^"]|"")*"|`(?:[^`]|``)*`|\[[^\]]*\]|--[^\n]*|\/\*[\s\S]*?(?:\*\/|$)/g
-
-/* what node runs, as a module file in the proof's scratch directory: it imports the child module and writes its
-   answer to a file, as Miniflare may print to stdout. Not \`node -e\`: wrangler 4's getPlatformProxy never resolves
-   in an evaluated module */
-const SHIM = `const [child, input, output] = process.argv.slice(2)
-const { main } = await import(child)
-const { writeFileSync } = await import("node:fs")
-writeFileSync(output, JSON.stringify(await main(input)))`
 
 /** The literal, quoted name or comment of `sql` that holds `at`, as the file writes it */
 function enclosing(sql: string, at: number): string {
@@ -110,25 +101,16 @@ async function proveOnD1(
 		"check proves the pending files in a child on wrangler's runtime, which cannot read the modules a Bun single-file executable embeds: run database migrate with bun or node, not from a compiled executable",
 	)
 	for (const file of files) refuseRewritten(file)
-	const { dir, remove: removeDir } = scratchDir("database-d1-proof-")
-	try {
-		const input = join(dir, "input.json")
-		const output = join(dir, "result.json")
-		writeFileSync(input, JSON.stringify(await proofInput(live, files, { bin, dir, table })))
-		const child = new URL("./d1-engine-child.mjs", import.meta.url).href
-		const shim = join(dir, "proof.mjs")
-		writeFileSync(shim, SHIM)
-		const ran = await exec(bin.runtime, [shim, child, input, output], { peer: bin.peer })
-		if (!existsSync(output))
-			throw new Error(
-				`check could not prove the pending files on D1's engine: the proof on ${bin.runtime} ended with code ${ran.code} and no answer: ${ran.stderr.trim() || "it printed nothing"}`,
-			)
-		const { refused, unproven = [] } = JSON.parse(readFileSync(output, "utf8")) as ProofResult
-		if (refused !== undefined) throw new Error(refused)
-		return unproven
-	} finally {
-		removeDir()
-	}
+	const { refused, unproven = [] } = await runChild<ProofResult>(new URL("./d1-engine-child.mjs", import.meta.url), {
+		bin,
+		exec,
+		failed: (ran) =>
+			`check could not prove the pending files on D1's engine: the proof on ${bin.runtime} ${endedWith(ran)}`,
+		inputOf: (dir) => proofInput(live, files, { bin, dir, table }),
+		prefix: "database-d1-proof-",
+	})
+	if (refused !== undefined) throw new Error(refused)
+	return unproven
 }
 
 export { enclosing, proofInput, proveOnD1, refuseRewritten }

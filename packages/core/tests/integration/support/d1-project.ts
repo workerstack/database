@@ -39,14 +39,17 @@ export function writeMigrations(dir: string, migrations: Record<string, string>)
 export function databaseProcess(
 	dir: string,
 	args: readonly string[],
-): Promise<{ code: number | null; stderr: string }> {
+): Promise<{ code: number | null; stderr: string; stdout: string }> {
 	return new Promise((done) => {
-		const child = spawn("bun", [BIN, ...args], { cwd: dir, stdio: ["ignore", "ignore", "pipe"] })
-		let stderr = ""
+		const child = spawn("bun", [BIN, ...args], { cwd: dir, stdio: ["ignore", "pipe", "pipe"] })
+		let [stderr, stdout] = ["", ""]
 		child.stderr.on("data", (chunk: Buffer) => {
 			stderr += chunk.toString()
 		})
-		child.on("close", (code) => done({ code, stderr }))
+		child.stdout.on("data", (chunk: Buffer) => {
+			stdout += chunk.toString()
+		})
+		child.on("close", (code) => done({ code, stderr, stdout }))
 	})
 }
 

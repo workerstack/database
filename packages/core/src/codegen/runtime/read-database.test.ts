@@ -145,6 +145,15 @@ describe("statesOf: a state column's default is its initial", () => {
 		expect(statesOf(MACHINE, "t.s", { default: "a" })?.initial).toBe("a")
 	})
 
+	/* CD3 of r23: a create that leaves a nullable column out stores null, which is no state */
+	it("refuses a nullable column with no default, and keeps one with a default of initial or NOT NULL", () => {
+		expect(() => statesOf(MACHINE, "t.s", { notNull: false })).toThrow(
+			't.s: a create that leaves it out stores null, a row in no state of its machine; write .default("a"), or .notNull() so a create sends "a"',
+		)
+		expect(statesOf(MACHINE, "t.s", { default: "a", notNull: false })?.initial).toBe("a")
+		expect(statesOf(MACHINE, "t.s", { notNull: true })?.initial).toBe("a")
+	})
+
 	it("refuses a literal default other than initial, naming the column", () => {
 		expect(() => statesOf(MACHINE, "t.s", { default: "b" })).toThrow(
 			't.s: its default "b" is not its state machine\'s initial "a"; a row starts at initial',

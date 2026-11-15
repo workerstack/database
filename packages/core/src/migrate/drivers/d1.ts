@@ -236,7 +236,7 @@ export function createD1Provider(config: D1ProviderConfig, exec: MigrateRun = ru
 		connect(): Promise<MigrateConnection> {
 			return Promise.resolve().then(() => {
 				const wrangler = projectBin(WRANGLER, process.cwd())
-				const held = localHeld(() => wranglerReader(wrangler), {
+				const held = localHeld((ref) => wranglerReader(wrangler, ref, { exec }), {
 					name: config.databaseName,
 					wranglerConfig: config.wranglerConfig ?? findWranglerConfig(process.cwd()),
 					wranglerEnv: config.wranglerEnv,

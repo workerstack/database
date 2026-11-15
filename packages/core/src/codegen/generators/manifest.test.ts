@@ -18,7 +18,7 @@ export const org = createTable("org", { id: c.id("org") })
 export const author = createTable("author", { id: c.id("aut"), name: c.text("name") })
 export const post = createTable("post", {
 	id: c.id("pst"),
-	org_id: c.ref("org_id", { tenant: true }).references(() => org.id, { onDelete: "cascade" }),
+	org_id: c.ref("org_id", { tenant: true }).notNull().references(() => org.id, { onDelete: "cascade" }),
 	author_id: c.ref("author_id").references(() => author.id, { onDelete: "set null" }),
 	status: c.enum("status", ["draft", "published"]).notNull(),
 	title: c.text("title", { max: 200, min: 2 }),
@@ -279,7 +279,7 @@ export const job = createTable("job", {
 		initial: "queued",
 		terminal: ["done"],
 		transitions: { queued: ["done"] },
-	}),
+	}).notNull(),
 })
 `,
 		)
@@ -295,7 +295,7 @@ export const job = createTable("job", {
 	it("reports a machine without terminal states as an empty terminal list", async () => {
 		const job = await entity(
 			"job",
-			`export const job = createTable("job", { id: c.id("job"), status: c.enum("status", ["a", "b"], { initial: "a" }) })`,
+			`export const job = createTable("job", { id: c.id("job"), status: c.enum("status", ["a", "b"], { initial: "a" }).notNull() })`,
 		)
 		expect(job.columns.find((c) => c.name === "status")!.states).toEqual({
 			initial: "a",

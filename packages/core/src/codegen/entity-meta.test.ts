@@ -36,7 +36,7 @@ describe("deriveEntityMeta: private columns", () => {
 					owner_id: 'c.ref("owner_id", { private: true }).references(() => owner.id)',
 					_secret: 'c.text("_secret").notNull()',
 					slug: 'c.text("slug")',
-					tenant_id: 'c.ref("tenant_id", { tenant: true, private: true }).references(() => tenant.id)',
+					tenant_id: 'c.ref("tenant_id", { private: true }).references(() => tenant.id)',
 				},
 				{
 					uniqueIndexes: [
@@ -138,7 +138,7 @@ describe("deriveEntityMeta: identity", () => {
 		const t = table(
 			{
 				id: 'c.id("itm")',
-				org_id: 'c.ref("org_id", { tenant: true })',
+				org_id: 'c.ref("org_id", { tenant: true }).notNull()',
 				deleted_at: 'c.deletedAt("deleted_at")',
 				status: 'c.text("status")',
 			},

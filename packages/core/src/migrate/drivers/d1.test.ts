@@ -5,11 +5,11 @@ import { DatabaseSync } from "node:sqlite"
 import { libsqlConnection } from "../__fixtures__/libsql-connection.ts"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { deliver, stubKill } from "../../../tests/support/signals.ts"
-import type { MigrateRun, RunOptions, RunResult } from "../core/process.ts"
+import { type MigrateRun, type RunOptions, type RunResult, run as runChildProcess } from "../core/process.ts"
 import { localD1Path } from "../core/d1-binding.ts"
 import type { D1ProviderConfig, ResolvedDatabaseConfig } from "../types.ts"
 import { createD1Provider, executeAll } from "./d1.ts"
-import { asCalled, wranglerBin } from "../../cli/__fixtures__/d1.ts"
+import { asCalled, isNodeChild, wranglerBin } from "../../cli/__fixtures__/d1.ts"
 
 type Call = { cmd: string; args: readonly string[]; options: RunOptions | undefined }
 
@@ -35,6 +35,7 @@ function fakeRun(answer: (call: Call) => RunResult): MigrateRun & { calls: Call[
 	const calls: Call[] = []
 	const spawns: Call[] = []
 	const fake = async (spawned: string, argv: readonly string[], options?: RunOptions) => {
+		if (isNodeChild(argv, options)) return runChildProcess(spawned, argv, options)
 		spawns.push({ args: argv, cmd: spawned, options })
 		const [cmd, args] = asCalled(spawned, argv, options?.peer)
 		const call = { args, cmd, options }

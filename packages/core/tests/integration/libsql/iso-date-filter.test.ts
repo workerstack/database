@@ -80,8 +80,8 @@ describe("an ISO date filter, by the instant it names (Q5)", () => {
 				"noon",
 			])
 			expect(await matched(`${column}.in.(2024-01-01T07:00-05:00,2023-12-31)`), "in").toEqual(["noon"])
-			/* a fraction past milliseconds is cut, as toISOString() writes the instant */
-			expect(await matched(`${column}.lt.2024-01-01T12:00:00.0009Z`), "a fraction cut").toEqual(["midnight"])
+			/* a fraction past milliseconds is compared exactly (QL3 of r23): noon is before noon and 0.9 ms */
+			expect(await matched(`${column}.lt.2024-01-01T12:00:00.0009Z`), "a fraction kept").toEqual(["midnight", "noon"])
 		},
 	)
 })

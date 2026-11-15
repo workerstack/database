@@ -263,7 +263,7 @@ import { sqliteTable as createTable, text } from "drizzle-orm/sqlite-core"
 import { c } from "@workerstack/database/sqlite/columns"
 export const delivery = createTable("delivery", {
 	id: c.id(),
-	status: c.enum("status", ["queued", "sent"], { initial: "queued", terminal: ["sent"] }),
+	status: c.enum("status", ["queued", "sent"], { initial: "queued", terminal: ["sent"] }).notNull(),
 })
 `)
 		const result = await analyze(fp)

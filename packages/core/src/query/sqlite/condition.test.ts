@@ -3,6 +3,7 @@
  * value binds, on a drizzle column and on a raw one alike. Rows are tests/integration/sqlite/filter-parity.test.ts's.
  */
 import { type SQL, sql } from "drizzle-orm"
+import { integer as pgInteger, json, PgDialect, pgTable, text as pgText, timestamp } from "drizzle-orm/pg-core"
 import { blob, integer, numeric, SQLiteDialect, sqliteTable, text } from "drizzle-orm/sqlite-core"
 import { describe, expect, it } from "vitest"
 import { IsoInstant } from "../iso-date.ts"
@@ -57,17 +58,65 @@ describe("lowerOn a raw column", () => {
 	const raw = sql`"r"."at"`
 
 	it("rounds epoch milliseconds to the second that keeps a seconds column exact", () => {
-		expect(compile(lowerOn({ kind: "date-s", sql: raw }, on("gt", 1500)))).toEqual({ params: [1], sql: '"r"."at" > ?' })
-		expect(compile(lowerOn({ kind: "date-s", sql: raw }, on("lte", 1500)))?.params).toEqual([1])
-		expect(compile(lowerOn({ kind: "date-s", sql: raw }, on("lt", 1500)))?.params).toEqual([2])
-		expect(compile(lowerOn({ kind: "date-s", sql: raw }, on("eq", 1500)))?.sql).toBe("0")
-		expect(compile(lowerOn({ kind: "date-s", sql: raw }, on("ne", 2000)))?.sql).toBe('"r"."at" <> ?')
-		expect(compile(lowerOn({ kind: "date-s", sql: raw }, on("neq", 1500)))?.sql).toBe('("r"."at" is not null)')
-		expect(compile(lowerOn({ kind: "date-s", sql: raw }, on("nin", [2000])))?.params).toEqual([2])
-		expect(compile(lowerOn({ kind: "date-s", sql: raw }, on("is", null)))?.sql).toBe('("r"."at" is null)')
+		expect(compile(lowerOn({ dialect: "sqlite", kind: "date-s", sql: raw }, on("gt", 1500)))).toEqual({
+			params: [1],
+			sql: '"r"."at" > ?',
+		})
+		expect(compile(lowerOn({ dialect: "sqlite", kind: "date-s", sql: raw }, on("lte", 1500)))?.params).toEqual([1])
+		expect(compile(lowerOn({ dialect: "sqlite", kind: "date-s", sql: raw }, on("lt", 1500)))?.params).toEqual([2])
+		expect(compile(lowerOn({ dialect: "sqlite", kind: "date-s", sql: raw }, on("eq", 1500)))?.sql).toBe("0")
+		expect(compile(lowerOn({ dialect: "sqlite", kind: "date-s", sql: raw }, on("ne", 2000)))?.sql).toBe('"r"."at" <> ?')
+		expect(compile(lowerOn({ dialect: "sqlite", kind: "date-s", sql: raw }, on("neq", 1500)))?.sql).toBe(
+			'("r"."at" is not null)',
+		)
+		expect(compile(lowerOn({ dialect: "sqlite", kind: "date-s", sql: raw }, on("nin", [2000])))?.params).toEqual([2])
+		expect(compile(lowerOn({ dialect: "sqlite", kind: "date-s", sql: raw }, on("is", null)))?.sql).toBe(
+			'("r"."at" is null)',
+		)
 	})
 
 	it("binds an instant as its text on a column of no kind", () => {
-		expect(compile(lowerOn({ kind: "as-is", sql: raw }, on("eq", JAN)))?.params).toEqual([JAN.text])
+		expect(compile(lowerOn({ dialect: "sqlite", kind: "as-is", sql: raw }, on("eq", JAN)))?.params).toEqual([JAN.text])
+	})
+})
+
+/* QL1 of r23: a Postgres column lowers as Postgres SQL; the rows are tests/integration/postgres/filter-sql.test.ts's */
+describe("conditionToSQL on a Postgres column", () => {
+	const pg = new PgDialect()
+	const p = pgTable("p", {
+		at: timestamp("at", { mode: "date", withTimezone: true }),
+		doc: json("doc"),
+		n: pgInteger("n"),
+		name: pgText("name"),
+	})
+	const pgCompile = (built: SQL | null) => (built === null ? null : pg.sqlToQuery(built))
+
+	it("binds a date value as its text to the microsecond, a Date and epoch milliseconds included", () => {
+		for (const value of [new Date(1500), 1500])
+			expect(pgCompile(conditionToSQL(on("lt", value), p.at as never))).toEqual({
+				params: ["1970-01-01T00:00:01.500Z"],
+				sql: '"p"."at" < $1',
+			})
+		expect(pgCompile(conditionToSQL(on("is", null), p.at as never))?.sql).toBe('("p"."at" is null)')
+	})
+
+	it("takes contains on a json column, a boolean or text member bound by its type, and on no other column", () => {
+		expect(pgCompile(conditionToSQL(on("contains", true), p.doc as never))?.sql).toContain("$1::boolean")
+		expect(pgCompile(conditionToSQL(on("contains", "red"), p.doc as never))?.sql).toContain("$1::text")
+		expect(conditionToSQL(on("contains", "red"), p.name as never)).toBeNull()
+		expect(lowerOn({ dialect: "postgres", kind: "as-is", sql: sql`raw` }, on("contains", "red"))).toBeNull()
+	})
+
+	it("lowers a number operator no comparison or list is as drizzle does", () => {
+		expect(pgCompile(conditionToSQL(on("is", null), p.n as never))?.sql).toBe('("p"."n" is null)')
+		expect(pgCompile(conditionToSQL(on("in", []), p.n as never))?.sql).toBe("false")
+	})
+
+	it("places an instant past the microsecond between two, and leaves a list with none past it as given", () => {
+		const past = new IsoInstant(Date.UTC(2024, 0, 1), "0000005")
+		expect(pgCompile(conditionToSQL(on("gte", past), p.at as never))?.sql).toBe('"p"."at" > $1')
+		expect(pgCompile(conditionToSQL(on("in", [past]), p.at as never))?.sql).toBe("false")
+		expect(pgCompile(conditionToSQL(on("nin", [past]), p.at as never))?.sql).toBe('("p"."at" is not null)')
+		expect(pgCompile(conditionToSQL(on("nin", []), p.at as never))?.sql).toBe("true")
 	})
 })

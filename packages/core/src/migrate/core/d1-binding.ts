@@ -8,8 +8,11 @@ import { existsSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { writeLocked } from "../drivers/local-db.ts"
 import type { MigrateConnection } from "../types.ts"
-import { importBin } from "./optional-peer.ts"
-import type { ProjectBin, MigrateRun } from "./process.ts"
+import { compiledRefusal, refuseCompiled } from "./compiled.ts"
+import { endedWith, runChild } from "./node-child.ts"
+import { binEntry } from "./optional-peer.ts"
+import { type MigrateRun, type ProjectBin, run } from "./process.ts"
+import type { ConfigAnswer, ConfigInput } from "./wrangler-config-child.mjs"
 import { D1_MIGRATIONS_TABLE } from "./d1-history-tables.ts"
 
 /** A D1 binding as wrangler's config reader returns it, for the environment asked */
@@ -91,10 +94,33 @@ function readNamed(read: ReadConfig, target: BindingRef): WranglerConfig {
 /** What names a binding: its name, and the wrangler config and environment it is read from */
 type BindingRef = Pick<D1Target, "name" | "wranglerConfig" | "wranglerEnv">
 
-/** The config reader of `bin`'s wrangler, the one the command checked and spawns */
-async function wranglerReader(bin: ProjectBin): Promise<ReadConfig> {
-	const wrangler = await importBin<{ unstable_readConfig: ReadConfig }>(bin)
-	return (args) => wrangler.unstable_readConfig(args)
+/**
+ * `ref`'s wrangler config as `bin`'s wrangler reads it, the one the command checked and spawns, read once in a
+ * child on its runtime (node-child.ts), so what wrangler's reader prints stays out of database's stdout.
+ * The reader answers that read, and refuses one of another config or environment, which it never read
+ */
+async function wranglerReader(
+	bin: ProjectBin,
+	ref: Pick<BindingRef, "wranglerConfig" | "wranglerEnv">,
+	{ exec = run, moduleUrl = import.meta.url }: { exec?: MigrateRun | undefined; moduleUrl?: string | undefined } = {},
+): Promise<ReadConfig> {
+	refuseCompiled(moduleUrl, compiledRefusal([bin.peer]))
+	const answer = await runChild<ConfigAnswer>(new URL("./wrangler-config-child.mjs", import.meta.url), {
+		bin,
+		exec,
+		failed: (ran) => `${ref.wranglerConfig} failed to load: wrangler's config read on ${bin.runtime} ${endedWith(ran)}`,
+		inputOf: () =>
+			({ config: ref.wranglerConfig, env: ref.wranglerEnv, wrangler: binEntry(bin) }) satisfies ConfigInput,
+		prefix: "database-wrangler-config-",
+	})
+	return (args) => {
+		if (args.config !== ref.wranglerConfig || args.env !== ref.wranglerEnv)
+			throw new Error(
+				`wrangler's config was read for ${ref.wranglerConfig}${ref.wranglerEnv === undefined ? "" : ` (env ${ref.wranglerEnv})`}, not ${args.config}${args.env === undefined ? "" : ` (env ${args.env})`}`,
+			)
+		if ("error" in answer) throw new Error(answer.error)
+		return answer.config as WranglerConfig
+	}
 }
 
 /** The binding `target` names in its wrangler config, and where database says it read it */
@@ -129,13 +155,14 @@ function localD1Path(configDir: string, d1: WranglerD1): string {
  * there is no file to ask, and no lock database can see
  */
 function localHeld(
-	read: () => Promise<ReadConfig>,
+	read: (ref: BindingRef) => Promise<ReadConfig>,
 	ref: Omit<BindingRef, "wranglerConfig"> & { wranglerConfig: string | undefined },
 ): () => Promise<boolean> {
 	return async () => {
 		const { wranglerConfig } = ref
 		if (wranglerConfig === undefined) return false
-		return writeLocked(localD1Path(dirname(wranglerConfig), bindingOf(await read(), { ...ref, wranglerConfig }).d1))
+		const bound = { ...ref, wranglerConfig }
+		return writeLocked(localD1Path(dirname(wranglerConfig), bindingOf(await read(bound), bound).d1))
 	}
 }
 

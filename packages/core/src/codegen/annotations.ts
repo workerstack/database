@@ -147,11 +147,17 @@ function refuseForeignKeys(
 }
 
 /* the keys no field takes together, and why: either would win without a word; a
-   tenant column moving on update would move the row to another tenant */
+   tenant column moving on update would move the row to another tenant, and a private one would
+   publish no boundary */
 const CONTRADICTIONS: ReadonlyArray<readonly [string, string, string]> = [
 	["mutable", "nomutate", "declare one"],
 	["lowercase", "uppercase", "declare one"],
 	["tenant", "mutable", "a tenant column is set once; a row does not move between tenants"],
+	[
+		"tenant",
+		"private",
+		"the stamp publishes a tenant column as the table's boundary, and a private column is published nowhere",
+	],
 ]
 
 /* a text's kinds: one rule each, so a second would drop the first's without a word */

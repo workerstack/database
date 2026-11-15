@@ -8,7 +8,7 @@ import { own } from "../../constraint-map.ts"
 import { DatabaseError } from "../../error.ts"
 import { databaseErrorKeys } from "../../types.ts"
 import type { ComputedFilterResolver, FilterAST, FilterCondition, FilterGroup } from "../types.ts"
-import { conditionToSQL } from "./condition.ts"
+import { conditionToSQL, dialectOf } from "./condition.ts"
 import type { RelationConfig } from "./types.ts"
 
 const COMPUTED_PREFIX = "@"
@@ -120,7 +120,12 @@ function groupToSQL(group: FilterGroup, config: FilterToSQLConfig): SQL {
 		...group.conditions.map((condition) => resolveCondition(condition, config)),
 		...group.subgroups.map((subgroup) => groupToSQL(subgroup, config)),
 	]
-	if (conditions.length === 0) return group.logic === "or" ? sql`0` : sql`1`
+	if (conditions.length === 0) {
+		/* Postgres takes no integer for a boolean: false and true there, 0 and 1 on SQLite */
+		const postgres = dialectOf(Object.values(getTableColumns(config.mainTable))[0] as SQLiteColumn) === "postgres"
+		if (group.logic === "or") return postgres ? sql`false` : sql`0`
+		return postgres ? sql`true` : sql`1`
+	}
 	if (conditions.length === 1) return conditions[0] as SQL
 	/* and() and or() return undefined only for an empty list, and this one holds two or more */
 	return (group.logic === "and" ? and(...conditions) : or(...conditions)) as SQL

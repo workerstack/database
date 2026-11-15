@@ -18,6 +18,8 @@ ALTER TABLE o ADD CONSTRAINT o_b ${BOUND} NOT VALID;
 ALTER TABLE o VALIDATE CONSTRAINT o_b;
 `
 export const ATTACH = "ALTER TABLE ev ATTACH PARTITION o FOR VALUES FROM ('2026-01-01') TO ('2027-01-01');"
+/* the CHECK's drop, as a string literal an EXECUTE runs */
+const DROP = "'ALTER TABLE o DROP CONSTRAINT o_b'"
 export const SCANS = "scans o under an exclusive lock to check its bound"
 
 const plain = `${PARENT}CREATE TABLE o (id int, at date NOT NULL);\n`
@@ -362,6 +364,18 @@ export const SCANNED: readonly AttachCase[] = [
 		"a key with an operator class",
 		"CREATE TABLE l (c text NOT NULL) PARTITION BY RANGE (c text_pattern_ops);\nCREATE TABLE o (c text NOT NULL CHECK (c >= 'a' AND c < 'm'));\n",
 		"ALTER TABLE l ATTACH PARTITION o FOR VALUES FROM ('a') TO ('m');",
+	],
+	/* PA2 of r23: code whose text database cannot read dropped the CHECK, which Postgres then scans past */
+	["a CHECK a DO block dropped", `${PARENT}${PARTITION}DO $$ BEGIN EXECUTE ${DROP}; END $$;\n`, ATTACH],
+	[
+		"a CHECK a procedure CALLed dropped",
+		`${PARENT}${PARTITION}CREATE PROCEDURE unbind() LANGUAGE plpgsql AS $$ BEGIN EXECUTE ${DROP}; END $$;\nCALL unbind();\n`,
+		ATTACH,
+	],
+	[
+		"a CHECK a function the history defined dropped",
+		`${PARENT}${PARTITION}CREATE FUNCTION unbind() RETURNS void LANGUAGE plpgsql AS $$ BEGIN EXECUTE ${DROP}; END $$;\nSELECT unbind();\n`,
+		ATTACH,
 	],
 ]
 

@@ -230,6 +230,24 @@ describe("database migrate on D1 --local: a pre-recorded hash is an intent until
 	}, 180_000)
 })
 
+/* KC1 of r23: database read the wrangler config with wrangler's own reader in its process, and what that
+   reader prints, a warning on a key it does not know and the newer-version notice, landed on stdout ahead of
+   the JSON a deploy script pipes to jq */
+describe("database migrate --json on D1 prints its JSON alone (KC1 of r23)", () => {
+	it("whatever wrangler's config reader prints of a key it does not know", async () => {
+		const dir = project(INIT)
+		const toml = path.join(dir, "wrangler.toml")
+		fs.writeFileSync(toml, `not_a_wrangler_key = 1\n${fs.readFileSync(toml, "utf8")}`)
+		for (const verb of ["apply", "status", "check"]) {
+			const ran = await databaseProcess(dir, ["migrate", verb, "core", "--local", "--json"])
+			expect(ran.code, ran.stderr).toBe(0)
+			const lines = ran.stdout.trim().split("\n")
+			expect(lines, verb).toHaveLength(1)
+			expect(JSON.parse(lines[0] as string), verb).toBeTypeOf("object")
+		}
+	}, 180_000)
+})
+
 /* S1 of r21: wrangler runs each file alone, so database's proof does too; a pragma 0001 approved never
    reaches 0002, and check refuses the insert wrangler would fail on */
 describe("database migrate check on D1 --local proves each file as wrangler runs it, alone (S1 of r21)", () => {
