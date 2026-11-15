@@ -3,7 +3,7 @@
  * through an Atlas config that keeps the URL in the environment, its output scrubbed, and its
  * status read through a template that never selects the URL.
  */
-import type { AtlasStatus } from "./atlas-history.ts"
+import { appliedAs, type AtlasStatus } from "./atlas-history.ts"
 import { explainAtlasFailure } from "./atlas-failure.ts"
 import { type PgTarget, withAtlasEnv } from "./atlas-target.ts"
 import { scrubAtlasOutput } from "./atlas-secrets.ts"
@@ -73,7 +73,14 @@ async function atlasStatus(
 	if (ran.code !== 0)
 		throw new Error(`atlas migrate status: ${ran.said || `exit ${ran.code}: ${ran.scrub(ran.stdout).trim()}`}`)
 	/* as Atlas wrote it: what database prints of it is scrubbed where it prints it (checkHistory's `scrub`) */
-	return json<AtlasStatus>(ran.stdout, "status")
+	return byName(json<AtlasStatus>(ran.stdout, "status"))
+}
+
+/** `status` with its applied revisions in file-name order, as Atlas orders files; Atlas lists them in the database's collation */
+function byName(status: AtlasStatus): AtlasStatus {
+	const named = status.applied.map((revision) => ({ name: appliedAs(revision), revision }))
+	named.sort((a, b) => Number(a.name > b.name) - Number(a.name < b.name))
+	return { ...status, applied: named.map(({ revision }) => revision) }
 }
 
 /** The scrubber for text database prints of `target`'s Atlas calls, outside one */

@@ -213,14 +213,16 @@ async function migrateSqlite({ args, io, mode }: Request, target: Target): Promi
 	}
 	for (const name of names.filter((file) => !pendingNames.includes(file))) io.out(`Skip (already applied): ${name}`)
 	await record(pending.length > 0)
-	if (pending.length > 0)
-		await applyEach(
-			() => target.fresh(),
-			pending.map(({ migration }) => migration),
-			{ history: await target.write(), print: io.out },
-		)
-	io.out(`\nDone: ${pendingNames.length} applied, ${names.length - pendingNames.length} skipped`)
-	return { applied: pendingNames, pending: [] }
+	const applied =
+		pending.length > 0
+			? await applyEach(
+					() => target.fresh(),
+					pending.map(({ migration }) => migration),
+					{ history: await target.write(), print: io.out },
+				)
+			: []
+	io.out(`\nDone: ${applied.length} applied, ${names.length - applied.length} skipped`)
+	return { applied, pending: [] }
 }
 
 /** `mode`'s argv read: its database and options; refused by usage without one database */

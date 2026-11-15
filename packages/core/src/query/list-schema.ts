@@ -148,17 +148,18 @@ function outputSchemaFor(sortConfig: readonly string[], extendFields: Record<str
  * q one of 0 terms, while each param publishes examples
  */
 function listLimitsOf({ filter = EMPTY_OBJ, limits: given, search }: ListQueryConfig): ListQueryLimits {
-	const limits = limitsOver("createListQuerySchema", LIST_QUERY_LIMITS, given)
-	const zero = (
-		[
-			["maxSortKeys", ""],
-			["maxConditions", Object.keys(filter).length > 0 ? " where filter names a field" : undefined],
-			["maxSearchTerms", search ? " where search names a field" : undefined],
-		] as const
-	).find(([key, where]) => where !== undefined && limits[key] < 1)
-	if (zero === undefined) return limits
-	const [key, where] = zero
-	throw new TypeError(`createListQuerySchema: limits.${key} must be a whole number from 1${where}; got ${limits[key]}`)
+	return limitsOver(
+		{
+			defaults: LIST_QUERY_LIMITS,
+			floors: {
+				maxSortKeys: [1, ""],
+				...(Object.keys(filter).length > 0 && { maxConditions: [1, " where filter names a field"] }),
+				...(search && { maxSearchTerms: [1, " where search names a field"] }),
+			},
+			owner: "createListQuerySchema",
+		},
+		given,
+	)
 }
 
 /** The optional params as the request object holds them: each one only where the config publishes it */

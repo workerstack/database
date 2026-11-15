@@ -136,12 +136,14 @@ describe("createUlidFactory's clock (QE7 of r22b)", () => {
 		}
 	})
 
-	/* B2-11 of area B: a full random part at ULID's last millisecond has no next millisecond to move to */
-	it("refuses to move past ULID's last millisecond, as it refuses a clock reading past it", () => {
+	/* B2-11 of area B, QE7 of r23: a full random part at ULID's last millisecond has no next millisecond to move to, which is not a bad clock */
+	it("refuses to move past ULID's last millisecond, saying the factory issued its last", () => {
 		const full = createUlidFactory({ now: () => 2 ** 48 - 1, random: (bytes) => bytes.fill(31) })
 		expect(full.ulid()).toBe("7zzzzzzzzzzzzzzzzzzzzzzzzz")
 		expect(() => full.ulid()).toThrow(
-			new RangeError(`createUlidFactory: the clock must read a millisecond from 0 to 2^48 - 1, got ${2 ** 48}`),
+			new RangeError(
+				"createUlidFactory: no ULID is left after the last millisecond, 2^48 - 1; this factory issued its last",
+			),
 		)
 	})
 })

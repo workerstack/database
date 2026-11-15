@@ -47,6 +47,8 @@ type Held = {
 	locks: Map<string, boolean>
 	made: Set<string>
 	owners: Set<string>
+	/** the tables a statement's hidden code validated, as the replay measured, until that statement is rated */
+	scanned: string[]
 	unseen: Set<string>
 }
 
@@ -57,6 +59,7 @@ const heldStart = (): Held => ({
 	locks: new Map(),
 	made: new Set(),
 	owners: new Set(),
+	scanned: [],
 	unseen: new Set(),
 })
 
@@ -78,6 +81,7 @@ function measured(held: Held, locked: Locked): void {
 	held.unseen.clear()
 	for (const [key, reads] of locked.locks) held.locks.set(key, reads)
 	for (const [key, calls] of locked.calls) held.calls.set(key, calls)
+	held.scanned = [...(locked.validated ?? [])]
 }
 
 /** `held` with `locks` taken, each but those on what the file made */

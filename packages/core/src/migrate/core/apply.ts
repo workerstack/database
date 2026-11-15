@@ -225,14 +225,16 @@ export async function applyRecorded(
  * `open` makes for it alone and closed after it, so what one file sets on its connection ends with
  * that file, as wrangler runs each file on D1. A failure stops the run as a Refused
  * naming the files that committed before it and the ones still pending, which it prints as D1's
- * apply does; a file whose answer was lost is in neither, but unknown
+ * apply does; a file whose answer was lost is in neither, but unknown. Answers with the files
+ * this run applied, which leaves out each one another run recorded first
  */
 export async function applyEach(
 	open: () => Promise<FileConnection>,
 	migrations: readonly Recorded[],
 	{ history, print, retry }: ApplyOptions & { print: (line: string) => void },
-): Promise<void> {
+): Promise<string[]> {
 	const names = migrations.map(({ filename }) => filename)
+	const mine: string[] = []
 	/* the files that committed, and the batch under way, which a stop waits for: it commits or fails whole */
 	let done = 0
 	let batching: Promise<unknown> = Promise.resolve()
@@ -257,6 +259,7 @@ export async function applyEach(
 					})
 					batching = batch
 					if ((await batch) === "another run") print(`Skip (applied by another run): ${migration.filename}`)
+					else mine.push(migration.filename)
 				} finally {
 					await conn.close()
 				}
@@ -271,4 +274,5 @@ export async function applyEach(
 			}
 		}
 	})
+	return mine
 }

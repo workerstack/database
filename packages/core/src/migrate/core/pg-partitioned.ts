@@ -90,15 +90,24 @@ function partitionedRefusal(type: string, node: Node, facts: Facts): string | un
 }
 
 /**
- * Why database refuses a REINDEX INDEX in a transaction of an index whose name it may have swapped
- * with another clone's (pg-index-facts.ts IndexFact `unsure`): a transaction refuses it of a
- * partitioned index and runs it of a plain one, and which this is rests on an order database cannot
- * tell; undefined for any other statement
+ * Why database refuses a REINDEX INDEX of an index it cannot place (pg-index-facts.ts IndexFact
+ * `unsure`): in a transaction, one whose name it may have swapped with another clone's, as a
+ * transaction refuses it of a partitioned index and runs it of a plain one, and which this is rests
+ * on an order database cannot tell; anywhere, a clone Postgres may never have made, as it may have
+ * attached a partition's own index in its place. Undefined for any other statement
  */
-function unsureRefusal(type: string, node: Node, facts: Facts): string | undefined {
+function unsureRefusal(
+	type: string,
+	node: Node,
+	{ facts, transaction }: { facts: Facts; transaction: boolean },
+): string | undefined {
 	if (type !== "ReindexStmt" || node["kind"] !== "REINDEX_OBJECT_INDEX") return undefined
-	if (facts.indexes.get(tableOf(node["relation"], facts.schema).key)?.unsure !== true) return undefined
-	return `database cannot tell whether Postgres gave ${written(node["relation"])} to a partitioned index or to a partition's, as the partitions' order rests on bounds it cannot compare, and a transaction refuses REINDEX INDEX of a partitioned index; put the statement in its own -- atlas:txmode none file, where Postgres runs either, or set devUrl so check replays it`
+	const unsure = facts.indexes.get(tableOf(node["relation"], facts.schema).key)?.unsure
+	const name = written(node["relation"])
+	if (unsure === "match")
+		return `database cannot tell whether Postgres made ${name}: it may have attached an index the partition had in its place, as their operator classes or collations are spelled apart and database cannot resolve one to the other; spell them alike, or set devUrl so check replays it`
+	if (unsure !== "order" || !transaction) return undefined
+	return `database cannot tell whether Postgres gave ${name} to a partitioned index or to a partition's, as the partitions' order rests on bounds it cannot compare, and a transaction refuses REINDEX INDEX of a partitioned index; put the statement in its own -- atlas:txmode none file, where Postgres runs either, or set devUrl so check replays it`
 }
 
 export { followPartitioned, partitionedKeyRecipe, partitionedRecipe, partitionedRefusal, unsureRefusal }

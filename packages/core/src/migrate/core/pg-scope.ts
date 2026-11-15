@@ -6,7 +6,8 @@
  */
 import type { ReadStatement } from "./classify-file.ts"
 import { type Facts, tableOf } from "./pg-history.ts"
-import { blockAfter, insideOnly, nodeOf, outsideOnly, transactionControl } from "./pg-outside-transaction.ts"
+import { insideOnly } from "./pg-inside-transaction.ts"
+import { blockAfter, nodeOf, outsideOnly, transactionControl } from "./pg-outside-transaction.ts"
 import { copyRefusal } from "./pg-copy.ts"
 import { partitionedRefusal, unsureRefusal } from "./pg-partitioned.ts"
 import { clearHeld, type Held } from "./pg-held.ts"
@@ -43,7 +44,7 @@ function scopeReader(
 			inside,
 			outside: outsideOnly(...parsed, partitioned),
 			refused:
-				(transaction && !replays ? unsureRefusal(...parsed, facts) : undefined) ??
+				(replays ? undefined : unsureRefusal(...parsed, { facts, transaction })) ??
 				partitionedRefusal(...parsed, facts) ??
 				copyRefusal(...parsed),
 		}

@@ -69,6 +69,15 @@ function held(ms: number): number {
 	return ms
 }
 
+/** The millisecond after `ms`, which a factory moves to when its random part at `ms` is used up */
+function past(ms: number): number {
+	if (ms === MAX_TIME)
+		throw new RangeError(
+			"createUlidFactory: no ULID is left after the last millisecond, 2^48 - 1; this factory issued its last",
+		)
+	return ms + 1
+}
+
 /** The clock's millisecond: a high-resolution reading such as `performance.timeOrigin + performance.now()` is floored */
 const readClock = (now: () => number): number => Math.floor(held(now()))
 
@@ -108,8 +117,7 @@ function createUlidFactory(options: UlidFactoryOptions = {}): {
 	function ulid(): string {
 		const time = Math.max(readClock(now), lastTime)
 		const counted = time === lastTime ? increment(lastDigits) : null
-		/* Moving on from ULID's last millisecond is refused as a clock reading past it is */
-		lastTime = counted === null && time === lastTime ? held(time + 1) : time
+		lastTime = counted === null && time === lastTime ? past(time) : time
 		lastDigits = counted ?? randomDigits(random)
 		return encodeTime(lastTime) + encodeDigits(lastDigits)
 	}

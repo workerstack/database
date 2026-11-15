@@ -6,6 +6,7 @@
  */
 import type { MigrateDialect } from "../types.ts"
 import type { Finding } from "./classify-alter.ts"
+import { controlEffect } from "./classify-control.ts"
 import { INSERT_INTO } from "./classify-sqlite-write.ts"
 import { atlasHeader, outsideTransaction } from "./atlas-header.ts"
 import { nameKey, type namingOf, type Pragma, pragmaOf, QNAME } from "./sql-code.ts"
@@ -204,7 +205,7 @@ function refuseOutOfScope(
 	/* Atlas records the file in its transaction, which the file's own control would end */
 	if (control !== undefined && !bare) {
 		throw new Error(
-			`${preview(stmt)}: Atlas runs this file in one transaction and records it there, so its own ${control} ends that transaction; to commit as you go, start the file with "-- atlas:txmode none" and a blank line`,
+			`${preview(stmt)}: Atlas runs this file in one transaction and records it there, so its own ${control} ${controlEffect(control)}; to commit as you go, start the file with "-- atlas:txmode none" and a blank line`,
 		)
 	}
 	/* From the parse tree, so DETACH CONCURRENTLY, a bare CLUSTER and a REINDEX of a schema are caught too */

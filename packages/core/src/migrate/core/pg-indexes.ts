@@ -11,19 +11,18 @@
  */
 import {
 	besideTable,
-	clone,
 	constraintWanted,
 	dropIndex,
 	indexesOn,
 	type IndexShape,
 	indexWanted,
 	list,
-	make,
 	merged,
 	rekey,
-	same,
 	taken,
 } from "./pg-index-facts.ts"
+import { clone, make, settle } from "./pg-index-match.ts"
+import { descendants, droppedFrom } from "./pg-inherit.ts"
 import { lineage } from "./pg-partition-order.ts"
 import { type Facts, flag, keyOf, names, type Node, tableOf } from "./pg-nodes.ts"
 
@@ -53,9 +52,9 @@ function renameRefs(tree: unknown, [was, now]: [string, string]): unknown {
 	)
 }
 
-/** A column of `table` renamed in each index on it and on its partitions, which keep their own names */
+/** A column of `table` renamed in each index on it and on every table under it, which keep their own names */
 function renameColumn(facts: Facts, table: string, renamed: [string, string]): void {
-	const tables = lineage(facts, table)
+	const tables = descendants(facts, table)
 	for (const fact of facts.indexes.values()) {
 		if (!tables.includes(fact.table)) continue
 		const { shape } = fact
@@ -137,11 +136,8 @@ const LIKE_INDEXES = 64
 function attach(facts: Facts, table: string, child: string): void {
 	const own = indexesOn(facts, child)
 	for (const fact of indexesOn(facts, table)) {
-		const match = own.find(
-			(each) => each.parent === undefined && same(each, fact) && (fact.kind === "index" || each.kind === fact.kind),
-		)
-		if (match === undefined) clone(facts, fact, { attached: true, table: child })
-		else match.parent = fact
+		const free = own.filter((each) => each.parent === undefined && (fact.kind === "index" || each.kind === fact.kind))
+		settle(facts, fact, { candidates: free, table: child })
 	}
 }
 
@@ -155,15 +151,15 @@ function usingIndex(facts: Facts, table: string, constraint: Node): void {
 	if (name !== undefined) rekey(facts, key, besideTable(table, name, facts.schema))
 }
 
-/** An ALTER TABLE command's drop: a constraint's index, or each index that reads a column, down the partitions */
-function followDrop(facts: Facts, table: string, cmd: Node): void {
+/** An ALTER TABLE command's drop: a constraint's index, or each index that reads a column, on each table the column goes from */
+function followDrop(facts: Facts, cmd: Node, { recurse, table }: { recurse: boolean; table: string }): void {
 	const name = String(cmd["name"])
 	if (cmd["subtype"] === "AT_DropConstraint") {
 		const key = besideTable(table, name, facts.schema)
 		const fact = facts.indexes.get(key)
 		if (fact?.table === table && fact.kind !== "index") dropIndex(facts, key)
 	} else if (cmd["subtype"] === "AT_DropColumn") {
-		const tables = lineage(facts, table)
+		const tables = droppedFrom(facts, table, { column: name, recurse })
 		for (const [key, fact] of Array.from(facts.indexes))
 			if (tables.includes(fact.table) && uses(fact.shape).has(name)) dropIndex(facts, key)
 	}
@@ -212,7 +208,7 @@ function followAlter(node: Node, facts: Facts): void {
 		return
 	}
 	const recurse = flag((node["relation"] as Node)["inh"])
-	for (const cmd of cmds) followDrop(facts, key, cmd)
+	for (const cmd of cmds) followDrop(facts, cmd, { recurse, table: key })
 	for (const cmd of cmds) followAdd(facts, cmd, { recurse, table: key })
 	for (const cmd of cmds) followPartition(facts, key, cmd)
 }

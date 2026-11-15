@@ -182,12 +182,34 @@ describe("createListQuerySchema's limits", () => {
 	it.each([
 		["maxPatternBytes", Number.POSITIVE_INFINITY],
 		["maxPatternBytes", 50.5],
-		["maxSortKeys", -1],
 		["maxValues", Number.NaN],
 		["maxFilterLength", 2 ** 53],
 	])("refuses %s %s, naming the key", (key, value) => {
 		expect(() => createListQuerySchema({ limits: { [key]: value }, sort: ["a"] })).toThrow(
 			new TypeError(`createListQuerySchema: limits.${key} must be a whole number from 0; got ${value}`),
+		)
+	})
+
+	/* KT3 of r23: one minimum per key, stated alike for every value under it */
+	it.each([-1, 0, 1.5])("refuses maxSortKeys %s from 1, as no order meets a cap of 0", (value) => {
+		expect(() => createListQuerySchema({ limits: { maxSortKeys: value }, sort: ["a"] })).toThrow(
+			new TypeError(`createListQuerySchema: limits.maxSortKeys must be a whole number from 1; got ${value}`),
+		)
+	})
+
+	it("prints a limit that is not a number as the caller wrote it", () => {
+		expect(() => createListQuerySchema({ limits: { maxSortKeys: "5" as never }, sort: ["a"] })).toThrow(
+			new TypeError('createListQuerySchema: limits.maxSortKeys must be a whole number from 1; got "5"'),
+		)
+	})
+
+	/* QL10 of r23: a misspelled key kept the default cap it meant to set */
+	it("refuses a key that is no limit, naming it and the limits", () => {
+		expect(() => createListQuerySchema({ limits: { maxCondition: 1 } as never, sort: ["a"] })).toThrow(
+			/^createListQuerySchema: limits\.maxCondition is not a limit; the limits are maxConditions, maxDepth, /,
+		)
+		expect(() => createListQuerySchema({ limits: { maxCondition: undefined } as never, sort: ["a"] })).toThrow(
+			/limits\.maxCondition is not a limit/,
 		)
 	})
 

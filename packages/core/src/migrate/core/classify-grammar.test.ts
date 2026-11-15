@@ -230,6 +230,25 @@ describe("a Postgres statement its parse tree rates, which the grammar's fallbac
 	})
 })
 
+/* PA17 of r23: a cursor's and a prepared statement's session statements read as ones database did not know */
+describe("a Postgres file's cursor and prepared-statement session statements", () => {
+	const NO_TX = "-- atlas:txmode none\n\n"
+	it.each([
+		/* cautious for the txmode line alone, and the PREPARE for what an EXECUTE of it runs */
+		[
+			"a cursor kept past its transaction",
+			`${NO_TX}DECLARE c CURSOR WITH HOLD FOR SELECT 1;\nFETCH c;\nMOVE c;\nCLOSE c;`,
+			"cautious",
+		],
+		["a cursor in the file's transaction", "DECLARE c CURSOR FOR SELECT 1;\nFETCH 2 FROM c;\nCLOSE ALL;", "safe"],
+		["a statement prepared and deallocated", "PREPARE p AS SELECT 1;\nDEALLOCATE p;\nDEALLOCATE ALL;", "cautious"],
+		["a session reset", `${NO_TX}DISCARD ALL;\nDISCARD PLANS;\nDISCARD TEMP;`, "cautious"],
+	])("rates %s with no note that database does not recognize them", (_, sql, safety) => {
+		const rated = rate(sql, "CREATE TABLE t (id int);", "postgres")
+		expect([rated.safety, rated.unsafeStatements]).toEqual([safety, []])
+	})
+})
+
 /* r18 S6: one entry per statement, each of its notes once, however many readings name it */
 describe("a statement two readings rate, listed once", () => {
 	it("joins writable_schema's own note and default-deny's rule in one entry per statement", () => {

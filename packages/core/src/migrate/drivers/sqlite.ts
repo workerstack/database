@@ -33,10 +33,44 @@ const tursoAuthTokenSchema = () => z.object({ jwt: z.string().min(1) })
    TURSO CREDENTIALS
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/** The Platform API's answer, as far as the Turso calls read it */
+export type TursoResponse = {
+	/** the body parsed as JSON, read on a success */
+	json(): Promise<unknown>
+	/** true for a 2xx status */
+	ok: boolean
+	/** the HTTP status; a 404 says the database does not exist */
+	status: number
+	/** the body as text, read on a failure for Turso's error message */
+	text(): Promise<string>
+}
+
+/**
+ * A fetch as the Turso calls make them: typed here, not as `typeof fetch`, so a project that declares
+ * no fetch, with neither the DOM's nor a runtime's types, still reads these declarations
+ */
+export type TursoFetch = (url: string, init: TursoRead | TursoCreate) => Promise<TursoResponse>
+
+/** A GET of a database or a token, which sends the API token alone */
+export type TursoRead = {
+	/** the Authorization header */
+	headers: Record<string, string>
+}
+
+/** The POST that creates a missing database */
+export type TursoCreate = {
+	/** the database's name and group, as JSON */
+	body: string
+	/** the Authorization header and the body's Content-Type */
+	headers: Record<string, string>
+	/** always POST */
+	method: "POST"
+}
+
 /** How the Turso calls reach the API and report progress: injectable, quiet by default */
 export type TursoDeps = {
 	/** what the Platform API calls go through; default: the global fetch */
-	fetch?: typeof fetch | undefined
+	fetch?: TursoFetch | undefined
 	/** A progress line, such as the database being created; no output when omitted */
 	log?: ((line: string) => void) | undefined
 }
@@ -65,7 +99,7 @@ export class TursoMissing extends DatabaseMissing {
 }
 
 /** Turso's error message from a failed response, or the HTTP status when its body has none */
-async function failure(res: Response): Promise<string> {
+async function failure(res: TursoResponse): Promise<string> {
 	const text = await res.text()
 	try {
 		const body = JSON.parse(text) as Record<string, unknown> | null
@@ -77,7 +111,7 @@ async function failure(res: Response): Promise<string> {
 }
 
 async function createTursoDatabase(
-	request: TursoCredentialsRequest & { fetch: typeof fetch; group: string },
+	request: TursoCredentialsRequest & { fetch: TursoFetch; group: string },
 ): Promise<void> {
 	const { apiToken, dbName, group, org } = request
 	const log = request.log ?? (() => undefined)
@@ -92,11 +126,12 @@ async function createTursoDatabase(
 }
 
 /** `call`, its failure to reach the API at all said with each cause under it, as `fetch failed: connect ECONNREFUSED …` */
-const reaching = (call: typeof fetch, name: string): typeof fetch =>
-	((...args: Parameters<typeof fetch>) =>
+const reaching =
+	(call: TursoFetch, name: string): TursoFetch =>
+	(...args) =>
 		call(...args).catch((error: unknown) => {
 			throw new Error(`database could not reach the Turso API for "${name}": ${chainText(error)}`, { cause: error })
-		})) as typeof fetch
+		})
 
 /**
  * The libsql URL and a one-hour token for a Turso database, creating the database when it is

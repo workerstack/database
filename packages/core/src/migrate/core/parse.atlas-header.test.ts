@@ -49,3 +49,25 @@ describe("a leading atlas: line no blank line closes (PA3n of r22b)", () => {
 		expect(parseMigration(sql, NAME).filename).toBe(NAME)
 	})
 })
+
+/* PA13 of r23: an editor's byte order mark reached the database as the first statement's first character */
+describe("a file that starts with a UTF-8 byte order mark (PA13)", () => {
+	const BOM = `${NAME}: the file starts with a UTF-8 byte order mark (U+FEFF), which Atlas sends as the first character of its first statement, where the database reads it as a syntax error; save the file as UTF-8 without a BOM`
+
+	it.each([
+		["SQLite", "sqlite", ""],
+		["Postgres", "postgres", ""],
+		["a header behind it", "postgres", "-- atlas:txmode none\n\n"],
+	] as const)("is refused on %s, naming the file and the mark", (_, dialect, head) => {
+		expect(() =>
+			parseMigration(`﻿${head}CREATE TABLE t2 (x int);\n`, NAME, {
+				before: extractSchema("", undefined, dialect),
+				dialect,
+			}),
+		).toThrow(BOM)
+	})
+
+	it("passes the mark anywhere past the first character", () => {
+		expect(parseMigration("CREATE TABLE t2 (x text DEFAULT '﻿');\n", NAME).filename).toBe(NAME)
+	})
+})

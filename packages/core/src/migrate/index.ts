@@ -84,4 +84,11 @@ export type { FtsObject, FtsState } from "./core/fts-migration.ts"
 export type { ProviderDeps } from "./config.ts"
 export type { PgTarget } from "./core/atlas-target.ts"
 export type { BinPeer, MigrateRun, RunOptions, RunResult } from "./core/process.ts"
-export type { TursoCredentialsRequest, TursoDeps } from "./drivers/sqlite.ts"
+export type {
+	TursoCredentialsRequest,
+	TursoCreate,
+	TursoDeps,
+	TursoFetch,
+	TursoRead,
+	TursoResponse,
+} from "./drivers/sqlite.ts"

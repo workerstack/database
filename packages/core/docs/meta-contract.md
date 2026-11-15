@@ -892,7 +892,7 @@ would make the tester self-confirming. §6.1.
    call database's reader rather than reaching for `value["x-database"]` — otherwise the refuse-on-newer
    rule lives in two places and one of them will rot.
 2. **`defaultOrder` when `sort` is empty.** `createListQuerySchema` falls back to
-   `parsedSort = []` and the SQLite builder then defaults to `created_at desc`. Those two defaults
+   `parsedSort = []` and the SQLite builder then defaults to `id desc`, nulls first. Those two defaults
    are declared in different files and can diverge; currently the stamp reports the schema's view.
    Unifying them is worth doing before either is depended on.
 3. **Terminal-state modeling.** Implemented. `c.enum` takes an optional third argument

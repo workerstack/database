@@ -8,8 +8,14 @@ type Calls = { defaults: readonly string[]; identity: string | undefined }
 
 /**
  * What Postgres held at a VALIDATE, read from pg_locks: each relation's lock, by key, with whether
- * reads wait too, and of each sequence among them, the tables another session sees that call it
+ * reads wait too, and of each sequence among them, the tables another session sees that call it.
+ * After a statement whose code database does not read, `validated` names, by key, each table a
+ * constraint of which that code validated, and the locks are those held as it ended
  */
-type Locked = { calls: ReadonlyMap<string, Calls>; locks: ReadonlyMap<string, boolean> }
+type Locked = {
+	calls: ReadonlyMap<string, Calls>
+	locks: ReadonlyMap<string, boolean>
+	validated?: readonly string[] | undefined
+}
 
 export type { Calls, Locked }

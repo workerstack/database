@@ -111,6 +111,12 @@ describe("a statement Postgres runs only inside a block, in a txmode none file (
 		["RELEASE s;", "RELEASE SAVEPOINT"],
 		["ROLLBACK TO s;", "ROLLBACK TO SAVEPOINT"],
 		["DECLARE c CURSOR FOR SELECT 1;", "DECLARE CURSOR"],
+		/* PA18 of r23: Postgres only warns of these bare and drops them, so the file passed doing nothing */
+		["SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;", "SET TRANSACTION"],
+		["SET TRANSACTION SNAPSHOT '00000003-0000001B-1';", "SET TRANSACTION"],
+		["SET LOCAL TRANSACTION READ ONLY;", "SET TRANSACTION"],
+		["SET LOCAL lock_timeout = '1s';", "SET LOCAL"],
+		["SET CONSTRAINTS ALL DEFERRED;", "SET CONSTRAINTS"],
 	])("refuses %j, naming Postgres's message, and rates it in a file's transaction", (sql, what) => {
 		expect(() => rate(`-- atlas:txmode none\n\n${sql}`)).toThrow(`${what} can only be used in transaction blocks`)
 		expect(() => rate(sql)).not.toThrow()
@@ -118,6 +124,14 @@ describe("a statement Postgres runs only inside a block, in a txmode none file (
 
 	it("passes a cursor held past its transaction, and the file's own block, and warns of no lock there", () => {
 		expect(() => rate("-- atlas:txmode none\n\nDECLARE c CURSOR WITH HOLD FOR SELECT 1;")).not.toThrow()
+		expect(() =>
+			rate(
+				"-- atlas:txmode none\n\nBEGIN;\nSET TRANSACTION ISOLATION LEVEL SERIALIZABLE;\nSET LOCAL lock_timeout = '1s';\nCOMMIT;",
+			),
+		).not.toThrow()
+		expect(() =>
+			rate("-- atlas:txmode none\n\nSET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;\nSET lock_timeout = '1s';"),
+		).not.toThrow()
 		expect(rate("-- atlas:txmode none\n\nBEGIN;\nLOCK TABLE t IN SHARE MODE;\nCOMMIT;").lockWarnings).toEqual([
 			"LOCK TABLE t IN SHARE MODE (locks t against writes until the file's transaction ends)",
 		])

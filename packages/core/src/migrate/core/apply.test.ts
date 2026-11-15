@@ -325,6 +325,18 @@ describe("applyEach on a file another run applied while this one waited for the 
 		])
 	})
 
+	/* SL3 of r23: the run counted and listed the other run's file as one it applied */
+	it("answers with the files this run applied, not the one another run did", async () => {
+		const conn = mockConnection({
+			batch: vi.fn((statements: readonly { params?: unknown }[]) =>
+				JSON.stringify(statements[0]?.params).includes("2_b.sql") ? duplicate() : Promise.resolve(),
+			),
+		})
+		const history = mockConnection({ execute: () => Promise.resolve({ columns: ["1"], rows: [[1]] }) })
+		const files = [file("1_a.sql", "SELECT 1"), file("2_b.sql", "SELECT 2"), file("3_c.sql", "SELECT 3")]
+		expect(await applyEach(kept(conn), files, { history, print: () => {} })).toEqual(["1_a.sql", "3_c.sql"])
+	})
+
 	it("reports the batch's own failure when the history cannot be read after it", async () => {
 		const conn = mockConnection({ batch: duplicate })
 		const history = mockConnection({ execute: () => Promise.reject(new Error("SQLITE_BUSY: database is locked")) })

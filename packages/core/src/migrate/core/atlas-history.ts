@@ -50,11 +50,11 @@ const filesOf = (copy: string): AtlasFile[] =>
 const appliedAs = (revision: Pick<AtlasRevision, "description" | "version">): string =>
 	revision.description === "" ? `${revision.version}.sql` : `${revision.version}_${revision.description}.sql`
 
-/** The applied file that sorts last by name, as Atlas orders files; undefined while none is applied */
-const lastApplied = (applied: readonly AtlasRevision[]): string | undefined =>
-	applied
-		.map(appliedAs)
-		.reduce<string | undefined>((last, name) => (last === undefined || name > last ? name : last), undefined)
+/** The applied file that sorts last by name, the last of `applied` as atlasStatus orders them; undefined while none is applied */
+const lastApplied = (applied: readonly AtlasRevision[]): string | undefined => {
+	const last = applied.at(-1)
+	return last === undefined ? undefined : appliedAs(last)
+}
 
 /** The file of `version` in the snapshot, as Atlas maps a revision to its file; the version when none is */
 const fileOf = (copy: string, version: string): string =>
@@ -240,6 +240,7 @@ export {
 	type AtlasFile,
 	type AtlasRevision,
 	type AtlasStatus,
+	appliedAs,
 	checkHistory,
 	fileOf,
 	filesOf,

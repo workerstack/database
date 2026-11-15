@@ -30,10 +30,8 @@ function sharedPrefix(shared: AtlasStatus, copy: string): string[] {
 	const files = sqlFiles(copy)
 	const named = new Map(files.map((name) => [versionOf(name).version, name]))
 	const hashes = sumHashes(copy)
-	/* by name, as Atlas ran them: Atlas lists the rows by version */
-	const rows = shared.applied
-		.filter((row) => named.has(row.version))
-		.sort((one, other) => ((named.get(one.version) as string) < (named.get(other.version) as string) ? -1 : 1))
+	/* by name, as Atlas ran them, which atlasStatus orders them in */
+	const rows = shared.applied.filter((row) => named.has(row.version))
 	for (const [i, row] of rows.entries()) {
 		const name = named.get(row.version) as string
 		const due = files[i] as string

@@ -7,7 +7,8 @@
  * same config that validates the request, so the text cannot drift from what
  * the parser accepts — and stays when a publisher strips `x-*` extensions.
  */
-import { type FilterLimits, orderPattern, validateFilter } from "./filter.ts"
+import { type FilterLimits, orderPattern } from "./filter.ts"
+import { checkFilter } from "./filter-validate.ts"
 import { REQUEST_BYTES } from "./schema-limits.ts"
 import type { FieldsConfig } from "./schema-types.ts"
 import type { FieldType, FilterOperator } from "./types.ts"
@@ -133,7 +134,7 @@ function filterParamMeta(
 
 	return {
 		description,
-		examples: [...examples].filter((example) => validateFilter(example, fields, limits)?.valid === true),
+		examples: [...examples].filter((example) => checkFilter(example, fields, limits)?.valid === true),
 	}
 }
 

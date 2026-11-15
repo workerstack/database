@@ -21,7 +21,7 @@ import { attachedFindings, createFindings, maintenanceFindings } from "./pg-main
 import { partitionedKeyRecipe } from "./pg-partitioned.ts"
 import { retypeFindings } from "./pg-retype.ts"
 import { staysPut } from "./pg-storage.ts"
-import { REWRITE_COMMANDS, tableFindings } from "./pg-table-commands.ts"
+import { moveAllFindings, REWRITE_COMMANDS, tableFindings } from "./pg-table-commands.ts"
 import { type Facts, flag, names, type Node, nodesOf, num, tableOf, written } from "./pg-nodes.ts"
 
 // lookup-table: the kinds a rename or a move to another schema of loses what names them: unsafe
@@ -168,9 +168,15 @@ function columnFindings(cmd: Node, table: string, on: On): Finding[] | undefined
 	return subtype === "AT_AddConstraint" ? addConstraint(cmd, table, on) : COMMAND_RULES[subtype]?.(cmd, table, on)
 }
 
-/** One ALTER TABLE command's findings, on `table` as written: none for a move to where the history left it */
+/**
+ * One ALTER TABLE command's findings, on `table` as written: none for a move to where the history left
+ * it, nor for a partitioned table's, which has no storage and sets only where its next partitions go
+ */
 const commandFindings = (cmd: Node, table: string, on: On): Finding[] =>
-	staysPut(cmd, on.facts.storage.get(on.key)) ? [] : (columnFindings(cmd, table, on) ?? tableFindings(cmd, table))
+	staysPut(cmd, on.facts.storage.get(on.key)) ||
+	(REWRITE_COMMANDS.has(String(cmd["subtype"])) && on.facts.partitioned.has(on.key))
+		? []
+		: (columnFindings(cmd, table, on) ?? tableFindings(cmd, table))
 
 // lookup-table: the relations a move to another tablespace rewrites, besides a table: an index, a materialized view
 const MOVED = /* @__PURE__ */ new Set(["OBJECT_INDEX", "OBJECT_MATVIEW"])
@@ -200,16 +206,6 @@ function alterFindings(node: Node, facts: Facts): Finding[] {
 	const where = objtype === "OBJECT_INDEX" ? index : facts.storage.get(key)
 	const rewrites = (cmd: Node) => REWRITE_COMMANDS.has(String(cmd["subtype"])) && !staysPut(cmd, where)
 	return MOVED.has(String(objtype)) && !storageless && cmds.some(rewrites) ? [{ level: "lock", note: REWRITES }] : []
-}
-
-/** An ALTER … ALL IN TABLESPACE: every relation of its kind there moves, and each is rewritten */
-function moveAllFindings(node: Node): Finding[] {
-	const kind = String(node["objtype"])
-		.replace(/^OBJECT_/, "")
-		.replace("MATVIEW", "materialized view")
-		.toLowerCase()
-	const from = String(node["orig_tablespacename"])
-	return [{ level: "lock", note: `moves every ${kind} in tablespace ${from}, each rewritten under an exclusive lock` }]
 }
 
 /** A drop's findings: its level by kind, and the tables and indexes it names */

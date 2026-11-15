@@ -13,6 +13,19 @@ describe("statementHead", () => {
 		)
 	})
 
+	/* QE6 of r23: a CTE's name is a name, whatever word it is */
+	it("reads past each CTE by its shape, so a CTE named as a verb is no verb", () => {
+		expect(
+			statementHead("WITH replace(id) AS (SELECT 1) DELETE FROM parent WHERE id IN (SELECT id FROM replace)"),
+		).toBe("DELETE FROM parent WHERE id IN (SELECT id FROM replace)")
+		expect(
+			statementHead("with gone as materialized (select 1), select as not materialized (select 2) delete from p"),
+		).toBe("delete from p")
+		expect(statementHead('WITH "update" (a, b) AS (SELECT 1, 2) INSERT INTO t SELECT * FROM "update"')).toBe(
+			'INSERT INTO t SELECT * FROM "update"',
+		)
+	})
+
 	it("takes no word inside a literal, a quoted name or a bracketed name for the verb", () => {
 		expect(statementHead("with x as (select 'delete') select * from [delete] where `update` = 'it''s'")).toBe(
 			"select * from [delete] where `update` = 'it''s'",
@@ -109,8 +122,16 @@ describe("statementTable reads the table the dialect writes", () => {
 		['DELETE FROM "App".Org', "App", "org"],
 		["INSERT INTO ORG (id) VALUES (1)", undefined, "org"],
 		["delete from OrgÉ", undefined, "orgÉ"],
+		["DELETE FROM U&\"\\006frg\" WHERE id = 'o1'", undefined, "org"],
+		['delete from app.u&"d\\0061t\\+000061\\\\"', "app", "data\\"],
+		['UPDATE U&"""q" SET a = 1', undefined, '"q'],
 	])("reads %s on Postgres as %s.%s", (query, schema, table) => {
 		expect(statementTable(query, "postgres")).toEqual({ schema, table })
+	})
+
+	/* QE6 of r23: the escape a UESCAPE names is in a string, which Postgres's code here holds as a space */
+	it("names no table for a Unicode-escaped name whose escape character it cannot read", () => {
+		expect(statementTable("DELETE FROM U&\"d!0061t\" UESCAPE '!' WHERE id = 1", "postgres")).toBeUndefined()
 	})
 
 	it.each([

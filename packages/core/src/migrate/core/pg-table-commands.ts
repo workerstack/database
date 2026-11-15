@@ -115,4 +115,15 @@ function tableFindings(cmd: Node, table: string): Finding[] {
 	]
 }
 
-export { REWRITE_COMMANDS, tableFindings }
+/** An ALTER … ALL IN TABLESPACE: every relation of its kind there moves, and each is rewritten, unless it stays there */
+function moveAllFindings(node: Node): Finding[] {
+	if (node["orig_tablespacename"] === node["new_tablespacename"]) return []
+	const kind = String(node["objtype"])
+		.replace(/^OBJECT_/, "")
+		.replace("MATVIEW", "materialized view")
+		.toLowerCase()
+	const from = String(node["orig_tablespacename"])
+	return [{ level: "lock", note: `moves every ${kind} in tablespace ${from}, each rewritten under an exclusive lock` }]
+}
+
+export { moveAllFindings, REWRITE_COMMANDS, tableFindings }

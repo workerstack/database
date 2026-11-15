@@ -253,6 +253,14 @@ describe("an explicit undefined limit means the default (KT1; sibling: `NaN` and
 	})
 })
 
+it("refuses a limits key that is no limit, naming it and the limits (QL10 of r23)", () => {
+	expect(() => validateFilter("a.eq.1", { a: "number" }, { maxCondition: 1 } as never)).toThrow(
+		new TypeError(
+			"validateFilter: limits.maxCondition is not a limit; the limits are maxConditions, maxDepth, maxInValues, maxPatternBytes, maxValues",
+		),
+	)
+})
+
 describe("validateFilter — an empty member (QL14)", () => {
 	it.each([
 		["a.eq.x,", 7],

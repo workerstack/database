@@ -181,11 +181,16 @@ export function lineReader(input: CliTerminal["input"]): NextLine {
 
 /**
  * A yes/no question on the terminal; anything but y or yes is no, and so is an input that ends
- * before a line does: an answer counts once Enter ends it
+ * before a line does: an answer counts once Enter ends it. With no Enter typed, the question's line
+ * is ended here, so what is printed next starts on its own.
  */
 async function ask(output: CliTerminal["output"], next: NextLine, question: string): Promise<boolean> {
 	output.write(`${question} (y/N) `)
-	const answer = await next()
+	const answer = await next().catch((error: unknown) => {
+		output.write("\n")
+		throw error
+	})
+	if (answer === undefined) output.write("\n")
 	return answer !== undefined && /^y(?:es)?$/i.test(answer.trim())
 }
 

@@ -96,4 +96,23 @@ function heldScans(node: Node, { facts, held }: { facts: Facts; held: Held }): F
 	})
 }
 
-export { heldScans }
+/**
+ * The VALIDATE a statement's hidden code ran, which check's replay measured: it scanned the tables
+ * `held.scanned` names under what the file then held, a lock the code took after it among them, so
+ * this says more than the code held at its scan, never less. Read once, by the statement measured
+ */
+function hiddenScans(held: Held): Finding[] {
+	const scanned = held.scanned
+	held.scanned = []
+	if (scanned.length === 0 || [held.locks, held.cascades, held.unseen, held.owners].every((each) => each.size === 0))
+		return []
+	const key = scanned.length === 1 ? (scanned[0] as string) : ""
+	return [
+		{
+			level: "lock",
+			note: `scans ${listed(scanned)} while ${holding(held, key)}; those locks last to the file's COMMIT; validate in a later file`,
+		},
+	]
+}
+
+export { heldScans, hiddenScans }

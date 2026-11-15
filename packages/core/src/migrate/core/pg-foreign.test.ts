@@ -210,3 +210,44 @@ describe("the name a history gives a primary key", () => {
 		expect(primary("CREATE TABLE t (id int PRIMARY KEY);\n-- t")?.name).toBe("t_pkey")
 	})
 })
+
+/** The names of the foreign keys a history leaves */
+const foreignNames = (sql: string) =>
+	historyFacts(extractSchema(sql, undefined, "postgres"), "public").foreignKeys.map((key) => key.name)
+
+/* PA14 of r23: Postgres numbers a foreign key's name past every constraint name its schema holds (Postgres 17: c_pid_fkey1) */
+describe("the name a history gives a foreign key", () => {
+	const ADD = "CREATE TABLE p (id int PRIMARY KEY);\n"
+	const FK = "\nALTER TABLE c ADD FOREIGN KEY (pid) REFERENCES p;"
+	const FN = "CREATE FUNCTION f() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RETURN NULL; END$$;\n"
+
+	it.each([
+		["a UNIQUE constraint's", "CREATE TABLE c (pid int CONSTRAINT c_pid_fkey UNIQUE);"],
+		["a CHECK's", "CREATE TABLE c (pid int CONSTRAINT c_pid_fkey CHECK (pid > 0));"],
+		["a primary key's", "CREATE TABLE c (pid int CONSTRAINT c_pid_fkey PRIMARY KEY);"],
+		[
+			"another table's CHECK's",
+			"CREATE TABLE o (x int CONSTRAINT c_pid_fkey CHECK (x > 0));\nCREATE TABLE c (pid int);",
+		],
+		[
+			"a domain's constraint's",
+			"CREATE DOMAIN d AS int CONSTRAINT c_pid_fkey CHECK (VALUE > 0);\nCREATE TABLE c (pid int);",
+		],
+		[
+			"a constraint trigger's",
+			`${FN}CREATE TABLE c (pid int);\nCREATE CONSTRAINT TRIGGER c_pid_fkey AFTER INSERT ON c FOR EACH ROW EXECUTE FUNCTION f();`,
+		],
+	])("numbers past %s name", (_, history) => {
+		expect(foreignNames(`${ADD}${history}${FK}`)).toEqual(["c_pid_fkey1"])
+	})
+
+	it.each([
+		["nothing takes it", "CREATE TABLE c (pid int);"],
+		[
+			"another schema's constraint takes it",
+			"CREATE SCHEMA s;\nCREATE TABLE s.o (x int CONSTRAINT c_pid_fkey CHECK (x > 0));\nCREATE TABLE c (pid int);",
+		],
+	])("keeps its plain name where %s (sibling)", (_, history) => {
+		expect(foreignNames(`${ADD}${history}${FK}`)).toEqual(["c_pid_fkey"])
+	})
+})

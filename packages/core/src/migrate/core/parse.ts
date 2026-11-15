@@ -107,8 +107,13 @@ export function parseMigration(sql: string, filename: string, options: ClassifyO
 	return parseRead({ ...fileRead(sql, taken.dialect ?? "sqlite"), filename }, taken)
 }
 
-/** Refuses `sql`, the file `filename`, when Atlas reads a leading `atlas:` line of it as a comment */
-function refuseStrayDirective(sql: string, filename: string): void {
+/** Refuses `sql`, the file `filename`, when Atlas reads a leading `atlas:` line of it as a comment, or the database a BOM */
+function refuseMisread(sql: string, filename: string): void {
+	/* Atlas strips no byte order mark, and neither Postgres nor SQLite reads it as space */
+	if (sql.startsWith("\uFEFF"))
+		throw new Error(
+			`${filename}: the file starts with a UTF-8 byte order mark (U+FEFF), which Atlas sends as the first character of its first statement, where the database reads it as a syntax error; save the file as UTF-8 without a BOM`,
+		)
 	const stray = strayDirective(sql)
 	if (stray === undefined) return
 	throw new Error(
@@ -127,7 +132,7 @@ export function parseRead(
 	{ placing, replayed }: { placing?: Placing | undefined; replayed?: Replayed | undefined } = {},
 ): ParsedMigration {
 	const { dialect, filename, sql } = file
-	refuseStrayDirective(sql, filename)
+	refuseMisread(sql, filename)
 	const reads = readings(
 		sql,
 		{ before, dialect, schema },

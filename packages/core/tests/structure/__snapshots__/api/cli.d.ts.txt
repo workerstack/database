@@ -546,7 +546,14 @@ type Sent = {
 };
 /** `statement` run on the replay's connection, a statement on roles as the replay runs it (pg-replay-made.ts) */
 declare function runStatement(run: Run, statement: Sent, replay: Replaying): Promise<void>;
-export { type Refuse, type Replay, type Replaying, runStatement };
+/** A history file's statements as the replay sends them: each one's text, its tree, and its node and type, empty where none parsed */
+declare const statementsOf: (text: string) => {
+    node: Record<string, unknown>;
+    sent: string;
+    tree: unknown;
+    type: string;
+}[];
+export { type Refuse, type Replay, type Replaying, runStatement, statementsOf };
 
 // migrate/core/pg-live-catalog.d.ts
 /**
@@ -597,11 +604,14 @@ type Calls = {
 };
 /**
  * What Postgres held at a VALIDATE, read from pg_locks: each relation's lock, by key, with whether
- * reads wait too, and of each sequence among them, the tables another session sees that call it
+ * reads wait too, and of each sequence among them, the tables another session sees that call it.
+ * After a statement whose code database does not read, `validated` names, by key, each table a
+ * constraint of which that code validated, and the locks are those held as it ended
  */
 type Locked = {
     calls: ReadonlyMap<string, Calls>;
     locks: ReadonlyMap<string, boolean>;
+    validated?: readonly string[] | undefined;
 };
 export type { Calls, Locked };
 

@@ -4,19 +4,24 @@
  * SQL's own words.
  */
 import { beforeAll, describe, expect, it } from "vitest"
+import { REWRITES } from "./pg-column-add.ts"
 import { ddlFindings } from "./pg-ddl.ts"
 import { historyFacts } from "./pg-history.ts"
 import type { Node } from "./pg-nodes.ts"
 import { loadPostgresParser, postgresParser } from "./pg-parser.ts"
+import { extractSchema } from "./schema.ts"
 
 beforeAll(() => loadPostgresParser())
 
-/** The DDL findings of `sql`'s one statement */
-function rated(sql: string) {
+/** The DDL findings of `sql`'s one statement, after `history` */
+function after(history: string, sql: string) {
 	const [stmt] = postgresParser().parseSync(sql).stmts as Array<{ stmt: Node }>
 	const [type, node] = Object.entries((stmt as { stmt: Node }).stmt)[0] as [string, Node]
-	return ddlFindings(type, node, historyFacts(undefined, "public"))
+	return ddlFindings(type, node, historyFacts(extractSchema(history, undefined, "postgres"), "public"))
 }
+
+/** The DDL findings of `sql`'s one statement, after no history */
+const rated = (sql: string) => after("", sql)
 
 describe("an ALTER TABLE's command on the whole table", () => {
 	it.each([
@@ -38,6 +43,35 @@ describe("an ALTER TABLE's command on the whole table", () => {
 	])("rates %j unsafe, naming the command in the SQL's own words", (sql, words) => {
 		expect(rated(sql)).toEqual([
 			{ level: "unsafe", note: `database does not recognize ALTER TABLE … ${words}; approve it in the file` },
+		])
+	})
+})
+
+/* PA15 of r23: a partitioned table has no storage, and a move to the tablespace it leaves moves nothing */
+describe("a move of a table's storage", () => {
+	const PARTITIONED = "CREATE TABLE p (a int) PARTITION BY LIST (a);\n"
+
+	it.each(["ALTER TABLE p SET TABLESPACE pg_default", "ALTER TABLE p SET ACCESS METHOD heap"])(
+		"rates %j on a partitioned table as no rewrite",
+		(sql) => {
+			expect(after(PARTITIONED, sql)).toEqual([])
+		},
+	)
+
+	it("rates a move of every table back into the tablespace they are in as no rewrite", () => {
+		expect(after("", "ALTER TABLE ALL IN TABLESPACE pg_default SET TABLESPACE pg_default")).toEqual([])
+	})
+
+	it.each(["ALTER TABLE t SET TABLESPACE fast", "ALTER TABLE t SET ACCESS METHOD heap2"])(
+		"still rates %j on a plain table as a rewrite",
+		(sql) => {
+			expect(after("CREATE TABLE t (a int);\n", sql)).toEqual([{ level: "lock", note: REWRITES }])
+		},
+	)
+
+	it("still rates a move of every table to another tablespace as a rewrite", () => {
+		expect(after("", "ALTER TABLE ALL IN TABLESPACE pg_default SET TABLESPACE fast")).toEqual([
+			{ level: "lock", note: "moves every table in tablespace pg_default, each rewritten under an exclusive lock" },
 		])
 	})
 })

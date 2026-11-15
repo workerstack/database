@@ -15,7 +15,7 @@ import { historyFacts } from "./pg-history.ts"
 import { nodeOf } from "./pg-outside-transaction.ts"
 import { loadPostgresParser } from "./pg-parser.ts"
 import { pgRead } from "./pg-split.ts"
-import { heldScans } from "./pg-validate.ts"
+import { heldScans, hiddenScans } from "./pg-validate.ts"
 import { extractSchema } from "./schema.ts"
 
 beforeAll(loadPostgresParser)
@@ -163,5 +163,35 @@ describe("what a VALIDATE names of a sequence Postgres held", () => {
 		})
 		measured(held, { calls: new Map(), locks: new Map([["sq", false]]) })
 		expect(held.calls).toEqual(new Map())
+	})
+})
+
+/** The finding of a statement the replay measured validating `validated` while `locks` were held */
+function hidden(validated: string[], locks: Array<[string, boolean]>) {
+	const held = heldStart()
+	measured(held, { calls: new Map(), locks: new Map(locks), validated })
+	return { findings: hiddenScans(held), again: hiddenScans(held) }
+}
+
+/* PA9 of r23: a VALIDATE a statement's hidden code ran, which the replay measured as the statement ended */
+describe("what a statement whose hidden code validated says the file held", () => {
+	it("names each table it scanned and what the file held, once", () => {
+		expect(hidden(["p", "p1"], [["w", true]])).toEqual({
+			again: [],
+			findings: [
+				{
+					level: "lock",
+					note: "scans p and p1 while this file holds w locked against reads and writes; those locks last to the file's COMMIT; validate in a later file",
+				},
+			],
+		})
+		expect(hidden(["t"], [["t", false]]).findings[0]?.note).toMatch(
+			/^scans t while this file holds it locked against writes;/,
+		)
+	})
+
+	it("says nothing when it validated nothing, or the file held nothing", () => {
+		expect(hidden([], [["w", true]]).findings).toEqual([])
+		expect(hidden(["t"], []).findings).toEqual([])
 	})
 })

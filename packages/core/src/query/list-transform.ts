@@ -4,7 +4,8 @@
  */
 import type * as z from "zod"
 
-import { type FilterLimits, namedTwice, orderEntries, validateFilter } from "./filter.ts"
+import { type FilterLimits, namedTwice, orderEntries } from "./filter.ts"
+import { checkFilter } from "./filter-validate.ts"
 import type { FieldType, FilterAST, SortDirection, SortField } from "./types.ts"
 
 type FilterParam = { fields: Record<string, FieldType>; limits: FilterLimits }
@@ -16,7 +17,7 @@ function filterAstOf(
 	ctx: z.RefinementCtx,
 ): FilterAST | null {
 	if (!filter) return null
-	const result = validateFilter(filter, fields, limits)
+	const result = checkFilter(filter, fields, limits)
 	if (result?.valid) return result.ast
 	if (result) ctx.addIssue({ code: "custom", message: result.errors.join("; "), path: ["filter"] })
 	return null

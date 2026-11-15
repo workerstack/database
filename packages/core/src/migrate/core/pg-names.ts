@@ -6,6 +6,7 @@
 import type { TriggerEvent } from "../migration-types.ts"
 import { moveReads } from "./pg-cascade.ts"
 import { moveDomains } from "./pg-domains.ts"
+import { descendants } from "./pg-inherit.ts"
 import { lineage } from "./pg-partition-order.ts"
 import { type Facts, flag, keyOf, names, type Node, num, tableOf } from "./pg-nodes.ts"
 
@@ -142,17 +143,19 @@ const RELATIONS = /* @__PURE__ */ new Set([
 	"OBJECT_VIEW",
 ])
 
-/** A column renamed: a table's column, or a view's, whose base column stays the one it named */
+/** A column renamed: a table's column, on it and every table under it, or a view's, whose base column stays the one it named */
 function renameColumn(node: Node, facts: Facts): void {
 	const key = tableOf(node["relation"], facts.schema).key
 	const [was, now] = [String(node["subname"]), String(node["newname"])]
-	const columns = facts.tables.get(key)
-	if (columns?.delete(was) === true) columns.add(now)
-	const types = facts.columnTypes.get(key)
-	const type = types?.get(was)
-	if (types !== undefined && type !== undefined) {
-		types.delete(was)
-		types.set(now, type)
+	for (const table of descendants(facts, key)) {
+		const columns = facts.tables.get(table)
+		if (columns?.delete(was) === true) columns.add(now)
+		const types = facts.columnTypes.get(table)
+		const type = types?.get(was)
+		if (types !== undefined && type !== undefined) {
+			types.delete(was)
+			types.set(now, type)
+		}
 	}
 	const view = facts.views.get(key)
 	const base = view?.columns === "all" ? undefined : view?.columns.get(was)

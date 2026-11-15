@@ -8,6 +8,9 @@
  * src/migrate/core/pg-indexes.test.ts holds database's facts to these lists, and
  * tests/integration/postgres/index-names-oracle.test.ts holds these lists to Postgres 17.
  */
+import { EXPRESSION_CASES } from "./pg-index-cases-expressions.ts"
+import { INHERIT_CASES } from "./pg-index-cases-inherit.ts"
+import { MATCH_CASES } from "./pg-index-cases-match.ts"
 import { TAKEN_CASES } from "./pg-index-cases-taken.ts"
 
 const P =
@@ -464,6 +467,9 @@ const INDEX_CASES: readonly IndexCase[] = [
 		label: "a partition's partition dropped with its grandparent",
 	},
 	...TAKEN_CASES,
+	...MATCH_CASES,
+	...EXPRESSION_CASES,
+	...INHERIT_CASES,
 ]
 
 export { INDEX_CASES, type IndexCase }

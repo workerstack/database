@@ -1806,7 +1806,7 @@ declare const OPERATORS_BY_TYPE: Record<FieldType, readonly FilterOperator[]>;
 type FilterFieldSpec = {
     /** "iso", on a date field only: values are ISO 8601 text, not epoch milliseconds */
     format?: "iso" | undefined;
-    /** the operators the field takes in place of its type's; `contains` on any type, and gt to lte on a string, beyond them */
+    /** the operators the field takes in place of its type's; `contains` on any type, gt to lte on a string, and `in` and `nin` on a date, beyond them */
     operators?: readonly FilterOperator[] | undefined;
     /** the type each value is checked and typed as */
     type: FieldType;
@@ -1844,19 +1844,32 @@ declare const FILTER_LIMITS: FilterLimits;
 type LimitsGiven<T> = {
     [K in keyof T]?: number | undefined;
 };
+/** A key's lowest value, and where it holds when that is not everywhere */
+type Floor = readonly [number, string];
+/** Whose limits these are, as a refusal names it, their defaults, and each key's floor where it is not 0 */
+type LimitsRule<T> = {
+    defaults: T;
+    floors?: {
+        [K in keyof T]?: Floor | undefined;
+    } | undefined;
+    owner: string;
+};
 /**
  * `given` over `defaults`, a key set to undefined left out as every other option bag reads it, each
- * other a whole number from 0, a TypeError naming it and `owner` otherwise: a cap of
- * NaN or undefined compared false, which turned it off. No cap is a large whole number
+ * other a whole number from its `floors` entry, else 0, a TypeError naming it and `owner` otherwise,
+ * as for a key `defaults` does not hold: a cap of NaN or undefined compared false, which turned it
+ * off, and a misspelled key kept the cap it meant to set. No cap is a large whole number
  */
-declare function limitsOver<T extends Record<string, number>>(owner: string, defaults: T, given: LimitsGiven<T> | undefined): T;
+declare function limitsOver<T extends Record<string, number>>({ defaults, floors, owner }: LimitsRule<T>, given: LimitsGiven<T> | undefined): T;
 /**
  * Parse `filterString` and check it against `allowedFields`: known fields, operators their type
  * or spec allows, values of their type, within `limits`. Null when there is no filter. A spec
  * that lists an operator its type cannot take, or a format on no date, throws a TypeError.
  */
 declare function validateFilter(filterString: string | null | undefined, allowedFields: Record<string, FilterField>, limits?: LimitsGiven<FilterLimits> | undefined): FilterValidationResult | null;
-export { FILTER_LIMITS, limitsOver, OPERATORS_BY_TYPE, validateFilter, type FilterField, type FilterFieldSpec, type FilterLimits, type LimitsGiven, type FilterValidationResult, };
+/** validateFilter under `caps` its caller has already checked, as a list schema's limits are */
+declare function checkFilter(filterString: string | null | undefined, allowedFields: Record<string, FilterField>, caps: FilterLimits): FilterValidationResult | null;
+export { checkFilter, FILTER_LIMITS, limitsOver, OPERATORS_BY_TYPE, validateFilter, type FilterField, type FilterFieldSpec, type FilterLimits, type LimitsGiven, type FilterValidationResult, };
 
 // query/filter-parse.d.ts
 /**

@@ -29,7 +29,7 @@ import { constraintIndexWarnings, ddlFindings } from "./pg-ddl.ts"
 import { maintenanceFindings } from "./pg-maintenance.ts"
 import { followFresh } from "./pg-fresh.ts"
 import { type Held, holdStatement } from "./pg-held.ts"
-import { heldScans } from "./pg-validate.ts"
+import { heldScans, hiddenScans } from "./pg-validate.ts"
 import { preview } from "./classify-file.ts"
 import { eventFindings, kindOf } from "./pg-events.ts"
 import { dynamicOf, executedNodes, executeFindings, firedBy, followPrepared, type Prepared } from "./pg-execute.ts"
@@ -286,7 +286,7 @@ function pgTreeFindings(
 		if (type === "AlterTableStmt") followParentage(node, ctx.fresh, ctx.facts.schema)
 	}
 	/* the event triggers the history made run on this statement before what it makes counts */
-	findings.push(...eventFindings(tree.stmts, ctx))
+	findings.push(...eventFindings(tree.stmts, ctx), ...hiddenScans(ctx.held))
 	followTree(tree.stmts, ctx.facts)
 	const treeRated = tops.length > 0 && tops.every(([type, node]) => maintenanceFindings(type, node) !== undefined)
 	return {

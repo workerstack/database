@@ -8,8 +8,9 @@
  * ADD … USING INDEX makes has its index's columns, which this does not record, so a key naming them is
  * not reached through it.
  */
+import { droppedFrom } from "./pg-inherit.ts"
 import { movedKey } from "./pg-names.ts"
-import { type Facts, flag, keyOf, names, type Node, tableOf } from "./pg-nodes.ts"
+import { constraintNames, type Facts, flag, keyOf, names, type Node, tableOf } from "./pg-nodes.ts"
 
 /** A foreign key: its name, its table and columns, and the table it references with the columns there, [] for its primary key */
 type ForeignKey = { columns: string[]; name: string; references: string; table: string; to: string[] }
@@ -43,14 +44,16 @@ function objectName(name1: string, name2: string, label: string): string {
 	return [clipped(name1, one), ...(name2 === "" ? [] : [clipped(name2, two)]), label].join("_")
 }
 
-/** A foreign key's name as Postgres chooses it on `table`: `fkey`, then `fkey1`, 2, … past a name its schema's keys take */
+/**
+ * A foreign key's name as Postgres chooses it on `table`: `fkey`, then `fkey1`, 2, … past every
+ * constraint name its schema holds, as ChooseConstraintName does: a key's, a CHECK's, a constraint
+ * trigger's, a domain's, and an index-backed primary key, unique or exclusion constraint's
+ */
 function chosen(table: string, columns: readonly string[], facts: Facts): string {
+	const backed = [...facts.indexes].filter(([, index]) => index.kind !== "index")
 	const taken = new Set(
-		[
-			...facts.foreignKeys.map((key) => [key.table, key.name]),
-			...[...facts.primaryKeys].map(([on, key]) => [on, key.name]),
-		]
-			.filter(([on]) => schemaOf(on as string) === schemaOf(table))
+		[...constraintNames(facts), ...backed.map(([key, index]): [string, string] => [index.table, bare(key)])]
+			.filter(([on]) => schemaOf(on) === schemaOf(table))
 			.map(([, name]) => name),
 	)
 	for (let pass = 0; ; pass += 1) {
@@ -262,7 +265,9 @@ function followKeyAlter(node: Node, facts: Facts): void {
 			for (const one of (column["constraints"] as Array<{ Constraint: Node }> | undefined) ?? [])
 				addConstraint({ column: String(column["colname"]), table }, one.Constraint, facts)
 		} else if (cmd["subtype"] === "AT_DropConstraint") dropKeys(table, { cascade, kind: "constraint", name }, facts)
-		else if (cmd["subtype"] === "AT_DropColumn") dropKeys(table, { cascade, kind: "column", name }, facts)
+		else if (cmd["subtype"] === "AT_DropColumn")
+			for (const one of droppedFrom(facts, table, { column: name, recurse: flag((node["relation"] as Node)["inh"]) }))
+				dropKeys(one, { cascade, kind: "column", name }, facts)
 	}
 }
 

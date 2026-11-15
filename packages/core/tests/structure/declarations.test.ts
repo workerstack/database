@@ -61,11 +61,14 @@ describe("the checker over database's emitted declarations", () => {
 })
 
 /**
- * The projects a consumer without Node's types runs, a Workers one and a browser bundle: database lists
+ * The projects a consumer without Node's types runs, a Workers one, a browser bundle and one with
+ * neither the DOM's nor a runtime's types: database lists
  * @types/node only as a dev dependency, so a declaration naming `NodeJS` fails such a project with
  * TS2503, or under skipLibCheck reads as `any` and accepts anything
  */
 const WITHOUT_NODE = {
+	/* KT4 of r23: ./migrate typed its Turso calls with `typeof fetch`, which no such project declares */
+	bare: { lib: ["lib.es2023.d.ts"], types: [] },
 	browser: { lib: ["lib.es2023.d.ts", "lib.dom.d.ts"], types: [] },
 	workers: { lib: ["lib.es2023.d.ts"], types: ["@cloudflare/workers-types"] },
 } satisfies Record<string, { lib: string[]; types: string[] }>

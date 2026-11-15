@@ -55,6 +55,9 @@ const RECOGNIZED = [
 
 /* Postgres's transaction control, which an `-- atlas:txmode none` file runs; SQLite's is refused (classify-file.ts) */
 const PG_TRANSACTION = /^(?:BEGIN|COMMIT|END|ROLLBACK|START TRANSACTION)\b/i
+/* Postgres's session statements over a cursor or a prepared statement, which change no schema or row:
+   where Postgres runs them is pg-outside-transaction.ts's, and an EXECUTE they leave unprepared pg-execute.ts's */
+const PG_SESSION = /^(?:DECLARE|FETCH|MOVE|CLOSE|DEALLOCATE|DISCARD)\b/i
 
 /* recognized, and cautious: an extension's install or upgrade script runs as the migrating role,
    and a new owner bypasses row level security (an ALTER TABLE's OWNER TO is classify-alter.ts's) */
@@ -169,7 +172,7 @@ function foreignKeyPragma(code: string): boolean {
 function grammarFindings(statement: string, ctx: GrammarContext): Finding[] {
 	/* an EXPLAIN is the statement it explains (ANALYZE runs it) */
 	const code = statement.replace(/^EXPLAIN (?:\([^)]*\) )?(?:(?:ANALYZE|ANALYSE|VERBOSE) )*/i, "")
-	const recognized = ctx.dialect === "postgres" ? [...RECOGNIZED, PG_TRANSACTION] : RECOGNIZED
+	const recognized = ctx.dialect === "postgres" ? [...RECOGNIZED, PG_TRANSACTION, PG_SESSION] : RECOGNIZED
 	/* a statement a parse-tree rule rates whole is recognized by that rule, whatever its kind */
 	if (
 		!recognized.some((shape) => shape.test(code)) &&

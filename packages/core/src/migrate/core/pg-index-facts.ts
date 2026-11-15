@@ -1,14 +1,14 @@
 /**
  * What an index of a Postgres history is, and the name Postgres gives it: its shape as
- * CompareIndexInfo compares two, the name ChooseIndexName chooses (its table, its columns or `expr`,
- * and `pkey`, `key`, `excl` or `idx`, cut to 63 bytes as makeObjectName cuts and numbered past every
- * relation its schema holds, and every constraint for a constraint's), and how one made on a
- * partitioned table reaches each partition, attached to a matching index there or cloned onto it, as
- * DefineIndex does. pg-indexes.ts follows each through a history's statements.
+ * CompareIndexInfo compares two, the name ChooseIndexName chooses (its table, its columns' names
+ * and its expressions' as pg-colname.ts figures them, and `pkey`, `key`, `excl` or `idx`, cut to 63
+ * bytes as makeObjectName cuts and numbered past every relation its schema holds, and every
+ * constraint for a constraint's). pg-index-match.ts takes one made on a partitioned table to each
+ * partition, and pg-indexes.ts follows each through a history's statements.
  */
+import { figureName } from "./pg-colname.ts"
 import { clipped, objectName } from "./pg-foreign.ts"
-import { type Facts, flag, keyOf, names, type Node } from "./pg-nodes.ts"
-import { partitionsOf } from "./pg-partition-order.ts"
+import { constraintNames, type Facts, flag, keyOf, names, type Node } from "./pg-nodes.ts"
 
 /** What an index is: a plain or unique index, or the index of a primary key, unique or exclusion constraint */
 type IndexKind = "exclusion" | "index" | "primary" | "unique"
@@ -34,9 +34,10 @@ type IndexShape = {
  * An index, by key in Facts.indexes: its table, its kind, its shape, its columns as the index names
  * them (which a clone copies, and a column's RENAME leaves alone), the partitioned index it is
  * attached to, and the tablespace the history put it in, undefined where it left that to the target.
- * `unsure` marks a clone whose name database may have swapped with another's: clones whose names
- * cut to one, on partitions it cannot order, some partitioned and some not, so it cannot tell which
- * of those names is a partitioned index's
+ * `unsure` marks a clone database cannot place: `order` where its name may have swapped with
+ * another's (clones whose names cut to one, on partitions it cannot order, some partitioned and some
+ * not, so it cannot tell which of those names is a partitioned index's), `match` where Postgres may
+ * have attached a partition's own index in its place (pg-index-match.ts)
  */
 type IndexFact = {
 	columns: string[]
@@ -45,7 +46,7 @@ type IndexFact = {
 	shape: IndexShape
 	table: string
 	tablespace?: string | undefined
-	unsure?: boolean | undefined
+	unsure?: "match" | "order" | undefined
 }
 
 /** An index a statement asks for: its fact, its name when the statement gives one, and what makes it the same as another */
@@ -76,8 +77,8 @@ const elementOf = (elem: Node): IndexElement => ({
 
 /**
  * The names an index gives its columns, as ChooseIndexColumnNames gives them: each key's and
- * INCLUDE column's own, `expr` for an expression, and a name taken already numbered 1, 2, …, cut so
- * it stays under 64 bytes
+ * INCLUDE column's own, an expression's as pg-colname.ts figures it or `expr`, and a name taken
+ * already numbered 1, 2, …, cut so it stays under 64 bytes
  */
 function columnNames(written: ReadonlyArray<string | undefined>): string[] {
 	const out: string[] = []
@@ -92,13 +93,6 @@ function columnNames(written: ReadonlyArray<string | undefined>): string[] {
 
 /** The label ChooseIndexName gives an index of `kind` */
 const LABELS: Readonly<Record<IndexKind, string>> = { exclusion: "excl", index: "idx", primary: "pkey", unique: "key" }
-
-/** Each constraint name pg_constraint holds outside the indexes: foreign keys', CHECKs', constraint triggers' and domains', each by its owner */
-function* constraintNames(facts: Facts): Generator<[string, string]> {
-	for (const fk of facts.foreignKeys) yield [fk.table, fk.name]
-	for (const [table, held] of facts.constraintNames) for (const name of held) yield [table, name]
-	for (const [domain, { constraints }] of facts.domains) for (const name of constraints.keys()) yield [domain, name]
-}
 
 /** Whether `key` is a relation's in its schema, or for a constraint, a constraint's */
 function taken(facts: Facts, key: string, constraint: boolean): boolean {
@@ -124,58 +118,9 @@ function chosen(facts: Facts, fact: IndexFact): string {
 	}
 }
 
-/** Whether two indexes match as CompareIndexInfo matches them */
-const same = (one: IndexFact, two: IndexFact): boolean => JSON.stringify(one.shape) === JSON.stringify(two.shape)
-
 /** The indexes on `table` */
 const indexesOn = (facts: Facts, table: string): IndexFact[] =>
 	[...facts.indexes.values()].filter((each) => each.table === table)
-
-/** `fact` cloned onto `table`, attached to it when `attached`, and on to each partition of `table` */
-function clone(facts: Facts, fact: IndexFact, { attached, table }: { attached: boolean; table: string }): IndexFact {
-	const copy: IndexFact = { columns: [...fact.columns], kind: fact.kind, shape: structuredClone(fact.shape), table }
-	if (attached) copy.parent = fact
-	facts.indexes.set(chosen(facts, copy), copy)
-	spread(facts, copy)
-	return copy
-}
-
-/** `clones` marked unsure where their names cut to one across partitioned and plain partitions */
-function markUnsure(facts: Facts, clones: readonly IndexFact[]): void {
-	const groups = new Map<string, IndexFact[]>()
-	for (const each of clones) {
-		const key = candidate(each, 0)
-		groups.set(key, [...(groups.get(key) ?? []), each])
-	}
-	for (const group of groups.values()) {
-		const partitioned = group.filter((each) => facts.partitioned.has(each.table)).length
-		if (partitioned > 0 && partitioned < group.length) for (const each of group) each.unsure = true
-	}
-}
-
-/**
- * `fact` on each partition of its table, as DefineIndex recurses: the partition's first index
- * attached to no other that matches it, a constraint's for a constraint, is attached to it; else a
- * clone of it is made there
- */
-function spread(facts: Facts, fact: IndexFact): void {
-	const { children, sure } = partitionsOf(facts, fact.table)
-	const clones: IndexFact[] = []
-	for (const child of children) {
-		const match = indexesOn(facts, child).find(
-			(each) => each.parent === undefined && same(each, fact) && (fact.kind === "index" || each.kind !== "index"),
-		)
-		if (match === undefined) clones.push(clone(facts, fact, { attached: true, table: child }))
-		else match.parent = fact
-	}
-	if (!sure) markUnsure(facts, clones)
-}
-
-/** An index made: under `name` when given, else the one Postgres chooses, and on to its table's partitions when `recurse` */
-function make(facts: Facts, { fact, name }: Wanted, recurse: boolean): void {
-	facts.indexes.set(name === undefined ? chosen(facts, fact) : besideTable(fact.table, name, facts.schema), fact)
-	if (recurse) spread(facts, fact)
-}
 
 /** A CREATE INDEX's index */
 function indexWanted(table: string, node: Node): Wanted {
@@ -190,7 +135,9 @@ function indexWanted(table: string, node: Node): Wanted {
 		unique: flag(node["unique"]),
 		where: located(node["whereClause"]),
 	}
-	const written = [...params, ...include].map((elem) => (elem["indexcolname"] ?? elem["name"]) as string | undefined)
+	const written = [...params, ...include].map(
+		(elem) => (elem["indexcolname"] ?? elem["name"] ?? figureName(elem["expr"])) as string | undefined,
+	)
 	const fact: IndexFact = {
 		columns: columnNames(written),
 		kind: "index",
@@ -235,7 +182,7 @@ function constraintWanted(table: string, constraint: Node, column?: string): Wan
 		where: located(constraint["where_clause"]),
 	}
 	const fact: IndexFact = {
-		columns: columnNames([...elements.map((each) => each.name), ...include]),
+		columns: columnNames([...elements.map((each) => each.name ?? figureName(each.expr)), ...include]),
 		kind,
 		shape,
 		table,
@@ -284,17 +231,18 @@ function rekey(facts: Facts, from: string, to: string): void {
 
 export {
 	besideTable,
-	clone,
+	chosen,
+	candidate,
 	constraintWanted,
 	dropIndex,
 	indexesOn,
+	type IndexElement,
 	type IndexFact,
 	type IndexShape,
 	indexWanted,
+	type Wanted,
 	list,
-	make,
 	merged,
 	rekey,
-	same,
 	taken,
 }

@@ -38,7 +38,7 @@ const TYPABLE_BY_TYPE: Record<FieldType, readonly FilterOperator[]> = {
 type FilterFieldSpec = {
 	/** "iso", on a date field only: values are ISO 8601 text, not epoch milliseconds */
 	format?: "iso" | undefined
-	/** the operators the field takes in place of its type's; `contains` on any type, and gt to lte on a string, beyond them */
+	/** the operators the field takes in place of its type's; `contains` on any type, gt to lte on a string, and `in` and `nin` on a date, beyond them */
 	operators?: readonly FilterOperator[] | undefined
 	/** the type each value is checked and typed as */
 	type: FieldType
@@ -88,20 +88,34 @@ const FILTER_LIMITS: FilterLimits = {
 /** Bounds as a caller gives them: a key left out or set to undefined keeps its default, and any other is a whole number from 0 */
 type LimitsGiven<T> = { [K in keyof T]?: number | undefined }
 
+/** A key's lowest value, and where it holds when that is not everywhere */
+type Floor = readonly [number, string]
+
+/** Whose limits these are, as a refusal names it, their defaults, and each key's floor where it is not 0 */
+type LimitsRule<T> = { defaults: T; floors?: { [K in keyof T]?: Floor | undefined } | undefined; owner: string }
+
 /**
  * `given` over `defaults`, a key set to undefined left out as every other option bag reads it, each
- * other a whole number from 0, a TypeError naming it and `owner` otherwise: a cap of
- * NaN or undefined compared false, which turned it off. No cap is a large whole number
+ * other a whole number from its `floors` entry, else 0, a TypeError naming it and `owner` otherwise,
+ * as for a key `defaults` does not hold: a cap of NaN or undefined compared false, which turned it
+ * off, and a misspelled key kept the cap it meant to set. No cap is a large whole number
  */
 function limitsOver<T extends Record<string, number>>(
-	owner: string,
-	defaults: T,
+	{ defaults, floors = {}, owner }: LimitsRule<T>,
 	given: LimitsGiven<T> | undefined,
 ): T {
+	const unknown = Object.keys(given ?? {}).find((key) => !Object.hasOwn(defaults, key))
+	if (unknown !== undefined)
+		throw new TypeError(
+			`${owner}: limits.${unknown} is not a limit; the limits are ${Object.keys(defaults).join(", ")}`,
+		)
 	const set = Object.entries(given ?? {}).filter((entry): entry is [string, number] => entry[1] !== undefined)
 	for (const [key, value] of set) {
-		if (!Number.isSafeInteger(value) || value < 0)
-			throw new TypeError(`${owner}: limits.${key} must be a whole number from 0; got ${String(value)}`)
+		const [floor, where] = floors[key] ?? [0, ""]
+		if (!Number.isSafeInteger(value) || value < floor)
+			throw new TypeError(
+				`${owner}: limits.${key} must be a whole number from ${floor}${where}; got ${typeof value === "number" ? value : JSON.stringify(value)}`,
+			)
 	}
 	return { ...defaults, ...Object.fromEntries(set) }
 }
@@ -197,8 +211,20 @@ function validateFilter(
 	allowedFields: Record<string, FilterField>,
 	limits?: LimitsGiven<FilterLimits> | undefined,
 ): FilterValidationResult | null {
+	return checkFilter(
+		filterString,
+		allowedFields,
+		limitsOver({ defaults: FILTER_LIMITS, owner: "validateFilter" }, limits),
+	)
+}
+
+/** validateFilter under `caps` its caller has already checked, as a list schema's limits are */
+function checkFilter(
+	filterString: string | null | undefined,
+	allowedFields: Record<string, FilterField>,
+	caps: FilterLimits,
+): FilterValidationResult | null {
 	const fields = checkedFields(allowedFields)
-	const caps = limitsOver("validateFilter", FILTER_LIMITS, limits)
 	if (!filterString || filterString.trim() === "") return null
 	const read = readFilter(filterString, caps.maxDepth)
 	if ("error" in read) return { errors: [read.error], valid: false }
@@ -216,6 +242,7 @@ function validateFilter(
 }
 
 export {
+	checkFilter,
 	FILTER_LIMITS,
 	limitsOver,
 	OPERATORS_BY_TYPE,

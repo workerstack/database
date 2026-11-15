@@ -5,11 +5,12 @@
  */
 import { outsideRefusal } from "./classify-file.ts"
 import type { Locked } from "./pg-held-types.ts"
-import { outsideOnly } from "./pg-outside-transaction.ts"
+import { nodeOf, outsideOnly } from "./pg-outside-transaction.ts"
 import { codeOf, type Sql } from "./pg-replay-database.ts"
 import { runRole } from "./pg-replay-made.ts"
 import type { Run } from "./pg-replay-roles.ts"
 import { inDefault } from "./pg-replay-tablespaces.ts"
+import { pgRead } from "./pg-split.ts"
 import { ReplayFailed } from "./replay-failed.ts"
 
 /** How the replay words what it does, and where it says what it left out */
@@ -89,4 +90,12 @@ async function runStatement(run: Run, statement: Sent, replay: Replaying): Promi
 	if (type === "CreateExtensionStmt") await replay.waits(run.sql)
 }
 
-export { type Refuse, type Replay, type Replaying, runStatement }
+/** A history file's statements as the replay sends them: each one's text, its tree, and its node and type, empty where none parsed */
+const statementsOf = (text: string): { node: Record<string, unknown>; sent: string; tree: unknown; type: string }[] =>
+	pgRead(text).statements.map(({ sent, tree }) => ({
+		sent,
+		tree,
+		...(tree === undefined ? { node: {}, type: "" } : (([type, node]) => ({ node, type }))(nodeOf(tree))),
+	}))
+
+export { type Refuse, type Replay, type Replaying, runStatement, statementsOf }

@@ -21,11 +21,19 @@ const rate = (sql: string) =>
 	})
 
 describe("a transactional file holds no transaction control (PA2; sibling: PA13's inside-only statements)", () => {
+	/* PA12 of r23: a BEGIN in Atlas's transaction starts none, as Postgres warns, so it ends nothing */
 	it.each([
 		["BEGIN … COMMIT", "BEGIN;\nINSERT INTO t VALUES (1);\nCOMMIT;\n", "BEGIN"],
+		["START TRANSACTION", "START TRANSACTION;\nINSERT INTO t VALUES (1);\n", "START TRANSACTION"],
+	])("refuses %s, whatever the file approves, as starting no transaction", (_, sql, control) => {
+		expect(() => rate(`${UNSAFE}${sql}`)).toThrow(
+			`Atlas runs this file in one transaction and records it there, so its own ${control} starts no transaction, as one is already open; to commit as you go, start the file with "-- atlas:txmode none" and a blank line`,
+		)
+	})
+
+	it.each([
 		["a bare COMMIT", "INSERT INTO t VALUES (1);\nCOMMIT;\nINSERT INTO t VALUES (2);\n", "COMMIT"],
 		["a ROLLBACK", "INSERT INTO t VALUES (1);\nROLLBACK;\n", "ROLLBACK"],
-		["START TRANSACTION", "START TRANSACTION;\nINSERT INTO t VALUES (1);\n", "START TRANSACTION"],
 		["END", "INSERT INTO t VALUES (1);\nEND;\n", "COMMIT"],
 		["ABORT", "INSERT INTO t VALUES (1);\nABORT;\n", "ROLLBACK"],
 		["COMMIT AND CHAIN", "INSERT INTO t VALUES (1);\nCOMMIT AND CHAIN;\n", "COMMIT"],

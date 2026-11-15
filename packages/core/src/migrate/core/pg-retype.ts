@@ -13,8 +13,10 @@
  * - an array of the same element type, with no modifier or the same one, of any dimensions.
  * A domain with a CHECK or NOT NULL up its chain checks every row, so a retype to it rewrites; one
  * with none is its flattened base. A column of a domain is its base with no modifier, as Postgres
- * reads a domain column's values. Every other retype rewrites the table and may change a value.
- * A retype in place still rebuilds every index on the column when its collation changes (a
+ * reads a domain column's values. A USING of the column itself is no USING, as Postgres reads it.
+ * Every other retype rewrites the table and may change a value.
+ * A retype in place still rebuilds each index that reads the column, as a key or INCLUDE column or
+ * in an expression or predicate, when its collation changes (a
  * domain's when it names none), when the type's default btree operator family changes
  * (text to bpchar, bit to varbit, int to oid), or when an array column changes its declared type.
  */
@@ -157,16 +159,55 @@ function retype(from: ColumnType, to: ColumnType, facts: Facts): "in place" | "r
 const REBUILDS =
 	"rebuilds every index on the column under an ACCESS EXCLUSIVE lock, as its collation, operator family or array type changes"
 
-/** An ALTER COLUMN … TYPE's findings, on the table `key` names in `facts` */
+/** Whether `tree` names the column `column` anywhere, as a ColumnRef's last field */
+const names = (tree: unknown, column: string): boolean =>
+	Array.isArray(tree)
+		? tree.some((each) => names(each, column))
+		: typeof tree === "object" &&
+			tree !== null &&
+			Object.entries(tree).some(([key, value]) =>
+				key === "ColumnRef" ? isColumn(value, column) : names(value, column),
+			)
+
+/** Whether a ColumnRef's fields end with the column `column` */
+const isColumn = (ref: unknown, column: string): boolean =>
+	((ref as Node)["fields"] as Array<{ String?: { sval: string } | undefined }>).at(-1)?.String?.sval === column
+
+/** `table` and every table under it, a partition or an inheritance child, which a retype recurses to */
+const under = (facts: Facts, table: string): string[] => [
+	table,
+	...[...facts.parents]
+		.filter(([, parents]) => parents.some((each) => each.parent === table))
+		.flatMap(([child]) => under(facts, child)),
+]
+
+/** Whether an index on `key` or a table under it reads `column`: as a key or INCLUDE column, in an expression or its predicate */
+function indexed(facts: Facts, key: string, column: string): boolean {
+	const tables = under(facts, key)
+	return [...facts.indexes.values()].some(
+		({ shape, table }) =>
+			tables.includes(table) &&
+			(shape.include.includes(column) ||
+				names(shape.where, column) ||
+				shape.elements.some((each) => each.name === column || names(each.expr, column))),
+	)
+}
+
+/** An ALTER COLUMN … TYPE's findings, on the table `key` names in `facts`; a USING of the column itself is no USING */
 function retypeFindings(cmd: Node, { facts, key }: { facts: Facts; key: string }): Finding[] {
 	const def = (cmd["def"] as Node)["ColumnDef"] as Node
-	const from = facts.columnTypes.get(key)?.get(String(cmd["name"]))
+	const column = String(cmd["name"])
+	const from = facts.columnTypes.get(key)?.get(column)
+	const using = def["raw_default"] as Node | undefined
 	const done =
-		from === undefined || def["raw_default"] !== undefined
+		from === undefined ||
+		(using !== undefined && !(using["ColumnRef"] !== undefined && isColumn(using["ColumnRef"], column)))
 			? "rewrites"
 			: retype(from, columnTypeOf(def, facts.schema), facts)
 	if (done === "rewrites") return [{ level: "unsafe" }, { level: "lock", note: REWRITES }]
-	return done === "rebuilds" ? [{ level: "unsafe" }, { level: "lock", note: REBUILDS }] : []
+	return done === "rebuilds" && indexed(facts, key, column)
+		? [{ level: "unsafe" }, { level: "lock", note: REBUILDS }]
+		: []
 }
 
 export { retypeFindings }

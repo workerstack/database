@@ -17,7 +17,7 @@ export type { FtsObject, FtsState } from "./core/fts-migration.ts";
 export type { ProviderDeps } from "./config.ts";
 export type { PgTarget } from "./core/atlas-target.ts";
 export type { BinPeer, MigrateRun, RunOptions, RunResult } from "./core/process.ts";
-export type { TursoCredentialsRequest, TursoDeps } from "./drivers/sqlite.ts";
+export type { TursoCredentialsRequest, TursoCreate, TursoDeps, TursoFetch, TursoRead, TursoResponse } from "./drivers/sqlite.ts";
 
 // migrate/config.d.ts
 import { type MigrateConfig, DEFAULT_PG_DEV_URL } from "./config-schema.ts";
@@ -309,10 +309,40 @@ export declare class DatabaseMissing extends Error {
 import type { ConnectionProvider, LibsqlProviderConfig, TursoProviderConfig } from "../types.ts";
 import { DatabaseMissing } from "./missing.ts";
 export { createBunSqliteProvider } from "./bun-sqlite.ts";
+/** The Platform API's answer, as far as the Turso calls read it */
+export type TursoResponse = {
+    /** the body parsed as JSON, read on a success */
+    json(): Promise<unknown>;
+    /** true for a 2xx status */
+    ok: boolean;
+    /** the HTTP status; a 404 says the database does not exist */
+    status: number;
+    /** the body as text, read on a failure for Turso's error message */
+    text(): Promise<string>;
+};
+/**
+ * A fetch as the Turso calls make them: typed here, not as `typeof fetch`, so a project that declares
+ * no fetch, with neither the DOM's nor a runtime's types, still reads these declarations
+ */
+export type TursoFetch = (url: string, init: TursoRead | TursoCreate) => Promise<TursoResponse>;
+/** A GET of a database or a token, which sends the API token alone */
+export type TursoRead = {
+    /** the Authorization header */
+    headers: Record<string, string>;
+};
+/** The POST that creates a missing database */
+export type TursoCreate = {
+    /** the database's name and group, as JSON */
+    body: string;
+    /** the Authorization header and the body's Content-Type */
+    headers: Record<string, string>;
+    /** always POST */
+    method: "POST";
+};
 /** How the Turso calls reach the API and report progress: injectable, quiet by default */
 export type TursoDeps = {
     /** what the Platform API calls go through; default: the global fetch */
-    fetch?: typeof fetch | undefined;
+    fetch?: TursoFetch | undefined;
     /** A progress line, such as the database being created; no output when omitted */
     log?: ((line: string) => void) | undefined;
 };
@@ -1411,11 +1441,14 @@ type Calls = {
 };
 /**
  * What Postgres held at a VALIDATE, read from pg_locks: each relation's lock, by key, with whether
- * reads wait too, and of each sequence among them, the tables another session sees that call it
+ * reads wait too, and of each sequence among them, the tables another session sees that call it.
+ * After a statement whose code database does not read, `validated` names, by key, each table a
+ * constraint of which that code validated, and the locks are those held as it ended
  */
 type Locked = {
     calls: ReadonlyMap<string, Calls>;
     locks: ReadonlyMap<string, boolean>;
+    validated?: readonly string[] | undefined;
 };
 export type { Calls, Locked };
 

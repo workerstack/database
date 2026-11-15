@@ -49,20 +49,24 @@ function blanked(sql: string): string {
 	return out
 }
 
-const VERB = /\b(?:insert|replace|update|delete|select)\b/i
+// per-process-constant: one CTE once blanked: its name (a quoted one is spaces), its column list and body spaces
+const CTE = "(?:[^\\s,]+\\s*)?as(?:\\s+not)?(?:\\s+materialized)?\\s*"
+// per-process-constant: a WITH clause's CTEs, read by their shape, so no CTE's name is taken for the verb; a word must follow
+const CTES = /* @__PURE__ */ new RegExp(`^with(?:\\s+recursive)?\\s+${CTE}(?:,\\s*${CTE})*(?=\\w)`, "i")
 
 /** `sql` from its main statement's verb on; `sql` itself, trimmed, when no verb is found */
 export function statementHead(sql: string): string {
 	const top = blanked(sql)
 	const start = top.search(/\S/)
 	if (start === -1) return ""
-	const verb = /^with\b/i.test(top.slice(start)) ? top.slice(start).search(VERB) : 0
-	return sql.slice(start + Math.max(verb, 0)).trim()
+	const ctes = /^with\b/i.test(top.slice(start)) ? CTES.exec(top.slice(start)) : undefined
+	if (ctes === null) return sql.slice(start).trim()
+	return sql.slice(start + (ctes?.[0].length ?? 0)).trim()
 }
 
 /* one part of a name: quoted whole, its doubled quotes standing for one, or bare. A string is a name
  * where SQLite takes one for it; Postgres's code reaches here with its strings blanked */
-const PART = "\"(?:[^\"]|\"\")+\"|`(?:[^`]|``)+`|'(?:[^']|'')+'|\\[[^\\]]+\\]|[^\\s(.\"`'\\[,=;*]+"
+const PART = '[uU]&"(?:[^"]|"")+"|"(?:[^"]|"")+"|`(?:[^`]|``)+`|\'(?:[^\']|\'\')+\'|\\[[^\\]]+\\]|[^\\s(."`\'\\[,=;*]+'
 // per-process-constant: one part, captured
 const ONE_PART = /* @__PURE__ */ new RegExp(PART, "g")
 // per-process-constant: a name, its schema parts before it, as a pattern
@@ -84,8 +88,15 @@ const STATEMENT_TABLE = {
 	sqlite: /* @__PURE__ */ statementTables(`\\s+(${NAME})`),
 }
 
+/** A Unicode-escaped name's text, each `\\XXXX`, `\\+XXXXXX` and `\\\\` read as Postgres reads it under the default escape */
+const unescaped = (text: string): string =>
+	text.replace(/\\(\\|\+[\da-f]{6}|[\da-f]{4})/gi, (_, code: string) =>
+		code === "\\" ? code : String.fromCodePoint(Number.parseInt(code.replace("+", ""), 16)),
+	)
+
 /** One name part as `dialect` resolves it: unquoted, and a bare one with its ASCII letters lowered on Postgres */
 function unquoted(part: string, dialect: "postgres" | "sqlite"): string {
+	if (/^u&"/i.test(part)) return unescaped(part.slice(3, -1).replaceAll('""', '"'))
 	if (part.startsWith('"')) return part.slice(1, -1).replaceAll('""', '"')
 	if (part.startsWith("`")) return part.slice(1, -1).replaceAll("``", "`")
 	if (part.startsWith("'")) return part.slice(1, -1).replaceAll("''", "'")
@@ -106,11 +117,11 @@ export function statementTable(
 ): { schema: string | undefined; table: string } | undefined {
 	/* SQLite's code keeps its strings, which name a table there */
 	const code = dialect === "sqlite" ? joined(query ?? "", dialect, true) : codeOf(query ?? "", dialect)
-	const name = STATEMENT_TABLE[dialect]
-		.exec(statementHead(code))
-		?.slice(1)
-		.find((group) => group !== undefined)
-	if (name === undefined) return undefined
+	const head = statementHead(code)
+	const match = STATEMENT_TABLE[dialect].exec(head)
+	const name = match?.slice(1).find((group) => group !== undefined)
+	/* the escape a UESCAPE names is a string, which Postgres's code here holds as a space */
+	if (name === undefined || /^\s*uescape\b/i.test(head.slice((match as RegExpExecArray)[0].length))) return undefined
 	const parts = (name.match(ONE_PART) as string[]).map((part) => unquoted(part, dialect))
 	return { schema: parts.at(-2), table: parts.at(-1) as string }
 }

@@ -239,3 +239,24 @@ describe("check's held warnings of a lock no CASE takes, measured on devUrl (Are
 		expect(heldOf(out, VALIDATE_T)).toEqual([])
 	})
 })
+
+/* PA9 of r23: a VALIDATE a DO block runs scans under each lock the file took before it, as a top-level one does */
+describe("check's held warnings of a VALIDATE inside a DO block, measured on devUrl", () => {
+	const ADD_U = "ALTER TABLE u ADD COLUMN z int;"
+
+	it.each([
+		["run as written", "DO $$BEGIN ALTER TABLE t VALIDATE CONSTRAINT c; END$$;"],
+		["run through EXECUTE", "DO $$BEGIN EXECUTE 'ALTER TABLE t VALIDATE CONSTRAINT c'; END$$;"],
+	])("warns of what the file held when a DO block's VALIDATE, %s, scanned", async (_, block) => {
+		const { out, refused } = await checked(NOT_VALID, `${ALLOW}${ADD_U}\n${block}\n`)
+		expect(refused).toBeUndefined()
+		expect(heldOf(out, block)).toEqual(warningOf({ table: "t", validate: block }, { u: "reads and writes" }))
+	})
+
+	it("adds no warning for a DO block that validates nothing", async () => {
+		const block = "DO $$BEGIN PERFORM 1; END$$;"
+		const { out, refused } = await checked(NOT_VALID, `${ALLOW}${ADD_U}\n${block}\n`)
+		expect(refused).toBeUndefined()
+		expect(heldOf(out, block)).toEqual([])
+	})
+})

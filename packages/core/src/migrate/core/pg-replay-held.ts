@@ -14,6 +14,7 @@
 import type { Calls, Locked } from "./pg-held-types.ts"
 import { flag, keyOf, type Node } from "./pg-nodes.ts"
 import type { Sql } from "./pg-replay-database.ts"
+import { runsHiddenCode } from "./pg-hidden-code.ts"
 import type { Replaying } from "./pg-replay-statement.ts"
 
 /** Whether a statement is an ALTER TABLE that validates a constraint, which scans every row */
@@ -158,22 +159,42 @@ async function heldNow(sql: Sql, before: ReadonlyMap<string, Owned>, schema: str
 	return { calls, locks: held }
 }
 
+/* the constraints not yet validated, by oid, of every table */
+const UNVALIDATED = "SELECT oid::int8::text AS oid FROM pg_constraint WHERE NOT convalidated AND conrelid <> 0"
+
+/* the schema and name of each table a constraint of which, of the oids a comma-separated list names, is now validated */
+const VALIDATED = `SELECT DISTINCT n.nspname AS schema, r.relname AS name
+FROM pg_constraint c JOIN pg_class r ON r.oid = c.conrelid JOIN pg_namespace n ON n.oid = r.relnamespace
+WHERE c.convalidated AND c.oid::int8::text = ANY (string_to_array($1, ','))`
+
+/** A statement of the file as the replay reads it: its type, its node, and its whole tree */
+type Read = { node: Node; tree: unknown; type: string }
+
+/** Whether the replay reads a transaction's locks for `statements`: at a VALIDATE, or one hidden code may run */
+const measures = (statements: readonly Read[]): boolean =>
+	statements.some(({ node, tree, type }) => validates(type, node) || runsHiddenCode(tree))
+
 /**
  * What the replay of `file` on `sql` reads of its transactions' locks for `held`: the relations as
- * each transaction begins, and what it holds at each VALIDATE in it; nothing without `held`
+ * each transaction begins, what it holds at each VALIDATE in it, and after a statement whose hidden
+ * code validated a constraint, what it holds then; nothing without `held`
  */
 function lockReader(
 	sql: Sql,
 	file: string,
-	held: Replaying["held"],
+	{ held, statements }: { held: Replaying["held"]; statements: readonly Read[] },
 ): {
 	began(): Promise<void>
 	moved(node: Node, open: boolean): Promise<void>
-	next(index: number, type: string, node: Node): Promise<void>
+	next(index: number): Promise<void>
+	ran(index: number): Promise<void>
 } {
+	const reading = measures(statements) ? held : undefined
 	let before: Map<string, Owned> | undefined
+	/* the constraints not yet validated as a statement with hidden code began, until it ran */
+	let unvalidated: string[] | undefined
 	const began = async (): Promise<void> => {
-		if (held !== undefined) before = await heldBefore(sql, held.schema)
+		if (reading !== undefined) before = await heldBefore(sql, reading.schema)
 	}
 	return {
 		/** a transaction of the file begins */
@@ -183,10 +204,22 @@ function lockReader(
 			if (!open) before = undefined
 			else if (opens(node)) await began()
 		},
-		/** the `index`th statement, of type `type`, is about to run */
-		async next(index: number, type: string, node: Node): Promise<void> {
-			if (held !== undefined && before !== undefined && validates(type, node))
-				held.at(file, index, await heldNow(sql, before, held.schema))
+		/** the `index`th statement is about to run */
+		async next(index: number): Promise<void> {
+			const { node, tree, type } = statements[index] as Read
+			if (reading === undefined || before === undefined) return
+			if (validates(type, node)) reading.at(file, index, await heldNow(sql, before, reading.schema))
+			else if (runsHiddenCode(tree)) unvalidated = (await sql.unsafe(UNVALIDATED, [])).map((row) => String(row["oid"]))
+		},
+		/** the `index`th statement ran */
+		async ran(index: number): Promise<void> {
+			const oids = unvalidated
+			unvalidated = undefined
+			if (reading === undefined || before === undefined || oids === undefined || oids.length === 0) return
+			const rows = await sql.unsafe(VALIDATED, [oids.join(",")])
+			if (rows.length === 0) return
+			const validated = rows.map((row) => keyOf([String(row["schema"]), String(row["name"])], reading.schema))
+			reading.at(file, index, { ...(await heldNow(sql, before, reading.schema)), validated: validated.toSorted() })
 		},
 	}
 }

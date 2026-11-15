@@ -98,7 +98,8 @@ describe("a retype on either side of an array", () => {
 
 /* r18 P3: a retype sets the column's collation, its type's default when it names none, and a change rebuilds its indexes */
 describe("a widening retype and the column's collation", () => {
-	const COLLATED = 'CREATE TABLE c (plain varchar(10), coded varchar(10) COLLATE "C");'
+	const COLLATED =
+		'CREATE TABLE c (plain varchar(10), coded varchar(10) COLLATE "C"); CREATE INDEX ON c (plain, coded);'
 	it.each([
 		'ALTER TABLE c ALTER COLUMN plain TYPE text COLLATE "C";',
 		'ALTER TABLE c ALTER COLUMN plain TYPE varchar(20) COLLATE "en-x-icu";',
@@ -122,9 +123,18 @@ describe("a widening retype and the column's collation", () => {
 
 	/* PA18 of r22b: Postgres keeps a text column's values and rebuilds its indexes; sibling: the varchar widening above */
 	it.each([
-		["CREATE TABLE c (email text);", 'ALTER TABLE c ALTER COLUMN email TYPE text COLLATE "C";'],
-		['CREATE TABLE c (email text COLLATE "C");', "ALTER TABLE c ALTER COLUMN email TYPE text;"],
-		["CREATE TABLE c (code varchar(10));", 'ALTER TABLE c ALTER COLUMN code TYPE varchar(10) COLLATE "C";'],
+		[
+			"CREATE TABLE c (email text); CREATE INDEX ON c (email);",
+			'ALTER TABLE c ALTER COLUMN email TYPE text COLLATE "C";',
+		],
+		[
+			'CREATE TABLE c (email text COLLATE "C"); CREATE INDEX ON c (email);',
+			"ALTER TABLE c ALTER COLUMN email TYPE text;",
+		],
+		[
+			"CREATE TABLE c (code varchar(10)); CREATE INDEX ON c (code);",
+			'ALTER TABLE c ALTER COLUMN code TYPE varchar(10) COLLATE "C";',
+		],
 	])(
 		"rates a change of collation alone, %j then %j, as one that rebuilds the indexes, not a rewrite",
 		(made, later) => {
@@ -147,7 +157,7 @@ const MORE = [
 	"CREATE DOMAIN short AS varchar(10); CREATE DOMAIN arr AS int[];",
 	"CREATE TABLE m (i int, ch char(5), x xml, net cidr, ts TIMESTAMP(3), t0 TIMESTAMP(0), tm time(2), ivd interval day,",
 	"iv interval(2), ivf interval, d plain, s short, a int[], da arr, ib int);",
-	"CREATE INDEX ON m (ib);",
+	"CREATE INDEX ON m (ib); CREATE INDEX ON m (a); CREATE INDEX ON m (da); CREATE INDEX ON t (body);",
 ].join(" ")
 
 describe("a retype by a coercion that changes no value", () => {
@@ -211,17 +221,76 @@ describe("a retype by a coercion that rebuilds the column's indexes", () => {
 	it.each([
 		[
 			"a domain renamed",
-			"ALTER TABLE m ADD COLUMN pa plain[]; CREATE DOMAIN plains AS plain[]; ALTER DOMAIN plain RENAME TO whole;",
+			"ALTER TABLE m ADD COLUMN pa plain[]; CREATE INDEX ON m (pa); CREATE DOMAIN plains AS plain[]; ALTER DOMAIN plain RENAME TO whole;",
 			"plains",
 		],
 		[
 			"its schema renamed",
-			"CREATE SCHEMA k; CREATE DOMAIN k.e AS int; CREATE DOMAIN k.es AS k.e[]; ALTER TABLE m ADD COLUMN pa k.e[]; ALTER SCHEMA k RENAME TO j;",
+			"CREATE SCHEMA k; CREATE DOMAIN k.e AS int; CREATE DOMAIN k.es AS k.e[]; ALTER TABLE m ADD COLUMN pa k.e[]; CREATE INDEX ON m (pa); ALTER SCHEMA k RENAME TO j;",
 			"j.es",
 		],
 	])("follows an array domain's element through %s", (_, more, type) => {
 		const history = `${MORE} ${more}`
 		const rated = rate(`ALTER TABLE m ALTER COLUMN pa TYPE ${type};`, history)
 		expect(rated.lockWarnings.join("\n")).toContain("rebuilds every index on the column")
+	})
+})
+
+/* PA16 of r23: Postgres rebuilds only the indexes that read the column, and reads USING the column itself as no USING */
+describe("a retype in place and the indexes that read the column", () => {
+	const TABLE = "CREATE TABLE r (email text, other text, b bit(4), i int);"
+	const REBUILD = "rebuilds every index on the column"
+
+	it.each(['ALTER TABLE r ALTER COLUMN email TYPE text COLLATE "C";', "ALTER TABLE r ALTER COLUMN b TYPE varbit;"])(
+		"rates %j safe, with no lock warning, when no index reads the column",
+		(later) => {
+			const rated = rate(later, `${TABLE} CREATE INDEX ON r (other);`)
+			expect([rated.safety, rated.lockWarnings]).toEqual(["safe", []])
+		},
+	)
+
+	it.each([
+		["a key column", "CREATE INDEX ON r (email);"],
+		["an expression", "CREATE INDEX ON r (lower(email));"],
+		["an INCLUDE column", "CREATE INDEX ON r (other) INCLUDE (email);"],
+		["a predicate", "CREATE INDEX ON r (other) WHERE email <> '';"],
+		["a UNIQUE constraint", "ALTER TABLE r ADD UNIQUE (email);"],
+		["a column renamed after its index", "CREATE INDEX ON r (mail); ALTER TABLE r RENAME COLUMN mail TO email;"],
+	])("still warns of the rebuild when %s reads the column", (_, index) => {
+		const table = index.includes("RENAME") ? TABLE.replace("email", "mail") : TABLE
+		const rated = rate('ALTER TABLE r ALTER COLUMN email TYPE text COLLATE "C";', `${table} ${index}`)
+		expect(rated.safety).toBe("unsafe")
+		expect(rated.lockWarnings).toEqual([expect.stringContaining(REBUILD)])
+	})
+
+	it.each([
+		[
+			"a partition",
+			"CREATE TABLE r (k int, email text) PARTITION BY LIST (k); CREATE TABLE r1 PARTITION OF r DEFAULT;",
+		],
+		["an inheritance child", "CREATE TABLE r (k int, email text); CREATE TABLE r1 () INHERITS (r);"],
+	])("still warns of the rebuild when an index of %s reads the column", (_, tables) => {
+		const rated = rate(
+			'ALTER TABLE r ALTER COLUMN email TYPE text COLLATE "C";',
+			`${tables} CREATE INDEX ON r1 (email);`,
+		)
+		expect(rated.lockWarnings).toEqual([expect.stringContaining(REBUILD)])
+		expect(rate('ALTER TABLE r ALTER COLUMN email TYPE text COLLATE "C";', tables).lockWarnings).toEqual([])
+	})
+
+	it.each([
+		"ALTER TABLE r ALTER COLUMN i TYPE int USING i;",
+		"ALTER TABLE r ALTER COLUMN i TYPE integer USING (i);",
+		'ALTER TABLE r ALTER COLUMN i TYPE int4 USING "i";',
+		"ALTER TABLE r ALTER COLUMN other TYPE varchar USING r.other;",
+	])("rates %j safe, as the retype in place with no USING is", (later) => {
+		const rated = rate(later, TABLE)
+		expect([rated.safety, rated.lockWarnings]).toEqual(["safe", []])
+	})
+
+	it("still rates a USING that computes the value as a rewrite", () => {
+		const rated = rate("ALTER TABLE r ALTER COLUMN i TYPE int USING i + 0;", TABLE)
+		expect(rated.safety).toBe("unsafe")
+		expect(rated.lockWarnings.join(" ")).toContain("rewrites or scans the table under an exclusive lock")
 	})
 })

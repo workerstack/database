@@ -19,6 +19,7 @@ import { followNames } from "./pg-names.ts"
 import { followIdentity, followSequence, owned } from "./pg-owned.ts"
 import { followForeign } from "./pg-foreign.ts"
 import { followIndexes } from "./pg-indexes.ts"
+import { dropColumn, noInherit } from "./pg-inherit.ts"
 import { followPartitioned } from "./pg-partitioned.ts"
 import { followTaken } from "./pg-taken.ts"
 import { followRoutine } from "./pg-routines.ts"
@@ -145,10 +146,10 @@ function followAlter(node: Node, facts: Facts): void {
 			])
 		} else if (TRIGGER_STATES[String(cmd["subtype"])] !== undefined) followTriggerState(table, cmd, facts)
 		else if (cmd["subtype"] === "AT_AddColumn") followColumn(table, def["ColumnDef"] as Node, facts)
-		else if (cmd["subtype"] === "AT_DropColumn") {
-			facts.tables.get(table)?.delete(String(cmd["name"]))
-			facts.columnTypes.get(table)?.delete(String(cmd["name"]))
-		} else if (cmd["subtype"] === "AT_AlterColumnType") {
+		else if (cmd["subtype"] === "AT_DropColumn")
+			dropColumn(facts, table, { column: String(cmd["name"]), recurse: flag((node["relation"] as Node)["inh"]) })
+		else if (cmd["subtype"] === "AT_DropInherit") noInherit(facts, table, tableOf(def["RangeVar"], facts.schema).key)
+		else if (cmd["subtype"] === "AT_AlterColumnType") {
 			/* a column retyped to a domain runs the domain's CHECK on every later write */
 			followType(table, { def: { ...(def["ColumnDef"] as Node), colname: cmd["name"] } }, facts)
 		} else if (!followIdentity(table, cmd, facts)) {

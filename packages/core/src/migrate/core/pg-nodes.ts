@@ -254,8 +254,16 @@ function columnTypeOf(def: Node, schema: string): ColumnType {
 	}
 }
 
+/** Each constraint name pg_constraint holds outside the indexes: foreign keys', CHECKs', constraint triggers' and domains', each by its owner */
+function* constraintNames(facts: Facts): Generator<[string, string]> {
+	for (const fk of facts.foreignKeys) yield [fk.table, fk.name]
+	for (const [table, held] of facts.constraintNames) for (const name of held) yield [table, name]
+	for (const [domain, { constraints }] of facts.domains) for (const name of constraints.keys()) yield [domain, name]
+}
+
 export {
 	columnTypeOf,
+	constraintNames,
 	type ColumnType,
 	type Domain,
 	emptyFacts,

@@ -164,6 +164,16 @@ describe("a question once the terminal's input ended or failed", () => {
 		expect(await (await answering(["y\n"], { after: "end", questions: 3 })).answers).toEqual([true, false, false])
 	})
 
+	/* KC7 of r23: Ctrl-D left the cursor after the question, so the refusal that followed began on its line */
+	it("ends the question's line when no answer comes, so what follows starts on its own", async () => {
+		const { answers, written } = await answering(["y"], { after: "end" })
+		expect(await answers).toEqual([false])
+		expect(written).toEqual(["Q1? (y/N) ", "\n"])
+		const broke = await answering([], { after: new Error("input broke") })
+		await broke.answers
+		expect(broke.written).toEqual(["Q1? (y/N) ", "\n"])
+	})
+
 	it("rejects with the input's error, on this question and every one after", async () => {
 		const broke = new Error("input broke")
 		expect(await (await answering([], { after: broke, questions: 2 })).answers).toEqual([broke, broke])

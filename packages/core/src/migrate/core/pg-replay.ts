@@ -50,19 +50,19 @@ import { asTarget } from "./pg-live-catalog.ts"
 import { outsideTransaction } from "./atlas-header.ts"
 import { type Connect, failureOf, loadPostgres, readCatalog } from "./pg-live-objects.ts"
 import type { LiveObjects } from "./pg-live-types.ts"
-import { beyondDatabase, blockAfter, insideOnly, nodeOf } from "./pg-outside-transaction.ts"
+import { insideOnly } from "./pg-inside-transaction.ts"
+import { beyondDatabase, blockAfter } from "./pg-outside-transaction.ts"
 import { claim, copyExtensions, extensionsOf, makeDatabase, replayOptions, type Sql } from "./pg-replay-database.ts"
 import { cleanUp, leaving, sweep } from "./pg-replay-drops.ts"
 import { localeClause, targetLocale } from "./pg-replay-locale.ts"
 import { runsOnMade } from "./pg-replay-made.ts"
 import { devRoleOf, type Run } from "./pg-replay-roles.ts"
-import { type Refuse, type Replay, type Replaying, runStatement } from "./pg-replay-statement.ts"
+import { type Refuse, type Replay, type Replaying, runStatement, statementsOf } from "./pg-replay-statement.ts"
 import { leaveOutTablespace } from "./pg-replay-tablespaces.ts"
 import { begin, commit, guarded, window } from "./pg-replay-commit.ts"
-import { lockReader, validates } from "./pg-replay-held.ts"
+import { lockReader } from "./pg-replay-held.ts"
 import { prepareSnapshot, snapshot } from "./pg-server-snapshot.ts"
 import { refuseUncounted } from "./pg-server-writes.ts"
-import { pgRead } from "./pg-split.ts"
 import { namesIn } from "./sql-code.ts"
 import { nothingHidden, readStatement } from "./pg-replay-hidden.ts"
 
@@ -86,7 +86,8 @@ const REPLAYS = "replay the history on devUrl, and read what it leaves, in a bas
  * it only so; the file's own BEGIN, COMMIT and SAVEPOINT, a LOCK and a cursor not held, and all its
  * own block runs, bare, as Atlas sends them, so Postgres refuses outside a block what apply's refuses.
  * When the replay is `held` to, what a transaction of the file holds is read before each VALIDATE
- * in it (pg-replay-held.ts), from the relations there when the transaction began
+ * in it, and after a statement whose hidden code validated a constraint (pg-replay-held.ts), from
+ * the relations there when the transaction began
  */
 async function replayFile(run: Run, { name, sql: text }: HistoryFile, replay: Replaying) {
 	const inFile = !outsideTransaction(text)
@@ -97,16 +98,8 @@ async function replayFile(run: Run, { name, sql: text }: HistoryFile, replay: Re
 		names: namesIn(text),
 		stops: replay.stops,
 	}
-	const statements = pgRead(text).statements.map(({ sent, tree }) => ({
-		sent,
-		tree,
-		...(tree === undefined ? { node: {}, type: "" } : (([type, node]) => ({ node, type }))(nodeOf(tree))),
-	}))
-	const locks = lockReader(
-		run.sql,
-		name,
-		statements.some(({ node, type }) => validates(type, node)) ? replay.held : undefined,
-	)
+	const statements = statementsOf(text)
+	const locks = lockReader(run.sql, name, { held: replay.held, statements })
 	let block = false
 	if (inFile) {
 		await begin(run)
@@ -120,7 +113,7 @@ async function replayFile(run: Run, { name, sql: text }: HistoryFile, replay: Re
 			continue
 		}
 		readStatement(tree, file.hidden)
-		await locks.next(index, type, node)
+		await locks.next(index)
 		const send = () => runStatement(run, { name, node, sent, type }, replay)
 		if (inFile) await send()
 		else if (block || type === "TransactionStmt" || insideOnly(type, node) !== undefined) {
@@ -129,6 +122,7 @@ async function replayFile(run: Run, { name, sql: text }: HistoryFile, replay: Re
 			if (type === "TransactionStmt") await locks.moved(node, block)
 			await window(run, { ...file, sent })
 		} else await guarded(run, { ...file, sent }, { send, type })
+		await locks.ran(index)
 	}
 	if (inFile) await commit(run, { ...file, sent: undefined })
 }

@@ -63,8 +63,8 @@ export const ALL_TYPES = `${SUBPATHS.map((spec, i) => `import type * as m${i} fr
 export type All = [${SUBPATHS.map((_, i) => `typeof m${i}`).join(", ")}]
 `
 
-/* the subpaths a Worker imports at runtime: all but the tooling, which runs under Node */
-const RUNTIME = SUBPATHS.filter(
+/** The subpaths a Worker imports at runtime: all but the tooling, which runs under Node */
+export const RUNTIME: string[] = SUBPATHS.filter(
 	(spec) => !/^@workerstack\/database\/(?:cli|codegen|migrate|package\.json)(?:\/|$)/.test(spec),
 )
 
