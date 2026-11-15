@@ -8,8 +8,7 @@
  */
 import pg from "pg"
 import postgres from "postgres"
-import { afterEach, beforeEach, onTestFinished } from "vitest"
-import { getCurrentTest } from "vitest/suite"
+import { afterEach, beforeEach, onTestFinished, TestRunner } from "vitest"
 import { scratchName } from "./scratch-sweep.ts"
 import { pgUrl } from "../../support/pg-url.ts"
 
@@ -65,7 +64,7 @@ export async function withScratchDb<T>(run: (url: string) => Promise<T> | T, opt
 		if (made) await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`)
 	}
 	const release = () => (released ??= drop().finally(() => admin.end()))
-	if (getCurrentTest() !== undefined) onTestFinished(release)
+	if (TestRunner.getCurrentTest() !== undefined) onTestFinished(release)
 	try {
 		await admin.connect()
 		await admin.query(`CREATE DATABASE ${name}${options === undefined ? "" : ` ${options}`}`)

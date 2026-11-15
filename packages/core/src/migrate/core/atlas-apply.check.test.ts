@@ -34,6 +34,7 @@ function options(exec: MigrateRun, more: Partial<ApplyOptions> = {}): ApplyOptio
 		print: () => undefined,
 		replayPending: async (_, { files }) => {
 			replayed.push(files.map((each) => each.name))
+			return undefined
 		},
 		replayed,
 		sweepDev: async () => undefined,
