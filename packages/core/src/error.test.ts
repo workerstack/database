@@ -97,9 +97,18 @@ describe("DatabaseError's JSON body", () => {
 		expect(Object.keys({ ...err })).toEqual(["column", "errorKey", "status", "statusKey", "table"])
 	})
 
-	it("leaves out a column and table it was not given", () => {
-		const err = new DatabaseError({ cause: "Not yours", errorKey: "post_locked", status: "forbidden" })
+	it("leaves out a cause, column and table it was not given", () => {
+		const err = new DatabaseError({ errorKey: "post_locked", status: "forbidden" })
 		expect(err.toJSON()).toEqual({ errorKey: "post_locked", status: 403, statusKey: "forbidden" })
 		expect(JSON.stringify(err)).toBe('{"errorKey":"post_locked","status":403,"statusKey":"forbidden"}')
+	})
+
+	/* KT1 of r23: cause is the message safe to show the client, so the body a client gets carries it */
+	it("carries the cause it was given, the message safe to show the client", () => {
+		const err = new DatabaseError({ cause: "Not yours", errorKey: "post_locked", status: "forbidden" })
+		expect(err.toJSON()).toEqual({ cause: "Not yours", errorKey: "post_locked", status: 403, statusKey: "forbidden" })
+		expect(JSON.stringify(err)).toBe(
+			'{"cause":"Not yours","errorKey":"post_locked","status":403,"statusKey":"forbidden"}',
+		)
 	})
 })

@@ -114,3 +114,40 @@ describe("the proof's copy on bun:sqlite reads a statement's end as SQLite does 
 		}
 	})
 })
+
+/* SL1 of r23: a view, a trigger's body or a DEFAULT the file makes is compiled on bun:sqlite's copy too */
+describe("provePending on bun:sqlite refuses a file that makes a view, trigger or DEFAULT unable to run (SL1 of r23)", () => {
+	/** The proof of `file` over a bun:sqlite database holding `CREATE TABLE t (v INTEGER)` */
+	async function proveOverT(file: string): Promise<unknown> {
+		const conn = await createBunSqliteProvider({ path: ":memory:", type: "bun-sqlite" }).connect(DB)
+		await conn.batch([{ sql: "CREATE TABLE t (v INTEGER)" }])
+		try {
+			return await provePending(conn, [{ name: "2_file.sql", sql: file }])
+		} finally {
+			await conn.close()
+		}
+	}
+
+	it.each([
+		["CREATE VIEW vw AS SELECT nope FROM t;", "view vw cannot be read: no such column: nope"],
+		[
+			"CREATE TRIGGER tr AFTER INSERT ON t BEGIN INSERT INTO audit VALUES (new.v); END;",
+			"every INSERT on t fails, as a trigger it fires cannot compile: no such table: main.audit",
+		],
+		[
+			"CREATE TABLE n (id INTEGER PRIMARY KEY, v TEXT DEFAULT (lowr('A')));",
+			"an insert into n that leaves a column to its default cannot compile: unknown function: lowr()",
+		],
+	])("refuses %s, naming it and SQLite's error", async (file, refused) => {
+		await expect(proveOverT(file)).rejects.toThrow(
+			`2_file.sql: after this file, ${refused}; drop or change it in this file, or keep what it uses`,
+		)
+	})
+
+	it("proves a new view that compiles and a new FTS5 table clean", async () => {
+		const proofs = (await proveOverT(
+			"CREATE VIEW good AS SELECT v FROM t;\nCREATE VIRTUAL TABLE doc USING fts5(body);",
+		)) as Map<string, { failed?: unknown }>
+		expect(proofs.get("2_file.sql")?.failed).toBeUndefined()
+	})
+})

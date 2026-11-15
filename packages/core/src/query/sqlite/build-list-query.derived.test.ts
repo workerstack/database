@@ -272,4 +272,30 @@ describe("buildDerivedListQuery holds idColumn to the schema's tiebreak (AB6 of 
 		const { tiebreak: _, ...unstated } = parseKeyed()
 		expect(() => buildKeyed(unstated as ReturnType<typeof parseKeyed>, keyed.uid)).not.toThrow()
 	})
+
+	/* QL4 of r23: the schema's tiebreak is a property key, as buildListQuery reads it, not the column's SQL name */
+	const renamed = sqliteTable("renamed", { id: text("post_id").primaryKey(), title: text("title") })
+	const buildRenamed = (query: ReturnType<typeof parseKeyed>) =>
+		buildDerivedListQuery({ ...SEALED, idColumn: renamed.id, parsed: query, sortColumns: { title: renamed.title } })
+
+	it("builds an idColumn whose property key the tiebreak names, though its SQL name differs, and breaks ties on it", () => {
+		const built = compile(buildRenamed(parseKeyed()).orderBy.at(-1) as SQL)
+		expect(built.sql).toBe('"renamed"."post_id" ASC NULLS LAST')
+		expect(() =>
+			buildDerivedListQuery({
+				...SEALED,
+				anchor: { idColumn: renamed.id, table: renamed },
+				parsed: parseKeyed(),
+				sortColumns: { title: renamed.title },
+			}),
+		).not.toThrow()
+	})
+
+	it("refuses a tiebreak that names the SQL name rather than the key, naming the key", () => {
+		expect(() => buildRenamed(parseKeyed("post_id"))).toThrow(
+			new TypeError(
+				`buildDerivedListQuery: idColumn "id" is not the column the list schema breaks ties on, "post_id": set the schema's tiebreak to "id"`,
+			),
+		)
+	})
 })

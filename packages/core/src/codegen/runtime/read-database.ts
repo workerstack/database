@@ -167,25 +167,67 @@ const heldBy = (entry: unknown): unknown[] => {
 	return [entry]
 }
 
+/** What JSON stores a part of each kind as, where that is no value of the kind: a document holding one fails every read */
+const UNSTORED: Readonly<Record<string, string>> = {
+	// lookup-table: a zod kind's def.type, and what JSON makes of its output
+	bigint: "JSON cannot store a BigInt: store its digits as a string",
+	date: "JSON stores a Date as a string, which the read DTO refuses: store an ISO string, z.iso.datetime()",
+	file: "JSON cannot store a File: store its URL or key as a string",
+	function: "JSON cannot store a function",
+	map: "JSON stores a Map as {}, losing its entries: store a z.record()",
+	nan: "JSON stores NaN as null, which the read DTO refuses",
+	promise: "JSON cannot store a Promise",
+	set: "JSON stores a Set as {}, losing its members: store a z.array()",
+	symbol: "JSON cannot store a Symbol",
+}
+
+const TRANSFORMED =
+	"its transform's output is what gets stored, and the read DTO could not parse it. Move the transform to the request body's schema."
+const IN_ARRAY = "JSON stores undefined in an array as null, which the read DTO refuses: make the element .nullable()"
+const IN_FIELD =
+	"JSON leaves out a key whose value is undefined, which the read DTO refuses: make the field .optional()"
+
+/** Where a part sits: an array's element, which JSON writes as null when undefined, or an object's field, which it leaves out */
+type Slot = "element" | "field" | undefined
+
+/** Whether `node`, in an array, outputs undefined where JSON writes null and the part refuses null */
+function nullInArray(node: unknown): boolean {
+	const schema = node as { safeParse(value: unknown): { data?: unknown; success: boolean } }
+	const left = schema.safeParse(undefined)
+	return left.success && left.data === undefined && !schema.safeParse(null).success
+}
+
+/** The parts `def` holds, each with its slot */
+function partsOf(def: ZodNode["def"]): Array<[unknown, Slot]> {
+	if (def.type === "array") return [[def["element"], "element"]]
+	if (def.type === "tuple") return [...heldBy(def["items"]), ...heldBy(def["rest"])].map((part) => [part, "element"])
+	if (def.type === "object") return heldBy(def["shape"]).map((part) => [part, "field"])
+	/* a lazy holds its schema behind a function, called once, as a recursive schema meets itself again */
+	const lazy = def.type === "lazy" ? [(def as unknown as { getter: () => unknown }).getter()] : []
+	return [...lazy, ...Object.values(def).flatMap(heldBy)].map((part) => [part, undefined])
+}
+
 /**
- * Whether `schema` holds, anywhere in it, a part whose output is another value than its input: a
- * transform, a pipe, which `.transform()`, `z.preprocess()` and a codec each build. An overwrite
- * (`.trim()`, `.toLowerCase()`), a default and a coerce hand on what the same part parses again
+ * Why JSON does not store `schema`'s output as itself, or undefined: a part whose output is another value
+ * than its input (a transform, a pipe, which `.transform()`, `z.preprocess()` and a codec each build), a
+ * kind JSON stores as another value or not at all, or undefined where JSON writes null or leaves the key
+ * out. An overwrite (`.trim()`, `.toLowerCase()`), a default and a coerce to a JSON value parse again
  */
-function changesValue(schema: unknown): boolean {
+function unstoredBy(schema: unknown): string | undefined {
 	const seen = new Set<unknown>()
-	const pending = [schema]
+	const pending: Array<[unknown, Slot]> = [[schema, undefined]]
 	while (pending.length > 0) {
-		const node = pending.pop()
+		const [node, slot] = pending.pop() as [unknown, Slot]
 		if (!isZodNode(node) || seen.has(node)) continue
 		seen.add(node)
 		const { def } = node
-		if (def.type === "pipe" || def.type === "transform") return true
-		/* a lazy holds its schema behind a function, called once, as a recursive schema meets itself again */
-		if (def.type === "lazy") pending.push((def as unknown as { getter: () => unknown }).getter())
-		for (const entry of Object.values(def)) pending.push(...heldBy(entry))
+		if (def.type === "pipe" || def.type === "transform") return TRANSFORMED
+		if (Object.hasOwn(UNSTORED, def.type)) return UNSTORED[def.type]
+		if (slot === "element" && nullInArray(node)) return IN_ARRAY
+		if (slot === "field" && (def.type === "undefined" || def.type === "void")) return IN_FIELD
+		pending.push(...partsOf(def))
 	}
-	return false
+	return undefined
 }
 
 /**
@@ -202,9 +244,10 @@ function refuseJsonDocument(
 	at: string,
 	{ filled, notNull }: { filled: boolean; notNull: boolean },
 ): void {
-	if (changesValue(schema))
+	const unstored = unstoredBy(schema)
+	if (unstored !== undefined)
 		throw new Error(
-			`${at}: a c.json schema is the stored document; its transform's output is what gets stored, and the read DTO could not parse it. Move the transform to the request body's schema.`,
+			`${at}: a c.json schema is the stored document${unstored === TRANSFORMED ? ";" : ", and"} ${unstored}`,
 		)
 	const takes = (value: unknown) =>
 		(schema as { safeParse(value: unknown): { success: boolean } }).safeParse(value).success

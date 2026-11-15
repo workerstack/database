@@ -174,6 +174,8 @@ export declare class DatabaseError extends Error {
     });
     /** The body a client gets: the documented fields alone, however the engine enumerates them */
     toJSON(): {
+        /** The message safe to show the client, left out when unset */
+        cause?: string | undefined;
         /** The column, left out when unset */
         column?: string | undefined;
         /** What went wrong, as the stable key a client branches on */

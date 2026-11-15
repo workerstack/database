@@ -63,7 +63,6 @@ function kindOf(value: unknown): string {
 	if (value instanceof Date) return "a time"
 	if (value instanceof Uint8Array) return "bytes"
 	const kind = typeof value
-	if (kind === "bigint") return "an integer past 20 digits"
 	if (kind === "number") return "a number that is not finite"
 	return kind === "object" ? "an object" : `a ${kind}`
 }

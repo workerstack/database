@@ -37,9 +37,10 @@ export default defineConfig({
 })
 `
 
-const PG_MIGRATE_CONFIG = `import { defineConfig } from "@workerstack/database/migrate"
+/* the type alone, which erases, so the config loads where database does not resolve, as in a compiled executable */
+const PG_MIGRATE_CONFIG = `import type { MigrateConfig } from "@workerstack/database/migrate"
 
-export default defineConfig({
+export default {
 	databases: {
 		core: {
 			drizzleConfigPath: "./drizzle.config.ts",
@@ -52,7 +53,7 @@ export default defineConfig({
 			},
 		},
 	},
-})
+} satisfies MigrateConfig
 `
 
 /**

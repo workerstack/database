@@ -29,6 +29,13 @@ const REFUSED: Array<[kind: string, schema: string]> = [
 	["a transform behind z.lazy", "z.object({ inner: z.lazy(() => z.string().transform((text) => text.length)) })"],
 ]
 
+/* CD2 of r23: parts JSON stores as another value, or not at all, each refused with what JSON makes of it */
+const UNSTORED: Array<[kind: string, schema: string, stores: string]> = [
+	["a Date", "z.object({ at: z.date() })", "JSON stores a Date as a string"],
+	["a BigInt", "z.object({ n: z.bigint() })", "JSON cannot store a BigInt"],
+	["undefined in a tuple", "z.tuple([z.string(), z.undefined()])", "JSON stores undefined in an array as null"],
+]
+
 /* insert into libsql's in-memory SQLite, and select it back */
 const store: Store = async (tables, value) => {
 	const { client, close } = libsqlMemory()
@@ -54,6 +61,13 @@ describe("a c.json schema is the stored document (CD2, CD3; sibling: r19 C5's NO
 			const name = `cd2-${dialect}-${REFUSED.findIndex(([each]) => each === kind)}`
 			await expect(generatedDtos(name, table(dialect, schema), { dialect })).rejects.toThrow(
 				"row.doc: a c.json schema is the stored document; its transform's output is what gets stored, and the read DTO could not parse it. Move the transform to the request body's schema.",
+			)
+		})
+
+		it.each(UNSTORED)("refuses %s at codegen, naming the column and what JSON stores", async (kind, schema, stores) => {
+			const name = `cd2-r23-${dialect}-${UNSTORED.findIndex(([each]) => each === kind)}`
+			await expect(generatedDtos(name, table(dialect, schema), { dialect })).rejects.toThrow(
+				`row.doc: a c.json schema is the stored document, and ${stores}`,
 			)
 		})
 

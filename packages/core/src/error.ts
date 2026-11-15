@@ -58,6 +58,8 @@ export class DatabaseError extends Error {
 
 	/** The body a client gets: the documented fields alone, however the engine enumerates them */
 	toJSON(): {
+		/** The message safe to show the client, left out when unset */
+		cause?: string | undefined
 		/** The column, left out when unset */
 		column?: string | undefined
 		/** What went wrong, as the stable key a client branches on */
@@ -69,8 +71,9 @@ export class DatabaseError extends Error {
 		/** The table, left out when unset */
 		table?: string | undefined
 	} {
-		const { column, errorKey, status, statusKey, table } = this
+		const { cause, column, errorKey, status, statusKey, table } = this
 		return {
+			...(cause !== undefined && { cause }),
 			...(column !== undefined && { column }),
 			errorKey,
 			status,

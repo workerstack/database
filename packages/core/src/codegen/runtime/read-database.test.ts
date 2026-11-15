@@ -77,6 +77,43 @@ describe("statesOf", () => {
 /* CD2, CD3 of r22b: a c.json schema is the stored document */
 /* a NOT NULL column no default fills */
 const NOT_NULL = { filled: false, notNull: true }
+const NULLABLE = { filled: false, notNull: false }
+
+/* CD2 of r23: JSON stores the document, so a part JSON stores as another value fails every read of the row */
+describe("refuseJsonDocument: a part JSON does not store as itself", () => {
+	it.each([
+		["a Date", z.object({ at: z.date() }), "JSON stores a Date as a string"],
+		["a coerced Date", z.object({ at: z.coerce.date() }), "JSON stores a Date as a string"],
+		["a Map", z.map(z.string(), z.number()), "JSON stores a Map as {}"],
+		["a Set", z.object({ tags: z.set(z.string()) }), "JSON stores a Set as {}"],
+		["NaN", z.object({ n: z.union([z.number(), z.nan()]) }), "JSON stores NaN as null"],
+		["a BigInt", z.object({ n: z.bigint() }), "JSON cannot store a BigInt"],
+		["a Symbol", z.symbol(), "JSON cannot store a Symbol"],
+		["a File", z.object({ f: z.file() }), "JSON cannot store a File"],
+		["undefined in a tuple", z.tuple([z.string(), z.undefined()]), "JSON stores undefined in an array as null"],
+		["undefined in a tuple's rest", z.tuple([z.string()]).rest(z.undefined()), "in an array as null"],
+		["an optional array element", z.array(z.string().optional()), "JSON stores undefined in an array as null"],
+		["an undefined field", z.object({ a: z.undefined() }), "JSON leaves out a key whose value is undefined"],
+	])("refuses %s, naming the column and what JSON stores", (_, schema, stores) => {
+		expect(() => refuseJsonDocument(schema, "t.c", NULLABLE)).toThrow(`t.c: a c.json schema is the stored document`)
+		expect(() => refuseJsonDocument(schema, "t.c", NULLABLE)).toThrow(stores)
+	})
+
+	type Tree = { kids: Tree[] }
+	const tree: z.ZodType<Tree> = z.lazy(() => z.object({ kids: z.array(tree) }))
+	it.each([
+		["an optional field", z.object({ a: z.string().optional() })],
+		["a nullable array element", z.array(z.string().nullable())],
+		["a union with undefined, on a nullable column", z.union([z.object({ a: z.string() }), z.undefined()])],
+		["a custom check", z.custom<string>((value) => typeof value === "string")],
+		["a coerced number", z.object({ n: z.coerce.number() })],
+		["a record", z.record(z.string(), z.number())],
+		["an ISO datetime string", z.object({ at: z.iso.datetime() })],
+		["a recursive lazy", tree],
+	])("keeps %s, which JSON stores as itself", (_, schema) => {
+		expect(() => refuseJsonDocument(schema, "t.c", NULLABLE)).not.toThrow()
+	})
+})
 
 describe("refuseJsonDocument: a schema whose output its input refuses, or a NOT NULL one that takes null or undefined", () => {
 	const STORED = "t.c: a c.json schema is the stored document"

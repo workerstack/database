@@ -1,4 +1,4 @@
-import { Column, getTableColumns, is, sql, type SQL, type SQLWrapper } from "drizzle-orm"
+import { Column, getColumnTable, getTableColumns, is, sql, type SQL, type SQLWrapper } from "drizzle-orm"
 import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core"
 import { own } from "../../constraint-map.ts"
 import { DatabaseError } from "../../error.ts"
@@ -192,13 +192,18 @@ function buildListQuery<TTable extends SQLiteTable>(
 
 /**
  * Throw where the list schema publishes a tiebreak (stableTiebreak) that `idColumn` is not: the list
- * would break ties on one column and say it breaks them on another. A query built by
- * hand names none, and an idColumn that is an expression has no name to compare
+ * would break ties on one column and say it breaks them on another. The tiebreak is a property key,
+ * as buildListQuery reads it, so `id: text("post_id")` is `id`. A query built by hand names none, and
+ * an idColumn that is an expression has no name to compare
  */
 function refuseOtherTiebreak(idColumn: SQLWrapper, tiebreak: string | undefined): void {
-	if (tiebreak === undefined || !is(idColumn, Column) || idColumn.name === tiebreak) return
+	if (tiebreak === undefined || !is(idColumn, Column)) return
+	const key = Object.entries<Column>(getTableColumns(getColumnTable(idColumn))).find(
+		([, column]) => column.name === idColumn.name,
+	)?.[0]
+	if (key === tiebreak) return
 	throw new TypeError(
-		`buildDerivedListQuery: idColumn "${idColumn.name}" is not the column the list schema breaks ties on, "${tiebreak}": set the schema's tiebreak to "${idColumn.name}"`,
+		`buildDerivedListQuery: idColumn "${key}" is not the column the list schema breaks ties on, "${tiebreak}": set the schema's tiebreak to "${key}"`,
 	)
 }
 

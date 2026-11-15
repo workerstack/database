@@ -610,9 +610,9 @@ Build the maps you pass once, at module load, with `defineConstraintMaps(...maps
 
 A rule a trigger enforces is the same 400 `constraint_violation` on every engine, its cause the message the app raised: `RAISE(ABORT, 'qty must be positive')` on SQLite, libsql and D1 (`SQLITE_CONSTRAINT_TRIGGER`), and `RAISE EXCEPTION 'qty must be positive'` (P0001) on Postgres. Write that message for the client. On libsql over a network and on Turso, the cause is the generic "Constraint violated": the server sends a violation's bare code with no `_TRIGGER`, so a raised message cannot be told from SQLite's own words. For the same reason a primary key conflict there is the 409 `unique_constraint_violation` its words describe (`UNIQUE constraint failed: parent.id`), not `primary_key_violation`. Every other violation there reads as on a file, its status, map entry and column included.
 
-Each handler answers a value the request sent that the column cannot hold from one shared table, so the same bad value is the same 400 on every engine. The answer names the column where the engine does, never the value: Postgres names none for text that is no number or a string past `varchar(n)` (22P02, 22001), so there the cause is a bare "Invalid value". `invalid_value` covers a string past `varchar(n)`, a number out of range, text that is no number, a NUL byte, a date that does not parse or is out of range, a time zone offset past 15:59, an interval past its range (SQLSTATE 22001, 22003, 22021, 22P02, 22P05, 22007, 22008, 22009, 22015), and a STRICT table's column given another type (`SQLITE_CONSTRAINT_DATATYPE`, `SQLITE_MISMATCH`). `value_too_large` covers a value too large for an index row (54000) and a string or blob past the engine's limit (`SQLITE_TOOBIG`, 2 MB on D1). A foreign-key violation from a delete or a key update of a row others still reference names the statement's table, the parent, on every engine, wherever the SQL is recorded (drizzle's error, postgres.js's own); a bare node-postgres error records none, and names no table.
+Each handler answers a value the request sent that the column cannot hold from one shared table, so the same bad value is the same 400 on every engine. The answer names the column where the engine does, never the value: Postgres names none for text that is no number or a string past `varchar(n)` (22P02, 22001), so there the cause is a bare "Invalid value". `invalid_value` covers a string past `varchar(n)`, a number out of range, text that is no number, a NUL byte, a date that does not parse or is out of range, a time zone offset past 15:59, an interval past its range, a bit string of the wrong length, malformed xml (SQLSTATE 22001, 22003, 22021, 22P02, 22P05, 22007, 22008, 22009, 22015, 22026, 2200N, 2200M), and a STRICT table's column given another type (`SQLITE_CONSTRAINT_DATATYPE`, `SQLITE_MISMATCH`). `value_too_large` covers a value too large for an index row (54000) and a string or blob past the engine's limit (`SQLITE_TOOBIG`, 2 MB on D1). A foreign-key violation from a delete or a key update of a row others still reference names the statement's table, the parent, on every engine, wherever the SQL is recorded (drizzle's error, postgres.js's own); a bare node-postgres error records none, and names no table.
 
-A `DatabaseError`'s `cause` is safe to show a client. The original error, which can hold the SQL and its bound values, is on `source`, which is never serialized; log it, don't return it.
+A `DatabaseError`'s `cause` is safe to show a client, and `toJSON()` puts it in the body beside `column`, `errorKey`, `status`, `statusKey` and `table`, each optional one left out when unset. The original error, which can hold the SQL and its bound values, is on `source`, which is never serialized; log it, don't return it.
 
 ## Codegen
 
@@ -698,9 +698,9 @@ const { errors, warnings } = validateTables(result)
 
 ```ts
 /* database.migrate.config.ts */
-import { defineConfig } from "@workerstack/database/migrate"
+import type { MigrateConfig } from "@workerstack/database/migrate"
 
-export default defineConfig({
+export default {
 	databases: {
 		core: {
 			migrationsDir: "./atlas-migrations",
@@ -709,8 +709,10 @@ export default defineConfig({
 			provider: { type: "bun-sqlite", path: "./.database/core.db" },
 		},
 	},
-})
+} satisfies MigrateConfig
 ```
+
+The config imports database's type alone, as `migrate init` writes it: the import erases, so the config loads where `@workerstack/database` does not resolve, as in an app built with `bun build --compile`, whose embedded database no project file can import. A config that imports `defineConfig` fails there, and the error names this form.
 
 The config is Zod-validated when database loads it, so a typo fails at load rather than at apply, with one message that names the file and the key, whether it is exported through `defineConfig` (which only types it), as a plain object, or as a function, sync or async, that returns one; a function that returns a function is refused, naming the form below (a program that imports its config module instead calls `await parseConfig(imported)`, on either form, the one parse `loadConfig(path)` runs, since `defineConfig` checks nothing at run time): every object is strict, and a key database does not know is refused by name. `diff`, `apply`, `check` and `status` all take a database by its name here; a database whose tables and FTS live under another name in `database.config.ts`, as two shards of one schema do, says so with `codegen: "shard"`, and `diff shard-0` reads that database's FTS. Each `provider` is a discriminated union on `type`: `bun-sqlite` (`path`), `libsql` (`url`, `authToken?`), `turso` (`databaseName`, the Turso database's own name, `org`, `apiToken`, and `group`, default `default`), `d1` (`databaseName`, the wrangler config's `database_name` or binding; wrangler finds the database through its config), `postgres` (`url`, with `devUrl`, `schema` and `lockTimeout` defaulting to `docker://postgres/17/dev`, `public` and `5s`). There is no `neon` type: a Neon or Supabase database is a `postgres` URL. A database is one of two shapes, held at load: one target, with its `name` and `provider`, or `environments`, at least one, chosen by `-e`, each named by its key unless it gives a `name` and taking the database's `provider` unless it gives its own; a database with both a `name` and `environments`, or an environment with no provider at either level, is refused. Every environment of a database has its dialect, and `-e` on a database that declares no environments is refused. A `postgres` `url` is checked when a command resolves its environment, not at load, so a production URL unset in this shell blocks no command on `-e dev`, and `diff`, which reaches only `devUrl`, needs none. `migrationsDir` and `drizzleConfigPath` are read relative to the config file, by `diff` as by `apply`.
 
@@ -1281,7 +1283,7 @@ Commits follow [Conventional Commits](https://www.conventionalcommits.org). `bun
 
 ## Upgrading to 0.25
 
-What changes for a project on 0.24. Each item below is a value database stored, returned or rated wrong, now refused or corrected. Run the tests of your API against 0.25 before deploying.
+What changes for a project on 0.24. Each item below is a value database stored, returned or rated wrong, or a valid input it crashed on, now refused, corrected or served. Run the tests of your API against 0.25 before deploying.
 
 1. **Know what changed in the API.** A test holds these three lists to the exports themselves.
 
@@ -1289,7 +1291,9 @@ What changes for a project on 0.24. Each item below is a value database stored, 
 
    Removed: none. **Fix:** none.
 
-   Changed: `IsoInstant`.
+   Changed: `DatabaseError`, `IsoInstant`, `classifyD1Error`, `classifyPgError`, `classifySqliteError`, `constraintError`.
+
+   `DatabaseError.toJSON()` now carries `cause`, the message safe to show a client, which 0.24 left out of the body, so a client got the error key alone; `classifyD1Error`, `classifyPgError`, `classifySqliteError` and `constraintError` change only in returning it. A body without a cause still leaves the key out. **Fix:** a client that read the cause from elsewhere reads it from the body; one that asserts the body's exact keys expects `cause` when the error has one.
 
    `IsoInstant` gains `cut` and `fraction`, and its constructor takes the nine-digit `fraction` as an optional second argument (step 8). **Fix:** none; an `IsoInstant` built from epoch milliseconds alone reads as before.
 
@@ -1312,6 +1316,18 @@ What changes for a project on 0.24. Each item below is a value database stored, 
 10. **`--json` on a D1 database prints its JSON alone.** database read the wrangler config with wrangler's reader in its own process, and what that reader printed, a warning on a key it does not know and the newer-version notice, landed on stdout ahead of the JSON. It now reads the config in a child on node, so stdout holds the one object. **Fix:** drop any line-skipping a deploy script added before parsing the output.
 
 11. **Expect a lock warning for a move or an `ATTACH PARTITION` after code the history cannot read, on Postgres.** A `DO` block, a `CALL` or a call of a function the history defined can run `ALTER TABLE … SET LOGGED` or drop a `CHECK` through `EXECUTE`, which the history's text does not show. 0.24 kept what the text said, so a `SET UNLOGGED` of a table such a block had made logged, and an `ATTACH PARTITION` whose proving `CHECK` it had dropped, each checked clean while Postgres rewrote or scanned the table under an exclusive lock. After such a statement, database no longer knows where each relation is or what a `CHECK` proves: a `SET LOGGED` or `SET UNLOGGED`, like a `SET TABLESPACE` or `SET ACCESS METHOD`, now reads the target's catalog when the `postgres` package is installed, and warns without it, and an `ATTACH PARTITION` warns of the scan until a later file validates a `CHECK` again. **Fix:** none, or validate the bound's `CHECK` in a file after the block, as the warning's recipe says.
+
+12. **A `c.json` schema holds only what JSON stores as itself.** The schema is the stored document, so a part JSON stores as another value failed every read of the row: a `Date` stored as a string, a `Map` or `Set` as `{}`, `NaN` as `null`, `undefined` in an array as `null`, and a field typed `z.undefined()` left out; and JSON stores no `BigInt`, `Symbol`, `File`, function or `Promise` at all. Codegen now refuses such a schema, naming the column and what JSON does with the part. **Fix:** store an ISO string (`z.iso.datetime()`) for a date, a string of digits for a BigInt, a URL or key for a file, a `z.record()` for a map and a `z.array()` for a set; make an array element `.nullable()` and a field `.optional()`.
+
+13. **A migrate config imports database's type alone.** A compiled app, or any project where `@workerstack/database` does not resolve beside the config, failed to load a config that imported `defineConfig`. `migrate init` now writes `import type { MigrateConfig } from "@workerstack/database/migrate"` and ends the object with `satisfies MigrateConfig`, and a config that fails to load for want of the package says to. **Fix:** in such a project, move the config to that form; `defineConfig` still works wherever the package resolves.
+
+14. **A derived list builds on a key column whose SQL name differs from its property.** `buildDerivedListQuery` compared `idColumn`'s SQL name with the schema's tiebreak, a property key, so `id: text("post_id")` under the default tiebreak threw a `TypeError`. It now compares the property key, and the error names the key. **Fix:** none.
+
+15. **A cursor carries a bigint of any length.** A list sorted by a bigint past 20 digits, such as a Postgres `numeric(78, 0)` in drizzle's bigint mode, answered a 500 `sort_not_wired` on its first page. The cursor now carries any integer, bounded by the cursor's own length. **Fix:** none.
+
+16. **Check refuses a file that makes a view, a trigger or a DEFAULT that cannot run.** SQLite resolves their names only when a statement runs, so a new view of a column no table has, a trigger body calling a misspelt function, or a `DEFAULT` calling one SQLite lacks (`if()` on libsql) passed check, applied, and failed every read or write through it. Check now compiles each view and trigger a file makes or changes, and an insert of defaults into each table it makes or changes, and refuses the file naming the object and SQLite's error. **Fix:** correct the object in its file; a history that already holds one blocks no later file.
+
+17. **A bit string of the wrong length or malformed xml is a 400 on Postgres.** SQLSTATE 22026, 2200N and 2200M reached the app as unmapped errors, a 500. Each is now `invalid_value`, as every other bad value is. **Fix:** an error handler that matched those codes itself reads `invalid_value`.
 
 ## Upgrading to 0.24
 

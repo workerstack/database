@@ -30,6 +30,9 @@ describe("the cursor codec reads back every value a key column reads (QL5 of r22
 		["a bigint", 7n],
 		["the least int64", -(2n ** 63n)],
 		["the largest uint64", 2n ** 64n - 1n],
+		/* QL7 of r23: a numeric(78, 0) in drizzle's bigint mode, such as a uint256 token amount */
+		["a bigint of 21 digits", 10n ** 20n],
+		["a negative bigint of 77 digits", -(2n ** 255n)],
 		["a Date", new Date(1_700_000_000_123)],
 		["a Date no JS Date holds", new Date(Number.NaN)],
 		["bytes", new Uint8Array([0, 1, 255])],
@@ -57,7 +60,6 @@ describe("the cursor codec reads back every value a key column reads (QL5 of r22
 		["a function", () => 1],
 		["a symbol", Symbol("k")],
 		["undefined", undefined],
-		["a bigint past 20 digits", 10n ** 25n],
 	])("carries no %s", (_label, value) => {
 		expect(carried(value, decodeValue)).toBe(false)
 	})
@@ -66,10 +68,16 @@ describe("the cursor codec reads back every value a key column reads (QL5 of r22
 		for (const id of ["a", 0, 7n]) expect(carried(id, decodeId), String(id)).toBe(true)
 		for (const id of [true, new Date(0), Number.NaN]) expect(carried(id, decodeId), String(id)).toBe(false)
 	})
+})
 
+/* QL7 of r23: a bigint tag holds any integer's canonical digits, and no other text */
+describe("the cursor codec reads no value from a tag of another form (QL7 of r23)", () => {
 	it.each([
 		["a bytes tag that is no base64url", { $bytes: "a+b" }],
 		["a bytes tag that is not a string", { $bytes: 1 }],
+		["a bigint tag of leading zeros", { $bigint: "007" }],
+		["a bigint tag of minus zero", { $bigint: "-0" }],
+		["a bigint tag in exponent form", { $bigint: "1e3" }],
 	])("reads no value from %s", (_label, value) => {
 		expect(decodeValue(value)).toBeUndefined()
 	})

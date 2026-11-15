@@ -94,7 +94,8 @@ function decodeTagged(value: Record<string, unknown>): CursorRef | Date | Uint8A
 	/* a forged time a Date cannot hold reads as Invalid Date, which no driver binds */
 	if (typeof time === "number") return Number.isNaN(new Date(time).getTime()) ? undefined : new Date(time)
 	const digits = value[BIGINT_TAG]
-	return typeof digits === "string" && /^-?\d{1,20}$/.test(digits) ? BigInt(digits) : undefined
+	/* any integer's canonical digits, as encodeValue writes them: MAX_CURSOR_LENGTH bounds how many */
+	return typeof digits === "string" && /^(?:0|-?[1-9]\d*)$/.test(digits) ? BigInt(digits) : undefined
 }
 
 /** A sort value from the wire, or undefined when it is not one a cursor can carry */

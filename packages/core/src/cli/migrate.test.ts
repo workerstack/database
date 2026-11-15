@@ -1,6 +1,8 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { loadConfig } from "../migrate/config.ts"
 import { ATLAS_RANGE, type MigrateRun, type RunResult } from "../migrate/core/process.ts"
 import { fakeAtlas as hashingAtlas, writeSum } from "./__fixtures__/d1.ts"
 import { makeIo, projects, runCliWithFakes, writeTables } from "./__fixtures__/io.ts"
@@ -102,6 +104,25 @@ describe("database migrate init", () => {
 		const unknown = makeIo(dir)
 		expect(await runCliWithFakes(["migrate", "init", "--dialect", "mysql"], unknown)).toBe(1)
 		expect(unknown.errors).toEqual(['Unknown --dialect "mysql": use sqlite or postgres'])
+	})
+})
+
+describe("database migrate init's Postgres starter (KC2 of r23)", () => {
+	/* KC2 of r23: a compiled app embeds database, so a starter that imports its value resolves nowhere */
+	it("writes a Postgres migrate config that imports database's type alone, and loads where database does not resolve", async () => {
+		const dir = project()
+		expect(await runCliWithFakes(["migrate", "init", "--dialect", "postgres"], makeIo(dir))).toBe(0)
+		const starter = readFileSync(join(dir, "database.migrate.config.ts"), "utf8")
+		expect(starter).toContain('import type { MigrateConfig } from "@workerstack/database/migrate"')
+		expect(starter).toContain("} satisfies MigrateConfig")
+		const bare = mkdtempSync(join(tmpdir(), "database-starter-"))
+		try {
+			writeFileSync(join(bare, "database.migrate.config.ts"), starter)
+			const { config } = await loadConfig(undefined, bare)
+			expect(Object.keys(config.databases)).toEqual(["core"])
+		} finally {
+			rmSync(bare, { force: true, recursive: true })
+		}
 	})
 })
 

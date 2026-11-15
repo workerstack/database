@@ -5,7 +5,7 @@
  */
 import { defineRelations } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/node-postgres"
-import { bigint, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core"
+import { bigint, integer, numeric, pgTable, text, timestamp } from "drizzle-orm/pg-core"
 import { describe, expect, it } from "vitest"
 import { queryHelpers } from "../../../src/query/drizzle.ts"
 import { createListQuerySchema } from "../../../src/query/schema.ts"
@@ -89,6 +89,41 @@ describe("keyset pagination on a bigint id (Q5)", () => {
 			cursor = meta.nextCursor
 		}
 		expect(seen).toEqual([1n, 2n, 3n, 4n, 5n].map((n) => 9007199254740990n + n))
+	})
+})
+
+/* QL7 of r23: a numeric(78, 0) in bigint mode, a uint256 token amount, reads a bigint of up to 78 digits */
+const token = pgTable("token", { amount: numeric("amount", { mode: "bigint" }).notNull(), id: text("id").primaryKey() })
+const tokenSchema = createListQuerySchema({ sort: ["amount"] })
+
+describe("keyset pagination on a numeric(78, 0) read as a bigint (QL7 of r23)", () => {
+	const sessions = usePg()
+
+	it("pages through amounts of 1, 21 and 77 digits, one a page, each row once", async () => {
+		const client = sessions.pg()
+		await client.query("CREATE TEMP TABLE token (id text PRIMARY KEY, amount numeric(78, 0) NOT NULL)")
+		await client.query(
+			"INSERT INTO token VALUES ('a', 5), ('b', 100000000000000000000), ('c', 7), ('d', 2::numeric(78, 0) ^ 255)",
+		)
+		const db = drizzle({ client, relations: defineRelations({ token }) })
+		const query = tokenSchema.parse({ limit: "1", order: "amount.asc" })
+		const seen: string[] = []
+		let cursor: string | undefined
+		for (let page = 0; page < 6; page++) {
+			const options = queryHelpers.listOptions({ ...query, cursor }, SEALED)
+			const rows = await db.query.token.findMany({
+				extras: options.extras,
+				limit: options.limit,
+				offset: options.offset,
+				orderBy: options.orderBy,
+				where: options.where,
+			} as never)
+			const [items, meta] = queryHelpers.paginate(rows as Array<{ amount: bigint; id: string }>, options)
+			seen.push(...items.map((row) => row.id))
+			if (!meta.hasMore || meta.nextCursor === null) break
+			cursor = meta.nextCursor
+		}
+		expect(seen).toEqual(["a", "c", "b", "d"])
 	})
 })
 

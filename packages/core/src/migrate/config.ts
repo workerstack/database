@@ -192,6 +192,13 @@ export function findConfigFile(cwd: string): string | undefined {
 	return undefined
 }
 
+/* how node, bun and vitest each word an import of database that resolves from nowhere the config sits */
+const UNRESOLVED = /\bCannot find (?:package|module) '@workerstack\/database(?:\/[^']*)?'/
+
+/** What a config whose import of database resolved nowhere does instead, after the runtime's own message */
+const TYPE_ONLY =
+	'; a config that imports only database\'s type loads where database does not resolve, as in a compiled executable: import type { MigrateConfig } from "@workerstack/database/migrate", and end the object with satisfies MigrateConfig'
+
 /** Load the migrate config at `configPath`, or the first one `findConfigFile` sees in `cwd` */
 export async function loadConfig(configPath?: string, cwd: string = process.cwd()): Promise<LoadedConfig> {
 	const resolvedPath = configPath === undefined ? findConfigFile(cwd) : resolve(cwd, configPath)
@@ -205,10 +212,12 @@ export async function loadConfig(configPath?: string, cwd: string = process.cwd(
 		return { config: await parseConfig(module.default ?? module), configDir: dirname(resolvedPath) }
 	} catch (error) {
 		/* a syntax error, or what a config function threw, names the file it came from */
-		if (!(error instanceof z.ZodError))
-			throw new Error(`${resolvedPath} failed to load: ${error instanceof Error ? error.message : String(error)}`, {
+		if (!(error instanceof z.ZodError)) {
+			const message = error instanceof Error ? error.message : String(error)
+			throw new Error(`${resolvedPath} failed to load: ${message}${UNRESOLVED.test(message) ? TYPE_ONLY : ""}`, {
 				cause: error,
 			})
+		}
 		throw new Error(`${resolvedPath} is not a valid migrate config:\n${z.prettifyError(error)}`, { cause: error })
 	}
 }

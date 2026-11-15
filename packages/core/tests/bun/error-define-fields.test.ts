@@ -2,7 +2,8 @@
  * KT5 of r22b: Bun compiles database's shipped source under the consumer's tsconfig. With
  * `useDefineForClassFields: false` (projects on legacy decorators) a class field is assigned, and
  * JavaScriptCore's own non-enumerable `Error.column` took `this.column`, so a DatabaseError's JSON body
- * and its spread dropped the column that names which one conflicted.
+ * and its spread dropped the column that names which one conflicted. KT1 of r23: the body carries the
+ * cause, the message safe to show the client, which Error's constructor defines.
  */
 import { afterEach, describe, expect, it } from "bun:test"
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
@@ -12,7 +13,7 @@ import { join } from "node:path"
 const SRC = join(import.meta.dir, "../../src")
 
 const PROBE = `import { DatabaseError } from "./src/error.ts"
-const error = new DatabaseError({ column: "email", errorKey: "unique_constraint_violation", status: "conflict", table: "user" })
+const error = new DatabaseError({ cause: "That email is taken", column: "email", errorKey: "unique_constraint_violation", status: "conflict", table: "user" })
 console.log(JSON.stringify({ body: JSON.parse(JSON.stringify(error)), spread: Object.keys({ ...error }).sort() }))
 `
 
@@ -36,7 +37,14 @@ function probe(compilerOptions: Record<string, unknown>): unknown {
 }
 
 const SHAPE = {
-	body: { column: "email", errorKey: "unique_constraint_violation", status: 409, statusKey: "conflict", table: "user" },
+	body: {
+		cause: "That email is taken",
+		column: "email",
+		errorKey: "unique_constraint_violation",
+		status: 409,
+		statusKey: "conflict",
+		table: "user",
+	},
 	spread: ["column", "errorKey", "status", "statusKey", "table"],
 }
 

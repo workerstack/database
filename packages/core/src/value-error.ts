@@ -27,6 +27,10 @@ const VALUE_ERRORS: Record<string, ValueRule> = {
 	"22009": "invalid",
 	/* an interval field past what Postgres holds */
 	"22015": "invalid",
+	/* a bit string of another length than bit(n), malformed xml, and an xml value that is no document */
+	"22026": "invalid",
+	"2200M": "invalid",
+	"2200N": "invalid",
 	/* a value too large for a btree index row */
 	"54000": "too_large",
 	/* a STRICT table's column given another type */

@@ -288,6 +288,15 @@ describe("readCursor on options that cannot seal", () => {
 	})
 })
 
+/* QL7 of r23: a numeric(78, 0) in drizzle's bigint mode reads a uint256 as a bigint of up to 78 digits */
+describe("a cursor on a bigint of any length (QL7 of r23)", () => {
+	const BY_K: SortField[] = [{ direction: "asc", field: "k" }]
+
+	it.each([10n ** 20n, 2n ** 255n, -(2n ** 255n)])("mints one on %s, which the next page reads back", (k) => {
+		expect(readCursor(mintCursor({ id: "a", k }, BY_K, SEALED), BY_K, SEALED).values).toEqual([k])
+	})
+})
+
 /* QL5 of r22b: the codec is closed over what a mint takes, so every cursor database mints is one it reads */
 describe("a minted cursor is one database reads (QL5 of r22b; sibling: what openCursor refuses)", () => {
 	const BY_K: SortField[] = [{ direction: "asc", field: "k" }]
@@ -297,7 +306,6 @@ describe("a minted cursor is one database reads (QL5 of r22b; sibling: what open
 		["an array", [1, 2]],
 		["a function", () => 1],
 		["a symbol", Symbol("k")],
-		["an integer past 20 digits", 10n ** 25n],
 	])("refuses %s as sort_not_wired naming its field, a 500 on the page that reads it", (kind, value) => {
 		expect(thrown(() => mintCursor({ id: "a", k: value }, BY_K, SEALED))).toMatchObject({
 			cause: `the sort by k reads ${kind}, which no cursor carries: sort by a column of text, numbers, booleans, times or bytes`,

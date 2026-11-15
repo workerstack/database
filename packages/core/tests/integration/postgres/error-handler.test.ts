@@ -324,36 +324,52 @@ describe("pgErrorHandler on a real server: a session the server ends for idling"
 	})
 })
 
+const MAPS_Q8: ConstraintMap[] = [
+	{ booking: { exclusion: { booking_no_overlap: { cause: "Room booked", errorKey: "room_booked" } } } },
+]
+
+/** What pgErrorHandler throws for the failure of `run.statement` on `client`, after `ddl` */
+async function failureOn(
+	client: ReturnType<ReturnType<typeof usePg>["pg"]>,
+	ddl: string,
+	run: { params: unknown[]; statement: string },
+): Promise<unknown> {
+	await client.query(ddl)
+	const error = await client.query(run.statement, run.params).then(
+		() => new Error("the statement did not fail"),
+		(caughtError: unknown) => caughtError,
+	)
+	try {
+		pgErrorHandler(error, MAPS_Q8)
+	} catch (thrown) {
+		return thrown
+	}
+	return "not handled"
+}
+
 describe("pgErrorHandler on a real server: values a request can send (Q8)", () => {
 	const sessions = usePg()
-	const MAPS_Q8: ConstraintMap[] = [
-		{ booking: { exclusion: { booking_no_overlap: { cause: "Room booked", errorKey: "room_booked" } } } },
-	]
-
-	/** What pgErrorHandler throws for the failure of `statement`, after `ddl` */
-	async function failure(ddl: string, statement: string, params: unknown[] = []): Promise<unknown> {
-		const client = sessions.pg()
-		await client.query(ddl)
-		const error = await client.query(statement, params).then(
-			() => new Error("the statement did not fail"),
-			(caughtError: unknown) => caughtError,
-		)
-		try {
-			pgErrorHandler(error, MAPS_Q8)
-		} catch (thrown) {
-			return thrown
-		}
-		return "not handled"
-	}
+	const failure = (ddl: string, statement: string, params: unknown[] = []) =>
+		failureOn(sessions.pg(), ddl, { params, statement })
 
 	it.each([
 		["a string past varchar(8)", "CREATE TEMP TABLE v (s varchar(8))", "123456789"],
 		["a NUL byte in text", "CREATE TEMP TABLE v (s text)", "a\u0000b"],
+		/* QE5 of r23: a bit string of the wrong length (22026) and malformed xml (2200N) */
+		["a bit string shorter than bit(3)", "CREATE TEMP TABLE v (s bit(3))", "10"],
+		["malformed xml", "CREATE TEMP TABLE v (s xml)", "<a>"],
 	])("maps %s, bound as a request sends it, to a 400 invalid_value", async (_, ddl, value) => {
 		expect(await failure(ddl, "INSERT INTO v VALUES ($1)", [value])).toMatchObject({
 			errorKey: "invalid_value",
 			status: 400,
 		})
+	})
+
+	/* QE5 of r23: an xml value that is no document where one is asked for (2200M) */
+	it("maps an xml value that is no document to a 400 invalid_value", async () => {
+		expect(
+			await failure("CREATE TEMP TABLE v (s text)", "SELECT XMLPARSE(DOCUMENT $1::text)", ["<a/><b/>"]),
+		).toMatchObject({ errorKey: "invalid_value", status: 400 })
 	})
 
 	it("maps a value too large for its unique index's row to a 400 value_too_large", async () => {

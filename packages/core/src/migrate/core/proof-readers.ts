@@ -1,10 +1,13 @@
 /**
- * What a file leaves unable to run: SQLite's DROP TABLE and DROP VIEW check no view or trigger that names what they
- * drop, and SQLite, D1 and libsql resolve those names only when a statement runs. So a file can apply and leave every
- * read of a view, or every write a trigger fires on, failing. After a file applies to the proof's copy, each view and
- * trigger that survives it and names an object the file dropped or changed is compiled: a view's read, a trigger's
- * own write on its table or view (trigger-write.mjs). SQLite resolves a name only by name, and the copy holds every
- * reader that names a table a file reaches (proof-scope.ts), so this finds every reader the file breaks.
+ * What a file leaves unable to run: SQLite resolves the names in a view, a trigger's body and a DEFAULT only when a
+ * statement runs, and its DROP TABLE and DROP VIEW check no view or trigger that names what they drop, on SQLite, D1
+ * and libsql alike. So a file can apply and leave every read of a view, every write a trigger fires on, or every
+ * insert that leaves a column to its default, failing. After a file applies to the proof's copy, this compiles each
+ * view and trigger the file made or changed, or that names an object it dropped, made or changed: a view's read, a
+ * trigger's own write on its table or view (trigger-write.mjs). It compiles an insert of defaults alone into each
+ * ordinary table the file made or changed. SQLite resolves a name only by name, and the copy holds every reader that
+ * names a table a file reaches (proof-scope.ts), so this finds every reader the file breaks. An object the file
+ * leaves as it was is not compiled, so a history that already holds a broken one blocks no later file
  */
 import type { LocalDb } from "../drivers/local-db.ts"
 import type { LiveObject } from "./proof-copy.ts"
@@ -56,22 +59,42 @@ function brokenRead(db: LocalDb, reader: LiveObject): string | undefined {
 		: `every ${event} on ${reader.table} fails, as a trigger it fires cannot compile: ${error}`
 }
 
+/** Why an insert into `table` of its defaults alone fails on `db`, or undefined; an FTS5 or other virtual table, its
+ * shadow tables and SQLite's own take none from a migration */
+function brokenDefault(db: LocalDb, table: LiveObject): string | undefined {
+	const [listed] = db.all(`PRAGMA main.table_list(${quote(table.name)})`)
+	if (listed?.["type"] !== "table" || asciiFold(table.name).startsWith("sqlite_")) return undefined
+	const error = compileError(db, `INSERT INTO ${quote(table.name)} DEFAULT VALUES`)
+	return error === undefined
+		? undefined
+		: `an insert into ${table.name} that leaves a column to its default cannot compile: ${error}`
+}
+
+/** Whether the file made or changed an object, and the folded names of every object it dropped, made or changed */
+type FileScope = { made: boolean; touched: ReadonlySet<string> }
+
+/** Why `object`, which the file made or changed or which names what it touched, fails on `db`, or undefined */
+function brokenObject(db: LocalDb, object: LiveObject, { made, touched }: FileScope): string | undefined {
+	if (object.type === "table") return made ? brokenDefault(db, object) : undefined
+	if (object.type !== "view" && object.type !== "trigger") return undefined
+	if (!made && ![...referencesOf(object)].some((name) => touched.has(name))) return undefined
+	return brokenRead(db, object)
+}
+
 /**
- * Throws when a file that turned the copy's schema `before` into `db`'s leaves a view or trigger unable to run,
- * naming it and SQLite's error: no approval overrides, since every read or write through it would fail
+ * Throws when a file that turned the copy's schema `before` into `db`'s leaves a view, a trigger or a DEFAULT unable
+ * to run, naming it and SQLite's error: no approval overrides, since every read or write through it would fail
  */
 function refuseBrokenReaders(db: LocalDb, before: ReadonlyMap<string, LiveObject>): void {
 	const after = schemaOf(db)
-	const touched = new Set(
-		[...before]
-			.filter(([key, object]) => after.get(key)?.sql !== object.sql)
-			.map(([, object]) => asciiFold(object.name)),
+	/* each object the file dropped, made or changed, by type and folded name */
+	const changed = new Set(
+		[...new Set([...before.keys(), ...after.keys()])].filter((key) => before.get(key)?.sql !== after.get(key)?.sql),
 	)
-	if (touched.size === 0) return
-	for (const reader of after.values()) {
-		if (reader.type !== "view" && reader.type !== "trigger") continue
-		if (![...referencesOf(reader)].some((name) => touched.has(name))) continue
-		const broken = brokenRead(db, reader)
+	if (changed.size === 0) return
+	const touched = new Set([...changed].map((key) => key.slice(key.indexOf(" ") + 1)))
+	for (const [key, object] of after) {
+		const broken = brokenObject(db, object, { made: changed.has(key), touched })
 		if (broken !== undefined)
 			throw new Error(`after this file, ${broken}; drop or change it in this file, or keep what it uses`)
 	}
