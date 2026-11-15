@@ -59,6 +59,15 @@ function chosen(table: string, columns: readonly string[], facts: Facts): string
 	}
 }
 
+/**
+ * The name of `table`'s primary key, which it shares with its index: followIndexes, which runs
+ * first, names that index past every name taken (pg-index-facts.ts)
+ */
+function primaryName(facts: Facts, table: string): string {
+	const primary = [...facts.indexes].find(([, index]) => index.kind === "primary" && index.table === table)
+	return bare((primary as [string, unknown])[0])
+}
+
 /** `facts` with a constraint of `table` added: a foreign key or a primary key, on `column` when a column declares it */
 function addConstraint(
 	{ column, table }: { column?: string | undefined; table: string },
@@ -78,7 +87,7 @@ function addConstraint(
 	} else if (constraint["contype"] === "CONSTR_PRIMARY") {
 		const index = constraint["indexname"] as string | undefined
 		const columns = column === undefined ? names(constraint["keys"] ?? []) : [column]
-		facts.primaryKeys.set(table, { columns, name: conname ?? index ?? objectName(bare(table), "", "pkey") })
+		facts.primaryKeys.set(table, { columns, name: conname ?? index ?? primaryName(facts, table) })
 	}
 }
 
@@ -220,7 +229,7 @@ const LIKE_INDEXES = 64
 function copyPrimaryKey(table: string, like: Node, facts: Facts): void {
 	const primary = facts.primaryKeys.get(tableOf(like["relation"], facts.schema).key)
 	if (primary !== undefined && (Number(like["options"] ?? 0) & LIKE_INDEXES) !== 0)
-		facts.primaryKeys.set(table, { columns: [...primary.columns], name: objectName(bare(table), "", "pkey") })
+		facts.primaryKeys.set(table, { columns: [...primary.columns], name: primaryName(facts, table) })
 }
 
 /** A CREATE TABLE's keys, declared on its columns and on itself; one the history holds stays as it was through IF NOT EXISTS */

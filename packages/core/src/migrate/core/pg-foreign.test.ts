@@ -7,6 +7,7 @@
  */
 import { beforeAll, describe, expect, it } from "vitest"
 import { classifyMigration } from "./classify.ts"
+import { historyFacts } from "./pg-history.ts"
 import { loadPostgresParser } from "./pg-parser.ts"
 import { extractSchema } from "./schema.ts"
 
@@ -180,5 +181,32 @@ describe("the foreign keys a history leaves, and what a statement reaches throug
 
 	it("reaches nothing through a temporary table, which no other session sees", () => {
 		expect(holds("CREATE TEMP TABLE tt (id int);\nALTER TABLE pg_temp.tt DROP COLUMN id;")).toBe("")
+	})
+})
+
+/** The primary key a history leaves on the table its last line names */
+const primary = (sql: string) =>
+	historyFacts(extractSchema(sql, undefined, "postgres"), "public").primaryKeys.get(sql.match(/(\w+)$/)?.[1] ?? "")
+
+/* PA6 of r23: a primary key shares the name its index takes, numbered past a name taken (Postgres 17: p_pkey1, c_pkey1, t_pkey1) */
+describe("the name a history gives a primary key", () => {
+	const CHECKED = "CREATE TABLE p (a int NOT NULL CONSTRAINT p_pkey CHECK (a > 0));\nALTER TABLE p ADD PRIMARY KEY (a);"
+
+	it("numbers past a CHECK's, a sequence's and, for a LIKE's copy, a sequence's name, as its index does", () => {
+		expect(primary(`${CHECKED}\n-- p`)?.name).toBe("p_pkey1")
+		expect(primary("CREATE SEQUENCE t_pkey;\nCREATE TABLE t (id int PRIMARY KEY);\n-- t")?.name).toBe("t_pkey1")
+		expect(
+			primary(
+				"CREATE SEQUENCE c_pkey;\nCREATE TABLE k (id int PRIMARY KEY);\nCREATE TABLE c (LIKE k INCLUDING INDEXES);\n-- c",
+			)?.name,
+		).toBe("c_pkey1")
+	})
+
+	it("is gone once that name is dropped", () => {
+		expect(primary(`${CHECKED}\nALTER TABLE p DROP CONSTRAINT p_pkey1;\n-- p`)).toBeUndefined()
+	})
+
+	it("keeps its plain name where none is taken (sibling)", () => {
+		expect(primary("CREATE TABLE t (id int PRIMARY KEY);\n-- t")?.name).toBe("t_pkey")
 	})
 })
