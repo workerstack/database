@@ -10,17 +10,10 @@ import { randomUUID } from "node:crypto"
 import pg from "pg"
 import postgres from "postgres"
 import { afterEach, beforeEach } from "vitest"
+import { pgUrl } from "../../support/pg-url.ts"
 
-export const PG_URL_VAR = "COMB_TEST_PG_URL"
-
-/** The server URL; unset or empty, the run fails, since a skipped suite would pass the gates. */
-export function pgUrl(env: NodeJS.ProcessEnv = process.env): string {
-	const url = env[PG_URL_VAR]
-	if (url !== undefined && url !== "") return url
-	throw new Error(
-		`${PG_URL_VAR} is unset: the Postgres suites are required. Set it to a Postgres server URL (docs/testing.md)`,
-	)
-}
+/* the URL is runner-free, for bun:test's suites too; the Postgres suites take it here with the rest */
+export { PG_URL_VAR, pgUrl } from "../../support/pg-url.ts"
 
 export type PgSessions = {
 	/** node-postgres, one connection */
