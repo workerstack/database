@@ -20,7 +20,7 @@ import { run } from "../../../src/migrate/core/process.ts"
 import type { ParsedMigration } from "../../../src/migrate/types.ts"
 import { pgUrl, withScratchDb } from "../support/pg.ts"
 import { pauses, waitFor } from "../support/pg-pause.ts"
-import { dropRoles as dropOnly, query, roleOf, unique } from "../support/pg-roles.ts"
+import { asRole, dropRoles as dropOnly, query, roleOf, unique } from "../support/pg-roles.ts"
 import { leavesStale, needsNothingStale } from "../support/stale-replay.ts"
 
 beforeAll(loadPostgresParser)
@@ -103,7 +103,12 @@ function childCheck(devUrl: string, url: string) {
 		while (!/^pid \d+$/m.test(said)) await new Promise((done) => setTimeout(done, 20))
 		return Number(/^pid (\d+)$/m.exec(said)?.[1])
 	}
-	return { ended, kill: async (signal: NodeJS.Signals) => process.kill(await pid(), signal) }
+	/* the check's pid once it wrote it, and its shell's */
+	const pids = (): number[] => [child.pid ?? 0, Number(/^pid (\d+)$/m.exec(said)?.[1] ?? 0)]
+	const hardKill = (): void => {
+		for (const each of pids().toReversed()) if (each > 0) process.kill(each, "SIGKILL")
+	}
+	return { ended, hardKill, kill: async (signal: NodeJS.Signals) => process.kill(await pid(), signal), pids }
 }
 
 /** `roles` dropped, with any replay database a failed run left that grants one of them CONNECT, which holds it */
@@ -187,6 +192,68 @@ describe("a check killed mid-replay", () => {
 		},
 		60_000,
 	)
+})
+
+/* how long a signalled check may take to end, well under the case's timeout, before the case kills it and fails */
+const ENDS_WITHIN_MS = 30_000
+
+/** What `child` wrote by its end, or, past ENDS_WITHIN_MS, it and its shell SIGKILLed and the case failed with their pids */
+async function endedWithin(child: ReturnType<typeof childCheck>): Promise<string[]> {
+	let timer: NodeJS.Timeout | undefined
+	const late = new Promise<never>((_, fail) => {
+		timer = setTimeout(() => {
+			child.hardKill()
+			fail(
+				new Error(
+					`the check (pid ${child.pids().join(", ")}) had not ended ${ENDS_WITHIN_MS} ms after its signal: SIGKILLed`,
+				),
+			)
+		}, ENDS_WITHIN_MS)
+	})
+	try {
+		return await Promise.race([child.ended, late])
+	} finally {
+		clearTimeout(timer)
+	}
+}
+
+/*
+ * a cleanup's drop that fails says what it left (r22b): a superuser's session in the replay database
+ * holds it across the drop, as a dev role without SUPERUSER may end no superuser's backend, so
+ * neither the cleanup's terminate nor DROP DATABASE's FORCE ends it
+ */
+describe("a check killed mid-replay whose database a session holds across the drop", () => {
+	it("says the database and the role it could not drop, and ends as the signal would", async () => {
+		const [made, resume, mgr] = [unique("comb_t_killed"), unique("comb_t_resume"), unique("comb_t_mgr")]
+		let holder: pg.Client | undefined
+		try {
+			await withScratchDb((dev) =>
+				withScratchDb(async (url) => {
+					await write(paused(made, resume))
+					const child = childCheck(await asRole(dev, mgr, "CREATEDB CREATEROLE"), url)
+					await untilRole(made)
+					const [database] = await replayDatabases(made)
+					const at = new URL(pgUrl())
+					at.pathname = `/${database}`
+					holder = new pg.Client({ connectionString: at.toString() })
+					holder.on("error", () => undefined)
+					await holder.connect()
+					await child.kill("SIGTERM")
+					const said = await endedWithin(child)
+					expect(said.at(-1)).toBe("exit 143")
+					const left = "which a replay left on devUrl's server: "
+					const swept = "; the next check or apply that reaches that server drops it$"
+					expect(said.filter((line) => line.startsWith("comb could not drop"))).toEqual([
+						expect.stringMatching(new RegExp(`^comb could not drop database ${database}, ${left}.+${swept}`)),
+						expect.stringMatching(new RegExp(`^comb could not drop role ${made}, ${left}.+${swept}`)),
+					])
+				}),
+			)
+		} finally {
+			await holder?.end().catch(() => undefined)
+			await dropRoles(made, mgr)
+		}
+	}, 60_000)
 })
 
 describe("a check killed by SIGKILL mid-replay", () => {

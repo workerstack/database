@@ -23,7 +23,30 @@ async function counted(): Promise<Connect> {
 		return Object.assign(sql, {
 			unsafe: (query: string, params?: unknown[]) => {
 				if (query.startsWith("DROP DATABASE IF EXISTS comb_replay_")) writeSync(1, `drop ${query.split(" ").at(-1)}\n`)
-				return unsafe(query, params as never)
+				if (query.startsWith("DROP DATABASE IF EXISTS comb_replay_")) {
+					const name = query.split(" ").at(-1) as string
+					const started = Date.now()
+					return unsafe(
+						"SELECT pid, state, wait_event_type, wait_event, backend_type, left(query, 60) AS q FROM pg_stat_activity WHERE datname = $1",
+						[name] as never,
+					).then((rows: unknown) => {
+						writeSync(2, `probe in-db ${Date.now()} ${JSON.stringify(rows)}\n`)
+						const sent = unsafe(query, params as never)
+						sent.then(
+							() => writeSync(2, `probe ok ${Date.now()} drop-took ${Date.now() - started} ${query.slice(0, 90)}\n`),
+							(error: { code?: string; message?: string }) =>
+								writeSync(2, `probe failed ${Date.now()} ${error.code} ${error.message} :: ${query.slice(0, 90)}\n`),
+						)
+						return sent
+					}) as never
+				}
+				const sent = unsafe(query, params as never)
+				if (/^(DROP|ALTER DATABASE|SELECT pg_terminate)/.test(query))
+					sent.then(
+						() => writeSync(2, `probe ok ${Date.now()} ${query.slice(0, 90)}\n`),
+						(error: { code?: string; message?: string }) => writeSync(2, `probe failed ${Date.now()} ${error.code} ${error.message} :: ${query.slice(0, 90)}\n`),
+					)
+				return sent
 			},
 		})
 	}
