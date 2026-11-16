@@ -1,0 +1,24 @@
+{
+  "_generated": "comb checksum:4948a5e9e8b8",
+  "databases": {
+    "core": [
+      "db.core.constraints.gen.ts",
+      "db.core.entities.gen.ts",
+      "db.core.enum-checks.gen.ts",
+      "db.core.manifest.gen.json",
+      "db.core.relations.gen.ts",
+      "db.core.rows.gen.ts",
+      "diagrams/core-ai.gen.txt",
+      "diagrams/core-relations.gen.json",
+      "diagrams/core-schema.gen.sql",
+      "dtos/_shared/index.gen.ts",
+      "dtos/peer/index.gen.ts",
+      "dtos/row/index.gen.ts",
+      "rqb-cols/peer/index.gen.ts",
+      "rqb-cols/row/index.gen.ts",
+      "sql-cols/peer/index.gen.ts",
+      "sql-cols/row/index.gen.ts",
+      "table-names/index.gen.ts"
+    ]
+  }
+}

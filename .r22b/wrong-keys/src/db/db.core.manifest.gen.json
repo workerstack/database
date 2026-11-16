@@ -1,0 +1,114 @@
+{
+  "_generated": "comb checksum:85f295daa136",
+  "database": "core",
+  "entities": [
+    {
+      "checkConstraints": [],
+      "columns": [
+        {
+          "enumValues": null,
+          "generated": true,
+          "immutable": true,
+          "kind": "id",
+          "max": 48,
+          "maxBytes": null,
+          "min": 1,
+          "name": "id",
+          "notNull": true,
+          "patterns": [
+            "/^\\S{1,48}$/"
+          ],
+          "primaryKey": true,
+          "textKind": null,
+          "transform": [],
+          "private": false,
+          "states": null
+        },
+        {
+          "enumValues": null,
+          "generated": false,
+          "immutable": false,
+          "kind": "integer",
+          "max": 9007199254740991,
+          "maxBytes": null,
+          "min": -9007199254740991,
+          "name": "n",
+          "notNull": true,
+          "patterns": [],
+          "primaryKey": false,
+          "textKind": "email",
+          "transform": [
+            "trim",
+            "lowercase"
+          ],
+          "private": false,
+          "states": null
+        },
+        {
+          "enumValues": null,
+          "generated": false,
+          "immutable": false,
+          "kind": "real",
+          "max": null,
+          "maxBytes": null,
+          "min": null,
+          "name": "r",
+          "notNull": true,
+          "patterns": [],
+          "primaryKey": false,
+          "textKind": "url",
+          "transform": [
+            "trim"
+          ],
+          "private": false,
+          "states": null
+        },
+        {
+          "enumValues": null,
+          "generated": false,
+          "immutable": false,
+          "kind": "text",
+          "max": null,
+          "maxBytes": null,
+          "min": 1,
+          "name": "t",
+          "notNull": true,
+          "patterns": [],
+          "primaryKey": false,
+          "textKind": null,
+          "transform": [],
+          "private": false,
+          "states": null
+        },
+        {
+          "enumValues": null,
+          "generated": false,
+          "immutable": false,
+          "kind": "timestamp",
+          "max": 9007199254740991,
+          "maxBytes": null,
+          "min": -9007199254740991,
+          "name": "ts",
+          "notNull": true,
+          "patterns": [],
+          "primaryKey": false,
+          "textKind": "password",
+          "transform": [],
+          "private": false,
+          "states": null
+        }
+      ],
+      "compositePrimaryKey": false,
+      "identity": "id",
+      "idPrefix": "row",
+      "name": "row",
+      "relations": [],
+      "softDelete": null,
+      "tenantColumn": null,
+      "partialUniqueIndexes": [],
+      "uniqueIndexes": [],
+      "varName": "row"
+    }
+  ],
+  "v": 2
+}

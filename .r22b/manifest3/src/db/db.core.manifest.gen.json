@@ -1,0 +1,162 @@
+{
+  "_generated": "comb checksum:841631daaff7",
+  "database": "core",
+  "entities": [
+    {
+      "checkConstraints": [],
+      "columns": [
+        {
+          "enumValues": null,
+          "generated": true,
+          "immutable": true,
+          "kind": "id",
+          "max": 48,
+          "maxBytes": null,
+          "min": 1,
+          "name": "id",
+          "notNull": true,
+          "patterns": [
+            "/^\\S{1,48}$/"
+          ],
+          "primaryKey": true,
+          "textKind": null,
+          "transform": [],
+          "private": false,
+          "states": null
+        },
+        {
+          "enumValues": null,
+          "generated": false,
+          "immutable": true,
+          "kind": "ref",
+          "max": 48,
+          "maxBytes": null,
+          "min": 1,
+          "name": "author_id",
+          "notNull": false,
+          "patterns": [
+            "/^\\S{1,48}$/"
+          ],
+          "primaryKey": false,
+          "textKind": null,
+          "transform": [],
+          "private": false,
+          "states": null
+        },
+        {
+          "enumValues": null,
+          "generated": false,
+          "immutable": false,
+          "kind": "ref",
+          "max": 48,
+          "maxBytes": null,
+          "min": 1,
+          "name": "_owner_id",
+          "notNull": false,
+          "patterns": [
+            "/^\\S{1,48}$/"
+          ],
+          "primaryKey": false,
+          "textKind": null,
+          "transform": [],
+          "private": true,
+          "states": null
+        },
+        {
+          "enumValues": null,
+          "generated": false,
+          "immutable": false,
+          "kind": "text",
+          "max": null,
+          "maxBytes": null,
+          "min": null,
+          "name": "_token",
+          "notNull": false,
+          "patterns": [],
+          "primaryKey": false,
+          "textKind": null,
+          "transform": [],
+          "private": true,
+          "states": null
+        },
+        {
+          "enumValues": null,
+          "generated": false,
+          "immutable": false,
+          "kind": "text",
+          "max": null,
+          "maxBytes": null,
+          "min": null,
+          "name": "title",
+          "notNull": false,
+          "patterns": [],
+          "primaryKey": false,
+          "textKind": null,
+          "transform": [],
+          "private": false,
+          "states": null
+        }
+      ],
+      "compositePrimaryKey": false,
+      "identity": "id",
+      "idPrefix": "pst",
+      "name": "post",
+      "relations": [
+        {
+          "column": "author_id",
+          "onDelete": null,
+          "onUpdate": null,
+          "refColumn": "id",
+          "table": "userAccount"
+        },
+        {
+          "column": "_owner_id",
+          "onDelete": null,
+          "onUpdate": null,
+          "refColumn": "id",
+          "table": "userAccount"
+        }
+      ],
+      "softDelete": null,
+      "tenantColumn": null,
+      "partialUniqueIndexes": [],
+      "uniqueIndexes": [],
+      "varName": "post"
+    },
+    {
+      "checkConstraints": [],
+      "columns": [
+        {
+          "enumValues": null,
+          "generated": true,
+          "immutable": true,
+          "kind": "id",
+          "max": 48,
+          "maxBytes": null,
+          "min": 1,
+          "name": "id",
+          "notNull": true,
+          "patterns": [
+            "/^\\S{1,48}$/"
+          ],
+          "primaryKey": true,
+          "textKind": null,
+          "transform": [],
+          "private": false,
+          "states": null
+        }
+      ],
+      "compositePrimaryKey": false,
+      "identity": "id",
+      "idPrefix": "usr",
+      "name": "user_account",
+      "relations": [],
+      "softDelete": null,
+      "tenantColumn": null,
+      "partialUniqueIndexes": [],
+      "uniqueIndexes": [],
+      "varName": "userAccount"
+    }
+  ],
+  "v": 2
+}

@@ -1,0 +1,17 @@
+{
+  "_generated": "comb checksum:ebf424b6631c",
+  "relationCount": 1,
+  "relations": [
+    {
+      "from": "doc.orgId",
+      "onDelete": "no action",
+      "onUpdate": "no action",
+      "to": "org.id"
+    }
+  ],
+  "tableCount": 2,
+  "tables": [
+    "doc",
+    "org"
+  ]
+}

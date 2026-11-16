@@ -1,0 +1,92 @@
+{
+  "_generated": "comb checksum:224dcbd2bfaa",
+  "database": "core",
+  "entities": [
+    {
+      "checkConstraints": [],
+      "columns": [
+        {
+          "enumValues": null,
+          "generated": true,
+          "immutable": true,
+          "kind": "id",
+          "max": 48,
+          "maxBytes": null,
+          "min": 1,
+          "name": "id",
+          "notNull": true,
+          "patterns": [
+            "/^\\S{1,48}$/"
+          ],
+          "primaryKey": true,
+          "textKind": null,
+          "transform": [],
+          "private": false,
+          "states": null
+        },
+        {
+          "enumValues": null,
+          "generated": false,
+          "immutable": false,
+          "kind": "json",
+          "max": null,
+          "maxBytes": null,
+          "min": null,
+          "name": "tags",
+          "notNull": true,
+          "patterns": [],
+          "primaryKey": false,
+          "textKind": null,
+          "transform": [],
+          "private": false,
+          "states": null
+        },
+        {
+          "enumValues": null,
+          "generated": false,
+          "immutable": false,
+          "kind": "json",
+          "max": null,
+          "maxBytes": null,
+          "min": null,
+          "name": "len",
+          "notNull": true,
+          "patterns": [],
+          "primaryKey": false,
+          "textKind": null,
+          "transform": [],
+          "private": false,
+          "states": null
+        },
+        {
+          "enumValues": null,
+          "generated": false,
+          "immutable": false,
+          "kind": "json",
+          "max": null,
+          "maxBytes": null,
+          "min": null,
+          "name": "trim",
+          "notNull": true,
+          "patterns": [],
+          "primaryKey": false,
+          "textKind": null,
+          "transform": [],
+          "private": false,
+          "states": null
+        }
+      ],
+      "compositePrimaryKey": false,
+      "identity": "id",
+      "idPrefix": "row",
+      "name": "row",
+      "relations": [],
+      "softDelete": null,
+      "tenantColumn": null,
+      "partialUniqueIndexes": [],
+      "uniqueIndexes": [],
+      "varName": "row"
+    }
+  ],
+  "v": 2
+}

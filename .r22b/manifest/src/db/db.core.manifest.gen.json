@@ -1,0 +1,239 @@
+{
+  "_generated": "comb checksum:bf48ff86a1e6",
+  "database": "core",
+  "entities": [
+    {
+      "checkConstraints": [],
+      "columns": [
+        {
+          "enumValues": null,
+          "generated": true,
+          "immutable": true,
+          "kind": "id",
+          "max": 48,
+          "maxBytes": null,
+          "min": 1,
+          "name": "id",
+          "notNull": true,
+          "patterns": [
+            "/^\\S{1,48}$/"
+          ],
+          "primaryKey": true,
+          "textKind": null,
+          "transform": [],
+          "private": false,
+          "states": null
+        }
+      ],
+      "compositePrimaryKey": false,
+      "identity": "id",
+      "idPrefix": "org",
+      "name": "app.org",
+      "relations": [],
+      "softDelete": null,
+      "tenantColumn": null,
+      "partialUniqueIndexes": [],
+      "uniqueIndexes": [],
+      "varName": "org"
+    },
+    {
+      "checkConstraints": [],
+      "columns": [
+        {
+          "enumValues": null,
+          "generated": true,
+          "immutable": true,
+          "kind": "id",
+          "max": 48,
+          "maxBytes": null,
+          "min": 1,
+          "name": "id",
+          "notNull": true,
+          "patterns": [
+            "/^\\S{1,48}$/"
+          ],
+          "primaryKey": true,
+          "textKind": null,
+          "transform": [],
+          "private": false,
+          "states": null
+        },
+        {
+          "enumValues": null,
+          "generated": false,
+          "immutable": true,
+          "kind": "ref",
+          "max": 48,
+          "maxBytes": null,
+          "min": 1,
+          "name": "orgId",
+          "notNull": false,
+          "patterns": [
+            "/^\\S{1,48}$/"
+          ],
+          "primaryKey": false,
+          "textKind": null,
+          "transform": [],
+          "private": false,
+          "states": null
+        },
+        {
+          "enumValues": null,
+          "generated": false,
+          "immutable": false,
+          "kind": "ref",
+          "max": 48,
+          "maxBytes": null,
+          "min": 1,
+          "name": "teamId",
+          "notNull": false,
+          "patterns": [
+            "/^\\S{1,48}$/"
+          ],
+          "primaryKey": false,
+          "textKind": null,
+          "transform": [],
+          "private": false,
+          "states": null
+        },
+        {
+          "enumValues": null,
+          "generated": false,
+          "immutable": false,
+          "kind": "ref",
+          "max": 48,
+          "maxBytes": null,
+          "min": 1,
+          "name": "_secretTeam",
+          "notNull": false,
+          "patterns": [
+            "/^\\S{1,48}$/"
+          ],
+          "primaryKey": false,
+          "textKind": null,
+          "transform": [],
+          "private": true,
+          "states": null
+        },
+        {
+          "enumValues": null,
+          "generated": false,
+          "immutable": false,
+          "kind": "text",
+          "max": null,
+          "maxBytes": null,
+          "min": null,
+          "name": "_hidden",
+          "notNull": false,
+          "patterns": [],
+          "primaryKey": false,
+          "textKind": null,
+          "transform": [],
+          "private": true,
+          "states": null
+        },
+        {
+          "enumValues": null,
+          "generated": false,
+          "immutable": false,
+          "kind": "PgInteger",
+          "max": 2147483647,
+          "maxBytes": null,
+          "min": -2147483648,
+          "name": "seq",
+          "notNull": true,
+          "patterns": [],
+          "primaryKey": false,
+          "textKind": null,
+          "transform": [],
+          "private": false,
+          "states": null
+        },
+        {
+          "enumValues": null,
+          "generated": true,
+          "immutable": true,
+          "kind": "createdAt",
+          "max": null,
+          "maxBytes": null,
+          "min": null,
+          "name": "created_at",
+          "notNull": true,
+          "patterns": [],
+          "primaryKey": false,
+          "textKind": null,
+          "transform": [],
+          "private": false,
+          "states": null
+        }
+      ],
+      "compositePrimaryKey": false,
+      "identity": "id",
+      "idPrefix": "mem",
+      "name": "member",
+      "relations": [
+        {
+          "column": "orgId",
+          "onDelete": "no action",
+          "onUpdate": "no action",
+          "refColumn": "id",
+          "table": "org"
+        },
+        {
+          "column": "teamId",
+          "onDelete": "no action",
+          "onUpdate": "no action",
+          "refColumn": "id",
+          "table": "team"
+        },
+        {
+          "column": "_secretTeam",
+          "onDelete": "no action",
+          "onUpdate": "no action",
+          "refColumn": "id",
+          "table": "team"
+        }
+      ],
+      "softDelete": null,
+      "tenantColumn": null,
+      "partialUniqueIndexes": [],
+      "uniqueIndexes": [],
+      "varName": "member"
+    },
+    {
+      "checkConstraints": [],
+      "columns": [
+        {
+          "enumValues": null,
+          "generated": true,
+          "immutable": true,
+          "kind": "id",
+          "max": 48,
+          "maxBytes": null,
+          "min": 1,
+          "name": "id",
+          "notNull": true,
+          "patterns": [
+            "/^\\S{1,48}$/"
+          ],
+          "primaryKey": true,
+          "textKind": null,
+          "transform": [],
+          "private": false,
+          "states": null
+        }
+      ],
+      "compositePrimaryKey": false,
+      "identity": "id",
+      "idPrefix": "tem",
+      "name": "team",
+      "relations": [],
+      "softDelete": null,
+      "tenantColumn": null,
+      "partialUniqueIndexes": [],
+      "uniqueIndexes": [],
+      "varName": "team"
+    }
+  ],
+  "v": 2
+}

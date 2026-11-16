@@ -1,0 +1,119 @@
+{
+  "_generated": "comb checksum:e2c5f2319ca8",
+  "database": "core",
+  "entities": [
+    {
+      "checkConstraints": [],
+      "columns": [
+        {
+          "enumValues": null,
+          "generated": true,
+          "immutable": true,
+          "kind": "id",
+          "max": 48,
+          "maxBytes": null,
+          "min": 1,
+          "name": "id",
+          "notNull": true,
+          "patterns": [
+            "/^\\S{1,48}$/"
+          ],
+          "primaryKey": true,
+          "textKind": null,
+          "transform": [],
+          "private": false,
+          "states": null
+        },
+        {
+          "enumValues": null,
+          "generated": false,
+          "immutable": false,
+          "kind": "ref",
+          "max": 48,
+          "maxBytes": null,
+          "min": 1,
+          "name": "orgId",
+          "notNull": true,
+          "patterns": [
+            "/^\\S{1,48}$/"
+          ],
+          "primaryKey": false,
+          "textKind": null,
+          "transform": [],
+          "private": false,
+          "states": null
+        },
+        {
+          "enumValues": null,
+          "generated": false,
+          "immutable": false,
+          "kind": "text",
+          "max": null,
+          "maxBytes": null,
+          "min": null,
+          "name": "title",
+          "notNull": false,
+          "patterns": [],
+          "primaryKey": false,
+          "textKind": null,
+          "transform": [],
+          "private": false,
+          "states": null
+        }
+      ],
+      "compositePrimaryKey": false,
+      "identity": "id",
+      "idPrefix": "doc",
+      "name": "doc",
+      "relations": [
+        {
+          "column": "orgId",
+          "onDelete": null,
+          "onUpdate": null,
+          "refColumn": "id",
+          "table": "org"
+        }
+      ],
+      "softDelete": null,
+      "tenantColumn": "orgId",
+      "partialUniqueIndexes": [],
+      "uniqueIndexes": [],
+      "varName": "doc"
+    },
+    {
+      "checkConstraints": [],
+      "columns": [
+        {
+          "enumValues": null,
+          "generated": true,
+          "immutable": true,
+          "kind": "id",
+          "max": 48,
+          "maxBytes": null,
+          "min": 1,
+          "name": "id",
+          "notNull": true,
+          "patterns": [
+            "/^\\S{1,48}$/"
+          ],
+          "primaryKey": true,
+          "textKind": null,
+          "transform": [],
+          "private": false,
+          "states": null
+        }
+      ],
+      "compositePrimaryKey": false,
+      "identity": "id",
+      "idPrefix": "org",
+      "name": "org",
+      "relations": [],
+      "softDelete": null,
+      "tenantColumn": null,
+      "partialUniqueIndexes": [],
+      "uniqueIndexes": [],
+      "varName": "org"
+    }
+  ],
+  "v": 2
+}

@@ -1,0 +1,18 @@
+{
+  "_generated": "comb checksum:856d6fb448ef",
+  "relationCount": 1,
+  "relations": [
+    {
+      "from": "member.team_ref",
+      "onDelete": "no action",
+      "onUpdate": "no action",
+      "to": "app.team.id"
+    }
+  ],
+  "tableCount": 3,
+  "tables": [
+    "app.team",
+    "member",
+    "team"
+  ]
+}

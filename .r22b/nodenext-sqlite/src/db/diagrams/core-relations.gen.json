@@ -1,0 +1,19 @@
+{
+  "_generated": "comb checksum:dc2cf2697a34",
+  "relationCount": 2,
+  "relations": [
+    {
+      "from": "row.otherMutId",
+      "to": "peer.id"
+    },
+    {
+      "from": "row.tenantId",
+      "to": "peer.id"
+    }
+  ],
+  "tableCount": 2,
+  "tables": [
+    "peer",
+    "row"
+  ]
+}

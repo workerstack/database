@@ -1,0 +1,17 @@
+{
+  "_generated": "comb checksum:95b34b89ac6c",
+  "relationCount": 1,
+  "relations": [
+    {
+      "from": "row.parent_id",
+      "onDelete": "no action",
+      "onUpdate": "no action",
+      "to": "parent.id"
+    }
+  ],
+  "tableCount": 2,
+  "tables": [
+    "parent",
+    "row"
+  ]
+}

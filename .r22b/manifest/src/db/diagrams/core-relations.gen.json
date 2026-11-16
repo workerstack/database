@@ -1,0 +1,30 @@
+{
+  "_generated": "comb checksum:93b32ac74347",
+  "relationCount": 3,
+  "relations": [
+    {
+      "from": "member.org_ref",
+      "onDelete": "no action",
+      "onUpdate": "no action",
+      "to": "app.org.id"
+    },
+    {
+      "from": "member.team_ref",
+      "onDelete": "no action",
+      "onUpdate": "no action",
+      "to": "team.id"
+    },
+    {
+      "from": "member.secret_team",
+      "onDelete": "no action",
+      "onUpdate": "no action",
+      "to": "team.id"
+    }
+  ],
+  "tableCount": 3,
+  "tables": [
+    "member",
+    "app.org",
+    "team"
+  ]
+}

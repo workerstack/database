@@ -1,0 +1,15 @@
+{
+  "_generated": "comb checksum:b30fd2001b89",
+  "relationCount": 1,
+  "relations": [
+    {
+      "from": "row.parent_id",
+      "to": "parent.id"
+    }
+  ],
+  "tableCount": 2,
+  "tables": [
+    "parent",
+    "row"
+  ]
+}

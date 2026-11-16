@@ -1,0 +1,23 @@
+{
+  "_generated": "comb checksum:f6733ce2b1cb",
+  "databases": {
+    "core": [
+      "db.core.constraints.gen.ts",
+      "db.core.entities.gen.ts",
+      "db.core.manifest.gen.json",
+      "db.core.relations.gen.ts",
+      "db.core.rows.gen.ts",
+      "diagrams/core-ai.gen.txt",
+      "diagrams/core-relations.gen.json",
+      "diagrams/core-schema.gen.sql",
+      "dtos/_shared/index.gen.ts",
+      "dtos/post/index.gen.ts",
+      "dtos/user-account/index.gen.ts",
+      "rqb-cols/post/index.gen.ts",
+      "rqb-cols/user-account/index.gen.ts",
+      "sql-cols/post/index.gen.ts",
+      "sql-cols/user-account/index.gen.ts",
+      "table-names/index.gen.ts"
+    ]
+  }
+}

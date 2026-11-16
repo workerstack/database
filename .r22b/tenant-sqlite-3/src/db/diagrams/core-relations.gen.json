@@ -1,0 +1,15 @@
+{
+  "_generated": "comb checksum:55690111e0a3",
+  "relationCount": 1,
+  "relations": [
+    {
+      "from": "doc.orgId",
+      "to": "org.id"
+    }
+  ],
+  "tableCount": 2,
+  "tables": [
+    "doc",
+    "org"
+  ]
+}

@@ -1,0 +1,149 @@
+{
+  "_generated": "comb checksum:68c9a2abcd87",
+  "database": "core",
+  "entities": [
+    {
+      "checkConstraints": [],
+      "columns": [
+        {
+          "enumValues": null,
+          "generated": true,
+          "immutable": true,
+          "kind": "id",
+          "max": 48,
+          "maxBytes": null,
+          "min": 1,
+          "name": "id",
+          "notNull": true,
+          "patterns": [
+            "/^\\S{1,48}$/"
+          ],
+          "primaryKey": true,
+          "textKind": null,
+          "transform": [],
+          "private": false,
+          "states": null
+        },
+        {
+          "enumValues": [
+            "queued",
+            "running",
+            "done",
+            "failed"
+          ],
+          "generated": false,
+          "immutable": false,
+          "kind": "enum",
+          "max": null,
+          "maxBytes": null,
+          "min": null,
+          "name": "status",
+          "notNull": true,
+          "patterns": [],
+          "primaryKey": false,
+          "textKind": null,
+          "transform": [],
+          "private": false,
+          "states": {
+            "initial": "queued",
+            "terminal": [
+              "done",
+              "failed"
+            ],
+            "transitions": {
+              "queued": [
+                "running"
+              ],
+              "running": [
+                "done",
+                "failed"
+              ]
+            }
+          }
+        }
+      ],
+      "compositePrimaryKey": false,
+      "identity": "id",
+      "idPrefix": "job",
+      "name": "job",
+      "relations": [],
+      "softDelete": null,
+      "tenantColumn": null,
+      "partialUniqueIndexes": [],
+      "uniqueIndexes": [],
+      "varName": "job"
+    },
+    {
+      "checkConstraints": [],
+      "columns": [
+        {
+          "enumValues": null,
+          "generated": true,
+          "immutable": true,
+          "kind": "id",
+          "max": 48,
+          "maxBytes": null,
+          "min": 1,
+          "name": "id",
+          "notNull": true,
+          "patterns": [
+            "/^\\S{1,48}$/"
+          ],
+          "primaryKey": true,
+          "textKind": null,
+          "transform": [],
+          "private": false,
+          "states": null
+        },
+        {
+          "enumValues": [
+            "queued",
+            "running",
+            "done",
+            "failed"
+          ],
+          "generated": false,
+          "immutable": false,
+          "kind": "enum",
+          "max": null,
+          "maxBytes": null,
+          "min": null,
+          "name": "status",
+          "notNull": true,
+          "patterns": [],
+          "primaryKey": false,
+          "textKind": null,
+          "transform": [],
+          "private": false,
+          "states": {
+            "initial": "queued",
+            "terminal": [
+              "done",
+              "failed"
+            ],
+            "transitions": {
+              "queued": [
+                "running"
+              ],
+              "running": [
+                "done",
+                "failed"
+              ]
+            }
+          }
+        }
+      ],
+      "compositePrimaryKey": false,
+      "identity": "id",
+      "idPrefix": "task",
+      "name": "task",
+      "relations": [],
+      "softDelete": null,
+      "tenantColumn": null,
+      "partialUniqueIndexes": [],
+      "uniqueIndexes": [],
+      "varName": "task"
+    }
+  ],
+  "v": 2
+}
