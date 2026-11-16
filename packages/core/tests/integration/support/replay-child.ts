@@ -23,7 +23,13 @@ async function counted(): Promise<Connect> {
 		return Object.assign(sql, {
 			unsafe: (query: string, params?: unknown[]) => {
 				if (query.startsWith("DROP DATABASE IF EXISTS comb_replay_")) writeSync(1, `drop ${query.split(" ").at(-1)}\n`)
-				return unsafe(query, params as never)
+				const sent = unsafe(query, params as never)
+				if (/^(DROP|ALTER DATABASE|SELECT pg_terminate)/.test(query))
+					sent.then(
+						() => writeSync(2, `probe ok ${Date.now()} ${query.slice(0, 90)}\n`),
+						(error: { code?: string; message?: string }) => writeSync(2, `probe failed ${Date.now()} ${error.code} ${error.message} :: ${query.slice(0, 90)}\n`),
+					)
+				return sent
 			},
 		})
 	}

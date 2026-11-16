@@ -149,6 +149,8 @@ async function replayEach(
 ): Promise<void> {
 	for (const file of files) {
 		await run.sql.end()
+		await new Promise((done) => setTimeout(done, 400))
+		process.stderr.write(`probe open ${Date.now()} ${file.name}\n`)
 		run.sql = open()
 		await replayFile(run, file, replay)
 	}
@@ -189,6 +191,8 @@ async function cleanUp(run: Run): Promise<void> {
 			[run.database],
 		),
 	)
+	process.stderr.write(`probe terminated ${Date.now()}\n`)
+	await new Promise((done) => setTimeout(done, 600))
 	for (const slot of run.strays.slots) await settle(() => dropSlot(run.admin, slot))
 	await settle(() => run.admin.unsafe(`ALTER DATABASE ${run.database} IS_TEMPLATE false`, []))
 	await settle(() => run.admin.unsafe(`DROP DATABASE IF EXISTS ${run.database}`, []))
