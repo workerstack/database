@@ -4,53 +4,54 @@
  * plaintext rule (8 to 72 printable ASCII characters, bcrypt's limit), yet meta-contract §8 still
  * described the manifest that rule wrote.
  */
-import { readdirSync, readFileSync } from "node:fs"
-import { join, relative } from "node:path"
-import { describe, expect, it } from "vitest"
+import { readdirSync, readFileSync } from "node:fs";
+import { join, relative } from "node:path";
 
-const PACKAGE = join(import.meta.dirname, "../..")
-const REPO = join(PACKAGE, "../..")
+import { describe, expect, it } from "vitest";
 
-/* the plaintext password rule 0.20.0 removed from the column (C1 of r21), as the sentences fdb49c98 deleted
-   wrote it: the bare words also describe other things, as Atlas's directive pattern in atlas-header.ts */
-const REMOVED = ["a password's 8 to 72", "a password's printable ASCII", "bcrypt's limit"]
+const PACKAGE = join(import.meta.dirname, "../..");
 
-/** The README without its "## Upgrading to …" sections, which the prepack copies into the package */
+// the plaintext password rule 0.20.0 removed from the column (C1 of r21), as the sentences fdb49c98 deleted
+// wrote it: the bare words also describe other things, as Atlas's directive pattern in atlas-header.ts
+const REMOVED = ["a password's 8 to 72", "a password's printable ASCII", "bcrypt's limit"];
+
+/** The package README without its "## Upgrading to …" sections */
 function readmeOutsideUpgrades(): string {
-	const sections = readFileSync(join(REPO, "README.md"), "utf8").split(/\n(?=## )/)
-	return sections.filter((section) => !section.startsWith("## Upgrading to ")).join("\n")
+  const sections = readFileSync(join(PACKAGE, "README.md"), "utf8").split(/\n(?=## )/);
+
+  return sections.filter((section) => !section.startsWith("## Upgrading to ")).join("\n");
 }
 
 /** Each file under `dir` the package's `files` ships: docs, and source that is no test or fixture */
 function shipped(dir: string): string[] {
-	return readdirSync(join(PACKAGE, dir), { recursive: true, withFileTypes: true })
-		.filter((entry) => entry.isFile() && /\.(?:md|ts)$/.test(entry.name) && !entry.name.endsWith(".test.ts"))
-		.map((entry) => relative(PACKAGE, join(entry.parentPath, entry.name)))
-		.filter((path) => !path.split("/").includes("__fixtures__"))
+  return readdirSync(join(PACKAGE, dir), { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile() && /\.(?:md|ts)$/.test(entry.name) && !entry.name.endsWith(".test.ts"))
+    .map((entry) => relative(PACKAGE, join(entry.parentPath, entry.name)))
+    .filter((path) => !path.split("/").includes("__fixtures__"));
 }
 
 /** Each line of `text` holding a removed rule, as `<where>:<line>: <rule>` */
 function holding(where: string, text: string): string[] {
-	return text
-		.split("\n")
-		.flatMap((line, at) => REMOVED.filter((rule) => line.includes(rule)).map((rule) => `${where}:${at + 1}: ${rule}`))
+  return text
+    .split("\n")
+    .flatMap((line, at) => REMOVED.filter((rule) => line.includes(rule)).map((rule) => `${where}:${at + 1}: ${rule}`));
 }
 
 describe("a removed rule in the shipped docs (C4; siblings: the README outside its upgrade notes, and source comments)", () => {
-	it("is in no doc or source file the package ships", () => {
-		const files = [...shipped("docs"), ...shipped("src")]
-		expect(files).toEqual(expect.arrayContaining(["docs/meta-contract.md", "src/password-text.ts"]))
-		expect(files.flatMap((file) => holding(file, readFileSync(join(PACKAGE, file), "utf8")))).toEqual([])
-	})
+  it("is in no doc or source file the package ships", () => {
+    const files = [...shipped("docs"), ...shipped("src")];
+    expect(files).toEqual(expect.arrayContaining(["docs/meta-contract.md", "src/password-text.ts"]));
+    expect(files.flatMap((file) => holding(file, readFileSync(join(PACKAGE, file), "utf8")))).toEqual([]);
+  });
 
-	it("is the removed sentence, not its words in another module's text", () => {
-		expect(holding("a.ts", "the kind's own (a password's printable ASCII, an id's)")).toEqual([
-			"a.ts:1: a password's printable ASCII",
-		])
-		expect(holding("b.ts", "`atlas:<name>` after printable ASCII and its value")).toEqual([])
-	})
+  it("is the removed sentence, not its words in another module's text", () => {
+    expect(holding("a.ts", "the kind's own (a password's printable ASCII, an id's)")).toEqual([
+      "a.ts:1: a password's printable ASCII",
+    ]);
+    expect(holding("b.ts", "`atlas:<name>` after printable ASCII and its value")).toEqual([]);
+  });
 
-	it("is in the README only within a dated upgrade note", () => {
-		expect(holding("README.md", readmeOutsideUpgrades())).toEqual([])
-	})
-})
+  it("is in the README only within a dated upgrade note", () => {
+    expect(holding("README.md", readmeOutsideUpgrades())).toEqual([]);
+  });
+});

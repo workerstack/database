@@ -60,8 +60,9 @@ the package:
     bun run test:bun                           # when migrate/drivers/bun-sqlite.ts or tests/bun/ changed
     bun run test tests/structure/api.test.ts   # when an export's signature changed
 
-The pre-commit hook formats, lints and type-checks the staged files; pre-push runs
-`fmt:check` and `lint` over the tree. The full
+The pre-commit hook (`bun repo precommit`) formats the staged files, lints them against
+`.repo/lint-baseline.json`, type-checks, runs the related tests and `bun repo check`;
+commit-msg runs `bun repo commit-msg`, and pre-push checks the pushed commits' messages. The full
 `test:coverage`, `test:consumers`, `test:e2e` and `typecheck:strict` run in CI,
 not here. Push, then run `bun scripts/ci-wait.ts`: it waits for the push's ci.yml
 run and, on a failure, names the failed jobs and saves their logs under
@@ -77,7 +78,7 @@ without either the run fails rather than skipping them. On this machine a
 user-level PostgreSQL 17 serves
 `DATABASE_TEST_PG_URL='postgres://lovro:database@localhost:55432/postgres?sslmode=disable'`
 in UTC, as CI's does. `node ~/.cache/pg17-embedded/start.mjs` starts it after a
-reboot, and `node .tmp/grunt/pg17/start.mjs` rebuilds it from nothing. Do not
+reboot. Do not
 bind 55432 from docker here. Elsewhere, a `postgres:17` container on that port
 serves the same URL where docker is set up. The local server checks passwords
 over TCP (scram-sha-256, `lovro`'s is `database`), as CI's does, so a test that
@@ -95,4 +96,4 @@ to make a build pass. Shell-outs to wrangler, atlas and drizzle-kit go through
 
 `test:bun` is separate because `packages/core/tests/bun/` imports `bun:sqlite`
 and `bun:test`, which vitest can't load; it holds `migrate/drivers/bun-sqlite.ts`
-at 100% (`packages/core/bunfig.toml`).
+at 100% (`packages/core/bunfig.test.toml`).

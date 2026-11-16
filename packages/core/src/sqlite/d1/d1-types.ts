@@ -8,37 +8,37 @@
 
 /** A prepared statement as database uses one: bound, then batched */
 type D1StatementLike = {
-	/** binds `values` to the statement's `?` placeholders in order, and returns the bound statement */
-	bind(...values: unknown[]): D1StatementLike
-}
+  /** binds `values` to the statement's `?` placeholders in order, and returns the bound statement */
+  bind(...values: unknown[]): D1StatementLike;
+};
 
 /** One statement's answer in a batch: the rows database reads */
 type D1AnswerLike<T> = {
-	/** the rows the statement returned, in order; empty for a write without RETURNING */
-	results: T[]
-}
+  /** the rows the statement returned, in order; empty for a write without RETURNING */
+  results: T[];
+};
 
 /** A D1 session: what database prepares and batches on, and the bookmark it hands on */
 type D1SessionLike = {
-	/** runs `statements` in order as one transaction, which a failing statement rolls back whole; one answer per statement, in order */
-	batch<T = unknown>(statements: D1StatementLike[]): Promise<Array<D1AnswerLike<T>>>
-	/** the bookmark of the session's latest query, which a session opened on it reads at least as far as; null before its first query */
-	getBookmark(): string | null
-	/** prepares `query`, its values written as `?` placeholders, to bind and batch */
-	prepare(query: string): D1StatementLike
-}
+  /** runs `statements` in order as one transaction, which a failing statement rolls back whole; one answer per statement, in order */
+  batch<T = unknown>(statements: D1StatementLike[]): Promise<Array<D1AnswerLike<T>>>;
+  /** the bookmark of the session's latest query, which a session opened on it reads at least as far as; null before its first query */
+  getBookmark(): string | null;
+  /** prepares `query`, its values written as `?` placeholders, to bind and batch */
+  prepare(query: string): D1StatementLike;
+};
 
 /** A D1 database binding; one with no `withSession` is a runtime without sessions (an older Miniflare) */
 type D1DatabaseLike = {
-	/** runs `statements` in order as one transaction, which a failing statement rolls back whole; one answer per statement, in order */
-	batch<T = unknown>(statements: D1StatementLike[]): Promise<Array<D1AnswerLike<T>>>
-	/** prepares `query`, its values written as `?` placeholders, to bind and batch */
-	prepare(query: string): D1StatementLike
-	/** opens a session on a bookmark, or on `"first-primary"` or `"first-unconstrained"`; absent on a runtime without sessions */
-	withSession?: ((constraintOrBookmark?: string) => D1SessionLike) | undefined
-}
+  /** runs `statements` in order as one transaction, which a failing statement rolls back whole; one answer per statement, in order */
+  batch<T = unknown>(statements: D1StatementLike[]): Promise<Array<D1AnswerLike<T>>>;
+  /** prepares `query`, its values written as `?` placeholders, to bind and batch */
+  prepare(query: string): D1StatementLike;
+  /** opens a session on a bookmark, or on `"first-primary"` or `"first-unconstrained"`; absent on a runtime without sessions */
+  withSession?: ((constraintOrBookmark?: string) => D1SessionLike) | undefined;
+};
 
 /** The session type `D`'s `withSession` opens: the caller's own, so drizzle() takes it as it takes `D`; a D1 session where `D` names none */
-type SessionOf<D extends D1DatabaseLike> = D extends { withSession(...args: never[]): infer S } ? S : D1SessionLike
+type SessionOf<D extends D1DatabaseLike> = D extends { withSession(...args: never[]): infer S } ? S : D1SessionLike;
 
-export type { D1AnswerLike, D1DatabaseLike, D1SessionLike, D1StatementLike, SessionOf }
+export type { D1AnswerLike, D1DatabaseLike, D1SessionLike, D1StatementLike, SessionOf };

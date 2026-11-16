@@ -9,61 +9,64 @@
  * <reason>` in the file; cautious: --yes too). `apply` then applies each in one batch with the
  * record of its hash, so it is applied and recorded or neither.
  */
-import fs from "node:fs"
-import path from "node:path"
-import { applyEach, ensureMigrationsTable, hashUnique, recordMigrationHash } from "../migrate/core/apply.ts"
-import { approveMigration } from "../migrate/core/approval.ts"
-import { sqlFiles } from "../migrate/core/atlas-dir.ts"
-import { sqliteDrift } from "../migrate/core/baseline-compare.ts"
+import fs from "node:fs";
+import path from "node:path";
+
+import { applyEach, ensureMigrationsTable, hashUnique, recordMigrationHash } from "../migrate/core/apply.ts";
+import { approveMigration } from "../migrate/core/approval.ts";
+import { sqlFiles } from "../migrate/core/atlas-dir.ts";
+import { sqliteDrift } from "../migrate/core/baseline-compare.ts";
 import {
-	type FileHashes,
-	type HistoryRow,
-	type LegacyRow,
-	type Matched,
-	matchHistory,
-	orphanMessage,
-	resolveLegacy,
-} from "../migrate/core/history-match.ts"
-import { type AcceptedHash, HASH_VERSION, migrationHashes } from "../migrate/core/parse.ts"
-import { binOf, type Peers, requirePeers } from "../migrate/core/optional-peer.ts"
-import type { Command, Provider } from "../migrate/core/peer-needs.ts"
-import { planApply, refuseSkipping } from "../migrate/core/plan-apply.ts"
-import { run as runProcess } from "../migrate/core/process.ts"
-import type { MigrateConnection } from "../migrate/types.ts"
-import { parseArgs, type ParsedArgs } from "./args.ts"
-import { fileName, openSqliteTarget, type SqliteTarget } from "./migrate-sqlite-target.ts"
-import { resolveMigrateTarget } from "./migrate-target.ts"
-import { asJson } from "./migrate-json.ts"
-import { checkPassed, CliError, type CliContext, type MigrateOutcome } from "./output.ts"
+  type FileHashes,
+  type HistoryRow,
+  type LegacyRow,
+  type Matched,
+  matchHistory,
+  orphanMessage,
+  resolveLegacy,
+} from "../migrate/core/history-match.ts";
+import { binOf, type Peers, requirePeers } from "../migrate/core/optional-peer.ts";
+import { type AcceptedHash, HASH_VERSION, migrationHashes } from "../migrate/core/parse.ts";
+import type { Command, Provider } from "../migrate/core/peer-needs.ts";
+import { planApply, refuseSkipping } from "../migrate/core/plan-apply.ts";
+import { run as runProcess } from "../migrate/core/process.ts";
+import type { MigrateConnection } from "../migrate/types.ts";
+import { parseArgs, type ParsedArgs } from "./args.ts";
+import { asJson } from "./migrate-json.ts";
+import { fileName, openSqliteTarget, type SqliteTarget } from "./migrate-sqlite-target.ts";
+import { resolveMigrateTarget } from "./migrate-target.ts";
+import { checkPassed, CliError, type CliContext, type MigrateOutcome } from "./output.ts";
 
-type Mode = "apply" | "baseline" | "check" | "status"
+type Mode = "apply" | "baseline" | "check" | "status";
 
-type Target = SqliteTarget
+type Target = SqliteTarget;
 
 /** One command: what it was asked, and where it reports */
-type Request = { args: ParsedArgs; db: string; io: CliContext; mode: Mode }
+type Request = { args: ParsedArgs; db: string; io: CliContext; mode: Mode };
 
-const option = (args: ParsedArgs, name: string) => args.options[name] as string | undefined
+const option = (args: ParsedArgs, name: string) => args.options[name] as string | undefined;
 
 /**
  * The history `__drizzle_migrations` holds, row by row: nothing when it is missing, which only a write
  * would create; a table without `hash_v`, which only a write adds, marks no row
  */
 async function recordedHistory(conn: MigrateConnection): Promise<LegacyRow[]> {
-	const table = await conn.execute(
-		"SELECT name FROM sqlite_master WHERE type = 'table' AND name = '__drizzle_migrations'",
-	)
-	if (table.rows.length === 0) return []
-	const { columns, rows } = await conn.execute("SELECT * FROM __drizzle_migrations ORDER BY id")
-	const [hash, name, id] = [columns.indexOf("hash"), columns.indexOf("name"), columns.indexOf("id")]
-	const [createdAt, version] = [columns.indexOf("created_at"), columns.indexOf("hash_v")]
-	return rows.map((row) => ({
-		createdAt: Number(row[createdAt]),
-		hash: String(row[hash]),
-		id: Number(row[id]),
-		marked: version >= 0 && Number(row[version]) === HASH_VERSION,
-		name: name >= 0 && row[name] !== null ? String(row[name]) : null,
-	}))
+  const table = await conn.execute(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = '__drizzle_migrations'",
+  );
+
+  if (table.rows.length === 0) return [];
+  const { columns, rows } = await conn.execute("SELECT * FROM __drizzle_migrations ORDER BY id");
+  const [hash, name, id] = [columns.indexOf("hash"), columns.indexOf("name"), columns.indexOf("id")];
+  const [createdAt, version] = [columns.indexOf("created_at"), columns.indexOf("hash_v")];
+
+  return rows.map((row) => ({
+    createdAt: Number(row[createdAt]),
+    hash: String(row[hash]),
+    id: Number(row[id]),
+    marked: version >= 0 && Number(row[version]) === HASH_VERSION,
+    name: name >= 0 && row[name] !== null ? String(row[name]) : null,
+  }));
 }
 
 /**
@@ -71,54 +74,65 @@ async function recordedHistory(conn: MigrateConnection): Promise<LegacyRow[]> {
  * resolveLegacy), and those names, which apply's rebuild then records; `legacy` while it awaits that rebuild
  */
 async function readHistory(
-	conn: MigrateConnection,
-	dir: string,
+  conn: MigrateConnection,
+  dir: string,
 ): Promise<{ legacy: boolean; renamed: Array<{ id: number; name: string }>; rows: HistoryRow[] }> {
-	const rows = await recordedHistory(conn)
-	if (rows.length === 0 || !(await hashUnique(conn))) return { legacy: false, renamed: [], rows }
-	const renamed = resolveLegacy(hashed(dir, sqlFiles(dir)), rows)
-	const names = new Map(renamed.map(({ id, name }) => [id, name]))
-	return { legacy: true, renamed, rows: rows.map((row) => ({ ...row, name: names.get(row.id) ?? row.name })) }
+  const rows = await recordedHistory(conn);
+
+  if (rows.length === 0 || !(await hashUnique(conn))) return { legacy: false, renamed: [], rows };
+  const renamed = resolveLegacy(hashed(dir, sqlFiles(dir)), rows);
+  const names = new Map(renamed.map(({ id, name }) => [id, name]));
+
+  return { legacy: true, renamed, rows: rows.map((row) => ({ ...row, name: names.get(row.id) ?? row.name })) };
 }
 
 /** Each of `files`, a file of `dir`, with the hashes its text has */
 const hashed = (dir: string, files: readonly string[]): FileHashes[] =>
-	files.map((name) => ({ hashes: migrationHashes(fs.readFileSync(path.join(dir, name), "utf8")), name }))
+  files.map((name) => ({ hashes: migrationHashes(fs.readFileSync(path.join(dir, name), "utf8")), name }));
 
 /**
  * Refuses what the history cannot vouch for: a file applied, then edited, in every mode; a row no
  * file matches (edited or renamed after it was applied) in every mode but status, which names it
  */
 function refuseUnmatched(matched: Matched, { dir, io, mode }: { dir: string; io: CliContext; mode: Mode }): void {
-	const [edited] = matched.edited
-	if (edited !== undefined)
-		throw new CliError(
-			`${edited} was applied, then edited: its hash is not the one recorded; restore the file, or put the change in a new one`,
-		)
-	/* a copy of a --file is what baseline records, so only check and apply refuse it */
-	const copies = matched.copies.map(
-		({ file, row }) =>
-			`${file} has the text of ${row}, applied with --file; run database migrate baseline to record it, or remove it`,
-	)
-	const [copy] = copies
-	if (copy !== undefined && (mode === "check" || mode === "apply")) throw new CliError(copy)
-	if (mode === "status") for (const line of copies) io.out(line)
-	if (matched.orphans.length === 0) return
-	const message = orphanMessage(matched.orphans, dir)
-	if (mode !== "status") throw new CliError(message)
-	io.out(message)
+  const [edited] = matched.edited;
+
+  if (edited !== undefined) {
+    throw new CliError(
+      `${edited} was applied, then edited: its hash is not the one recorded; restore the file, or put the change in a new one`,
+    );
+  }
+
+  // a copy of a --file is what baseline records, so only check and apply refuse it
+  const copies = matched.copies.map(
+    ({ file, row }) =>
+      `${file} has the text of ${row}, applied with --file; run database migrate baseline to record it, or remove it`,
+  );
+
+  const [copy] = copies;
+
+  if (copy !== undefined && (mode === "check" || mode === "apply")) throw new CliError(copy);
+
+  if (mode === "status") for (const line of copies) io.out(line);
+
+  if (matched.orphans.length === 0) return;
+  const message = orphanMessage(matched.orphans, dir);
+
+  if (mode !== "status") throw new CliError(message);
+  io.out(message);
 }
 
 /** Name each row a history from before 0.11 left unnamed, by the file it matched */
 async function nameRecorded(
-	conn: MigrateConnection,
-	named: ReadonlyArray<{ hash: string; name: string }>,
+  conn: MigrateConnection,
+  named: ReadonlyArray<{ hash: string; name: string }>,
 ): Promise<void> {
-	for (const { hash, name } of named)
-		await conn.execute(
-			"UPDATE __drizzle_migrations SET name = ? WHERE id = (SELECT id FROM __drizzle_migrations WHERE hash = ? AND name IS NULL ORDER BY id LIMIT 1)",
-			[name, hash],
-		)
+  for (const { hash, name } of named) {
+    await conn.execute(
+      "UPDATE __drizzle_migrations SET name = ? WHERE id = (SELECT id FROM __drizzle_migrations WHERE hash = ? AND name IS NULL ORDER BY id LIMIT 1)",
+      [name, hash],
+    );
+  }
 }
 
 /**
@@ -127,38 +141,43 @@ async function nameRecorded(
  * applied that the database does not reflect
  */
 async function baseline(
-	target: Target,
-	{ files, matched, record }: { files: readonly FileHashes[]; matched: Matched; record: () => Promise<void> },
-	io: CliContext,
+  target: Target,
+  { files, matched, record }: { files: readonly FileHashes[]; matched: Matched; record: () => Promise<void> },
+  io: CliContext,
 ) {
-	const drift = await sqliteDrift(target.conn, target.migrationsDir, {
-		engine: target.engine,
-		exec: io.run ?? runProcess,
-	})
-	if (drift !== "") {
-		throw new CliError(
-			`${target.name}'s schema is not the one its migrations leave, so baseline records nothing; the difference:\n${drift}`,
-		)
-	}
-	await record()
-	const conn = await target.write()
-	let marked = 0
-	for (const { hashes, name } of files) {
-		if (matched.applied.has(name)) continue
-		await recordMigrationHash(conn, (hashes[0] as AcceptedHash).hash, name)
-		io.out(`Marked applied: ${name}`)
-		marked++
-	}
-	io.out(`\nBaseline done: ${marked} marked, ${files.length - marked} already tracked`)
+  const drift = await sqliteDrift(target.conn, target.migrationsDir, {
+    engine: target.engine,
+    exec: io.run ?? runProcess,
+  });
+
+  if (drift !== "") {
+    throw new CliError(
+      `${target.name}'s schema is not the one its migrations leave, so baseline records nothing; the difference:\n${drift}`,
+    );
+  }
+
+  await record();
+  const conn = await target.write();
+  let marked = 0;
+
+  for (const { hashes, name } of files) {
+    if (matched.applied.has(name)) continue;
+    await recordMigrationHash(conn, (hashes[0] as AcceptedHash).hash, name);
+    io.out(`Marked applied: ${name}`);
+    marked++;
+  }
+
+  io.out(`\nBaseline done: ${marked} marked, ${files.length - marked} already tracked`);
 }
 
 /** status's lines and outcome: each of `names` applied or pending, as database's history records it */
 function statusOf(names: readonly string[], applied: ReadonlySet<string>, io: CliContext): MigrateOutcome {
-	const done = names.filter((name) => applied.has(name))
-	const unapplied = names.filter((name) => !applied.has(name))
-	io.out(`Applied: ${done.join(", ") || "none"}`)
-	io.out(`Pending: ${unapplied.join(", ") || "none"}`)
-	return { applied: done, pending: unapplied }
+  const done = names.filter((name) => applied.has(name));
+  const unapplied = names.filter((name) => !applied.has(name));
+  io.out(`Applied: ${done.join(", ") || "none"}`);
+  io.out(`Pending: ${unapplied.join(", ") || "none"}`);
+
+  return { applied: done, pending: unapplied };
 }
 
 /**
@@ -167,76 +186,93 @@ function statusOf(names: readonly string[], applied: ReadonlySet<string>, io: Cl
  * file (history-match.ts): a named row by its name, an unnamed one by its hash.
  */
 async function migrateSqlite({ args, io, mode }: Request, target: Target): Promise<MigrateOutcome> {
-	const single = option(args, "file")
-	const dir = target.migrationsDir
-	const relative = single === undefined ? undefined : fileName(single, { cwd: io.cwd, dir })
-	const { legacy, renamed, rows } = await readHistory(target.conn, dir)
-	if (relative !== undefined && !relative.startsWith("..")) {
-		const before = sqlFiles(dir).filter((name) => name < relative)
-		refuseSkipping(relative, before, matchHistory(hashed(dir, before), rows, false).applied)
-	}
-	const files = hashed(dir, relative === undefined ? sqlFiles(dir) : [relative])
-	const matched = matchHistory(files, rows, single === undefined)
-	refuseUnmatched(matched, { dir, io, mode })
-	/* database's history is written only once nothing refuses the run: its table, and each name a row lacks;
-	   only when a file applies or the history awaits its rebuild or names, so a Turso database
-	   with nothing to change is never opened for writing */
-	const record = async (applying: boolean) => {
-		if (!applying && !legacy && matched.named.length === 0) return
-		const conn = await target.write()
-		await ensureMigrationsTable(conn, renamed)
-		await nameRecorded(conn, matched.named)
-	}
-	if (mode === "baseline") {
-		await baseline(target, { files, matched, record: () => record(true) }, io)
-		return { applied: [], pending: [] }
-	}
-	const names = files.map(({ name }) => name)
-	if (mode === "status") return statusOf(names, matched.applied, io)
-	const yes = args.options["yes"] === true
-	const pending = await planApply({
-		applied: (name) => matched.applied.has(name),
-		approve: (migration) => approveMigration(migration, { confirm: io.confirm, target: target.name, yes }),
-		conn: target.conn,
-		dir,
-		exec: io.run ?? runProcess,
-		files: names,
-		kind: target.kind,
-		print: io.out,
-		proofEngine: target.engine,
-		whole: single === undefined,
-	})
-	const pendingNames = pending.map(({ name }) => name)
-	if (mode === "check") {
-		io.out(checkPassed(pendingNames))
-		return { applied: [], pending: pendingNames }
-	}
-	for (const name of names.filter((file) => !pendingNames.includes(file))) io.out(`Skip (already applied): ${name}`)
-	await record(pending.length > 0)
-	const applied =
-		pending.length > 0
-			? await applyEach(
-					() => target.fresh(),
-					pending.map(({ migration }) => migration),
-					{ history: await target.write(), print: io.out },
-				)
-			: []
-	io.out(`\nDone: ${applied.length} applied, ${names.length - applied.length} skipped`)
-	return { applied, pending: [] }
+  const single = option(args, "file");
+  const dir = target.migrationsDir;
+  const relative = single === undefined ? undefined : fileName(single, { cwd: io.cwd, dir });
+  const { legacy, renamed, rows } = await readHistory(target.conn, dir);
+
+  if (relative !== undefined && !relative.startsWith("..")) {
+    const before = sqlFiles(dir).filter((name) => name < relative);
+    refuseSkipping(relative, before, matchHistory(hashed(dir, before), rows, false).applied);
+  }
+
+  const files = hashed(dir, relative === undefined ? sqlFiles(dir) : [relative]);
+  const matched = matchHistory(files, rows, single === undefined);
+  refuseUnmatched(matched, { dir, io, mode });
+
+  // database's history is written only once nothing refuses the run: its table, and each name a row lacks;
+  // only when a file applies or the history awaits its rebuild or names, so a Turso database
+  // with nothing to change is never opened for writing
+  const record = async (applying: boolean) => {
+    if (!applying && !legacy && matched.named.length === 0) return;
+    const conn = await target.write();
+    await ensureMigrationsTable(conn, renamed);
+    await nameRecorded(conn, matched.named);
+  };
+
+  if (mode === "baseline") {
+    await baseline(target, { files, matched, record: () => record(true) }, io);
+
+    return { applied: [], pending: [] };
+  }
+
+  const names = files.map(({ name }) => name);
+
+  if (mode === "status") return statusOf(names, matched.applied, io);
+  const yes = args.options["yes"] === true;
+
+  const pending = await planApply({
+    applied: (name) => matched.applied.has(name),
+    approve: (migration) => approveMigration(migration, { confirm: io.confirm, target: target.name, yes }),
+    conn: target.conn,
+    dir,
+    exec: io.run ?? runProcess,
+    files: names,
+    kind: target.kind,
+    print: io.out,
+    proofEngine: target.engine,
+    whole: single === undefined,
+  });
+
+  const pendingNames = pending.map(({ name }) => name);
+
+  if (mode === "check") {
+    io.out(checkPassed(pendingNames));
+
+    return { applied: [], pending: pendingNames };
+  }
+
+  for (const name of names.filter((file) => !pendingNames.includes(file))) io.out(`Skip (already applied): ${name}`);
+  await record(pending.length > 0);
+
+  const applied =
+    pending.length > 0
+      ? await applyEach(
+          () => target.fresh(),
+          pending.map(({ migration }) => migration),
+          { history: await target.write(), print: io.out },
+        )
+      : [];
+
+  io.out(`\nDone: ${applied.length} applied, ${names.length - applied.length} skipped`);
+
+  return { applied, pending: [] };
 }
 
 /** `mode`'s argv read: its database and options; refused by usage without one database */
 function readArgv(mode: Mode, argv: readonly string[]): { args: ParsedArgs; db: string } {
-	const args = parseArgs(argv, `migrate ${mode}`)
-	/* parseArgs refuses a command that names no database */
-	return { args, db: args.positionals[0] as string }
+  const args = parseArgs(argv, `migrate ${mode}`);
+
+  // parseArgs refuses a command that names no database
+  return { args, db: args.positionals[0] as string };
 }
 
 /** `migrate apply|baseline|check|status`, with --json as one JSON object (migrate-json.ts) */
 export async function migrateApply(mode: Mode, argv: readonly string[], io: CliContext): Promise<void> {
-	const { args, db } = readArgv(mode, argv)
-	if (args.options["json"] === true) await asJson(db, io, (each) => runMode({ args, db, io: each, mode }))
-	else await runMode({ args, db, io, mode })
+  const { args, db } = readArgv(mode, argv);
+
+  if (args.options["json"] === true) await asJson(db, io, (each) => runMode({ args, db, io: each, mode }));
+  else await runMode({ args, db, io, mode });
 }
 
 /**
@@ -244,39 +280,48 @@ export async function migrateApply(mode: Mode, argv: readonly string[], io: CliC
  * before the command connects, fetches, spawns or asks Atlas anything
  */
 export async function needPeers(
-	io: CliContext,
-	command: Command,
-	{ fts, provider }: { fts?: boolean | undefined; provider: Provider },
+  io: CliContext,
+  command: Command,
+  { fts, provider }: { fts?: boolean | undefined; provider: Provider },
 ): Promise<Peers> {
-	const atlas = io.readAtlasVersion ?? (() => (io.run ?? runProcess)("atlas", ["version"]))
-	return requirePeers(command, provider, { atlas, cwd: io.cwd, fts, locate: io.locatePeer })
+  const atlas = io.readAtlasVersion ?? (() => (io.run ?? runProcess)("atlas", ["version"]));
+
+  return requirePeers(command, provider, { atlas, cwd: io.cwd, fts, locate: io.locatePeer });
 }
 
 /** `request.mode` on the database `request.db` resolves to, on its engine */
 async function runMode(request: Request): Promise<MigrateOutcome> {
-	const { args, db, io, mode } = request
-	const resolved = await resolveMigrateTarget({
-		cwd: io.cwd,
-		db,
-		dir: option(args, "dir"),
-		env: option(args, "env"),
-		mode: "apply",
-	})
-	/* every peer the command needs, before it connects, fetches, spawns or asks Atlas anything; a
-	   project without database.migrate.config.ts names a D1 binding */
-	const peers = await needPeers(io, mode, { provider: resolved?.provider.type ?? "d1" })
-	if (resolved?.provider.type === "postgres") {
-		const { migratePostgres } = await import("./migrate-atlas.ts")
-		return migratePostgres(mode, { ...resolved, provider: resolved.provider }, { args, io })
-	}
-	if (resolved === undefined || resolved.provider.type === "d1") {
-		const { migrateD1 } = await import("./migrate-d1.ts")
-		return migrateD1(request, resolved, binOf(peers, "wrangler"))
-	}
-	const target = await openSqliteTarget(request, { ...resolved, provider: resolved.provider })
-	try {
-		return await migrateSqlite(request, target)
-	} finally {
-		await target.close()
-	}
+  const { args, db, io, mode } = request;
+
+  const resolved = await resolveMigrateTarget({
+    cwd: io.cwd,
+    db,
+    dir: option(args, "dir"),
+    env: option(args, "env"),
+    mode: "apply",
+  });
+
+  // every peer the command needs, before it connects, fetches, spawns or asks Atlas anything; a
+  // project without database.migrate.config.ts names a D1 binding
+  const peers = await needPeers(io, mode, { provider: resolved?.provider.type ?? "d1" });
+
+  if (resolved?.provider.type === "postgres") {
+    const { migratePostgres } = await import("./migrate-atlas.ts");
+
+    return migratePostgres(mode, { ...resolved, provider: resolved.provider }, { args, io });
+  }
+
+  if (resolved === undefined || resolved.provider.type === "d1") {
+    const { migrateD1 } = await import("./migrate-d1.ts");
+
+    return migrateD1(request, resolved, binOf(peers, "wrangler"));
+  }
+
+  const target = await openSqliteTarget(request, { ...resolved, provider: resolved.provider });
+
+  try {
+    return await migrateSqlite(request, target);
+  } finally {
+    await target.close();
+  }
 }

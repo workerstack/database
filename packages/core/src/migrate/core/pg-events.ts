@@ -7,124 +7,134 @@
  * every trigger, so no new kind of statement escapes one. Shared objects (databases, roles,
  * tablespaces) and event triggers themselves fire none, as Postgres runs none for them.
  */
-import type { Finding } from "./classify-alter.ts"
-import { ddlFindings, REWRITES } from "./pg-ddl.ts"
-import { type EventTrigger, type Facts, flag, names, type Node } from "./pg-nodes.ts"
+import type { Finding } from "./classify-alter.ts";
+import { ddlFindings, REWRITES } from "./pg-ddl.ts";
+import { type EventTrigger, type Facts, flag, names, type Node } from "./pg-nodes.ts";
 
 /** A command whose tag database does not know: every trigger takes it for its own */
-const UNKNOWN = "?"
+const UNKNOWN = "?";
 
 // lookup-table: an object kind's word in a command tag, where it is not the kind's own name
 const WORDS: Readonly<Record<string, string>> = {
-	OBJECT_ATTRIBUTE: "TYPE",
-	OBJECT_FDW: "FOREIGN DATA WRAPPER",
-	OBJECT_FOREIGN_SERVER: "SERVER",
-	OBJECT_FOREIGN_TABLE: "FOREIGN TABLE",
-	OBJECT_LARGEOBJECT: "LARGE OBJECT",
-	OBJECT_MATVIEW: "MATERIALIZED VIEW",
-	OBJECT_TABCONSTRAINT: "TABLE",
-	OBJECT_TSCONFIGURATION: "TEXT SEARCH CONFIGURATION",
-	OBJECT_TSDICTIONARY: "TEXT SEARCH DICTIONARY",
-	OBJECT_TSPARSER: "TEXT SEARCH PARSER",
-	OBJECT_TSTEMPLATE: "TEXT SEARCH TEMPLATE",
-}
+  OBJECT_ATTRIBUTE: "TYPE",
+  OBJECT_FDW: "FOREIGN DATA WRAPPER",
+  OBJECT_FOREIGN_SERVER: "SERVER",
+  OBJECT_FOREIGN_TABLE: "FOREIGN TABLE",
+  OBJECT_LARGEOBJECT: "LARGE OBJECT",
+  OBJECT_MATVIEW: "MATERIALIZED VIEW",
+  OBJECT_TABCONSTRAINT: "TABLE",
+  OBJECT_TSCONFIGURATION: "TEXT SEARCH CONFIGURATION",
+  OBJECT_TSDICTIONARY: "TEXT SEARCH DICTIONARY",
+  OBJECT_TSPARSER: "TEXT SEARCH PARSER",
+  OBJECT_TSTEMPLATE: "TEXT SEARCH TEMPLATE",
+};
 
 // lookup-table: the command tags of the statements this module does not tag for an event trigger, as Postgres names them
 const LABELS: Readonly<Record<string, string>> = {
-	AlterDefaultPrivilegesStmt: "ALTER DEFAULT PRIVILEGES",
-	AlterRoleSetStmt: "ALTER ROLE",
-	AlterTSConfigurationStmt: "ALTER TEXT SEARCH CONFIGURATION",
-	AlterTSDictionaryStmt: "ALTER TEXT SEARCH DICTIONARY",
-	CheckPointStmt: "CHECKPOINT",
-	CreateAmStmt: "CREATE ACCESS METHOD",
-	CreatePLangStmt: "CREATE LANGUAGE",
-	CreateStatsStmt: "CREATE STATISTICS",
-	CreateUserMappingStmt: "CREATE USER MAPPING",
-	CreatedbStmt: "CREATE DATABASE",
-	DropdbStmt: "DROP DATABASE",
-	ImportForeignSchemaStmt: "IMPORT FOREIGN SCHEMA",
-	ReassignOwnedStmt: "REASSIGN OWNED",
-}
+  AlterDefaultPrivilegesStmt: "ALTER DEFAULT PRIVILEGES",
+  AlterRoleSetStmt: "ALTER ROLE",
+  AlterTSConfigurationStmt: "ALTER TEXT SEARCH CONFIGURATION",
+  AlterTSDictionaryStmt: "ALTER TEXT SEARCH DICTIONARY",
+  CheckPointStmt: "CHECKPOINT",
+  CreateAmStmt: "CREATE ACCESS METHOD",
+  CreatePLangStmt: "CREATE LANGUAGE",
+  CreateStatsStmt: "CREATE STATISTICS",
+  CreateUserMappingStmt: "CREATE USER MAPPING",
+  CreatedbStmt: "CREATE DATABASE",
+  DropdbStmt: "DROP DATABASE",
+  ImportForeignSchemaStmt: "IMPORT FOREIGN SCHEMA",
+  ReassignOwnedStmt: "REASSIGN OWNED",
+};
 
 // lookup-table: the tags of the statements a node type is, one per type
 const TAGS: Readonly<Record<string, string>> = {
-	AlterDomainStmt: "ALTER DOMAIN",
-	AlterEnumStmt: "ALTER TYPE",
-	AlterExtensionStmt: "ALTER EXTENSION",
-	AlterPolicyStmt: "ALTER POLICY",
-	AlterSeqStmt: "ALTER SEQUENCE",
-	CommentStmt: "COMMENT",
-	CompositeTypeStmt: "CREATE TYPE",
-	CreateCastStmt: "CREATE CAST",
-	CreateDomainStmt: "CREATE DOMAIN",
-	CreateEnumStmt: "CREATE TYPE",
-	CreateExtensionStmt: "CREATE EXTENSION",
-	CreateForeignTableStmt: "CREATE FOREIGN TABLE",
-	CreatePolicyStmt: "CREATE POLICY",
-	CreateRangeStmt: "CREATE TYPE",
-	CreateSchemaStmt: "CREATE SCHEMA",
-	CreateSeqStmt: "CREATE SEQUENCE",
-	CreateStmt: "CREATE TABLE",
-	CreateTrigStmt: "CREATE TRIGGER",
-	IndexStmt: "CREATE INDEX",
-	RuleStmt: "CREATE RULE",
-	SecLabelStmt: "SECURITY LABEL",
-	ViewStmt: "CREATE VIEW",
-}
+  AlterDomainStmt: "ALTER DOMAIN",
+  AlterEnumStmt: "ALTER TYPE",
+  AlterExtensionStmt: "ALTER EXTENSION",
+  AlterPolicyStmt: "ALTER POLICY",
+  AlterSeqStmt: "ALTER SEQUENCE",
+  CommentStmt: "COMMENT",
+  CompositeTypeStmt: "CREATE TYPE",
+  CreateCastStmt: "CREATE CAST",
+  CreateDomainStmt: "CREATE DOMAIN",
+  CreateEnumStmt: "CREATE TYPE",
+  CreateExtensionStmt: "CREATE EXTENSION",
+  CreateForeignTableStmt: "CREATE FOREIGN TABLE",
+  CreatePolicyStmt: "CREATE POLICY",
+  CreateRangeStmt: "CREATE TYPE",
+  CreateSchemaStmt: "CREATE SCHEMA",
+  CreateSeqStmt: "CREATE SEQUENCE",
+  CreateStmt: "CREATE TABLE",
+  CreateTrigStmt: "CREATE TRIGGER",
+  IndexStmt: "CREATE INDEX",
+  RuleStmt: "CREATE RULE",
+  SecLabelStmt: "SECURITY LABEL",
+  ViewStmt: "CREATE VIEW",
+};
 
 // lookup-table: the statements no event trigger runs for: on shared objects, or on event triggers themselves
 const NO_EVENT = /* @__PURE__ */ new Set([
-	"AlterEventTrigStmt",
-	"AlterRoleStmt",
-	"AlterTableSpaceOptionsStmt",
-	"CreateEventTrigStmt",
-	"CreateRoleStmt",
-	"CreateTableSpaceStmt",
-	"CreatedbStmt",
-	"DropRoleStmt",
-	"DropTableSpaceStmt",
-	"DropdbStmt",
-])
+  "AlterEventTrigStmt",
+  "AlterRoleStmt",
+  "AlterTableSpaceOptionsStmt",
+  "CreateEventTrigStmt",
+  "CreateRoleStmt",
+  "CreateTableSpaceStmt",
+  "CreatedbStmt",
+  "DropRoleStmt",
+  "DropTableSpaceStmt",
+  "DropdbStmt",
+]);
 
 /** An object kind's word in a tag: OBJECT_SEQUENCE is SEQUENCE */
 const word = (kind: unknown): string =>
-	WORDS[String(kind)] ??
-	String(kind)
-		.replace(/^OBJECT_/, "")
-		.replaceAll("_", " ")
+  WORDS[String(kind)] ??
+  String(kind)
+    .replace(/^OBJECT_/, "")
+    .replaceAll("_", " ");
 
 // lookup-table: the tags a node type reads from its fields; a SELECT is a command only with INTO
 const READ_TAGS: Readonly<Record<string, (node: Node) => string | undefined>> = {
-	CreateFunctionStmt: (node) => (flag(node["is_procedure"]) ? "CREATE PROCEDURE" : "CREATE FUNCTION"),
-	CreateTableAsStmt: (node) => (node["objtype"] === "OBJECT_MATVIEW" ? "CREATE MATERIALIZED VIEW" : "CREATE TABLE AS"),
-	DefineStmt: (node) => `CREATE ${word(node["kind"])}`,
-	GrantStmt: (node) => (flag(node["is_grant"]) ? "GRANT" : "REVOKE"),
-	SelectStmt: (node) => (node["intoClause"] === undefined ? undefined : "SELECT INTO"),
-}
+  CreateFunctionStmt: (node) => (flag(node["is_procedure"]) ? "CREATE PROCEDURE" : "CREATE FUNCTION"),
+  CreateTableAsStmt: (node) => (node["objtype"] === "OBJECT_MATVIEW" ? "CREATE MATERIALIZED VIEW" : "CREATE TABLE AS"),
+  DefineStmt: (node) => `CREATE ${word(node["kind"])}`,
+  GrantStmt: (node) => (flag(node["is_grant"]) ? "GRANT" : "REVOKE"),
+  SelectStmt: (node) => (node["intoClause"] === undefined ? undefined : "SELECT INTO"),
+};
 
 /** The command tag a rename, move, ALTER or DROP names by its object */
 function objectTag(type: string, node: Node): string | undefined {
-	if (type === "AlterTableStmt") return `ALTER ${word(node["objtype"])}`
-	if (type === "DropStmt") return `DROP ${word(node["removeType"])}`
-	if (type === "RenameStmt") {
-		const kind = node["renameType"]
-		return `ALTER ${word(kind === "OBJECT_COLUMN" ? node["relationType"] : kind)}`
-	}
-	if (type === "AlterObjectSchemaStmt" || type === "AlterOwnerStmt") return `ALTER ${word(node["objectType"])}`
-	if (type === "AlterFunctionStmt") return `ALTER ${word(node["objtype"])}`
-	return undefined
+  if (type === "AlterTableStmt") return `ALTER ${word(node["objtype"])}`;
+
+  if (type === "DropStmt") return `DROP ${word(node["removeType"])}`;
+
+  if (type === "RenameStmt") {
+    const kind = node["renameType"];
+
+    return `ALTER ${word(kind === "OBJECT_COLUMN" ? node["relationType"] : kind)}`;
+  }
+
+  if (type === "AlterObjectSchemaStmt" || type === "AlterOwnerStmt") return `ALTER ${word(node["objectType"])}`;
+
+  if (type === "AlterFunctionStmt") return `ALTER ${word(node["objtype"])}`;
+
+  return undefined;
 }
 
 /** A top-level statement's command tag; undefined for one no event trigger runs for, UNKNOWN for DDL database cannot tag */
 function tagOf(type: string, node: Node): string | undefined {
-	const eventTrigger = node["removeType"] === "OBJECT_EVENT_TRIGGER" || node["renameType"] === "OBJECT_EVENT_TRIGGER"
-	if (NO_EVENT.has(type) || eventTrigger) return undefined
-	const known = TAGS[type] ?? objectTag(type, node)
-	if (known !== undefined) return known
-	const read = READ_TAGS[type]
-	if (read !== undefined) return read(node)
-	/* a CREATE, ALTER or DROP of a kind this module has not named is DDL all the same */
-	return /^(?:Create|Alter|Drop)/.test(type) ? UNKNOWN : undefined
+  const eventTrigger = node["removeType"] === "OBJECT_EVENT_TRIGGER" || node["renameType"] === "OBJECT_EVENT_TRIGGER";
+
+  if (NO_EVENT.has(type) || eventTrigger) return undefined;
+  const known = TAGS[type] ?? objectTag(type, node);
+
+  if (known !== undefined) return known;
+  const read = READ_TAGS[type];
+
+  if (read !== undefined) return read(node);
+
+  // a CREATE, ALTER or DROP of a kind this module has not named is DDL all the same
+  return /^(?:Create|Alter|Drop)/.test(type) ? UNKNOWN : undefined;
 }
 
 /**
@@ -133,42 +143,52 @@ function tagOf(type: string, node: Node): string | undefined {
  * PREPARE)
  */
 function kindOf(type: string, node: Node): string {
-	const tag = tagOf(type, node)
-	if (tag !== undefined && tag !== UNKNOWN) return tag
-	return (
-		LABELS[type] ??
-		type
-			.replace(/Stmt$/, "")
-			.replaceAll(/([a-z])([A-Z])/g, "$1 $2")
-			.toUpperCase()
-	)
+  const tag = tagOf(type, node);
+
+  if (tag !== undefined && tag !== UNKNOWN) return tag;
+
+  return (
+    LABELS[type] ??
+    type
+      .replace(/Stmt$/, "")
+      .replaceAll(/([a-z])([A-Z])/g, "$1 $2")
+      .toUpperCase()
+  );
 }
 
 /** Whether a top-level statement drops an object, as sql_drop takes one */
 function drops(type: string, node: Node): boolean {
-	if (type === "DropStmt") return node["removeType"] !== "OBJECT_EVENT_TRIGGER"
-	if (type === "DropOwnedStmt") return true
-	if (type === "AlterDomainStmt") return node["subtype"] === "X"
-	if (type !== "AlterTableStmt") return false
-	return (node["cmds"] as Node[]).some((each) =>
-		/^AT_Drop(?:Column|Constraint)$/.test(String((each["AlterTableCmd"] as Node)["subtype"])),
-	)
+  if (type === "DropStmt") return node["removeType"] !== "OBJECT_EVENT_TRIGGER";
+
+  if (type === "DropOwnedStmt") return true;
+
+  if (type === "AlterDomainStmt") return node["subtype"] === "X";
+
+  if (type !== "AlterTableStmt") return false;
+
+  return (node["cmds"] as Node[]).some((each) =>
+    /^AT_Drop(?:Column|Constraint)$/.test(String((each["AlterTableCmd"] as Node)["subtype"])),
+  );
 }
 
 /** Whether a top-level statement rewrites a table, as table_rewrite takes one: a command whose rewrite database warns of */
 const rewrites = (type: string, node: Node, facts: Facts): boolean =>
-	(ddlFindings(type, node, facts) ?? []).some((finding) => finding.level === "lock" && finding.note === REWRITES)
+  (ddlFindings(type, node, facts) ?? []).some((finding) => finding.level === "lock" && finding.note === REWRITES);
 
-type Firing = { everyTrigger: boolean; facts: Facts }
+type Firing = { everyTrigger: boolean; facts: Facts };
 
 /** Whether `trigger`, as the history left it, fires on the top-level statement `type` */
 function fires(trigger: EventTrigger, [type, node]: [string, Node], { everyTrigger, facts }: Firing): boolean {
-	if (!trigger.enabled && !everyTrigger) return false
-	if (trigger.event === "sql_drop") return drops(type, node)
-	if (trigger.event === "table_rewrite") return rewrites(type, node, facts)
-	const tag = tagOf(type, node)
-	if (tag === undefined) return false
-	return trigger.tags === undefined || tag === UNKNOWN || trigger.tags.includes(tag)
+  if (!trigger.enabled && !everyTrigger) return false;
+
+  if (trigger.event === "sql_drop") return drops(type, node);
+
+  if (trigger.event === "table_rewrite") return rewrites(type, node, facts);
+  const tag = tagOf(type, node);
+
+  if (tag === undefined) return false;
+
+  return trigger.tags === undefined || tag === UNKNOWN || trigger.tags.includes(tag);
 }
 
 /**
@@ -176,44 +196,50 @@ function fires(trigger: EventTrigger, [type, node]: [string, Node], { everyTrigg
  * once the file set session_replication_role: each unsafe, as its function is code database does not read
  */
 function eventFindings(
-	stmts: unknown,
-	{ everyTrigger, facts }: { everyTrigger?: boolean | undefined; facts: Facts },
+  stmts: unknown,
+  { everyTrigger, facts }: { everyTrigger?: boolean | undefined; facts: Facts },
 ): Finding[] {
-	const tops = (stmts as Array<{ stmt: Node }>).map(({ stmt }) => Object.entries(stmt)[0] as [string, Node])
-	return [...facts.eventTriggers].flatMap(([name, trigger]) =>
-		tops.some((top) => fires(trigger, top, { everyTrigger: everyTrigger === true, facts }))
-			? [{ level: "unsafe" as const, note: `runs event trigger ${name}, whose function database does not read` }]
-			: [],
-	)
+  const tops = (stmts as Array<{ stmt: Node }>).map(({ stmt }) => Object.entries(stmt)[0] as [string, Node]);
+
+  return [...facts.eventTriggers].flatMap(([name, trigger]) =>
+    tops.some((top) => fires(trigger, top, { everyTrigger: everyTrigger === true, facts }))
+      ? [{ level: "unsafe" as const, note: `runs event trigger ${name}, whose function database does not read` }]
+      : [],
+  );
 }
 
 /** An event trigger made, altered, renamed or dropped: `facts` after it; whether `type` was one */
 function followEventTrigger(type: string, node: Node, facts: Facts): boolean {
-	if (type === "CreateEventTrigStmt") {
-		const when = ((node["whenclause"] as Node[] | undefined) ?? []).map((each) => each["DefElem"] as Node)
-		const tags = when.find((elem) => elem["defname"] === "tag")
-		facts.eventTriggers.set(String(node["trigname"]), {
-			enabled: true,
-			event: String(node["eventname"]),
-			tags:
-				tags === undefined
-					? undefined
-					: names(((tags["arg"] as Node)["List"] as Node)["items"]).map((tag) => tag.toUpperCase()),
-		})
-	} else if (type === "AlterEventTrigStmt") {
-		const trigger = facts.eventTriggers.get(String(node["trigname"]))
-		/* ENABLE REPLICA fires only under session_replication_role = replica, which no migration runs with */
-		if (trigger !== undefined) trigger.enabled = node["tgenabled"] === "O" || node["tgenabled"] === "A"
-	} else if (type === "RenameStmt" && node["renameType"] === "OBJECT_EVENT_TRIGGER") {
-		const was = String(((node["object"] as Node)["String"] as Node)["sval"])
-		const trigger = facts.eventTriggers.get(was)
-		facts.eventTriggers.delete(was)
-		if (trigger !== undefined) facts.eventTriggers.set(String(node["newname"]), trigger)
-	} else if (type === "DropStmt" && node["removeType"] === "OBJECT_EVENT_TRIGGER") {
-		for (const object of node["objects"] as Node[])
-			facts.eventTriggers.delete(String((object["String"] as Node)["sval"]))
-	} else return false
-	return true
+  if (type === "CreateEventTrigStmt") {
+    const when = ((node["whenclause"] as Node[] | undefined) ?? []).map((each) => each["DefElem"] as Node);
+    const tags = when.find((elem) => elem["defname"] === "tag");
+    facts.eventTriggers.set(String(node["trigname"]), {
+      enabled: true,
+      event: String(node["eventname"]),
+      tags:
+        tags === undefined
+          ? undefined
+          : names(((tags["arg"] as Node)["List"] as Node)["items"]).map((tag) => tag.toUpperCase()),
+    });
+  } else if (type === "AlterEventTrigStmt") {
+    const trigger = facts.eventTriggers.get(String(node["trigname"]));
+
+    // ENABLE REPLICA fires only under session_replication_role = replica, which no migration runs with
+    if (trigger !== undefined) trigger.enabled = node["tgenabled"] === "O" || node["tgenabled"] === "A";
+  } else if (type === "RenameStmt" && node["renameType"] === "OBJECT_EVENT_TRIGGER") {
+    const was = String(((node["object"] as Node)["String"] as Node)["sval"]);
+    const trigger = facts.eventTriggers.get(was);
+    facts.eventTriggers.delete(was);
+
+    if (trigger !== undefined) facts.eventTriggers.set(String(node["newname"]), trigger);
+  } else if (type === "DropStmt" && node["removeType"] === "OBJECT_EVENT_TRIGGER") {
+    for (const object of node["objects"] as Node[])
+      facts.eventTriggers.delete(String((object["String"] as Node)["sval"]));
+  } else {
+    return false;
+  }
+
+  return true;
 }
 
-export { eventFindings, followEventTrigger, kindOf, tagOf }
+export { eventFindings, followEventTrigger, kindOf, tagOf };

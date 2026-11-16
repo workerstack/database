@@ -5,12 +5,14 @@
  * under a consumer's strict flags; a builder the generators name that the project never writes fails
  * here, so the next rule is typechecked too.
  */
-import fs from "node:fs"
-import path from "node:path"
-import { describe, expect, it } from "vitest"
-import { codegen, generatedFiles, project, read, typecheck, useProjects } from "../support/codegen-project.ts"
+import fs from "node:fs";
+import path from "node:path";
 
-useProjects()
+import { describe, expect, it } from "vitest";
+
+import { codegen, generatedFiles, project, read, typecheck, useProjects } from "../support/codegen-project.ts";
+
+useProjects();
 
 const PG_TABLES = `import { bigint, bit, boolean, cidr, date, doublePrecision, inet, integer, interval, json, jsonb, macaddr, macaddr8, numeric, pgEnum, pgTable, real, text, time, timestamp, uuid, varchar } from "drizzle-orm/pg-core"
 import { c } from "@workerstack/database/pg/columns"
@@ -64,7 +66,7 @@ export const kinds = pgTable("kinds", {
 	updatedAt: c.updatedAt("updatedAt"),
 })
 export const child = pgTable("child", { id: c.id("chd"), kindsId: c.ref("kinds_id").references(() => kinds.id) })
-`
+`;
 
 const SQLITE_TABLES = `import { sqliteTable } from "drizzle-orm/sqlite-core"
 import { c } from "@workerstack/database/sqlite/columns"
@@ -81,52 +83,56 @@ export const note = sqliteTable("note", {
 	createdAt: c.createdAt("createdAt"),
 	deletedAt: c.deletedAt("deletedAt"),
 })
-`
+`;
 
-const SCHEMAS = 'import * as z from "zod"\nexport const settings = z.object({ theme: z.string() })\n'
+const SCHEMAS = 'import * as z from "zod"\nexport const settings = z.object({ theme: z.string() })\n';
 
-/*
- * tsconfig.strict.json's flags past the ones `typecheck` already sets, but isolatedDeclarations: a
- * generated schema's type is zod's inference, which no DTO file writes out (TS9010, TS9013)
- */
-const STRICT = { allowJs: false, erasableSyntaxOnly: true }
+// tsconfig.src.json's flags past the ones `typecheck` already sets, but isolatedDeclarations: a
+// generated schema's type is zod's inference, which no DTO file writes out (TS9010, TS9013)
+const STRICT = { allowJs: false, erasableSyntaxOnly: true };
 
-const DTOS = path.join(import.meta.dirname, "../../../src/codegen/generators/dtos")
+const DTOS = path.join(import.meta.dirname, "../../../src/codegen/generators/dtos");
 
 /** The zod builders the DTO generators name in what they write, such as z.string( or z.iso.date( */
 const builders = (): string[] => {
-	const named = fs
-		.readdirSync(DTOS)
-		.filter((file) => file.endsWith(".ts") && !file.endsWith(".test.ts"))
-		.flatMap((file) => [...fs.readFileSync(path.join(DTOS, file), "utf8").matchAll(/\bz\.(?:iso\.)?[A-Za-z0-9]+\(/g)])
-		.map((match) => match[0])
-	return [...new Set(named)].sort()
-}
+  const named = fs
+    .readdirSync(DTOS)
+    .filter((file) => file.endsWith(".ts") && !file.endsWith(".test.ts"))
+    .flatMap((file) => [...fs.readFileSync(path.join(DTOS, file), "utf8").matchAll(/\bz\.(?:iso\.)?[A-Za-z0-9]+\(/g)])
+    .map((match) => match[0]);
+
+  return [...new Set(named)].sort();
+};
 
 describe("every zod builder database's DTOs call, as a consumer's tsc reads it", () => {
-	it("typechecks the DTOs of a column of every kind, on Postgres and SQLite, each builder written", async () => {
-		const dir = project({
-			"database.config.ts": `export default { databases: {
+  it("typechecks the DTOs of a column of every kind, on Postgres and SQLite, each builder written", async () => {
+    const dir = project({
+      "database.config.ts": `export default { databases: {
 	core: { tables: "./src/db/db.core.tables.ts" },
 	support: { tables: "./src/pg/db.support.tables.ts", dialect: "postgres" },
 } }\n`,
-			"src/db/db.core.tables.ts": SQLITE_TABLES,
-			"src/db/schemas.ts": SCHEMAS,
-			"src/pg/db.support.tables.ts": PG_TABLES,
-			"src/pg/schemas.ts": SCHEMAS,
-		})
-		await codegen(dir)
-		const written = generatedFiles(dir)
-			.filter((file) => file.endsWith(".ts"))
-			.map((file) => read(dir, file))
-			.join("\n")
-		expect(builders().filter((builder) => !written.includes(builder))).toEqual([])
-		/* the consumer's strict flags, then typecheck:strict's on top of them: the ones database holds its own source to */
-		for (const options of [{}, STRICT, { ...STRICT, lib: ["es2022"], target: "es2022" }])
-			expect(
-				typecheck(dir, [], options)
-					.split("\n")
-					.filter((line) => line.includes(".gen.ts")),
-			).toEqual([])
-	}, 240_000)
-})
+      "src/db/db.core.tables.ts": SQLITE_TABLES,
+      "src/db/schemas.ts": SCHEMAS,
+      "src/pg/db.support.tables.ts": PG_TABLES,
+      "src/pg/schemas.ts": SCHEMAS,
+    });
+
+    await codegen(dir);
+
+    const written = generatedFiles(dir)
+      .filter((file) => file.endsWith(".ts"))
+      .map((file) => read(dir, file))
+      .join("\n");
+
+    expect(builders().filter((builder) => !written.includes(builder))).toEqual([]);
+
+    // the consumer's strict flags, then typecheck:strict's on top of them: the ones database holds its own source to
+    for (const options of [{}, STRICT, { ...STRICT, lib: ["es2022"], target: "es2022" }]) {
+      expect(
+        typecheck(dir, [], options)
+          .split("\n")
+          .filter((line) => line.includes(".gen.ts")),
+      ).toEqual([]);
+    }
+  }, 240_000);
+});

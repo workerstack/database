@@ -42,43 +42,43 @@
  * cleanup first, once, and then ends the process as the signal would; a run killed past it is swept
  * by the next replay or apply on the server.
  */
-import { sqlIdentifier } from "../../codegen/utils/case.ts"
-import { type PgTarget, refuseUrlProblems } from "./atlas-target.ts"
-import { onceCleanup, onSignals } from "./cleanup.ts"
-import { ReplayFailed } from "./replay-failed.ts"
-import { asTarget } from "./pg-live-catalog.ts"
-import { outsideTransaction } from "./atlas-header.ts"
-import { type Connect, failureOf, loadPostgres, readCatalog } from "./pg-live-objects.ts"
-import type { LiveObjects } from "./pg-live-types.ts"
-import { insideOnly } from "./pg-inside-transaction.ts"
-import { beyondDatabase, blockAfter } from "./pg-outside-transaction.ts"
-import { claim, copyExtensions, extensionsOf, makeDatabase, replayOptions, type Sql } from "./pg-replay-database.ts"
-import { cleanUp, leaving, sweep } from "./pg-replay-drops.ts"
-import { localeClause, targetLocale } from "./pg-replay-locale.ts"
-import { runsOnMade } from "./pg-replay-made.ts"
-import { devRoleOf, type Run } from "./pg-replay-roles.ts"
-import { type Refuse, type Replay, type Replaying, runStatement, statementsOf } from "./pg-replay-statement.ts"
-import { leaveOutTablespace } from "./pg-replay-tablespaces.ts"
-import { begin, commit, guarded, window } from "./pg-replay-commit.ts"
-import { lockReader } from "./pg-replay-held.ts"
-import { prepareSnapshot, snapshot } from "./pg-server-snapshot.ts"
-import { refuseUncounted } from "./pg-server-writes.ts"
-import { namesIn } from "./sql-code.ts"
-import { nothingHidden, readStatement } from "./pg-replay-hidden.ts"
+import { sqlIdentifier } from "../../codegen/utils/case.ts";
+import { outsideTransaction } from "./atlas-header.ts";
+import { type PgTarget, refuseUrlProblems } from "./atlas-target.ts";
+import { onceCleanup, onSignals } from "./cleanup.ts";
+import { insideOnly } from "./pg-inside-transaction.ts";
+import { asTarget } from "./pg-live-catalog.ts";
+import { type Connect, failureOf, loadPostgres, readCatalog } from "./pg-live-objects.ts";
+import type { LiveObjects } from "./pg-live-types.ts";
+import { beyondDatabase, blockAfter } from "./pg-outside-transaction.ts";
+import { begin, commit, guarded, window } from "./pg-replay-commit.ts";
+import { claim, copyExtensions, extensionsOf, makeDatabase, replayOptions, type Sql } from "./pg-replay-database.ts";
+import { cleanUp, leaving, sweep } from "./pg-replay-drops.ts";
+import { lockReader } from "./pg-replay-held.ts";
+import { nothingHidden, readStatement } from "./pg-replay-hidden.ts";
+import { localeClause, targetLocale } from "./pg-replay-locale.ts";
+import { runsOnMade } from "./pg-replay-made.ts";
+import { devRoleOf, type Run } from "./pg-replay-roles.ts";
+import { type Refuse, type Replay, type Replaying, runStatement, statementsOf } from "./pg-replay-statement.ts";
+import { leaveOutTablespace } from "./pg-replay-tablespaces.ts";
+import { prepareSnapshot, snapshot } from "./pg-server-snapshot.ts";
+import { refuseUncounted } from "./pg-server-writes.ts";
+import { ReplayFailed } from "./replay-failed.ts";
+import { namesIn } from "./sql-code.ts";
 
 /** A history file as baseline reads it */
-type HistoryFile = { name: string; sql: string }
+type HistoryFile = { name: string; sql: string };
 
 /** What replayCatalog replays, where it says what it left, the role the target is read as, and what reads it first */
 type CatalogReplay<T> = {
-	files: readonly HistoryFile[]
-	inspect(database: string): Promise<T>
-	print(line: string): void
-	targetUser: string
-}
+  files: readonly HistoryFile[];
+  inspect(database: string): Promise<T>;
+  print(line: string): void;
+  targetUser: string;
+};
 
-/* why database loads postgres.js here */
-const REPLAYS = "replay the history on devUrl, and read what it leaves, in a baseline"
+// why database loads postgres.js here
+const REPLAYS = "replay the history on devUrl, and read what it leaves, in a baseline";
 
 /**
  * `file` run as Atlas applies it: in a transaction of its own unless `-- atlas:txmode none` gives it
@@ -90,123 +90,141 @@ const REPLAYS = "replay the history on devUrl, and read what it leaves, in a bas
  * the relations there when the transaction began
  */
 async function replayFile(run: Run, { name, sql: text }: HistoryFile, replay: Replaying) {
-	const inFile = !outsideTransaction(text)
-	const file = {
-		adopted: (role: string) => replay.adopted?.(name, role),
-		hidden: nothingHidden(),
-		name,
-		names: namesIn(text),
-		stops: replay.stops,
-	}
-	const statements = statementsOf(text)
-	const locks = lockReader(run.sql, name, { held: replay.held, statements })
-	let block = false
-	if (inFile) {
-		await begin(run)
-		await locks.began()
-	}
-	for (const [index, { node, sent, tree, type }] of statements.entries()) {
-		const beyond = (await runsOnMade(run, type, node)) ? undefined : beyondDatabase(type, node)
-		if (beyond !== undefined) {
-			leaveOutTablespace(run.tablespaces, type, node)
-			replay.leftOut(name, sent, beyond)
-			continue
-		}
-		readStatement(tree, file.hidden)
-		await locks.next(index)
-		const send = () => runStatement(run, { name, node, sent, type }, replay)
-		if (inFile) await send()
-		else if (block || type === "TransactionStmt" || insideOnly(type, node) !== undefined) {
-			await send()
-			block = blockAfter(block, type, node)
-			if (type === "TransactionStmt") await locks.moved(node, block)
-			await window(run, { ...file, sent })
-		} else await guarded(run, { ...file, sent }, { send, type })
-		await locks.ran(index)
-	}
-	if (inFile) await commit(run, { ...file, sent: undefined })
+  const inFile = !outsideTransaction(text);
+
+  const file = {
+    adopted: (role: string) => replay.adopted?.(name, role),
+    hidden: nothingHidden(),
+    name,
+    names: namesIn(text),
+    stops: replay.stops,
+  };
+
+  const statements = statementsOf(text);
+  const locks = lockReader(run.sql, name, { held: replay.held, statements });
+  let block = false;
+
+  if (inFile) {
+    await begin(run);
+    await locks.began();
+  }
+
+  for (const [index, { node, sent, tree, type }] of statements.entries()) {
+    const beyond = (await runsOnMade(run, type, node)) ? undefined : beyondDatabase(type, node);
+
+    if (beyond !== undefined) {
+      leaveOutTablespace(run.tablespaces, type, node);
+      replay.leftOut(name, sent, beyond);
+      continue;
+    }
+
+    readStatement(tree, file.hidden);
+    await locks.next(index);
+    const send = () => runStatement(run, { name, node, sent, type }, replay);
+
+    if (inFile) {
+      await send();
+    } else if (block || type === "TransactionStmt" || insideOnly(type, node) !== undefined) {
+      await send();
+      block = blockAfter(block, type, node);
+
+      if (type === "TransactionStmt") await locks.moved(node, block);
+      await window(run, { ...file, sent });
+    } else {
+      await guarded(run, { ...file, sent }, { send, type });
+    }
+
+    await locks.ran(index);
+  }
+
+  if (inFile) await commit(run, { ...file, sent: undefined });
 }
 
 /** `files` replayed each on a session `open`ed for it, as apply gives each file an Atlas call */
 async function replayEach(
-	run: Run,
-	files: readonly HistoryFile[],
-	{ open, ...replay }: Replaying & { open: () => Sql },
+  run: Run,
+  files: readonly HistoryFile[],
+  { open, ...replay }: Replaying & { open: () => Sql },
 ): Promise<void> {
-	for (const file of files) {
-		await run.sql.end()
-		run.sql = open()
-		await replayFile(run, file, replay)
-	}
+  for (const file of files) {
+    await run.sql.end();
+    run.sql = open();
+    await replayFile(run, file, replay);
+  }
 }
 
-/* why a replay stops on a devUrl role that cannot make the database it replays in */
+// why a replay stops on a devUrl role that cannot make the database it replays in
 const NO_CREATEDB =
-	"devUrl's role cannot create a database (CREATEDB), and database replays the history file by file, as Atlas applies it, in a database of its own on devUrl's server; grant the role CREATEDB, or point devUrl at a server where it has it"
+  "devUrl's role cannot create a database (CREATEDB), and database replays the history file by file, as Atlas applies it, in a database of its own on devUrl's server; grant the role CREATEDB, or point devUrl at a server where it has it";
 
 /**
  * The replay's database made ready: counted, holding devUrl's extensions the `files` do not make, and
  * `schema` made; what makes those waiting on one a file makes
  */
 async function prepare(
-	run: Run,
-	schema: string,
-	{ files, refused, stops }: { files: readonly HistoryFile[]; refused: Refuse; stops: string },
+  run: Run,
+  schema: string,
+  { files, refused, stops }: { files: readonly HistoryFile[]; refused: Refuse; stops: string },
 ): Promise<(sql: Sql) => Promise<void>> {
-	await refuseUncounted(run.sql, stops)
-	const waits = await copyExtensions(run.admin, run.sql, {
-		makes: extensionsOf(files.map(({ sql: text }) => text)),
-		refused: (name, error) =>
-			refused(
-				`devUrl's database holds the extension ${name}, which database could not make in the database it replays the history in`,
-				error,
-			),
-	})
-	if (schema !== "public") await run.sql.unsafe(`CREATE SCHEMA IF NOT EXISTS ${sqlIdentifier(schema)}`, [])
-	return waits
+  await refuseUncounted(run.sql, stops);
+
+  const waits = await copyExtensions(run.admin, run.sql, {
+    makes: extensionsOf(files.map(({ sql: text }) => text)),
+    refused: (name, error) =>
+      refused(
+        `devUrl's database holds the extension ${name}, which database could not make in the database it replays the history in`,
+        error,
+      ),
+  });
+
+  if (schema !== "public") await run.sql.unsafe(`CREATE SCHEMA IF NOT EXISTS ${sqlIdentifier(schema)}`, []);
+
+  return waits;
 }
 
-/*
- * the startup settings Atlas's session applies a file on, which the replay's opens with too: Atlas's
- * driver pins DateStyle, and the target URL carries the schema, a plain name, as search_path, so a
- * RESET or DISCARD ALL returns to them and a date reads month first on any server
- */
-const ATLAS_SESSION = { DateStyle: "ISO, MDY" } as const
+// the startup settings Atlas's session applies a file on, which the replay's opens with too: Atlas's
+// driver pins DateStyle, and the target URL carries the schema, a plain name, as search_path, so a
+// RESET or DISCARD ALL returns to them and a date reads month first on any server
+const ATLAS_SESSION = { DateStyle: "ISO, MDY" } as const;
 
 /**
  * The replay's database made on `admin`'s server at `target`'s database's locale, and its run on it:
  * a connection there searching `target`'s schema, and how each later session opens
  */
 async function opening(
-	admin: Sql,
-	target: PgTarget,
-	{ connect, refused, stops }: { connect: Connect; refused: Refuse; stops: string },
+  admin: Sql,
+  target: PgTarget,
+  { connect, refused, stops }: { connect: Connect; refused: Refuse; stops: string },
 ): Promise<{ open: () => Sql; run: Run }> {
-	const { owner, settings, version } = await claim(admin)
-	const search = { ...settings, ...ATLAS_SESSION, search_path: target.schema }
-	const locale = localeClause(await targetLocale(connect, target, stops), version)
-	const database = await makeDatabase(admin, owner, {
-		denied: () => new ReplayFailed(`${NO_CREATEDB}; ${stops}`),
-		locale,
-		unmade: (error) =>
-			refused(
-				`devUrl's server could not make the replay's database at the target database's locale (${locale}), and a verdict under another is not the target's; point devUrl at a server that has it`,
-				error,
-			),
-	})
-	const open = () => connect(replayOptions(target.devUrl, { database, settings: search }))
-	const run: Run = {
-		admin,
-		created: [],
-		database,
-		ours: { rows: new Map(), writes: new Map() },
-		owner,
-		seen: new Map(),
-		sql: open(),
-		tablespaces: new Set(),
-		...(await devRoleOf(admin)),
-	}
-	return { open, run }
+  const { owner, settings, version } = await claim(admin);
+  const search = { ...settings, ...ATLAS_SESSION, search_path: target.schema };
+  const locale = localeClause(await targetLocale(connect, target, stops), version);
+
+  const database = await makeDatabase(admin, owner, {
+    denied: () => new ReplayFailed(`${NO_CREATEDB}; ${stops}`),
+    locale,
+    unmade: (error) =>
+      refused(
+        `devUrl's server could not make the replay's database at the target database's locale (${locale}), and a verdict under another is not the target's; point devUrl at a server that has it`,
+        error,
+      ),
+  });
+
+  const open = () => connect(replayOptions(target.devUrl, { database, settings: search }));
+
+  const run: Run = {
+    admin,
+    created: [],
+    database,
+    ours: { rows: new Map(), writes: new Map() },
+    owner,
+    seen: new Map(),
+    sql: open(),
+    tablespaces: new Set(),
+    ...(await devRoleOf(admin)),
+  };
+
+  return { open, run };
 }
 
 /**
@@ -215,56 +233,64 @@ async function opening(
  * was `doing`, and then what that `stops`; what the replay or its sweep could not drop is `print`ed
  */
 async function onDev<T>(
-	target: PgTarget,
-	files: readonly HistoryFile[],
-	{
-		after,
-		load,
-		print,
-		...replay
-	}: Omit<Replay, "leftOut"> & {
-		after: (sql: Sql, database: string) => Promise<T>
-		leftOut?: Replay["leftOut"] | undefined
-		load: () => Promise<Connect>
-		print: (line: string) => void
-	},
+  target: PgTarget,
+  files: readonly HistoryFile[],
+  {
+    after,
+    load,
+    print,
+    ...replay
+  }: Omit<Replay, "leftOut"> & {
+    after: (sql: Sql, database: string) => Promise<T>;
+    leftOut?: Replay["leftOut"] | undefined;
+    load: () => Promise<Connect>;
+    print: (line: string) => void;
+  },
 ): Promise<T> {
-	refuseUrlProblems(target, { dev: true })
-	const connect = await load()
-	const failed = { field: "devUrl", url: target.devUrl, urls: [target.devUrl, target.url] } as const
-	const refused: Refuse = (what, error) =>
-		new ReplayFailed(`${what}: ${failureOf(error, failed)}; ${replay.stops}`, { cause: error })
-	const leave = leaving(print, failed)
-	let admin: Sql | undefined
-	try {
-		const cleanup = onceCleanup()
-		return await onSignals(cleanup.run, async () => {
-			admin = connect(replayOptions(target.devUrl))
-			const drops = {
-				into: (database: string) => connect(replayOptions(target.devUrl, { database, settings: {} })),
-				leave,
-			}
-			await sweep(admin, Date.now(), drops)
-			const { open, run } = await opening(admin, target, { connect, refused, stops: replay.stops })
-			cleanup.set(() => cleanUp(run, drops))
-			try {
-				const waits = await prepare(run, target.schema, { files, refused, stops: replay.stops })
-				await prepareSnapshot(admin, run)
-				run.seen = await snapshot(admin)
-				await replayEach(run, files, { ...replay, leftOut: replay.leftOut ?? (() => undefined), open, refused, waits })
-				return await after(run.sql, run.database)
-			} finally {
-				await cleanup.run()
-			}
-		})
-	} catch (error) {
-		if (error instanceof ReplayFailed) throw error
-		throw new ReplayFailed(`database could not replay the history on devUrl: ${failureOf(error, failed)}`, {
-			cause: error,
-		})
-	} finally {
-		await admin?.end()
-	}
+  refuseUrlProblems(target, { dev: true });
+  const connect = await load();
+  const failed = { field: "devUrl", url: target.devUrl, urls: [target.devUrl, target.url] } as const;
+
+  const refused: Refuse = (what, error) =>
+    new ReplayFailed(`${what}: ${failureOf(error, failed)}; ${replay.stops}`, { cause: error });
+
+  const leave = leaving(print, failed);
+  let admin: Sql | undefined;
+
+  try {
+    const cleanup = onceCleanup();
+
+    return await onSignals(cleanup.run, async () => {
+      admin = connect(replayOptions(target.devUrl));
+
+      const drops = {
+        into: (database: string) => connect(replayOptions(target.devUrl, { database, settings: {} })),
+        leave,
+      };
+
+      await sweep(admin, Date.now(), drops);
+      const { open, run } = await opening(admin, target, { connect, refused, stops: replay.stops });
+      cleanup.set(() => cleanUp(run, drops));
+
+      try {
+        const waits = await prepare(run, target.schema, { files, refused, stops: replay.stops });
+        await prepareSnapshot(admin, run);
+        run.seen = await snapshot(admin);
+        await replayEach(run, files, { ...replay, leftOut: replay.leftOut ?? (() => {}), open, refused, waits });
+
+        return await after(run.sql, run.database);
+      } finally {
+        await cleanup.run();
+      }
+    });
+  } catch (error) {
+    if (error instanceof ReplayFailed) throw error;
+    throw new ReplayFailed(`database could not replay the history on devUrl: ${failureOf(error, failed)}`, {
+      cause: error,
+    });
+  } finally {
+    await admin?.end();
+  }
 }
 
 /**
@@ -275,20 +301,21 @@ async function onDev<T>(
  * name, as Atlas compares its tables, before the cleanup drops it with what the replay adopted
  */
 async function replayCatalog<T>(
-	target: PgTarget,
-	{ files, inspect, print, targetUser }: CatalogReplay<T>,
-	load: () => Promise<Connect> = () => loadPostgres(REPLAYS),
+  target: PgTarget,
+  { files, inspect, print, targetUser }: CatalogReplay<T>,
+  load: () => Promise<Connect> = () => loadPostgres(REPLAYS),
 ): Promise<{ catalog: LiveObjects; inspected: T }> {
-	return onDev(target, files, {
-		after: async (sql, database) => {
-			const inspected = await inspect(database)
-			return { catalog: asTarget(await readCatalog(sql, target.schema), targetUser), inspected }
-		},
-		doing: "baseline replayed the history there",
-		load,
-		print,
-		stops: "baseline compares nothing",
-	})
+  return onDev(target, files, {
+    after: async (sql, database) => {
+      const inspected = await inspect(database);
+
+      return { catalog: asTarget(await readCatalog(sql, target.schema), targetUser), inspected };
+    },
+    doing: "baseline replayed the history there",
+    load,
+    print,
+    stops: "baseline compares nothing",
+  });
 }
 
-export { type HistoryFile, onDev, replayCatalog }
+export { type HistoryFile, onDev, replayCatalog };

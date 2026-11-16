@@ -1,26 +1,27 @@
-import { describe, expect, it } from "vitest"
-import { D1_HASH_TABLE, D1_MIGRATIONS_TABLE, d1HistoryTables, DRIZZLE_HISTORY_TABLE } from "../index.ts"
+import { describe, expect, it } from "vitest";
 
-/* M2 of the 0.13.0 consumers review: a tool that empties a D1 database keeps these, rows and all */
+import { D1_HASH_TABLE, D1_MIGRATIONS_TABLE, d1HistoryTables, DRIZZLE_HISTORY_TABLE } from "../index.ts";
+
+// M2 of the 0.13.0 consumers review: a tool that empties a D1 database keeps these, rows and all
 describe("d1HistoryTables", () => {
-	it("names wrangler's migrations table, database's record of each file's hash and of each pending file's, and database's history before 0.8", () => {
-		expect(d1HistoryTables()).toEqual([
-			"d1_migrations",
-			"_database_migration_hashes",
-			"_database_migration_hash_intents",
-			"__drizzle_migrations",
-		])
-		expect([D1_MIGRATIONS_TABLE, D1_HASH_TABLE, "_database_migration_hash_intents", DRIZZLE_HISTORY_TABLE]).toEqual(
-			d1HistoryTables(),
-		)
-	})
+  it("names wrangler's migrations table, database's record of each file's hash and of each pending file's, and database's history before 0.8", () => {
+    expect(d1HistoryTables()).toEqual([
+      "d1_migrations",
+      "_database_migration_hashes",
+      "_database_migration_hash_intents",
+      "__drizzle_migrations",
+    ]);
+    expect([D1_MIGRATIONS_TABLE, D1_HASH_TABLE, "_database_migration_hash_intents", DRIZZLE_HISTORY_TABLE]).toEqual(
+      d1HistoryTables(),
+    );
+  });
 
-	it("takes the binding's own migrations_table", () => {
-		expect(d1HistoryTables("app_migrations")).toEqual([
-			"app_migrations",
-			"_database_migration_hashes",
-			"_database_migration_hash_intents",
-			"__drizzle_migrations",
-		])
-	})
-})
+  it("takes the binding's own migrations_table", () => {
+    expect(d1HistoryTables("app_migrations")).toEqual([
+      "app_migrations",
+      "_database_migration_hashes",
+      "_database_migration_hash_intents",
+      "__drizzle_migrations",
+    ]);
+  });
+});

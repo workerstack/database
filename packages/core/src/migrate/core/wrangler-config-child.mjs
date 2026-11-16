@@ -5,8 +5,8 @@
  * environment asked, or the reader's message when it refuses the config. Plain JavaScript: node does not
  * strip a TypeScript file's types under node_modules, where a project holds database.
  */
-import { readFileSync } from "node:fs"
-import { pathToFileURL } from "node:url"
+import { readFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 
 /**
  * @typedef {import("./wrangler-config-child.d.mts").ConfigInput} ConfigInput
@@ -19,16 +19,18 @@ import { pathToFileURL } from "node:url"
  * @returns {Promise<ConfigAnswer>}
  */
 export async function readConfig(input) {
-	const wrangler =
-		/** @type {{ unstable_readConfig(args: { config: string; env?: string }): { d1_databases: unknown[] } }} */ (
-			await import(pathToFileURL(input.wrangler).href)
-		)
-	try {
-		const { d1_databases } = wrangler.unstable_readConfig({ config: input.config, env: input.env })
-		return { config: { d1_databases } }
-	} catch (error) {
-		return { error: error instanceof Error ? error.message : String(error) }
-	}
+  const wrangler =
+    /** @type {{ unstable_readConfig(args: { config: string; env?: string }): { d1_databases: unknown[] } }} */ (
+      await import(pathToFileURL(input.wrangler).href)
+    );
+
+  try {
+    const { d1_databases } = wrangler.unstable_readConfig({ config: input.config, env: input.env });
+
+    return { config: { d1_databases } };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 /**
@@ -37,5 +39,5 @@ export async function readConfig(input) {
  * @returns {Promise<ConfigAnswer>}
  */
 export async function main(input) {
-	return await readConfig(/** @type {ConfigInput} */ (JSON.parse(readFileSync(input, "utf8"))))
+  return await readConfig(/** @type {ConfigInput} */ (JSON.parse(readFileSync(input, "utf8"))));
 }

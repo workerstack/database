@@ -1,37 +1,37 @@
-/* an expiry is a time, or Infinity for an entry that never expires: `now > Infinity` is never true */
-type LruEntry<V> = { hardExpiry: number; softExpiry: number; value: V }
+// an expiry is a time, or Infinity for an entry that never expires: `now > Infinity` is never true
+type LruEntry<V> = { hardExpiry: number; softExpiry: number; value: V };
 
 /** An entry as `getWithMeta` returns it, with whether it is past its soft TTL */
 type LruMeta<V> = {
-	/** True between the entry's soft and hard expiry: serve `value`, and refresh it */
-	stale: boolean
-	/** The value the entry was set with */
-	value: V
-}
+  /** True between the entry's soft and hard expiry: serve `value`, and refresh it */
+  stale: boolean;
+  /** The value the entry was set with */
+  value: V;
+};
 
-const isPositive = (value: number | undefined) => value === undefined || (Number.isFinite(value) && value > 0)
+const isPositive = (value: number | undefined) => value === undefined || (Number.isFinite(value) && value > 0);
 
 /**
  * A size that bounds the cache, and TTLs that expire: NaN or 0 would make it unbounded or
  * never-expiring, and a hard TTL under the soft one would have get() and getWithMeta() disagree.
  */
 function checkOptions({
-	hardTtlMs,
-	maxSize,
-	ttlMs,
+  hardTtlMs,
+  maxSize,
+  ttlMs,
 }: {
-	hardTtlMs?: number | undefined
-	maxSize: number
-	ttlMs?: number | undefined
+  hardTtlMs?: number | undefined;
+  maxSize: number;
+  ttlMs?: number | undefined;
 }): void {
-	if (!Number.isInteger(maxSize) || maxSize < 1) {
-		throw new RangeError(`LruCache maxSize must be a positive integer, got ${maxSize}`)
-	}
-	if (!isPositive(ttlMs) || !isPositive(hardTtlMs))
-		throw new RangeError("LruCache ttlMs and hardTtlMs must be positive")
-	if (ttlMs !== undefined && hardTtlMs !== undefined && hardTtlMs < ttlMs) {
-		throw new RangeError(`LruCache hardTtlMs (${hardTtlMs}) must not be shorter than ttlMs (${ttlMs})`)
-	}
+  if (!Number.isInteger(maxSize) || maxSize < 1)
+    throw new RangeError(`LruCache maxSize must be a positive integer, got ${maxSize}`);
+
+  if (!isPositive(ttlMs) || !isPositive(hardTtlMs))
+    throw new RangeError("LruCache ttlMs and hardTtlMs must be positive");
+
+  if (ttlMs !== undefined && hardTtlMs !== undefined && hardTtlMs < ttlMs)
+    throw new RangeError(`LruCache hardTtlMs (${hardTtlMs}) must not be shorter than ttlMs (${ttlMs})`);
 }
 
 /**
@@ -43,149 +43,153 @@ function checkOptions({
  * `Date.now()`.
  */
 class LruCache<K, V> {
-	private cache: Map<K, LruEntry<V>>
-	private readonly hardTtlMs: number | undefined
-	private readonly maxSize: number
-	private readonly ttlMs: number | undefined
+  private cache: Map<K, LruEntry<V>>;
+  private readonly hardTtlMs: number | undefined;
+  private readonly maxSize: number;
+  private readonly ttlMs: number | undefined;
 
-	/**
-	 * An empty cache. Throws `RangeError` for a `maxSize` that is not a positive integer, a TTL that
-	 * is not a positive finite number, or a `hardTtlMs` shorter than `ttlMs`.
-	 */
-	constructor(options: {
-		/** Milliseconds after a set when the entry is evicted, whatever reads it; none when omitted */
-		hardTtlMs?: number | undefined
-		/** The most entries the cache holds, a positive integer */
-		maxSize: number
-		/** Milliseconds after a set when the entry turns stale, unless `set` is given its own; never when omitted and no `hardTtlMs` is set */
-		ttlMs?: number | undefined
-	}) {
-		checkOptions(options)
-		this.maxSize = options.maxSize
-		this.ttlMs = options.ttlMs
-		this.hardTtlMs = options.hardTtlMs
-		this.cache = new Map()
-	}
+  /**
+   * An empty cache. Throws `RangeError` for a `maxSize` that is not a positive integer, a TTL that
+   * is not a positive finite number, or a `hardTtlMs` shorter than `ttlMs`.
+   */
+  constructor(options: {
+    /** Milliseconds after a set when the entry is evicted, whatever reads it; none when omitted */
+    hardTtlMs?: number | undefined;
+    /** The most entries the cache holds, a positive integer */
+    maxSize: number;
+    /** Milliseconds after a set when the entry turns stale, unless `set` is given its own; never when omitted and no `hardTtlMs` is set */
+    ttlMs?: number | undefined;
+  }) {
+    checkOptions(options);
+    this.maxSize = options.maxSize;
+    this.ttlMs = options.ttlMs;
+    this.hardTtlMs = options.hardTtlMs;
+    this.cache = new Map();
+  }
 
-	/**
-	 * Get value from cache.
-	 * Returns undefined if not found or past soft expiry.
-	 * Updates access order (LRU).
-	 */
-	get(key: K): V | undefined {
-		const entry = this.cache.get(key)
+  /**
+   * Get value from cache.
+   * Returns undefined if not found or past soft expiry.
+   * Updates access order (LRU).
+   */
+  get(key: K): V | undefined {
+    const entry = this.cache.get(key);
 
-		if (!entry) {
-			return undefined
-		}
+    if (!entry) return undefined;
 
-		/* hard first: no read serves an entry past it */
-		const now = Date.now()
-		if (now > entry.hardExpiry) {
-			this.cache.delete(key)
-			return undefined
-		}
-		if (now > entry.softExpiry) return undefined
+    // hard first: no read serves an entry past it
+    const now = Date.now();
 
-		/* move to end (most recently used) by deleting and re-inserting */
-		this.cache.delete(key)
-		this.cache.set(key, entry)
+    if (now > entry.hardExpiry) {
+      this.cache.delete(key);
 
-		return entry.value
-	}
+      return undefined;
+    }
 
-	/**
-	 * Get value with staleness metadata for SWR pattern.
-	 * - Before softExpiry: { value, stale: false }
-	 * - Between soft and hardExpiry: { value, stale: true }
-	 * - After hardExpiry or not found: undefined
-	 *
-	 * When hardTtlMs not configured, behaves like get() wrapped in meta.
-	 */
-	getWithMeta(key: K): LruMeta<V> | undefined {
-		const entry = this.cache.get(key)
+    if (now > entry.softExpiry) return undefined;
 
-		if (!entry) {
-			return undefined
-		}
+    // move to end (most recently used) by deleting and re-inserting
+    this.cache.delete(key);
+    this.cache.set(key, entry);
 
-		const now = Date.now()
+    return entry.value;
+  }
 
-		/* Hard eviction check */
-		if (now > entry.hardExpiry) {
-			this.cache.delete(key)
-			return undefined
-		}
+  /**
+   * Get value with staleness metadata for SWR pattern.
+   * - Before softExpiry: { value, stale: false }
+   * - Between soft and hardExpiry: { value, stale: true }
+   * - After hardExpiry or not found: undefined
+   *
+   * When hardTtlMs not configured, behaves like get() wrapped in meta.
+   */
+  getWithMeta(key: K): LruMeta<V> | undefined {
+    const entry = this.cache.get(key);
 
-		/* move to end (most recently used) */
-		this.cache.delete(key)
-		this.cache.set(key, entry)
+    if (!entry) return undefined;
 
-		const stale = now > entry.softExpiry
-		return { stale, value: entry.value }
-	}
+    const now = Date.now();
 
-	/**
-	 * Set value in cache.
-	 * Evicts oldest entry if at max size.
-	 * @param ttlMs - Optional per-key soft TTL override
-	 */
-	set(key: K, value: V, ttlMs?: number): void {
-		/* refuse before touching an entry, so a refused set leaves the cache as it was */
-		if (!isPositive(ttlMs)) throw new RangeError(`LruCache ttlMs must be positive, got ${ttlMs}`)
-		/* remove if exists (to update position) */
-		this.cache.delete(key)
+    // Hard eviction check
+    if (now > entry.hardExpiry) {
+      this.cache.delete(key);
 
-		/* evict oldest entry if at max size */
-		if (this.cache.size >= this.maxSize) {
-			/* a full cache holds at least one entry, so there is a first key */
-			this.cache.delete(this.cache.keys().next().value as K)
-		}
+      return undefined;
+    }
 
-		/* a soft TTL past the hard one, or none beside it, would let get serve what getWithMeta has
-		   already evicted: with a hard TTL, no soft one means fresh until the hard expiry */
-		const requested = ttlMs ?? this.ttlMs
-		const effectiveSoftTtl =
-			this.hardTtlMs === undefined ? requested : Math.min(requested ?? this.hardTtlMs, this.hardTtlMs)
-		const now = Date.now()
-		const softExpiry = effectiveSoftTtl ? now + effectiveSoftTtl : Number.POSITIVE_INFINITY
-		const hardExpiry = this.hardTtlMs ? now + this.hardTtlMs : softExpiry
+    // move to end (most recently used)
+    this.cache.delete(key);
+    this.cache.set(key, entry);
 
-		this.cache.set(key, { hardExpiry, softExpiry, value })
-	}
+    const stale = now > entry.softExpiry;
 
-	/** Delete key from cache */
-	delete(key: K): boolean {
-		return this.cache.delete(key)
-	}
+    return { stale, value: entry.value };
+  }
 
-	/** Clear all entries */
-	clear(): void {
-		this.cache.clear()
-	}
+  /**
+   * Set value in cache.
+   * Evicts oldest entry if at max size.
+   * @param ttlMs - Optional per-key soft TTL override
+   */
+  set(key: K, value: V, ttlMs?: number): void {
+    // refuse before touching an entry, so a refused set leaves the cache as it was
+    if (!isPositive(ttlMs)) throw new RangeError(`LruCache ttlMs must be positive, got ${ttlMs}`);
+    // remove if exists (to update position)
+    this.cache.delete(key);
 
-	/** Get current cache size */
-	get size(): number {
-		return this.cache.size
-	}
+    // evict oldest entry if at max size
+    if (this.cache.size >= this.maxSize) {
+      // a full cache holds at least one entry, so there is a first key
+      this.cache.delete(this.cache.keys().next().value as K);
+    }
 
-	/** Check if key exists and is not past soft expiry */
-	has(key: K): boolean {
-		const entry = this.cache.get(key)
+    // a soft TTL past the hard one, or none beside it, would let get serve what getWithMeta has
+    // already evicted: with a hard TTL, no soft one means fresh until the hard expiry
+    const requested = ttlMs ?? this.ttlMs;
 
-		if (!entry) {
-			return false
-		}
+    const effectiveSoftTtl =
+      this.hardTtlMs === undefined ? requested : Math.min(requested ?? this.hardTtlMs, this.hardTtlMs);
 
-		const now = Date.now()
-		if (now > entry.hardExpiry) {
-			this.cache.delete(key)
-			return false
-		}
-		if (now > entry.softExpiry) return false
+    const now = Date.now();
+    const softExpiry = effectiveSoftTtl ? now + effectiveSoftTtl : Number.POSITIVE_INFINITY;
+    const hardExpiry = this.hardTtlMs ? now + this.hardTtlMs : softExpiry;
 
-		return true
-	}
+    this.cache.set(key, { hardExpiry, softExpiry, value });
+  }
+
+  /** Delete key from cache */
+  delete(key: K): boolean {
+    return this.cache.delete(key);
+  }
+
+  /** Clear all entries */
+  clear(): void {
+    this.cache.clear();
+  }
+
+  /** Get current cache size */
+  get size(): number {
+    return this.cache.size;
+  }
+
+  /** Check if key exists and is not past soft expiry */
+  has(key: K): boolean {
+    const entry = this.cache.get(key);
+
+    if (!entry) return false;
+
+    const now = Date.now();
+
+    if (now > entry.hardExpiry) {
+      this.cache.delete(key);
+
+      return false;
+    }
+
+    if (now > entry.softExpiry) return false;
+
+    return true;
+  }
 }
 
-export { LruCache, type LruMeta }
+export { LruCache, type LruMeta };

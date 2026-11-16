@@ -4,43 +4,46 @@
  * from 0.13 the name, not the hash, is unique, so two files of one text are recorded apart; from 0.21
  * each row database writes carries `hash_v`, which says it holds the exact hash (parse.ts HASH_VERSION)
  */
-import { chainText } from "../../error-chain.ts"
-import type { MigrateConnection } from "../types.ts"
-import { pastStop } from "./cleanup.ts"
-import { HASH_VERSION } from "./parse.ts"
-import { Refused } from "./refused.ts"
-import { whileStoppable } from "./stopped.ts"
-import { isTransient } from "./transient.ts"
-import { type RetryOptions, withRetry } from "./utils.ts"
+import { chainText } from "../../error-chain.ts";
+import type { MigrateConnection } from "../types.ts";
+import { pastStop } from "./cleanup.ts";
+import { HASH_VERSION } from "./parse.ts";
+import { Refused } from "./refused.ts";
+import { whileStoppable } from "./stopped.ts";
+import { isTransient } from "./transient.ts";
+import { type RetryOptions, withRetry } from "./utils.ts";
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   MIGRATIONS TABLE
-   ═══════════════════════════════════════════════════════════════════════════ */
+// ═══════════════════════════════════════════════════════════════════════════
+// MIGRATIONS TABLE
+// ═══════════════════════════════════════════════════════════════════════════
 
-/* database's history from 0.13: a name is recorded once, a hash as often as files hold that text */
+// database's history from 0.13: a name is recorded once, a hash as often as files hold that text
 const TABLE = `(
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       hash TEXT NOT NULL,
       created_at INTEGER NOT NULL,
       name TEXT UNIQUE,
       hash_v INTEGER
-    )`
+    )`;
 
 /** Whether a unique index of database's history holds `column` alone */
 async function uniqueOn(conn: MigrateConnection, column: string): Promise<boolean> {
-	const list = await conn.execute("PRAGMA index_list(__drizzle_migrations)")
-	const unique = list.rows.filter((row) => Number(row[list.columns.indexOf("unique")]) === 1)
-	for (const index of unique) {
-		const name = String(index[list.columns.indexOf("name")])
-		const info = await conn.execute(`PRAGMA index_info("${name.replaceAll('"', '""')}")`)
-		const columns = info.rows.map((row) => String(row[info.columns.indexOf("name")]))
-		if (columns.length === 1 && columns[0] === column) return true
-	}
-	return false
+  const list = await conn.execute("PRAGMA index_list(__drizzle_migrations)");
+  const unique = list.rows.filter((row) => Number(row[list.columns.indexOf("unique")]) === 1);
+
+  for (const index of unique) {
+    const name = String(index[list.columns.indexOf("name")]);
+    const info = await conn.execute(`PRAGMA index_info("${name.replaceAll('"', '""')}")`);
+    const columns = info.rows.map((row) => String(row[info.columns.indexOf("name")]));
+
+    if (columns.length === 1 && columns[0] === column) return true;
+  }
+
+  return false;
 }
 
 /** Whether a unique index of database's history holds its hash alone, as database's table did before 0.13 */
-export const hashUnique = (conn: MigrateConnection): Promise<boolean> => uniqueOn(conn, "hash")
+export const hashUnique = (conn: MigrateConnection): Promise<boolean> => uniqueOn(conn, "hash");
 
 /**
  * A name recorded once, whoever made the table: a history drizzle's migrator made gains `name` by ALTER
@@ -48,15 +51,19 @@ export const hashUnique = (conn: MigrateConnection): Promise<boolean> => uniqueO
  * Refused, naming the files, when the history already holds one twice
  */
 async function keepNameUnique(conn: MigrateConnection): Promise<void> {
-	if (await uniqueOn(conn, "name")) return
-	const twice = await conn.execute(
-		"SELECT name FROM __drizzle_migrations WHERE name IS NOT NULL GROUP BY name HAVING count(*) > 1 ORDER BY name",
-	)
-	if (twice.rows.length > 0)
-		throw new Error(
-			`__drizzle_migrations records ${twice.rows.map((row) => String(row[0])).join(", ")} more than once, so database cannot keep a file from being recorded twice: delete the extra rows of each (keep the first), then run it again`,
-		)
-	await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS __drizzle_migrations_name ON __drizzle_migrations (name)")
+  if (await uniqueOn(conn, "name")) return;
+
+  const twice = await conn.execute(
+    "SELECT name FROM __drizzle_migrations WHERE name IS NOT NULL GROUP BY name HAVING count(*) > 1 ORDER BY name",
+  );
+
+  if (twice.rows.length > 0) {
+    throw new Error(
+      `__drizzle_migrations records ${twice.rows.map((row) => String(row[0])).join(", ")} more than once, so database cannot keep a file from being recorded twice: delete the extra rows of each (keep the first), then run it again`,
+    );
+  }
+
+  await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS __drizzle_migrations_name ON __drizzle_migrations (name)");
 }
 
 /**
@@ -65,62 +72,71 @@ async function keepNameUnique(conn: MigrateConnection): Promise<void> {
  * and the AUTOINCREMENT counter kept above every id it handed out
  */
 export async function ensureMigrationsTable(
-	conn: MigrateConnection,
-	renamed: ReadonlyArray<{ id: number; name: string }> = [],
+  conn: MigrateConnection,
+  renamed: ReadonlyArray<{ id: number; name: string }> = [],
 ): Promise<void> {
-	await conn.execute(`CREATE TABLE IF NOT EXISTS __drizzle_migrations ${TABLE}`)
-	/* a history from before 0.11 gains the column; drizzle's own migrator ignores it */
-	/* PRAGMA table_info answers in rows, since a driver may name no columns for an empty result */
-	const { columns, rows } = await conn.execute("PRAGMA table_info(__drizzle_migrations)")
-	const has = (column: string) => rows.some((row) => row[columns.indexOf("name")] === column)
-	if (!has("name")) await conn.execute("ALTER TABLE __drizzle_migrations ADD COLUMN name TEXT")
-	/* a history 0.20 or earlier wrote gains it too, every row it holds left without it */
-	if (!has("hash_v")) await conn.execute("ALTER TABLE __drizzle_migrations ADD COLUMN hash_v INTEGER")
-	/* a history from before 0.13 holds each hash once: rebuilt, in one batch, with every row and id kept */
-	if (!(await hashUnique(conn))) return keepNameUnique(conn)
-	/* a history made without AUTOINCREMENT has no counter; its largest id is where the new one starts */
-	const sequenced = await conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'sqlite_sequence'")
-	const counted =
-		sequenced.rows.length === 0
-			? "0"
-			: "coalesce((SELECT seq FROM sqlite_sequence WHERE name = '__drizzle_migrations'), 0)"
-	const counter = await conn.execute(`SELECT max(${counted}, coalesce((SELECT max(id) FROM __drizzle_migrations), 0))`)
-	const seq = Number(counter.rows[0]?.[0])
-	/* a view or trigger over the history would fail the rename, and the drop takes an index on it: each goes before the rebuild and comes back after */
-	const over = await conn.execute(
-		"SELECT type, name, sql FROM sqlite_master WHERE type IN ('index', 'view', 'trigger') AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' AND instr(lower(sql), '__drizzle_migrations') > 0 ORDER BY rowid",
-	)
-	const dependents = over.rows.map((row) => ({ name: String(row[1]), sql: String(row[2]), type: String(row[0]) }))
-	const statements = [
-		...dependents.map(({ name, type }) => ({ sql: `DROP ${type.toUpperCase()} "${name.replaceAll('"', '""')}"` })),
-		{ sql: `CREATE TABLE __drizzle_migrations_next ${TABLE}` },
-		{
-			sql: "INSERT INTO __drizzle_migrations_next (id, hash, created_at, name, hash_v) SELECT id, hash, created_at, name, hash_v FROM __drizzle_migrations",
-		},
-		...renamed.map(({ id, name }) => ({
-			params: [name, id],
-			sql: "UPDATE __drizzle_migrations_next SET name = ? WHERE id = ?",
-		})),
-		{ sql: "DROP TABLE __drizzle_migrations" },
-		{ sql: "ALTER TABLE __drizzle_migrations_next RENAME TO __drizzle_migrations" },
-		{ sql: "DELETE FROM sqlite_sequence WHERE name = '__drizzle_migrations'" },
-		{ params: [seq], sql: "INSERT INTO sqlite_sequence (name, seq) VALUES ('__drizzle_migrations', ?)" },
-		...dependents.map(({ sql }) => ({ sql })),
-		/* SQLite resolves a view's columns only when it is read: each is read once, so one that no longer resolves rolls back */
-		...dependents
-			.filter(({ type }) => type === "view")
-			.map(({ name }) => ({ sql: `SELECT * FROM "${name.replaceAll('"', '""')}" LIMIT 0` })),
-	]
-	try {
-		await conn.batch(statements)
-	} catch (error) {
-		if (dependents.length === 0) throw error
-		const objects = dependents.map(({ name, type }) => `${type} ${name}`).join(", ")
-		throw new Error(
-			`database could not rebuild __drizzle_migrations for 0.13 with the ${objects} over it, and changed nothing: ${(error as Error).message}`,
-			{ cause: error },
-		)
-	}
+  await conn.execute(`CREATE TABLE IF NOT EXISTS __drizzle_migrations ${TABLE}`);
+  // a history from before 0.11 gains the column; drizzle's own migrator ignores it
+  // PRAGMA table_info answers in rows, since a driver may name no columns for an empty result
+  const { columns, rows } = await conn.execute("PRAGMA table_info(__drizzle_migrations)");
+  const has = (column: string) => rows.some((row) => row[columns.indexOf("name")] === column);
+
+  if (!has("name")) await conn.execute("ALTER TABLE __drizzle_migrations ADD COLUMN name TEXT");
+
+  // a history 0.20 or earlier wrote gains it too, every row it holds left without it
+  if (!has("hash_v")) await conn.execute("ALTER TABLE __drizzle_migrations ADD COLUMN hash_v INTEGER");
+
+  // a history from before 0.13 holds each hash once: rebuilt, in one batch, with every row and id kept
+  if (!(await hashUnique(conn))) return keepNameUnique(conn);
+  // a history made without AUTOINCREMENT has no counter; its largest id is where the new one starts
+  const sequenced = await conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'sqlite_sequence'");
+
+  const counted =
+    sequenced.rows.length === 0
+      ? "0"
+      : "coalesce((SELECT seq FROM sqlite_sequence WHERE name = '__drizzle_migrations'), 0)";
+
+  const counter = await conn.execute(`SELECT max(${counted}, coalesce((SELECT max(id) FROM __drizzle_migrations), 0))`);
+  const seq = Number(counter.rows[0]?.[0]);
+
+  // a view or trigger over the history would fail the rename, and the drop takes an index on it: each goes before the rebuild and comes back after
+  const over = await conn.execute(
+    "SELECT type, name, sql FROM sqlite_master WHERE type IN ('index', 'view', 'trigger') AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' AND instr(lower(sql), '__drizzle_migrations') > 0 ORDER BY rowid",
+  );
+
+  const dependents = over.rows.map((row) => ({ name: String(row[1]), sql: String(row[2]), type: String(row[0]) }));
+
+  const statements = [
+    ...dependents.map(({ name, type }) => ({ sql: `DROP ${type.toUpperCase()} "${name.replaceAll('"', '""')}"` })),
+    { sql: `CREATE TABLE __drizzle_migrations_next ${TABLE}` },
+    {
+      sql: "INSERT INTO __drizzle_migrations_next (id, hash, created_at, name, hash_v) SELECT id, hash, created_at, name, hash_v FROM __drizzle_migrations",
+    },
+    ...renamed.map(({ id, name }) => ({
+      params: [name, id],
+      sql: "UPDATE __drizzle_migrations_next SET name = ? WHERE id = ?",
+    })),
+    { sql: "DROP TABLE __drizzle_migrations" },
+    { sql: "ALTER TABLE __drizzle_migrations_next RENAME TO __drizzle_migrations" },
+    { sql: "DELETE FROM sqlite_sequence WHERE name = '__drizzle_migrations'" },
+    { params: [seq], sql: "INSERT INTO sqlite_sequence (name, seq) VALUES ('__drizzle_migrations', ?)" },
+    ...dependents.map(({ sql }) => ({ sql })),
+    // SQLite resolves a view's columns only when it is read: each is read once, so one that no longer resolves rolls back
+    ...dependents
+      .filter(({ type }) => type === "view")
+      .map(({ name }) => ({ sql: `SELECT * FROM "${name.replaceAll('"', '""')}" LIMIT 0` })),
+  ];
+
+  try {
+    await conn.batch(statements);
+  } catch (error) {
+    if (dependents.length === 0) throw error;
+    const objects = dependents.map(({ name, type }) => `${type} ${name}`).join(", ");
+    throw new Error(
+      `database could not rebuild __drizzle_migrations for 0.13 with the ${objects} over it, and changed nothing: ${(error as Error).message}`,
+      { cause: error },
+    );
+  }
 }
 
 /**
@@ -128,44 +144,45 @@ export async function ensureMigrationsTable(
  * so a file recorded under an earlier hash still counts as applied.
  */
 export async function checkMigrationHash(
-	conn: MigrateConnection,
-	hashes: string | readonly string[],
+  conn: MigrateConnection,
+  hashes: string | readonly string[],
 ): Promise<boolean> {
-	const list = typeof hashes === "string" ? [hashes] : [...hashes]
-	const marks = list.map(() => "?").join(", ")
-	const result = await conn.execute(`SELECT hash FROM __drizzle_migrations WHERE hash IN (${marks})`, list)
-	return result.rows.length > 0
+  const list = typeof hashes === "string" ? [hashes] : [...hashes];
+  const marks = list.map(() => "?").join(", ");
+  const result = await conn.execute(`SELECT hash FROM __drizzle_migrations WHERE hash IN (${marks})`, list);
+
+  return result.rows.length > 0;
 }
 
-const RECORD = `INSERT INTO __drizzle_migrations (hash, created_at, name, hash_v) VALUES (?, ?, ?, ${HASH_VERSION})`
+const RECORD = `INSERT INTO __drizzle_migrations (hash, created_at, name, hash_v) VALUES (?, ?, ?, ${HASH_VERSION})`;
 
 /**
  * Set on every connection database opens to a local file: a write lock the app serving the
  * file holds, or a second runner, is waited for up to 5 s, as SQLite's own busy handler waits, where
  * SQLite fails at once. It retries no statement that failed, so a `SQLITE_` code is still never retried
  */
-export const BUSY_TIMEOUT = "PRAGMA busy_timeout = 5000"
+export const BUSY_TIMEOUT = "PRAGMA busy_timeout = 5000";
 
 /** Record `hash` as applied, under the file's `name` when given (an unnamed row is named on the next apply) */
 export async function recordMigrationHash(conn: MigrateConnection, hash: string, name?: string): Promise<void> {
-	await conn.execute(RECORD, [hash, Date.now(), name ?? null])
+  await conn.execute(RECORD, [hash, Date.now(), name ?? null]);
 }
 
 /** A file to apply: its statements, and the hash and name its record holds */
-type Recorded = { filename: string; hash: string; statements: readonly string[] }
+type Recorded = { filename: string; hash: string; statements: readonly string[] };
 
 /**
  * The connection one file applies on: its batch, then its close. It reads nothing, so a libsql file's
  * can run on `exec` alone; a read of database's history goes through the command's own connection
  */
-export type FileConnection = Pick<MigrateConnection, "batch" | "close">
+export type FileConnection = Pick<MigrateConnection, "batch" | "close">;
 
 /** How a file's batch is retried: the connection that reads database's history after a lost answer, and the backoff */
-type ApplyOptions = { history: Pick<MigrateConnection, "execute">; retry?: RetryOptions | undefined }
+type ApplyOptions = { history: Pick<MigrateConnection, "execute">; retry?: RetryOptions | undefined };
 
 /** Whether database's history records the file `name` */
 const recorded = async (conn: Pick<MigrateConnection, "execute">, name: string): Promise<boolean> =>
-	(await conn.execute("SELECT 1 FROM __drizzle_migrations WHERE name = ?", [name])).rows.length > 0
+  (await conn.execute("SELECT 1 FROM __drizzle_migrations WHERE name = ?", [name])).rows.length > 0;
 
 /** A batch that failed transiently with no read of the history answering after it: whether it committed is unknown */
 class Unconfirmed extends Error {}
@@ -181,43 +198,49 @@ class Unconfirmed extends Error {}
  * Returns who applied it.
  */
 export async function applyRecorded(
-	conn: Pick<MigrateConnection, "batch">,
-	migration: Recorded,
-	{ history, retry }: ApplyOptions,
+  conn: Pick<MigrateConnection, "batch">,
+  migration: Recorded,
+  { history, retry }: ApplyOptions,
 ): Promise<"this run" | "another run"> {
-	const statements = [
-		{ params: [migration.hash, Date.now(), migration.filename], sql: RECORD },
-		...migration.statements.map((sql) => ({ sql })),
-	]
-	let tried = false
-	let lost: unknown
-	try {
-		await withRetry(async () => {
-			if (tried) {
-				if (await recorded(history, migration.filename)) return
-				lost = undefined
-			}
-			tried = true
-			await conn.batch(statements).catch((error: unknown) => {
-				if (isTransient(error)) lost = error
-				throw error
-			})
-		}, retry)
-		return "this run"
-	} catch (error) {
-		if (lost === undefined) {
-			const elsewhere = await recorded(history, migration.filename).catch(() => {
-				// reason: with the history unread, the batch's own failure is the one to report
-				return false
-			})
-			if (elsewhere) return "another run"
-			throw error
-		}
-		throw new Unconfirmed(
-			`${migration.filename} may have committed: its batch failed with ${chainText(lost)}, and no read of database's history answered after it; database migrate status says whether it applied`,
-			{ cause: error },
-		)
-	}
+  const statements = [
+    { params: [migration.hash, Date.now(), migration.filename], sql: RECORD },
+    ...migration.statements.map((sql) => ({ sql })),
+  ];
+
+  let tried = false;
+  let lost: unknown;
+
+  try {
+    await withRetry(async () => {
+      if (tried) {
+        if (await recorded(history, migration.filename)) return;
+        lost = undefined;
+      }
+
+      tried = true;
+      await conn.batch(statements).catch((error: unknown) => {
+        if (isTransient(error)) lost = error;
+        throw error;
+      });
+    }, retry);
+
+    return "this run";
+  } catch (error) {
+    if (lost === undefined) {
+      const elsewhere = await recorded(history, migration.filename).catch(() => {
+        // reason: with the history unread, the batch's own failure is the one to report
+        return false;
+      });
+
+      if (elsewhere) return "another run";
+      throw error;
+    }
+
+    throw new Unconfirmed(
+      `${migration.filename} may have committed: its batch failed with ${chainText(lost)}, and no read of database's history answered after it; database migrate status says whether it applied`,
+      { cause: error },
+    );
+  }
 }
 
 /**
@@ -229,50 +252,61 @@ export async function applyRecorded(
  * this run applied, which leaves out each one another run recorded first
  */
 export async function applyEach(
-	open: () => Promise<FileConnection>,
-	migrations: readonly Recorded[],
-	{ history, print, retry }: ApplyOptions & { print: (line: string) => void },
+  open: () => Promise<FileConnection>,
+  migrations: readonly Recorded[],
+  { history, print, retry }: ApplyOptions & { print: (line: string) => void },
 ): Promise<string[]> {
-	const names = migrations.map(({ filename }) => filename)
-	const mine: string[] = []
-	/* the files that committed, and the batch under way, which a stop waits for: it commits or fails whole */
-	let done = 0
-	let batching: Promise<unknown> = Promise.resolve()
-	const read = async () => {
-		await batching.catch(() => {
-			// reason: a batch that failed committed nothing, which the count it left already says
-		})
-		return { applied: names.slice(0, done), pending: names.slice(done) }
-	}
-	await whileStoppable({ names, print, read }, async () => {
-		for (const [at, migration] of migrations.entries()) {
-			/* a stop parks the run here, whichever connection the next file would open */
-			await pastStop()
-			print(`Apply: ${migration.filename}`)
-			try {
-				const conn = await open()
-				try {
-					/* counted with the batch, so a stop that waited for it reads the count it made */
-					const batch = applyRecorded(conn, migration, { history, retry }).then((who) => {
-						done++
-						return who
-					})
-					batching = batch
-					if ((await batch) === "another run") print(`Skip (applied by another run): ${migration.filename}`)
-					else mine.push(migration.filename)
-				} finally {
-					await conn.close()
-				}
-			} catch (error) {
-				const applied = names.slice(0, at)
-				if (applied.length > 0) print(`Applied before the failure: ${applied.join(", ")}`)
-				/* withRetry throws an Error, whatever the batch threw; so does a connection that would not open */
-				const message = (error as Error).message
-				if (error instanceof Unconfirmed)
-					throw new Refused(message, { applied, pending: names.slice(at + 1), unknown: [migration.filename] })
-				throw new Refused(message, { applied, pending: names.slice(at) })
-			}
-		}
-	})
-	return mine
+  const names = migrations.map(({ filename }) => filename);
+  const mine: string[] = [];
+  // the files that committed, and the batch under way, which a stop waits for: it commits or fails whole
+  let done = 0;
+  let batching: Promise<unknown> = Promise.resolve();
+
+  const read = async () => {
+    await batching.catch(() => {
+      // reason: a batch that failed committed nothing, which the count it left already says
+    });
+
+    return { applied: names.slice(0, done), pending: names.slice(done) };
+  };
+
+  await whileStoppable({ names, print, read }, async () => {
+    for (const [at, migration] of migrations.entries()) {
+      // a stop parks the run here, whichever connection the next file would open
+      await pastStop();
+      print(`Apply: ${migration.filename}`);
+
+      try {
+        const conn = await open();
+
+        try {
+          // counted with the batch, so a stop that waited for it reads the count it made
+          const batch = applyRecorded(conn, migration, { history, retry }).then((who) => {
+            done++;
+
+            return who;
+          });
+
+          batching = batch;
+
+          if ((await batch) === "another run") print(`Skip (applied by another run): ${migration.filename}`);
+          else mine.push(migration.filename);
+        } finally {
+          await conn.close();
+        }
+      } catch (error) {
+        const applied = names.slice(0, at);
+
+        if (applied.length > 0) print(`Applied before the failure: ${applied.join(", ")}`);
+        // withRetry throws an Error, whatever the batch threw; so does a connection that would not open
+        const message = (error as Error).message;
+
+        if (error instanceof Unconfirmed)
+          throw new Refused(message, { applied, pending: names.slice(at + 1), unknown: [migration.filename] });
+        throw new Refused(message, { applied, pending: names.slice(at) });
+      }
+    }
+  });
+
+  return mine;
 }

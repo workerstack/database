@@ -5,55 +5,58 @@
  * and its spread dropped the column that names which one conflicted. KT1 of r23: the body carries the
  * cause, the message safe to show the client, which Error's constructor defines.
  */
-import { afterEach, describe, expect, it } from "bun:test"
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { afterEach, describe, expect, it } from "bun:test";
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-const SRC = join(import.meta.dir, "../../src")
+const SRC = join(import.meta.dir, "../../src");
 
 const PROBE = `import { DatabaseError } from "./src/error.ts"
 const error = new DatabaseError({ cause: "That email is taken", column: "email", errorKey: "unique_constraint_violation", status: "conflict", table: "user" })
 console.log(JSON.stringify({ body: JSON.parse(JSON.stringify(error)), spread: Object.keys({ ...error }).sort() }))
-`
+`;
 
-const made: string[] = []
+const made: string[] = [];
+
 afterEach(() => {
-	for (const dir of made.splice(0)) rmSync(dir, { force: true, recursive: true })
-})
+  for (const dir of made.splice(0)) rmSync(dir, { force: true, recursive: true });
+});
 
 /** What a DatabaseError serializes and spreads to, compiled by Bun under a project tsconfig of `compilerOptions` */
 function probe(compilerOptions: Record<string, unknown>): unknown {
-	const dir = mkdtempSync(join(tmpdir(), "database-define-fields-"))
-	made.push(dir)
-	mkdirSync(join(dir, "src"))
-	for (const file of ["error.ts", "types.ts"]) copyFileSync(join(SRC, file), join(dir, "src", file))
-	writeFileSync(join(dir, "package.json"), JSON.stringify({ type: "module" }))
-	writeFileSync(join(dir, "tsconfig.json"), JSON.stringify({ compilerOptions }))
-	writeFileSync(join(dir, "probe.ts"), PROBE)
-	const ran = Bun.spawnSync([process.execPath, "probe.ts"], { cwd: dir })
-	expect(ran.stderr.toString()).toBe("")
-	return JSON.parse(ran.stdout.toString())
+  const dir = mkdtempSync(join(tmpdir(), "database-define-fields-"));
+  made.push(dir);
+  mkdirSync(join(dir, "src"));
+
+  for (const file of ["error.ts", "types.ts"]) copyFileSync(join(SRC, file), join(dir, "src", file));
+  writeFileSync(join(dir, "package.json"), JSON.stringify({ type: "module" }));
+  writeFileSync(join(dir, "tsconfig.json"), JSON.stringify({ compilerOptions }));
+  writeFileSync(join(dir, "probe.ts"), PROBE);
+  const ran = Bun.spawnSync([process.execPath, "probe.ts"], { cwd: dir });
+  expect(ran.stderr.toString()).toBe("");
+
+  return JSON.parse(ran.stdout.toString());
 }
 
 const SHAPE = {
-	body: {
-		cause: "That email is taken",
-		column: "email",
-		errorKey: "unique_constraint_violation",
-		status: 409,
-		statusKey: "conflict",
-		table: "user",
-	},
-	spread: ["column", "errorKey", "status", "statusKey", "table"],
-}
+  body: {
+    cause: "That email is taken",
+    column: "email",
+    errorKey: "unique_constraint_violation",
+    status: 409,
+    statusKey: "conflict",
+    table: "user",
+  },
+  spread: ["column", "errorKey", "status", "statusKey", "table"],
+};
 
 describe("a DatabaseError keeps its column under Bun, whatever the consumer's class-field setting (KT5; sibling: the default)", () => {
-	it.each([
-		["useDefineForClassFields false", { target: "ES2022", useDefineForClassFields: false }],
-		["legacy decorators", { experimentalDecorators: true, useDefineForClassFields: false }],
-		["the default", {}],
-	])("under %s", (_label, compilerOptions) => {
-		expect(probe(compilerOptions)).toEqual(SHAPE)
-	})
-})
+  it.each([
+    ["useDefineForClassFields false", { target: "ES2022", useDefineForClassFields: false }],
+    ["legacy decorators", { experimentalDecorators: true, useDefineForClassFields: false }],
+    ["the default", {}],
+  ])("under %s", (_label, compilerOptions) => {
+    expect(probe(compilerOptions)).toEqual(SHAPE);
+  });
+});

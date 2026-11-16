@@ -1,23 +1,23 @@
 /** What d1-engine.ts hands the D1 proof's child, as JSON */
 export type ProofInput = {
-	/** The scratch worker's wrangler.json, one D1 binding named DB */
-	configPath: string
-	/** Each pending file, in order: its name, and its text with the history row wrangler appends */
-	files: Array<{ name: string; query: string }>
-	/** The copy of the live schema with its seed rows, and the history table, in one batch */
-	seed: string[]
-	/** The checked wrangler's entry module */
-	wrangler: string
-}
+  /** The scratch worker's wrangler.json, one D1 binding named DB */
+  configPath: string;
+  /** Each pending file, in order: its name, and its text with the history row wrangler appends */
+  files: Array<{ name: string; query: string }>;
+  /** The copy of the live schema with its seed rows, and the history table, in one batch */
+  seed: string[];
+  /** The checked wrangler's entry module */
+  wrangler: string;
+};
 
 /**
  * What the child answers: D1's refusal of a file, in D1's words, or none, with each file D1's engine
  * could not prove, as database's local D1 crashed compiling its probes, and why
  */
 export type ProofResult = {
-	refused?: string | undefined
-	unproven?: Array<{ name: string; why: string }> | undefined
-}
+  refused?: string | undefined;
+  unproven?: Array<{ name: string; why: string }> | undefined;
+};
 
-export function prove(input: ProofInput): Promise<ProofResult>
-export function main(input: string): Promise<ProofResult>
+export function prove(input: ProofInput): Promise<ProofResult>;
+export function main(input: string): Promise<ProofResult>;

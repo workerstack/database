@@ -786,7 +786,7 @@ neither would have been caught by a test that restated the rule.
 
 database ships its TypeScript source for runtimes and bundlers, and from 0.19 the declarations a type
 checker reads. `prepack` emits them, with declaration maps, under `types/` from
-`tsconfig.types.json` (which extends `tsconfig.strict.json`), and each export names them first:
+`tsconfig.build.json` (which extends `tsconfig.src.json`), and each export names them first:
 `{ "types": "./types/x.d.ts", "default": "./src/x.ts" }`. Bun, `tsx`, Vite and Wrangler take
 `default` and compile the source; a consumer's `tsc` takes `types` and never loads database's `.ts`.
 The order is the contract: the first condition that matches wins, and `default` always matches.

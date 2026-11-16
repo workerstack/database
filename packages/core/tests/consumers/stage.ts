@@ -4,191 +4,222 @@
  * link to the workspace, with each peer at the newest version database's range admits (the repo's own
  * suites run the catalog's exact floor).
  */
-import { spawnSync } from "node:child_process"
+import { spawnSync } from "node:child_process";
 import {
-	cpSync,
-	existsSync,
-	mkdirSync,
-	mkdtempSync,
-	readdirSync,
-	readFileSync,
-	realpathSync,
-	rmSync,
-	symlinkSync,
-	writeFileSync,
-} from "node:fs"
-import { tmpdir } from "node:os"
-import { dirname, join } from "node:path"
-import semver from "semver"
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 
-const CORE = join(import.meta.dirname, "../..")
-const ROOT = join(CORE, "../..")
+import semver from "semver";
+
+const CORE = join(import.meta.dirname, "../..");
+const ROOT = join(CORE, "../..");
 
 type Manifest = {
-	exports: Record<string, string>
-	peerDependencies: Record<string, string>
-	peerDependenciesMeta?: Record<string, { optional?: boolean }>
-}
+  exports: Record<string, string>;
+  peerDependencies: Record<string, string>;
+  peerDependenciesMeta?: Record<string, { optional?: boolean }>;
+};
 
-const manifest = JSON.parse(readFileSync(join(CORE, "package.json"), "utf8")) as Manifest
+const manifest = JSON.parse(readFileSync(join(CORE, "package.json"), "utf8")) as Manifest;
+
 const catalog = (
-	JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { workspaces: { catalog: Record<string, string> } }
-).workspaces.catalog
+  JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { workspaces: { catalog: Record<string, string> } }
+).workspaces.catalog;
 
 /** The tools a consumer builds with, pinned */
 export const TOOLS = {
-	/* a Worker's own types, which database no longer peers on (K3 of r21) */
-	"@cloudflare/workers-types": catalog["@cloudflare/workers-types"] as string,
-	"@types/node": catalog["@types/node"] as string,
-	tsx: "4.23.15",
-	typescript: catalog["typescript"] as string,
-	vite: "8.3.4",
-	wrangler: catalog["wrangler"] as string,
-}
+  // a Worker's own types, which database no longer peers on (K3 of r21)
+  "@cloudflare/workers-types": catalog["@cloudflare/workers-types"] as string,
+  "@types/node": catalog["@types/node"] as string,
+  tsx: "4.23.15",
+  typescript: catalog["typescript"] as string,
+  vite: "8.3.4",
+  wrangler: catalog["wrangler"] as string,
+};
 
-export const OPTIONAL_PEERS: string[] = Object.entries(manifest.peerDependenciesMeta ?? {})
-	.filter(([, meta]) => meta.optional === true)
-	.map(([name]) => name)
+const OPTIONAL_PEERS: string[] = Object.entries(manifest.peerDependenciesMeta ?? {})
+  .filter(([, meta]) => meta.optional === true)
+  .map(([name]) => name);
 
 /** Every subpath a consumer imports, as a specifier */
 export const SUBPATHS: string[] = Object.keys(manifest.exports)
-	.filter((key) => key !== "./package.json")
-	.map((key) => (key === "." ? "@workerstack/database" : `@workerstack/database/${key.slice(2)}`))
+  .filter((key) => key !== "./package.json")
+  .map((key) => (key === "." ? "@workerstack/database" : `@workerstack/database/${key.slice(2)}`));
 
-export type Run = { output: string; status: number }
+export type Run = { output: string; status: number };
 
 /** `cmd args` in `cwd`, with a consumer's environment: none of the runner's vitest variables, `set` over it */
 export function run(cwd: string, cmd: string, args: readonly string[], set: Record<string, string> = {}): Run {
-	const env = {
-		...Object.fromEntries(
-			Object.entries(process.env).filter(([name]) => name !== "NODE_ENV" && !name.startsWith("VITEST")),
-		),
-		...set,
-	}
-	const result = spawnSync(cmd, args, { cwd, encoding: "utf8", env, maxBuffer: 64 * 1024 * 1024 })
-	return { output: `${result.stdout}${result.stderr}`, status: result.status ?? 1 }
+  const env = {
+    ...Object.fromEntries(
+      Object.entries(process.env).filter(([name]) => name !== "NODE_ENV" && !name.startsWith("VITEST")),
+    ),
+    ...set,
+  };
+
+  const result = spawnSync(cmd, args, { cwd, encoding: "utf8", env, maxBuffer: 64 * 1024 * 1024 });
+
+  return { output: `${result.stdout}${result.stderr}`, status: result.status ?? 1 };
 }
 
 /** Throw with the output unless the command exited 0 */
 export function ok(result: Run, what: string): string {
-	if (result.status !== 0) throw new Error(`${what} exited ${result.status}\n${result.output}`)
-	return result.output
+  if (result.status !== 0) throw new Error(`${what} exited ${result.status}\n${result.output}`);
+
+  return result.output;
 }
 
-/* what a pack reads: the workspace's manifest and lockfile (catalog: resolves through them), the base tsconfig,
-   and the README and LICENSE prepack copies in; then the package's manifest, tsconfigs, src and docs */
-const ROOT_FILES = ["package.json", "bun.lock", "tsconfig.base.json", "README.md", "LICENSE"]
-const CORE_FILES = ["package.json", "tsconfig.json", "tsconfig.strict.json", "tsconfig.types.json", "src", "docs"]
-const MODULES = ["node_", "modules"].join("")
+// what a pack reads: the workspace's manifest and lockfile (catalog: resolves through them), the base tsconfig,
+// and the LICENSE prepack copies in; then the package's manifest, README (sync builds it), tsconfigs, src and docs
+const ROOT_FILES = ["package.json", "bun.lock", "tsconfig.base.json", "LICENSE"];
+
+const CORE_FILES = [
+  "package.json",
+  "README.md",
+  "tsconfig.json",
+  "tsconfig.src.json",
+  "tsconfig.build.json",
+  "src",
+  "docs",
+];
+
+const MODULES = ["node_", "modules"].join("");
 
 /**
  * The files a pack reads at `root` that git would commit. HN1 of plan 21: a copy of the tree that is no
  * repository of its own lists the enclosing one's files, or none where it ignores the copy, so it is refused
  */
 export function packFiles(root: string): string[] {
-	const top = spawnSync("git", ["rev-parse", "--show-toplevel"], { cwd: root, encoding: "utf8" })
-	const repository = top.status === 0 ? realpathSync(top.stdout.trim()) : "none"
-	if (repository !== realpathSync(root)) {
-		throw new Error(
-			`${root} is not the top of its git repository (${repository}); pack from a checkout or a worktree of database`,
-		)
-	}
-	const listed = spawnSync(
-		"git",
-		[
-			"ls-files",
-			"-co",
-			"--exclude-standard",
-			"--",
-			...ROOT_FILES,
-			...CORE_FILES.map((file) => `packages/core/${file}`),
-		],
-		{ cwd: root, encoding: "utf8" },
-	)
-	if (listed.status !== 0) throw new Error(`git ls-files exited ${listed.status}\n${listed.stderr}`)
-	const files = listed.stdout.split("\n").filter((line) => line !== "")
-	if (files.length === 0) throw new Error(`git lists none of the files a pack reads at ${root}`)
-	return files
+  const top = spawnSync("git", ["rev-parse", "--show-toplevel"], { cwd: root, encoding: "utf8" });
+  const repository = top.status === 0 ? realpathSync(top.stdout.trim()) : "none";
+
+  if (repository !== realpathSync(root)) {
+    throw new Error(
+      `${root} is not the top of its git repository (${repository}); pack from a checkout or a worktree of database`,
+    );
+  }
+
+  const listed = spawnSync(
+    "git",
+    [
+      "ls-files",
+      "-co",
+      "--exclude-standard",
+      "--",
+      ...ROOT_FILES,
+      ...CORE_FILES.map((file) => `packages/core/${file}`),
+    ],
+    { cwd: root, encoding: "utf8" },
+  );
+
+  if (listed.status !== 0) throw new Error(`git ls-files exited ${listed.status}\n${listed.stderr}`);
+  const files = listed.stdout.split("\n").filter((line) => line !== "");
+
+  if (files.length === 0) throw new Error(`git lists none of the files a pack reads at ${root}`);
+
+  return files;
 }
 
 /**
  * database packed by the release's own script (K1 of r20: the tarball it publishes), and the directory it
  * printed, under the OS temp dir. It packs a copy: bun pm pack walks every directory of the package, so
  * packing the live tree fails when a test removes its scratch directory mid-walk, and prepack would write
- * types/, README.md and LICENSE where other tests read. The copy is a workspace of the files git would
+ * types/ and LICENSE where other tests read. The copy is a workspace of the files git would
  * commit, as the release's checkout holds them, borrowing the repo's installed modules
  */
 export function packedDir(): string {
-	const files = packFiles(ROOT)
-	const copy = mkdtempSync(join(ROOT, ".tmp-pack-"))
-	try {
-		for (const file of files) {
-			mkdirSync(dirname(join(copy, file)), { recursive: true })
-			cpSync(join(ROOT, file), join(copy, file))
-		}
-		symlinkSync(join(ROOT, MODULES), join(copy, MODULES))
-		symlinkSync(join(CORE, MODULES), join(copy, "packages/core", MODULES))
-		const script = join(ROOT, ".github/scripts/pack-for-publish.sh")
-		/* its stdout alone: bun echoes each pack script to stderr, after the directory the script prints */
-		const packed = spawnSync("bash", [script, join(copy, "packages/core")], { cwd: copy, encoding: "utf8" })
-		if (packed.status !== 0) {
-			throw new Error(`pack-for-publish exited ${packed.status}\n${packed.stdout}${packed.stderr}`)
-		}
-		return packed.stdout.trim().split("\n").at(-1) as string
-	} finally {
-		rmSync(copy, { force: true, recursive: true })
-	}
+  const files = packFiles(ROOT);
+  const copy = mkdtempSync(join(ROOT, ".tmp-pack-"));
+
+  try {
+    for (const file of files) {
+      mkdirSync(dirname(join(copy, file)), { recursive: true });
+      cpSync(join(ROOT, file), join(copy, file));
+    }
+
+    symlinkSync(join(ROOT, MODULES), join(copy, MODULES));
+    symlinkSync(join(CORE, MODULES), join(copy, "packages/core", MODULES));
+    const script = join(ROOT, ".github/scripts/pack-for-publish.sh");
+    // its stdout alone: bun echoes each pack script to stderr, after the directory the script prints
+    const packed = spawnSync("bash", [script, join(copy, "packages/core")], { cwd: copy, encoding: "utf8" });
+
+    if (packed.status !== 0)
+      throw new Error(`pack-for-publish exited ${packed.status}\n${packed.stdout}${packed.stderr}`);
+
+    return packed.stdout.trim().split("\n").at(-1) as string;
+  } finally {
+    rmSync(copy, { force: true, recursive: true });
+  }
 }
 
 /** The tarball packedDir's pack wrote, beside the directory; remove its parent when done */
 export function pack(): string {
-	const out = dirname(packedDir())
-	const tarball = readdirSync(out).find((file) => file.endsWith(".tgz"))
-	if (tarball === undefined) throw new Error("bun pm pack wrote no tarball")
-	return join(out, tarball)
+  const out = dirname(packedDir());
+  const tarball = readdirSync(out).find((file) => file.endsWith(".tgz"));
+
+  if (tarball === undefined) throw new Error("bun pm pack wrote no tarball");
+
+  return join(out, tarball);
 }
 
-export type Stage = { dir: string; dispose(): void }
+export type Stage = { dir: string; dispose(): void };
 
 /** The lowest version `range` admits */
 export function floorOf(range: string): string {
-	const floor = semver.minVersion(range)
-	if (floor === null) throw new Error(`${range} admits no version`)
-	return floor.version
+  const floor = semver.minVersion(range);
+
+  if (floor === null) throw new Error(`${range} admits no version`);
+
+  return floor.version;
 }
 
-/* every version each peer range admits, as tests/structure/peers.test.ts holds it to the ranges */
+// every version each peer range admits, as tests/structure/peers.test.ts holds it to the ranges
 const REGISTRY = JSON.parse(
-	readFileSync(join(CORE, "tests/structure/__snapshots__/peer-registry.json"), "utf8"),
-) as Record<string, { admitted: string[]; floorPeers: Record<string, string>; newestPeers: Record<string, string> }>
+  readFileSync(join(CORE, "tests/structure/__snapshots__/peer-registry.json"), "utf8"),
+) as Record<string, { admitted: string[]; floorPeers: Record<string, string>; newestPeers: Record<string, string> }>;
 
 /** Every version database's range for `name` admits, oldest first, as the registry was recorded */
-export const admittedOf = (name: string): string[] => REGISTRY[name]?.admitted ?? []
+export const admittedOf = (name: string): string[] => REGISTRY[name]?.admitted ?? [];
 
 /**
  * Which version of each peer a stage installs: the newest its range admits, the range's floor
  * (K8 of r20), or the newest but for the exact versions `pin` names, a tool's among them. Each is an exact version, never
  * a range npm resolves: drizzle's `1.0.0-rc.N-<hash>` branch builds rank above its tagged rcs.
  */
-export type Versions = "floor" | "newest" | { pin: Record<string, string> }
+export type Versions = "floor" | "newest" | { pin: Record<string, string> };
 
 function versionOf(name: string, versions: Versions): string {
-	if (versions === "floor") return floorOf(manifest.peerDependencies[name] as string)
-	const pinned = versions === "newest" ? undefined : versions.pin[name]
-	const newest = pinned ?? admittedOf(name).at(-1)
-	if (newest === undefined) throw new Error(`the recorded registry admits no ${name}`)
-	return newest
+  if (versions === "floor") return floorOf(manifest.peerDependencies[name] as string);
+  const pinned = versions === "newest" ? undefined : versions.pin[name];
+  const newest = pinned ?? admittedOf(name).at(-1);
+
+  if (newest === undefined) throw new Error(`the recorded registry admits no ${name}`);
+
+  return newest;
 }
 
 /** The peers `name`@`version` declares, as the registry recorded them for its range's floor and newest */
 function recordedPeers(name: string, version: string): Record<string, string> {
-	const entry = REGISTRY[name]
-	if (entry?.admitted.at(-1) === version) return entry.newestPeers
-	if (entry !== undefined && version === floorOf(manifest.peerDependencies[name] as string)) return entry.floorPeers
-	throw new Error(`the recorded registry holds no peers of ${name}@${version}: rerun support/write-peer-registry.ts`)
+  const entry = REGISTRY[name];
+
+  if (entry?.admitted.at(-1) === version) return entry.newestPeers;
+
+  if (entry !== undefined && version === floorOf(manifest.peerDependencies[name] as string)) return entry.floorPeers;
+  throw new Error(`the recorded registry holds no peers of ${name}@${version}: rerun support/write-peer-registry.ts`);
 }
 
-const TYPES = "@cloudflare/workers-types"
+const TYPES = "@cloudflare/workers-types";
 
 /**
  * The tools a stage installs beside `dependencies`, each at the version `pins` names or TOOLS pins:
@@ -198,18 +229,22 @@ const TYPES = "@cloudflare/workers-types"
  * the newest wrangler, which moves its range with each release
  */
 export function toolsFor(
-	dependencies: Record<string, string>,
-	pins: Record<string, string> = {},
+  dependencies: Record<string, string>,
+  pins: Record<string, string> = {},
 ): Record<string, string> {
-	const tools: Record<string, string> = Object.fromEntries(
-		Object.entries(TOOLS)
-			.filter(([name]) => !(name in dependencies))
-			.map(([name, version]) => [name, pins[name] ?? version]),
-	)
-	const range = recordedPeers("wrangler", dependencies["wrangler"] ?? (tools["wrangler"] as string))[TYPES]
-	const types = tools[TYPES] as string
-	if (pins[TYPES] === undefined && range !== undefined && !semver.satisfies(types, range)) tools[TYPES] = floorOf(range)
-	return tools
+  const tools: Record<string, string> = Object.fromEntries(
+    Object.entries(TOOLS)
+      .filter(([name]) => !(name in dependencies))
+      .map(([name, version]) => [name, pins[name] ?? version]),
+  );
+
+  const range = recordedPeers("wrangler", dependencies["wrangler"] ?? (tools["wrangler"] as string))[TYPES];
+  const types = tools[TYPES] as string;
+
+  if (pins[TYPES] === undefined && range !== undefined && !semver.satisfies(types, range))
+    tools[TYPES] = floorOf(range);
+
+  return tools;
 }
 
 /**
@@ -217,42 +252,57 @@ export function toolsFor(
  * the tools, each peer at the exact version `versions` picks
  */
 export function stage(
-	tarball: string,
-	peers: "all" | "required",
-	files: Record<string, string> = {},
-	versions: Versions = "newest",
+  tarball: string,
+  peers: "all" | "required",
+  files: Record<string, string> = {},
+  versions: Versions = "newest",
 ): Stage {
-	const label = typeof versions === "string" ? versions : "pinned"
-	const dir = mkdtempSync(join(tmpdir(), `database-consumer-${peers}-${label}-`))
-	const wanted = Object.keys(manifest.peerDependencies).filter(
-		(name) => peers === "all" || !OPTIONAL_PEERS.includes(name),
-	)
-	const dependencies = Object.fromEntries([
-		["@workerstack/database", `file:${tarball}`],
-		...wanted.map((name) => [name, versionOf(name, versions)]),
-	])
-	const devDependencies = toolsFor(dependencies, typeof versions === "string" ? {} : versions.pin)
-	console.log(
-		`[database] the ${label} ${peers} stage installs ${TYPES}@${devDependencies[TYPES]} beside wrangler@${dependencies["wrangler"] ?? devDependencies["wrangler"]}`,
-	)
-	writeFileSync(
-		join(dir, "package.json"),
-		JSON.stringify({ dependencies, devDependencies, name: "database-consumer", private: true, type: "module" }),
-	)
-	for (const [path, text] of Object.entries(files)) {
-		mkdirSync(dirname(join(dir, path)), { recursive: true })
-		writeFileSync(join(dir, path), text)
-	}
-	/* npm refuses a peer outside database's range (ERESOLVE); a project that overrides it installs this way */
-	const outside = wanted.some(
-		(name) => !semver.satisfies(dependencies[name], manifest.peerDependencies[name] as string),
-	)
-	const install = ["install", "--no-audit", "--no-fund", "--loglevel=error", ...(outside ? ["--legacy-peer-deps"] : [])]
-	ok(run(dir, "npm", install), "npm install")
-	/* the globals `wrangler types` writes for the create-cloudflare project, from its bindings (K3 of r21) */
-	if (existsSync(join(dir, "c3/wrangler.jsonc")))
-		ok(run(join(dir, "c3"), "npx", ["wrangler", "types"]), "wrangler types")
-	return { dir, dispose: () => rmSync(dir, { force: true, recursive: true }) }
+  const label = typeof versions === "string" ? versions : "pinned";
+  const dir = mkdtempSync(join(tmpdir(), `database-consumer-${peers}-${label}-`));
+
+  const wanted = Object.keys(manifest.peerDependencies).filter(
+    (name) => peers === "all" || !OPTIONAL_PEERS.includes(name),
+  );
+
+  const dependencies = Object.fromEntries([
+    ["@workerstack/database", `file:${tarball}`],
+    ...wanted.map((name) => [name, versionOf(name, versions)]),
+  ]);
+
+  const devDependencies = toolsFor(dependencies, typeof versions === "string" ? {} : versions.pin);
+  console.log(
+    `[database] the ${label} ${peers} stage installs ${TYPES}@${devDependencies[TYPES]} beside wrangler@${dependencies["wrangler"] ?? devDependencies["wrangler"]}`,
+  );
+  writeFileSync(
+    join(dir, "package.json"),
+    JSON.stringify({ dependencies, devDependencies, name: "database-consumer", private: true, type: "module" }),
+  );
+
+  for (const [path, text] of Object.entries(files)) {
+    mkdirSync(dirname(join(dir, path)), { recursive: true });
+    writeFileSync(join(dir, path), text);
+  }
+
+  // npm refuses a peer outside database's range (ERESOLVE); a project that overrides it installs this way
+  const outside = wanted.some(
+    (name) => !semver.satisfies(dependencies[name], manifest.peerDependencies[name] as string),
+  );
+
+  const install = [
+    "install",
+    "--no-audit",
+    "--no-fund",
+    "--loglevel=error",
+    ...(outside ? ["--legacy-peer-deps"] : []),
+  ];
+
+  ok(run(dir, "npm", install), "npm install");
+
+  // the globals `wrangler types` writes for the create-cloudflare project, from its bindings (K3 of r21)
+  if (existsSync(join(dir, "c3/wrangler.jsonc")))
+    ok(run(join(dir, "c3"), "npx", ["wrangler", "types"]), "wrangler types");
+
+  return { dir, dispose: () => rmSync(dir, { force: true, recursive: true }) };
 }
 
 /**
@@ -260,30 +310,34 @@ export function stage(
  * `tarball` (K3 of r20): the README's line, not database's ranges, decides each peer's version
  */
 export function stageLine(tarball: string, line: string): Stage {
-	const dir = mkdtempSync(join(tmpdir(), "database-consumer-readme-"))
-	writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "database-consumer", private: true, type: "module" }))
-	const [cmd, ...args] = line.split(" ").map((word) => (word === "@workerstack/database" ? tarball : word))
-	ok(run(dir, cmd as string, args), line)
-	return { dir, dispose: () => rmSync(dir, { force: true, recursive: true }) }
+  const dir = mkdtempSync(join(tmpdir(), "database-consumer-readme-"));
+  writeFileSync(
+    join(dir, "package.json"),
+    JSON.stringify({ name: "database-consumer", private: true, type: "module" }),
+  );
+  const [cmd, ...args] = line.split(" ").map((word) => (word === "@workerstack/database" ? tarball : word));
+  ok(run(dir, cmd as string, args), line);
+
+  return { dir, dispose: () => rmSync(dir, { force: true, recursive: true }) };
 }
 
 /** The version of `name` installed in `dir` */
 export const installedVersion = (dir: string, name: string): string =>
-	(JSON.parse(readFileSync(join(dir, "node_modules", name, "package.json"), "utf8")) as { version: string }).version
+  (JSON.parse(readFileSync(join(dir, "node_modules", name, "package.json"), "utf8")) as { version: string }).version;
 
 /** database's range for the peer `name` */
-export const peerRange = (name: string): string => manifest.peerDependencies[name] as string
+export const peerRange = (name: string): string => manifest.peerDependencies[name] as string;
 
 /** `name` taken out of the consumer in `dir`, its bin with it, as a project that never installed it */
 export function removePackage(dir: string, name: string): void {
-	rmSync(join(dir, "node_modules", name), { force: true, recursive: true })
-	rmSync(join(dir, "node_modules", ".bin", name), { force: true })
+  rmSync(join(dir, "node_modules", name), { force: true, recursive: true });
+  rmSync(join(dir, "node_modules", ".bin", name), { force: true });
 }
 
 /** database's range for each of its required peers */
 export const REQUIRED_PEERS: Record<string, string> = Object.fromEntries(
-	Object.entries(manifest.peerDependencies).filter(([name]) => !OPTIONAL_PEERS.includes(name)),
-)
+  Object.entries(manifest.peerDependencies).filter(([name]) => !OPTIONAL_PEERS.includes(name)),
+);
 
 /** A script that imports every subpath and prints `OK <spec>` or `FAIL <spec> <reason>` for each */
 export const IMPORT_ALL = `const specs = ${JSON.stringify(SUBPATHS)}
@@ -295,12 +349,12 @@ for (const spec of specs) {
 		console.log("FAIL", spec, String(error?.message ?? error).split("\\n")[0])
 	}
 }
-`
+`;
 
 /** The subpaths that failed to import in an import-all run */
 export function failures(output: string): string[] {
-	return output
-		.split("\n")
-		.filter((line) => line.startsWith("FAIL "))
-		.map((line) => line.split(" ")[1] as string)
+  return output
+    .split("\n")
+    .filter((line) => line.startsWith("FAIL "))
+    .map((line) => line.split(" ")[1] as string);
 }

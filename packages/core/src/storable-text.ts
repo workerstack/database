@@ -6,25 +6,27 @@
  * app's own schema the same rule. A refine, never a pattern: published as one, Go's and Rust's
  * engines refuse \u and a surrogate, and a field's own pattern would move into an allOf.
  */
-import * as z from "zod"
+import * as z from "zod";
 
 // A refine, never a pattern
 /** The `x-database-text` value a storable text schema publishes in JSON Schema, which names the rule a pattern cannot express */
-export const STORABLE_TEXT_RULE = "no U+0000 or unpaired surrogate"
+export const STORABLE_TEXT_RULE = "no U+0000 or unpaired surrogate";
 
 /** Whether every engine stores `value` as sent: it holds no U+0000 and no lone surrogate */
 export function isStorableText(value: string): boolean {
-	/* by code point: a pair is one past U+FFFF, so only a lone half falls in the surrogate range */
-	for (const char of value) {
-		const point = char.codePointAt(0) as number
-		if (point === 0 || (point >= 0xd800 && point <= 0xdfff)) return false
-	}
-	return true
+  // by code point: a pair is one past U+FFFF, so only a lone half falls in the surrogate range
+  for (const char of value) {
+    const point = char.codePointAt(0) as number;
+
+    if (point === 0 || (point >= 0xd800 && point <= 0xdfff)) return false;
+  }
+
+  return true;
 }
 
 /** A string schema that refuses what `isStorableText` refuses, publishing the rule as `x-database-text` */
 export const storableText = (): z.ZodString =>
-	z
-		.string()
-		.refine(isStorableText, { message: "Must not contain U+0000 or an unpaired surrogate" })
-		.meta({ "x-database-text": STORABLE_TEXT_RULE })
+  z
+    .string()
+    .refine(isStorableText, { message: "Must not contain U+0000 or an unpaired surrogate" })
+    .meta({ "x-database-text": STORABLE_TEXT_RULE });

@@ -24,35 +24,34 @@
  * Clean break from legacy "~" prefix + "." dot-path nesting — those characters are
  * now literal and downstream validators will reject them as unknown field names.
  */
-import { DatabaseError } from "../error.ts"
-import { databaseErrorKeys } from "../types.ts"
-import type { FieldSelection, ParsedFields } from "./types.ts"
+import { DatabaseError } from "../error.ts";
+import { databaseErrorKeys } from "../types.ts";
+import type { FieldSelection, ParsedFields } from "./types.ts";
 
 /** Relations nested deeper than this are refused: each level is a join, and the parse recurses per level */
-const MAX_SELECT_DEPTH: number = 8
-const TOO_DEEP: string = `select nests relations deeper than ${MAX_SELECT_DEPTH} levels`
+const MAX_SELECT_DEPTH: number = 8;
+const TOO_DEEP: string = `select nests relations deeper than ${MAX_SELECT_DEPTH} levels`;
 
 /** The parsed selection; null when empty; "malformed" when it does not parse; "too_deep" past MAX_SELECT_DEPTH */
 function readSelect(selectStr: string | undefined): ParsedFields | null | "malformed" | "too_deep" {
-	if (!selectStr || selectStr.trim() === "") {
-		return null
-	}
+  if (!selectStr || selectStr.trim() === "") return null;
 
-	const text: Text = { closes: matchParens(selectStr), str: selectStr }
-	const root = parseSelectList(text, { end: selectStr.length, start: 0 }, 0)
-	if (root === null) return "malformed"
-	if (root === "too_deep") return root
+  const text: Text = { closes: matchParens(selectStr), str: selectStr };
+  const root = parseSelectList(text, { end: selectStr.length, start: 0 }, 0);
 
-	/* Return null only when input was purely separators (no name tokens attempted).
-	 * "author()" has a name token but skips the empty relation — root is empty but
-	 * result must be non-null so callers can inspect the empty root.
-	 * ",,," has no name tokens at all — return null. */
-	const hasContent = /[^,\s]/.test(selectStr)
-	if (!hasContent) {
-		return null
-	}
+  if (root === null) return "malformed";
 
-	return { root }
+  if (root === "too_deep") return root;
+
+  // Return null only when input was purely separators (no name tokens attempted).
+  // "author()" has a name token but skips the empty relation — root is empty but
+  // result must be non-null so callers can inspect the empty root.
+  // ",,," has no name tokens at all — return null.
+  const hasContent = /[^,\s]/.test(selectStr);
+
+  if (!hasContent) return null;
+
+  return { root };
 }
 
 /**
@@ -61,37 +60,45 @@ function readSelect(selectStr: string | undefined): ParsedFields | null | "malfo
  * malformed one must never read as it.
  */
 function parseSelect(selectStr: string | undefined): ParsedFields | null {
-	const read = readSelect(selectStr)
-	if (read !== "too_deep" && read !== "malformed") return read
-	const cause = read === "too_deep" ? TOO_DEEP : "select is malformed"
-	throw new DatabaseError({ cause, errorKey: databaseErrorKeys.INVALID_SELECT, status: "bad_request" })
+  const read = readSelect(selectStr);
+
+  if (read !== "too_deep" && read !== "malformed") return read;
+  const cause = read === "too_deep" ? TOO_DEEP : "select is malformed";
+  throw new DatabaseError({ cause, errorKey: databaseErrorKeys.INVALID_SELECT, status: "bad_request" });
 }
 
-const SEPARATORS = /[ ,\t)]/
-const NAME_END = /[,()]/
+const SEPARATORS = /[ ,\t)]/;
+const NAME_END = /[,()]/;
 
-type Span = { end: number; str: string }
+type Span = { end: number; str: string };
+
 /** The input and, for each `(`, the index of its matching `)` (the input's length when unclosed) */
-type Text = { closes: Map<number, number>; str: string }
-type Range = { end: number; start: number }
+type Text = { closes: Map<number, number>; str: string };
+
+type Range = { end: number; start: number };
 
 /** Every `(` matched to its `)` in one pass: the parse then never rescans a span to find a close */
 function matchParens(str: string): Map<number, number> {
-	const closes = new Map<number, number>()
-	const open: number[] = []
-	for (let i = 0; i < str.length; i++) {
-		if (str[i] === "(") open.push(i)
-		else if (str[i] === ")" && open.length > 0) closes.set(open.pop() as number, i)
-	}
-	for (const at of open) closes.set(at, str.length)
-	return closes
+  const closes = new Map<number, number>();
+  const open: number[] = [];
+
+  for (let i = 0; i < str.length; i++) {
+    if (str[i] === "(") open.push(i);
+    else if (str[i] === ")" && open.length > 0) closes.set(open.pop() as number, i);
+  }
+
+  for (const at of open) closes.set(at, str.length);
+
+  return closes;
 }
 
 /** The first index at or after `from`, before `span.end`, where `test` matches; else `span.end` */
 function scan(span: Span, from: number, test: (char: string) => boolean): number {
-	let i = from
-	while (i < span.end && !test(span.str[i] as string)) i++
-	return i
+  let i = from;
+
+  while (i < span.end && !test(span.str[i] as string)) i++;
+
+  return i;
 }
 
 /**
@@ -99,40 +106,49 @@ function scan(span: Span, from: number, test: (char: string) => boolean): number
  * null when the embed's contents are malformed. Empty parens select nothing and add nothing.
  */
 function addEmbed(
-	selection: FieldSelection,
-	name: string,
-	at: { depth: number; open: number; range: Range; text: Text },
+  selection: FieldSelection,
+  name: string,
+  at: { depth: number; open: number; range: Range; text: Text },
 ): number | null | "too_deep" {
-	const close = Math.min(at.text.closes.get(at.open) as number, at.range.end)
-	const nested = parseSelectList(at.text, { end: close, start: at.open + 1 }, at.depth + 1)
-	if (nested === null || nested === "too_deep") return nested
-	if (nested.scalars.length > 0 || Object.keys(nested.relations).length > 0)
-		mergeRelation(selection.relations, name, nested)
-	return close < at.range.end ? close + 1 : at.range.end
+  const close = Math.min(at.text.closes.get(at.open) as number, at.range.end);
+  const nested = parseSelectList(at.text, { end: close, start: at.open + 1 }, at.depth + 1);
+
+  if (nested === null || nested === "too_deep") return nested;
+
+  if (nested.scalars.length > 0 || Object.keys(nested.relations).length > 0)
+    mergeRelation(selection.relations, name, nested);
+
+  return close < at.range.end ? close + 1 : at.range.end;
 }
 
 /** The selection within `range` at `depth`, or null when an embed has no name before its `(` */
 function parseSelectList(text: Text, range: Range, depth: number): FieldSelection | null | "too_deep" {
-	if (depth > MAX_SELECT_DEPTH) return "too_deep"
-	const selection: FieldSelection = { relations: {}, scalars: [] }
-	const span = { end: range.end, str: text.str }
-	let i = scan(span, range.start, (char) => !SEPARATORS.test(char))
-	while (i < range.end) {
-		const nameEnd = scan(span, i, (char) => NAME_END.test(char))
-		const name = text.str.slice(i, nameEnd).trim()
-		/* separators were skipped, so an empty name means "(" with nothing before it */
-		if (!name) return null
-		if (text.str[nameEnd] === "(" && nameEnd < range.end) {
-			const next = addEmbed(selection, name, { depth, open: nameEnd, range, text })
-			if (next === null || next === "too_deep") return next
-			i = next
-		} else {
-			if (!selection.scalars.includes(name)) selection.scalars.push(name)
-			i = nameEnd
-		}
-		i = scan(span, i, (char) => !SEPARATORS.test(char))
-	}
-	return selection
+  if (depth > MAX_SELECT_DEPTH) return "too_deep";
+  const selection: FieldSelection = { relations: {}, scalars: [] };
+  const span = { end: range.end, str: text.str };
+  let i = scan(span, range.start, (char) => !SEPARATORS.test(char));
+
+  while (i < range.end) {
+    const nameEnd = scan(span, i, (char) => NAME_END.test(char));
+    const name = text.str.slice(i, nameEnd).trim();
+
+    // separators were skipped, so an empty name means "(" with nothing before it
+    if (!name) return null;
+
+    if (text.str[nameEnd] === "(" && nameEnd < range.end) {
+      const next = addEmbed(selection, name, { depth, open: nameEnd, range, text });
+
+      if (next === null || next === "too_deep") return next;
+      i = next;
+    } else {
+      if (!selection.scalars.includes(name)) selection.scalars.push(name);
+      i = nameEnd;
+    }
+
+    i = scan(span, i, (char) => !SEPARATORS.test(char));
+  }
+
+  return selection;
 }
 
 /**
@@ -140,25 +156,21 @@ function parseSelectList(text: Text, range: Range, depth: number): FieldSelectio
  * prototype instead, and a request names keys freely.
  */
 function setOwn<T>(record: Record<string, T>, key: string, value: T): void {
-	Object.defineProperty(record, key, { configurable: true, enumerable: true, value, writable: true })
+  Object.defineProperty(record, key, { configurable: true, enumerable: true, value, writable: true });
 }
 
 function mergeRelation(relations: Record<string, FieldSelection | null>, name: string, value: FieldSelection): void {
-	const existing = Object.hasOwn(relations, name) ? relations[name] : undefined
+  const existing = Object.hasOwn(relations, name) ? relations[name] : undefined;
 
-	if (!existing) {
-		setOwn(relations, name, value)
-	} else {
-		for (const s of value.scalars) {
-			if (!existing.scalars.includes(s)) {
-				existing.scalars.push(s)
-			}
-		}
-		/* parseSelectList stores a selection for every embed, never null */
-		for (const [k, v] of Object.entries(value.relations) as Array<[string, FieldSelection]>) {
-			mergeRelation(existing.relations, k, v)
-		}
-	}
+  if (existing) {
+    for (const s of value.scalars) if (!existing.scalars.includes(s)) existing.scalars.push(s);
+
+    // parseSelectList stores a selection for every embed, never null
+    for (const [k, v] of Object.entries(value.relations) as Array<[string, FieldSelection]>)
+      mergeRelation(existing.relations, k, v);
+  } else {
+    setOwn(relations, name, value);
+  }
 }
 
 /**
@@ -167,56 +179,55 @@ function mergeRelation(relations: Record<string, FieldSelection | null>, name: s
  * left out, and a null or undefined relation stays as it is
  */
 function filterBySelect<T extends Record<string, unknown>>(data: T, fields: ParsedFields): Partial<T> {
-	return filterBySelection(data, fields.root) as Partial<T>
+  return filterBySelection(data, fields.root) as Partial<T>;
 }
 
 function filterBySelection(data: Record<string, unknown>, selection: FieldSelection): Record<string, unknown> {
-	const result: Record<string, unknown> = {}
+  const result: Record<string, unknown> = {};
 
-	const hasWildcard = selection.scalars.includes("*")
+  const hasWildcard = selection.scalars.includes("*");
 
-	if (hasWildcard) {
-		for (const key of Object.keys(data)) {
-			/* skip keys that are explicitly selected as nested relations — handled below */
-			if (!Object.hasOwn(selection.relations, key)) setOwn(result, key, data[key])
-		}
-	} else {
-		for (const scalar of selection.scalars) {
-			if (Object.hasOwn(data, scalar)) setOwn(result, scalar, data[scalar])
-		}
-	}
+  if (hasWildcard) {
+    for (const key of Object.keys(data)) {
+      // skip keys that are explicitly selected as nested relations — handled below
+      if (!Object.hasOwn(selection.relations, key)) setOwn(result, key, data[key]);
+    }
+  } else {
+    for (const scalar of selection.scalars) if (Object.hasOwn(data, scalar)) setOwn(result, scalar, data[scalar]);
+  }
 
-	for (const [relationName, nestedSelection] of Object.entries(selection.relations)) {
-		if (!Object.hasOwn(data, relationName)) continue
+  for (const [relationName, nestedSelection] of Object.entries(selection.relations)) {
+    if (!Object.hasOwn(data, relationName)) continue;
 
-		const relationData = data[relationName]
+    const relationData = data[relationName];
 
-		if (relationData === null || relationData === undefined) {
-			setOwn(result, relationName, relationData)
-			continue
-		}
+    if (relationData === null || relationData === undefined) {
+      setOwn(result, relationName, relationData);
+      continue;
+    }
 
-		if (nestedSelection === null || nestedSelection.scalars.includes("*")) {
-			/* wildcard at this level — pass through untouched */
-			setOwn(result, relationName, relationData)
-			continue
-		}
+    if (nestedSelection === null || nestedSelection.scalars.includes("*")) {
+      // wildcard at this level — pass through untouched
+      setOwn(result, relationName, relationData);
+      continue;
+    }
 
-		if (Array.isArray(relationData)) {
-			const items = relationData.map((item: unknown) =>
-				typeof item === "object" && item !== null
-					? filterBySelection(item as Record<string, unknown>, nestedSelection)
-					: item,
-			)
-			setOwn(result, relationName, items)
-		} else if (typeof relationData === "object") {
-			setOwn(result, relationName, filterBySelection(relationData as Record<string, unknown>, nestedSelection))
-		} else {
-			setOwn(result, relationName, relationData)
-		}
-	}
+    if (Array.isArray(relationData)) {
+      const items = relationData.map((item: unknown) =>
+        typeof item === "object" && item !== null
+          ? filterBySelection(item as Record<string, unknown>, nestedSelection)
+          : item,
+      );
 
-	return result
+      setOwn(result, relationName, items);
+    } else if (typeof relationData === "object") {
+      setOwn(result, relationName, filterBySelection(relationData as Record<string, unknown>, nestedSelection));
+    } else {
+      setOwn(result, relationName, relationData);
+    }
+  }
+
+  return result;
 }
 
-export { filterBySelect, MAX_SELECT_DEPTH, parseSelect, readSelect, TOO_DEEP }
+export { filterBySelect, MAX_SELECT_DEPTH, parseSelect, readSelect, TOO_DEEP };

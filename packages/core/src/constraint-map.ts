@@ -3,33 +3,33 @@
  * Postgres handlers: each dialect finds the table, column or constraint name its own way, and
  * both turn what they found into the same DatabaseError.
  */
-import { DatabaseError } from "./error.ts"
-import { warnOnError } from "./log.ts"
-import type { DatabaseDriverErrorKey, ConstraintMap, ConstraintMapEntry, StatusKey } from "./types.ts"
+import { DatabaseError } from "./error.ts";
+import { warnOnError } from "./log.ts";
+import type { DatabaseDriverErrorKey, ConstraintMap, ConstraintMapEntry, StatusKey } from "./types.ts";
 
-export type TableMap = NonNullable<ConstraintMap[string]>
+export type TableMap = NonNullable<ConstraintMap[string]>;
 
 /** The generic error for a kind of violation, used when no map entry matches. */
 export type ConstraintFallback = {
-	/** the message safe to show the client, which the DatabaseError carries as its `cause` */
-	cause: string
-	/** the key a client branches on */
-	errorKey: DatabaseDriverErrorKey
-	/** the HTTP status the error answers with, by key: `conflict` is 409, `service_unavailable` 503 */
-	status: StatusKey
-}
+  /** the message safe to show the client, which the DatabaseError carries as its `cause` */
+  cause: string;
+  /** the key a client branches on */
+  errorKey: DatabaseDriverErrorKey;
+  /** the HTTP status the error answers with, by key: `conflict` is 409, `service_unavailable` 503 */
+  status: StatusKey;
+};
 
 /** What a handler found: the map entry, if any, the generic error otherwise, and where. */
 export type Found = {
-	column?: string | undefined
-	entry: ConstraintMapEntry | undefined
-	fallback: ConstraintFallback
-	table?: string | undefined
-}
+  column?: string | undefined;
+  entry: ConstraintMapEntry | undefined;
+  fallback: ConstraintFallback;
+  table?: string | undefined;
+};
 
 /** `record[key]` when `key` is the record's own (never an inherited name such as `constructor`). */
 export const own = <T>(record: Record<string, T> | undefined, key: string | undefined): T | undefined =>
-	record !== undefined && key !== undefined && Object.hasOwn(record, key) ? record[key] : undefined
+  record !== undefined && key !== undefined && Object.hasOwn(record, key) ? record[key] : undefined;
 
 /**
  * The entry `map` holds for `table`: its own key's, else that of the longest prefix pattern it
@@ -37,28 +37,32 @@ export const own = <T>(record: Record<string, T> | undefined, key: string | unde
  * no generated map can name. A key with a `*` anywhere else matches nothing
  */
 export function entryOf(map: ConstraintMap, table: string | undefined): TableMap | undefined {
-	let pattern: string | undefined
-	for (const key of Object.keys(map)) {
-		/* a malformed key matches nothing: defineConstraintMaps refuses it at load, and checkedOnce reports it */
-		if (!key.endsWith("*") || malformed(key)) continue
-		if (table?.startsWith(key.slice(0, -1)) === true && key.length > (pattern?.length ?? 0)) pattern = key
-	}
-	if (table !== undefined && Object.hasOwn(map, table)) return map[table]
-	return pattern === undefined ? undefined : map[pattern]
+  let pattern: string | undefined;
+
+  for (const key of Object.keys(map)) {
+    // a malformed key matches nothing: defineConstraintMaps refuses it at load, and checkedOnce reports it
+    if (!key.endsWith("*") || malformed(key)) continue;
+
+    if (table?.startsWith(key.slice(0, -1)) === true && key.length > (pattern?.length ?? 0)) pattern = key;
+  }
+
+  if (table !== undefined && Object.hasOwn(map, table)) return map[table];
+
+  return pattern === undefined ? undefined : map[pattern];
 }
 
 /** Whether `key` holds a `*` anywhere but its end, which no prefix pattern does */
-const malformed = (key: string): boolean => key.includes("*") && key.indexOf("*") !== key.length - 1
+const malformed = (key: string): boolean => key.includes("*") && key.indexOf("*") !== key.length - 1;
 
 /** Why `key` is no key a map may hold */
 const ruleOf = (key: string): string =>
-	`constraint map key "${key}": a "*" may only end a key, as a prefix pattern such as "ut_*"`
+  `constraint map key "${key}": a "*" may only end a key, as a prefix pattern such as "ut_*"`;
 
 // lookup-table: the maps defineConstraintMaps checked, or whose malformed keys were reported once: each map, not its array, which an app may build per call
-const CHECKED: WeakSet<ConstraintMap> = /* @__PURE__ */ new WeakSet()
+const CHECKED: WeakSet<ConstraintMap> = /* @__PURE__ */ new WeakSet();
 
 // lookup-table: each malformed key reported, by its text, as a map spread per call is a new map each time; keys are the app's source text, so it stays that small
-const WARNED: Set<string> = /* @__PURE__ */ new Set()
+const WARNED: Set<string> = /* @__PURE__ */ new Set();
 
 /**
  * The maps an app passes its error handlers, every key checked where it builds them, at module load:
@@ -66,10 +70,13 @@ const WARNED: Set<string> = /* @__PURE__ */ new Set()
  * The array comes back frozen, and no handler checks it again.
  */
 export function defineConstraintMaps(...maps: ConstraintMap[]): readonly ConstraintMap[] {
-	const bad = maps.flatMap((map) => Object.keys(map)).find(malformed)
-	if (bad !== undefined) throw new TypeError(ruleOf(bad))
-	for (const map of maps) CHECKED.add(map)
-	return Object.freeze(maps)
+  const bad = maps.flatMap((map) => Object.keys(map)).find(malformed);
+
+  if (bad !== undefined) throw new TypeError(ruleOf(bad));
+
+  for (const map of maps) CHECKED.add(map);
+
+  return Object.freeze(maps);
 }
 
 /**
@@ -78,23 +85,25 @@ export function defineConstraintMaps(...maps: ConstraintMap[]): readonly Constra
  * keys, as the client's answer must not change, nor say anything of the app's configuration
  */
 export function checkedOnce(maps: readonly ConstraintMap[]): readonly ConstraintMap[] {
-	for (const map of maps) {
-		if (CHECKED.has(map)) continue
-		CHECKED.add(map)
-		for (const key of Object.keys(map).filter((each) => malformed(each) && !WARNED.has(each))) {
-			WARNED.add(key)
-			warnOnError("database.constraint-maps.error", {
-				key,
-				message: `${ruleOf(key)}; it matches no table. Build the maps with defineConstraintMaps, which refuses such a key at load`,
-			})
-		}
-	}
-	return maps
+  for (const map of maps) {
+    if (CHECKED.has(map)) continue;
+    CHECKED.add(map);
+
+    for (const key of Object.keys(map).filter((each) => malformed(each) && !WARNED.has(each))) {
+      WARNED.add(key);
+      warnOnError("database.constraint-maps.error", {
+        key,
+        message: `${ruleOf(key)}; it matches no table. Build the maps with defineConstraintMaps, which refuses such a key at load`,
+      });
+    }
+  }
+
+  return maps;
 }
 
 /** Whether a map lists `column` among `table`'s private columns */
 const listsPrivate = (maps: readonly ConstraintMap[], table: string | undefined, column: string) =>
-	maps.some((map) => entryOf(map, table)?.private?.includes(column) === true)
+  maps.some((map) => entryOf(map, table)?.private?.includes(column) === true);
 
 /**
  * Whether the maps can say which of `table`'s columns are private: no map is given, which hides
@@ -102,7 +111,7 @@ const listsPrivate = (maps: readonly ConstraintMap[], table: string | undefined,
  * outside the schema, so its columns are hidden on every dialect
  */
 const knows = (maps: readonly ConstraintMap[], table: string | undefined) =>
-	maps.length === 0 || table === undefined || maps.some((map) => entryOf(map, table) !== undefined)
+  maps.length === 0 || table === undefined || maps.some((map) => entryOf(map, table) !== undefined);
 
 /**
  * The columns an error may name of those a violation reports: all of them, or none when a map lists
@@ -110,71 +119,80 @@ const knows = (maps: readonly ConstraintMap[], table: string | undefined) =>
  * maps given key no such table (fail closed)
  */
 export function shown(
-	maps: readonly ConstraintMap[],
-	table: string | undefined,
-	columns: readonly string[],
+  maps: readonly ConstraintMap[],
+  table: string | undefined,
+  columns: readonly string[],
 ): readonly string[] {
-	if (!knows(maps, table)) return []
-	return columns.some((column) => listsPrivate(maps, table, column)) ? [] : columns
+  if (!knows(maps, table)) return [];
+
+  return columns.some((column) => listsPrivate(maps, table, column)) ? [] : columns;
 }
 
 /** `column`, or undefined when a map lists it among `table`'s private columns, or shown hides the table's */
 export const shownColumn = (
-	maps: readonly ConstraintMap[],
-	table: string | undefined,
-	column: string | undefined,
-): string | undefined => (column === undefined ? undefined : shown(maps, table, [column])[0])
+  maps: readonly ConstraintMap[],
+  table: string | undefined,
+  column: string | undefined,
+): string | undefined => (column === undefined ? undefined : shown(maps, table, [column])[0]);
 
 /** The first entry `pick` finds for `table` across `maps`. */
 export function lookup(
-	maps: readonly ConstraintMap[],
-	table: string | undefined,
-	pick: (t: TableMap) => ConstraintMapEntry | undefined,
+  maps: readonly ConstraintMap[],
+  table: string | undefined,
+  pick: (t: TableMap) => ConstraintMapEntry | undefined,
 ): ConstraintMapEntry | undefined {
-	for (const map of maps) {
-		const t = entryOf(map, table)
-		const entry = t === undefined ? undefined : pick(t)
-		if (entry !== undefined) return entry
-	}
-	return undefined
+  for (const map of maps) {
+    const t = entryOf(map, table);
+    const entry = t === undefined ? undefined : pick(t);
+
+    if (entry !== undefined) return entry;
+  }
+
+  return undefined;
 }
 
 /** The `kind` entry named `name` (a CHECK, or a unique index) in any table, with that table. */
 export function findNamed(
-	maps: readonly ConstraintMap[],
-	kind: "check" | "unique",
-	name: string | undefined,
+  maps: readonly ConstraintMap[],
+  kind: "check" | "unique",
+  name: string | undefined,
 ): { entry: ConstraintMapEntry; table: string } | undefined {
-	for (const map of maps) {
-		for (const [table, t] of Object.entries(map)) {
-			/* a pattern names no one table: its constraints are found through the violated table's */
-			if (table.endsWith("*")) continue
-			const entry = own(t[kind], name)
-			if (entry !== undefined) return { entry, table }
-		}
-	}
-	return undefined
+  for (const map of maps) {
+    for (const [table, t] of Object.entries(map)) {
+      // a pattern names no one table: its constraints are found through the violated table's
+      if (table.endsWith("*")) continue;
+      const entry = own(t[kind], name);
+
+      if (entry !== undefined) return { entry, table };
+    }
+  }
+
+  return undefined;
 }
 
 /** Each table whose `kind` entry is named `name`, with that entry: the first map's where two list one table, a pattern left out as findNamed leaves it */
 export function findAllNamed(
-	maps: readonly ConstraintMap[],
-	kind: "check" | "unique",
-	name: string | undefined,
+  maps: readonly ConstraintMap[],
+  kind: "check" | "unique",
+  name: string | undefined,
 ): Array<{ entry: ConstraintMapEntry; table: string }> {
-	const found = new Map<string, ConstraintMapEntry>()
-	for (const map of maps) {
-		for (const [table, t] of Object.entries(map)) {
-			const entry = table.endsWith("*") || found.has(table) ? undefined : own(t[kind], name)
-			if (entry !== undefined) found.set(table, entry)
-		}
-	}
-	return [...found].map(([table, entry]) => ({ entry, table }))
+  const found = new Map<string, ConstraintMapEntry>();
+
+  for (const map of maps) {
+    for (const [table, t] of Object.entries(map)) {
+      const entry = table.endsWith("*") || found.has(table) ? undefined : own(t[kind], name);
+
+      if (entry !== undefined) found.set(table, entry);
+    }
+  }
+
+  return [...found].map(([table, entry]) => ({ entry, table }));
 }
 
 /** The DatabaseError for what a handler found; `source` is the original error, kept for logs. */
 export function toDatabaseError({ column, entry, fallback, table }: Found, source: unknown): DatabaseError {
-	if (entry === undefined) return new DatabaseError({ ...fallback, column, source, table })
-	const status = entry.statusKey ?? (fallback.status === "bad_request" ? "bad_request" : "conflict")
-	return new DatabaseError({ cause: entry.cause, column, errorKey: entry.errorKey, source, status, table })
+  if (entry === undefined) return new DatabaseError({ ...fallback, column, source, table });
+  const status = entry.statusKey ?? (fallback.status === "bad_request" ? "bad_request" : "conflict");
+
+  return new DatabaseError({ cause: entry.cause, column, errorKey: entry.errorKey, source, status, table });
 }

@@ -1,10 +1,10 @@
+import { codeOf } from "../../sql-lexer.ts";
 /**
  * The proof's check that each piece of database's split is one statement to SQLite, asked
  * of the scratch copy's own engine, which compiles the piece as the target's would.
  */
-import type { LocalDb } from "../drivers/local-db.ts"
-import { preview } from "./classify-file.ts"
-import { codeOf } from "../../sql-lexer.ts"
+import type { LocalDb } from "../drivers/local-db.ts";
+import { preview } from "./classify-file.ts";
 
 /**
  * Refuses `sql` when SQLite reads it as more than one statement: database applies each
@@ -14,9 +14,10 @@ import { codeOf } from "../../sql-lexer.ts"
  * the split reaches this, and it fails here, before any apply, on every provider alike
  */
 export function refuseFolded(db: LocalDb, sql: string): void {
-	const first = db.firstStatement(sql)
-	if (!codeOf(first, "sqlite").trimEnd().endsWith(";")) return
-	throw new Error(
-		`${preview(sql)}: SQLite reads this as more than one statement, the first ending at "${preview(first)}", where database applies one; database split this file where SQLite does not end a statement, so report it with the file`,
-	)
+  const first = db.firstStatement(sql);
+
+  if (!codeOf(first, "sqlite").trimEnd().endsWith(";")) return;
+  throw new Error(
+    `${preview(sql)}: SQLite reads this as more than one statement, the first ending at "${preview(first)}", where database applies one; database split this file where SQLite does not end a statement, so report it with the file`,
+  );
 }

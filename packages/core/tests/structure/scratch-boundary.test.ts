@@ -4,44 +4,46 @@
  * SIGTERM run too. A directory made anywhere else outlives a Ctrl-C, with whatever it held: a
  * migrations copy, a snapshot, an Atlas config naming the target's URL.
  */
-import { readdirSync, readFileSync } from "node:fs"
-import { join, relative } from "node:path"
-import { describe, expect, it } from "vitest"
+import { readdirSync, readFileSync } from "node:fs";
+import { join, relative } from "node:path";
 
-const SRC = join(import.meta.dirname, "../../src")
-const BOUNDARY = "migrate/core/cleanup.ts"
+import { describe, expect, it } from "vitest";
 
-const MAKES = /\bmkdtemp(?:Sync|Disposable(?:Sync)?)?\s*\(/
+const SRC = join(import.meta.dirname, "../../src");
+const BOUNDARY = "migrate/core/cleanup.ts";
+
+const MAKES = /\bmkdtemp(?:Sync|Disposable(?:Sync)?)?\s*\(/;
 
 /** Whether `text` makes a temporary directory itself */
 export function makesScratch(text: string): boolean {
-	return MAKES.test(text)
+  return MAKES.test(text);
 }
 
-/* the shipped sources: a test and its fixtures make what they like */
+// the shipped sources: a test and its fixtures make what they like
 function sources(dir: string): string[] {
-	return readdirSync(dir, { recursive: true, withFileTypes: true })
-		.filter((entry) => entry.isFile() && /\.(?:ts|mjs)$/.test(entry.name) && !entry.name.endsWith(".test.ts"))
-		.map((entry) => join(entry.parentPath, entry.name))
-		.filter((file) => !relative(SRC, file).split("/").includes("__fixtures__"))
+  return readdirSync(dir, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile() && /\.(?:ts|mjs)$/.test(entry.name) && !entry.name.endsWith(".test.ts"))
+    .map((entry) => join(entry.parentPath, entry.name))
+    .filter((file) => !relative(SRC, file).split("/").includes("__fixtures__"));
 }
 
 describe("single scratch boundary (S2 and KC5 of r22; sibling: the single process boundary)", () => {
-	it("only src/migrate/core/cleanup.ts makes a scratch directory", () => {
-		const makers = sources(SRC)
-			.filter((file) => makesScratch(readFileSync(file, "utf8")))
-			.map((file) => relative(SRC, file))
-		expect(makers).toEqual([BOUNDARY])
-	})
+  it("only src/migrate/core/cleanup.ts makes a scratch directory", () => {
+    const makers = sources(SRC)
+      .filter((file) => makesScratch(readFileSync(file, "utf8")))
+      .map((file) => relative(SRC, file));
 
-	it.each([
-		['const dir = fs.mkdtempSync(path.join(os.tmpdir(), "database-x-"))', true],
-		['const dir = mkdtempSync(join(tmpdir(), "database-x-"))', true],
-		['const dir = await mkdtemp("database-x-")', true],
-		['using dir = fs.mkdtempDisposableSync("database-x-")', true],
-		['const { dir, remove } = scratchDir("database-x-")', false],
-		['const s = "mkdtemp is banned"', false],
-	])("the checker: %s → %s", (text, expected) => {
-		expect(makesScratch(text)).toBe(expected)
-	})
-})
+    expect(makers).toEqual([BOUNDARY]);
+  });
+
+  it.each([
+    ['const dir = fs.mkdtempSync(path.join(os.tmpdir(), "database-x-"))', true],
+    ['const dir = mkdtempSync(join(tmpdir(), "database-x-"))', true],
+    ['const dir = await mkdtemp("database-x-")', true],
+    ['using dir = fs.mkdtempDisposableSync("database-x-")', true],
+    ['const { dir, remove } = scratchDir("database-x-")', false],
+    ['const s = "mkdtemp is banned"', false],
+  ])("the checker: %s → %s", (text, expected) => {
+    expect(makesScratch(text)).toBe(expected);
+  });
+});

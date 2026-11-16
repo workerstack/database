@@ -1,69 +1,69 @@
 /** Database-relevant HTTP status keys */
 export type StatusKey =
-	| "bad_request"
-	| "conflict"
-	| "forbidden"
-	| "internal_server_error"
-	| "service_unavailable"
-	| "unprocessable_entity"
+  | "bad_request"
+  | "conflict"
+  | "forbidden"
+  | "internal_server_error"
+  | "service_unavailable"
+  | "unprocessable_entity";
 
 /** The HTTP status code for each status key, as `DatabaseError.status` carries it */
 export const statusKeyToCode: Record<StatusKey, number> = {
-	bad_request: 400,
-	conflict: 409,
-	forbidden: 403,
-	internal_server_error: 500,
-	service_unavailable: 503,
-	unprocessable_entity: 422,
-}
+  bad_request: 400,
+  conflict: 409,
+  forbidden: 403,
+  internal_server_error: 500,
+  service_unavailable: 503,
+  unprocessable_entity: 422,
+};
 
 /** Database-related error key constants */
 export const databaseErrorKeys = {
-	CHECK_CONSTRAINT_VIOLATION: "check_constraint_violation",
-	CONSTRAINT_VIOLATION: "constraint_violation",
-	CURSOR_NOT_WIRED: "cursor_not_wired",
-	CURSOR_PAGINATION_UNSUPPORTED: "cursor_pagination_unsupported",
-	DATABASE_IO_ERROR: "database_io_error",
-	DATABASE_READONLY: "database_readonly",
-	DATABASE_UNAVAILABLE: "database_unavailable",
-	EXCLUSION_CONSTRAINT_VIOLATION: "exclusion_constraint_violation",
-	FILTER_NOT_WIRED: "filter_not_wired",
-	FOREIGN_KEY_VIOLATION: "foreign_key_violation",
-	INVALID_CURSOR: "invalid_cursor",
-	INVALID_PAGE: "invalid_page",
-	INVALID_SELECT: "invalid_select",
-	INVALID_STATE_TRANSITION: "invalid_state_transition",
-	INVALID_VALUE: "invalid_value",
-	PAGE_NOT_WIRED: "page_not_wired",
-	PAGE_TOO_DEEP: "page_too_deep",
-	PRIMARY_KEY_VIOLATION: "primary_key_violation",
-	REQUIRED_FIELD_MISSING: "required_field_missing",
-	SEARCH_NOT_WIRED: "search_not_wired",
-	SHARDS_FULL: "shards_full",
-	SORT_NOT_WIRED: "sort_not_wired",
-	STORAGE_LIMIT_REACHED: "tier_database_limit_reached",
-	UNIQUE_CONSTRAINT_VIOLATION: "unique_constraint_violation",
-	VALUE_TOO_LARGE: "value_too_large",
-} as const
+  CHECK_CONSTRAINT_VIOLATION: "check_constraint_violation",
+  CONSTRAINT_VIOLATION: "constraint_violation",
+  CURSOR_NOT_WIRED: "cursor_not_wired",
+  CURSOR_PAGINATION_UNSUPPORTED: "cursor_pagination_unsupported",
+  DATABASE_IO_ERROR: "database_io_error",
+  DATABASE_READONLY: "database_readonly",
+  DATABASE_UNAVAILABLE: "database_unavailable",
+  EXCLUSION_CONSTRAINT_VIOLATION: "exclusion_constraint_violation",
+  FILTER_NOT_WIRED: "filter_not_wired",
+  FOREIGN_KEY_VIOLATION: "foreign_key_violation",
+  INVALID_CURSOR: "invalid_cursor",
+  INVALID_PAGE: "invalid_page",
+  INVALID_SELECT: "invalid_select",
+  INVALID_STATE_TRANSITION: "invalid_state_transition",
+  INVALID_VALUE: "invalid_value",
+  PAGE_NOT_WIRED: "page_not_wired",
+  PAGE_TOO_DEEP: "page_too_deep",
+  PRIMARY_KEY_VIOLATION: "primary_key_violation",
+  REQUIRED_FIELD_MISSING: "required_field_missing",
+  SEARCH_NOT_WIRED: "search_not_wired",
+  SHARDS_FULL: "shards_full",
+  SORT_NOT_WIRED: "sort_not_wired",
+  STORAGE_LIMIT_REACHED: "tier_database_limit_reached",
+  UNIQUE_CONSTRAINT_VIOLATION: "unique_constraint_violation",
+  VALUE_TOO_LARGE: "value_too_large",
+} as const;
 
 /** Lowercase error key values from databaseErrorKeys */
-export type DatabaseErrorKey = (typeof databaseErrorKeys)[keyof typeof databaseErrorKeys]
+export type DatabaseErrorKey = (typeof databaseErrorKeys)[keyof typeof databaseErrorKeys];
 
 /** A key a database error classifier answers with: classifyD1Error, classifySqliteError and classifyPgError alike */
 export type DatabaseDriverErrorKey = (typeof databaseErrorKeys)[
-	| "CHECK_CONSTRAINT_VIOLATION"
-	| "CONSTRAINT_VIOLATION"
-	| "DATABASE_IO_ERROR"
-	| "DATABASE_READONLY"
-	| "DATABASE_UNAVAILABLE"
-	| "EXCLUSION_CONSTRAINT_VIOLATION"
-	| "FOREIGN_KEY_VIOLATION"
-	| "INVALID_VALUE"
-	| "PRIMARY_KEY_VIOLATION"
-	| "REQUIRED_FIELD_MISSING"
-	| "STORAGE_LIMIT_REACHED"
-	| "UNIQUE_CONSTRAINT_VIOLATION"
-	| "VALUE_TOO_LARGE"]
+  | "CHECK_CONSTRAINT_VIOLATION"
+  | "CONSTRAINT_VIOLATION"
+  | "DATABASE_IO_ERROR"
+  | "DATABASE_READONLY"
+  | "DATABASE_UNAVAILABLE"
+  | "EXCLUSION_CONSTRAINT_VIOLATION"
+  | "FOREIGN_KEY_VIOLATION"
+  | "INVALID_VALUE"
+  | "PRIMARY_KEY_VIOLATION"
+  | "REQUIRED_FIELD_MISSING"
+  | "STORAGE_LIMIT_REACHED"
+  | "UNIQUE_CONSTRAINT_VIOLATION"
+  | "VALUE_TOO_LARGE"];
 
 /**
  * The keys database's database error classifiers answer with: the subset of databaseErrorKeys a consumer's
@@ -71,76 +71,76 @@ export type DatabaseDriverErrorKey = (typeof databaseErrorKeys)[
  * keys are not among them.
  */
 export const databaseDriverErrorKeys: readonly DatabaseDriverErrorKey[] = [
-	databaseErrorKeys.CHECK_CONSTRAINT_VIOLATION,
-	databaseErrorKeys.CONSTRAINT_VIOLATION,
-	databaseErrorKeys.DATABASE_IO_ERROR,
-	databaseErrorKeys.DATABASE_READONLY,
-	databaseErrorKeys.DATABASE_UNAVAILABLE,
-	databaseErrorKeys.EXCLUSION_CONSTRAINT_VIOLATION,
-	databaseErrorKeys.FOREIGN_KEY_VIOLATION,
-	databaseErrorKeys.INVALID_VALUE,
-	databaseErrorKeys.PRIMARY_KEY_VIOLATION,
-	databaseErrorKeys.REQUIRED_FIELD_MISSING,
-	databaseErrorKeys.STORAGE_LIMIT_REACHED,
-	databaseErrorKeys.UNIQUE_CONSTRAINT_VIOLATION,
-	databaseErrorKeys.VALUE_TOO_LARGE,
-]
+  databaseErrorKeys.CHECK_CONSTRAINT_VIOLATION,
+  databaseErrorKeys.CONSTRAINT_VIOLATION,
+  databaseErrorKeys.DATABASE_IO_ERROR,
+  databaseErrorKeys.DATABASE_READONLY,
+  databaseErrorKeys.DATABASE_UNAVAILABLE,
+  databaseErrorKeys.EXCLUSION_CONSTRAINT_VIOLATION,
+  databaseErrorKeys.FOREIGN_KEY_VIOLATION,
+  databaseErrorKeys.INVALID_VALUE,
+  databaseErrorKeys.PRIMARY_KEY_VIOLATION,
+  databaseErrorKeys.REQUIRED_FIELD_MISSING,
+  databaseErrorKeys.STORAGE_LIMIT_REACHED,
+  databaseErrorKeys.UNIQUE_CONSTRAINT_VIOLATION,
+  databaseErrorKeys.VALUE_TOO_LARGE,
+];
 
 /** Constraint map entry for mapping DB constraint violations to domain errors */
 export type ConstraintMapEntry = {
-	/** The `DatabaseError.cause` the violation answers with: a message safe to show the client */
-	cause: string
-	/** The `DatabaseError.errorKey` the violation answers with, your domain's key */
-	errorKey: string
-	/** The status the violation answers with; `bad_request` for a violation database reports as one, such as a CHECK, and `conflict` otherwise */
-	statusKey?: "bad_request" | "conflict" | "forbidden" | undefined
-}
+  /** The `DatabaseError.cause` the violation answers with: a message safe to show the client */
+  cause: string;
+  /** The `DatabaseError.errorKey` the violation answers with, your domain's key */
+  errorKey: string;
+  /** The status the violation answers with; `bad_request` for a violation database reports as one, such as a CHECK, and `conflict` otherwise */
+  statusKey?: "bad_request" | "conflict" | "forbidden" | undefined;
+};
 
 /** Per-table constraint violation mappings */
 export type ConstraintMap = {
-	/**
-	 * A table's constraints, keyed by its SQL name; a key ending in `*` is a prefix pattern for the
-	 * tables an app makes at run time (`"ut_*"`). A table's own key wins over a pattern, and the
-	 * longest pattern over a shorter one.
-	 */
-	[table: string]: {
-		/** CHECK constraints, by constraint name */
-		check?: Record<string, ConstraintMapEntry> | undefined
-		/** Postgres EXCLUDE constraints, by name */
-		exclusion?: Record<string, ConstraintMapEntry> | undefined
-		/**
-		 * Foreign keys, by the SQL name of each one's first column. SQLite and D1 name no foreign key
-		 * in their message, so there an entry is blamed only when it is the table's one listed key
-		 * and the statement sets that column; list every foreign key of the table, as codegen does.
-		 * A failure a trigger makes in another table is blamed on that key too, as the message cannot
-		 * tell the two apart.
-		 */
-		foreignKey?: Record<string, ConstraintMapEntry> | undefined
-		/**
-		 * The partitions of this Postgres table, keyed as the map keys a table: Postgres reports a
-		 * violation on the partition, which is read as this table's, under its keys and its `private`
-		 * list. Codegen writes it from database.config.ts's `partitions`; a table no entry lists or keys
-		 * names no column.
-		 */
-		partitions?: readonly string[] | undefined
-		/** The primary key's violation, a duplicate id */
-		primaryKey?: ConstraintMapEntry | undefined
-		/**
-		 * The columns of this table the client never sees, by SQL name: an error names none of them,
-		 * in its `column` or its cause. Codegen writes it; a map without it names every column.
-		 */
-		private?: readonly string[] | undefined
-		/**
-		 * The columns of this table some foreign key points at, by SQL name: an UPDATE, or an
-		 * upsert's DO UPDATE, that assigns one may have failed on a row referencing the old value, as
-		 * may a REPLACE or INSERT OR REPLACE, which deletes the rows its values conflict with, so
-		 * SQLite's handler answers each with the neutral cause. Codegen writes it.
-		 */
-		referenced?: readonly string[] | undefined
-		/** Unique constraints, by their columns' SQL names comma-joined (`org_id,slug`); a unique index on an expression by its index name */
-		unique?: Record<string, ConstraintMapEntry> | undefined
-	}
-}
+  /**
+   * A table's constraints, keyed by its SQL name; a key ending in `*` is a prefix pattern for the
+   * tables an app makes at run time (`"ut_*"`). A table's own key wins over a pattern, and the
+   * longest pattern over a shorter one.
+   */
+  [table: string]: {
+    /** CHECK constraints, by constraint name */
+    check?: Record<string, ConstraintMapEntry> | undefined;
+    /** Postgres EXCLUDE constraints, by name */
+    exclusion?: Record<string, ConstraintMapEntry> | undefined;
+    /**
+     * Foreign keys, by the SQL name of each one's first column. SQLite and D1 name no foreign key
+     * in their message, so there an entry is blamed only when it is the table's one listed key
+     * and the statement sets that column; list every foreign key of the table, as codegen does.
+     * A failure a trigger makes in another table is blamed on that key too, as the message cannot
+     * tell the two apart.
+     */
+    foreignKey?: Record<string, ConstraintMapEntry> | undefined;
+    /**
+     * The partitions of this Postgres table, keyed as the map keys a table: Postgres reports a
+     * violation on the partition, which is read as this table's, under its keys and its `private`
+     * list. Codegen writes it from database.config.ts's `partitions`; a table no entry lists or keys
+     * names no column.
+     */
+    partitions?: readonly string[] | undefined;
+    /** The primary key's violation, a duplicate id */
+    primaryKey?: ConstraintMapEntry | undefined;
+    /**
+     * The columns of this table the client never sees, by SQL name: an error names none of them,
+     * in its `column` or its cause. Codegen writes it; a map without it names every column.
+     */
+    private?: readonly string[] | undefined;
+    /**
+     * The columns of this table some foreign key points at, by SQL name: an UPDATE, or an
+     * upsert's DO UPDATE, that assigns one may have failed on a row referencing the old value, as
+     * may a REPLACE or INSERT OR REPLACE, which deletes the rows its values conflict with, so
+     * SQLite's handler answers each with the neutral cause. Codegen writes it.
+     */
+    referenced?: readonly string[] | undefined;
+    /** Unique constraints, by their columns' SQL names comma-joined (`org_id,slug`); a unique index on an expression by its index name */
+    unique?: Record<string, ConstraintMapEntry> | undefined;
+  };
+};
 
 /** Function signature for database error handlers */
-export type DatabaseErrorHandler = (error: unknown, constraintMaps: readonly ConstraintMap[]) => void
+export type DatabaseErrorHandler = (error: unknown, constraintMaps: readonly ConstraintMap[]) => void;

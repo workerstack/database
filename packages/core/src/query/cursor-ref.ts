@@ -25,42 +25,45 @@
  * which is NULL whenever the row holds anything else or is gone, the null the cursor carried. A
  * deleted ±Infinity anchor so resumes from the NULLs' place.
  */
-import { getTableName, is, type SQL, type SQLWrapper, sql, type Table } from "drizzle-orm"
-import { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core"
+import { getTableName, is, type SQL, type SQLWrapper, sql, type Table } from "drizzle-orm";
+import { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
 
-import { DatabaseError } from "../error.ts"
-import { databaseErrorKeys } from "../types.ts"
-import { CursorRef, effectiveNulls } from "./cursor.ts"
-import { lossy } from "./cursor-refusals.ts"
-import { cursorPrecision } from "./cursor-precision.ts"
-import { readsBack } from "./sqlite/reads-back.ts"
-import { holdsText, inSeconds } from "./sqlite/timestamp-column.ts"
-import { AnchorBound, countLiteral, integerLiteral, type SortKey } from "./sqlite/keyset.ts"
+import { DatabaseError } from "../error.ts";
+import { databaseErrorKeys } from "../types.ts";
+import { cursorPrecision } from "./cursor-precision.ts";
+import { lossy } from "./cursor-refusals.ts";
+import { CursorRef, effectiveNulls } from "./cursor.ts";
+import { AnchorBound, countLiteral, integerLiteral, type SortKey } from "./sqlite/keyset.ts";
+import { readsBack } from "./sqlite/reads-back.ts";
+import { holdsText, inSeconds } from "./sqlite/timestamp-column.ts";
 
-/* drizzle's own keys for a table's name before any alias, and its schema */
-const ORIGINAL_NAME = /* @__PURE__ */ Symbol.for("drizzle:OriginalName")
-const SCHEMA = /* @__PURE__ */ Symbol.for("drizzle:Schema")
+// drizzle's own keys for a table's name before any alias, and its schema
+const ORIGINAL_NAME = /* @__PURE__ */ Symbol.for("drizzle:OriginalName");
+const SCHEMA = /* @__PURE__ */ Symbol.for("drizzle:Schema");
 
 /** Whether a key is read on SQLite: a SQLite column is, and an SQL expression is when its anchor table is SQLite's */
-const onSqlite = (column: SQLWrapper, table: object): boolean => is(column, SQLiteColumn) || is(table, SQLiteTable)
+const onSqlite = (column: SQLWrapper, table: object): boolean => is(column, SQLiteColumn) || is(table, SQLiteTable);
 
 /** `table` as a FROM item: its own name, with the alias a relational query gave it reapplied */
 function fromOf(table: object): SQL {
-	const original = (table as Record<symbol, string>)[ORIGINAL_NAME] as string
-	const schema = (table as Record<symbol, string | undefined>)[SCHEMA]
-	const qualified = schema
-		? sql`${sql.identifier(schema)}.${sql.identifier(original)}`
-		: sql`${sql.identifier(original)}`
-	const name = getTableName(table as Table)
-	return name === original ? qualified : sql`${qualified} AS ${sql.identifier(name)}`
+  const original = (table as Record<symbol, string>)[ORIGINAL_NAME] as string;
+  const schema = (table as Record<symbol, string | undefined>)[SCHEMA];
+
+  const qualified = schema
+    ? sql`${sql.identifier(schema)}.${sql.identifier(original)}`
+    : sql`${sql.identifier(original)}`;
+
+  const name = getTableName(table as Table);
+
+  return name === original ? qualified : sql`${qualified} AS ${sql.identifier(name)}`;
 }
 
 /** Whether `column` sorts by code point on Postgres: C or POSIX, its own or the database's default */
 const byCodePoint = (column: SQLWrapper) =>
-	sql`(pg_collation_for(${column}) IN ('"C"', '"POSIX"') OR (pg_collation_for(${column}) = '"default"' AND (SELECT datcollate FROM pg_database WHERE datname = current_database()) IN ('C', 'POSIX')))`
+  sql`(pg_collation_for(${column}) IN ('"C"', '"POSIX"') OR (pg_collation_for(${column}) = '"default"' AND (SELECT datcollate FROM pg_database WHERE datname = current_database()) IN ('C', 'POSIX')))`;
 
 /** Where the keyset reads the cursor's row: the table, the tiebreak column and the row's id */
-type Anchor = { id: unknown; nonFinite?: "exact" | undefined; table: object; tiebreak: SQLWrapper }
+type Anchor = { id: unknown; nonFinite?: "exact" | undefined; table: object; tiebreak: SQLWrapper };
 
 /**
  * The bound a reference compares with: the row's value while it has the reference's prefix and
@@ -68,22 +71,25 @@ type Anchor = { id: unknown; nonFinite?: "exact" | undefined; table: object; tie
  * is bound once, so the bound costs two parameters, and one for an empty prefix.
  */
 function textBound(key: SortKey, ref: CursorRef, at: Anchor): SQL {
-	const { column, direction } = key
-	const sqlite = onSqlite(column, at.table)
-	const cut = countLiteral(Array.from(ref.prefix).length)
-	const head = sqlite ? sql`substr(${column}, 1, ${cut})` : sql`left(${column}, ${cut})`
-	const size = sqlite ? sql`length(${column})` : sql`char_length(${column})`
-	const prefix = ref.prefix === "" ? sql`''` : sql`${ref.prefix}`
-	const above =
-		direction === "asc"
-			? sql`database_anchor.v`
-			: sql`(database_anchor.v || ${sqlite ? sql`char(1114111)` : sql`chr(1114111)`})`
-	const fallback = sqlite ? above : sql`CASE WHEN ${byCodePoint(column)} THEN ${above} END`
-	return sql`(SELECT CASE WHEN ${head} = database_anchor.v AND ${size} = ${countLiteral(ref.length)} THEN ${column} ELSE ${fallback} END FROM (SELECT ${prefix} AS v) AS database_anchor LEFT JOIN ${fromOf(at.table)} ON ${at.tiebreak} = ${at.id})`
+  const { column, direction } = key;
+  const sqlite = onSqlite(column, at.table);
+  const cut = countLiteral(Array.from(ref.prefix).length);
+  const head = sqlite ? sql`substr(${column}, 1, ${cut})` : sql`left(${column}, ${cut})`;
+  const size = sqlite ? sql`length(${column})` : sql`char_length(${column})`;
+  const prefix = ref.prefix === "" ? sql`''` : sql`${ref.prefix}`;
+
+  const above =
+    direction === "asc"
+      ? sql`database_anchor.v`
+      : sql`(database_anchor.v || ${sqlite ? sql`char(1114111)` : sql`chr(1114111)`})`;
+
+  const fallback = sqlite ? above : sql`CASE WHEN ${byCodePoint(column)} THEN ${above} END`;
+
+  return sql`(SELECT CASE WHEN ${head} = database_anchor.v AND ${size} = ${countLiteral(ref.length)} THEN ${column} ELSE ${fallback} END FROM (SELECT ${prefix} AS v) AS database_anchor LEFT JOIN ${fromOf(at.table)} ON ${at.tiebreak} = ${at.id})`;
 }
 
 /** An integer as an SQL literal, its sign kept */
-const literal = (n: number): SQL => sql`${n < 0 ? sql`-` : sql``}${countLiteral(Math.abs(n))}`
+const literal = (n: number): SQL => sql`${n < 0 ? sql`-` : sql``}${countLiteral(Math.abs(n))}`;
 
 /**
  * A Date on a SQLite timestamp key: the row's own value while it still lies in the cursor's
@@ -97,24 +103,26 @@ const literal = (n: number): SQL => sql`${n < 0 ? sql`-` : sql``}${countLiteral(
  */
 // the bound for a seconds-mode key, and for a milliseconds-mode key holding a REAL fraction
 function storedTimeBound({ column, direction }: SortKey, value: Date, at: Anchor): SQL {
-	const truncated = value.getTime()
-	/* each edge widened on its own: a Date of 0 is any stored value within a millisecond either side of it */
-	const [low, high] = [truncated > 0 ? truncated : truncated - 1, truncated < 0 ? truncated : truncated + 1]
-	const ms = literal(direction === "asc" ? low : high)
-	const seconds = inSeconds(column)
-	const fallback = seconds ? sql`(${ms} / 1000.0)` : ms
-	const kept = sql`CASE WHEN CAST(${column}${seconds ? sql` * 1000` : sql``} AS INTEGER) = ${literal(truncated)} THEN ${column} END`
-	return sql`coalesce((SELECT ${kept} FROM ${fromOf(at.table)} WHERE ${at.tiebreak} = ${at.id}), ${fallback})`
+  const truncated = value.getTime();
+  // each edge widened on its own: a Date of 0 is any stored value within a millisecond either side of it
+  const [low, high] = [truncated > 0 ? truncated : truncated - 1, truncated < 0 ? truncated : truncated + 1];
+  const ms = literal(direction === "asc" ? low : high);
+  const seconds = inSeconds(column);
+  const fallback = seconds ? sql`(${ms} / 1000.0)` : ms;
+  const kept = sql`CASE WHEN CAST(${column}${seconds ? sql` * 1000` : sql``} AS INTEGER) = ${literal(truncated)} THEN ${column} END`;
+
+  return sql`coalesce((SELECT ${kept} FROM ${fromOf(at.table)} WHERE ${at.tiebreak} = ${at.id}), ${fallback})`;
 }
 
 /** Whether `column` is a Postgres `timestamp` read in date mode, which reads 'infinity' and '-infinity' as one valid Date */
 const misreadsInfinity = (column: SQLWrapper): boolean => {
-	const { columnType, withTimezone } = column as { columnType?: unknown; withTimezone?: unknown }
-	return columnType === "PgTimestamp" && withTimezone !== true
-}
+  const { columnType, withTimezone } = column as { columnType?: unknown; withTimezone?: unknown };
 
-/* the Date node-postgres reads a `timestamp` 'infinity' and '-infinity' as: 2000-01-01, local midnight */
-const misreadInfinity = (value: Date): boolean => value.getTime() === new Date(2000, 0, 1).getTime()
+  return columnType === "PgTimestamp" && withTimezone !== true;
+};
+
+// the Date node-postgres reads a `timestamp` 'infinity' and '-infinity' as: 2000-01-01, local midnight
+const misreadInfinity = (value: Date): boolean => value.getTime() === new Date(2000, 0, 1).getTime();
 
 /**
  * The Date node-postgres gives both infinities, on a date-mode Postgres `timestamp` key: the row's
@@ -125,12 +133,13 @@ const misreadInfinity = (value: Date): boolean => value.getTime() === new Date(2
  * that reads infinity as an Invalid Date is bounded by unheldBound.
  */
 function timestampBound({ column, direction }: SortKey, value: Date, at: Anchor): SQL {
-	const end = direction === "asc" ? sql`'-infinity'::timestamp` : sql`'infinity'::timestamp`
-	const date = sql.param(value, column as never)
-	/* an infinite row is its own bound; a finite one only while it is still that Date (a row of local
-	   2000-01-01); one edited since, an infinite one made finite among them, bounds as a deleted row */
-	const kept = sql`CASE WHEN NOT isfinite(${column}) THEN ${column} WHEN ${cursorPrecision(column)} = ${date} THEN ${column} END`
-	return sql`coalesce((SELECT ${kept} FROM ${fromOf(at.table)} WHERE ${at.tiebreak} = ${at.id}), ${end})`
+  const end = direction === "asc" ? sql`'-infinity'::timestamp` : sql`'infinity'::timestamp`;
+  const date = sql.param(value, column as never);
+  // an infinite row is its own bound; a finite one only while it is still that Date (a row of local
+  // 2000-01-01); one edited since, an infinite one made finite among them, bounds as a deleted row
+  const kept = sql`CASE WHEN NOT isfinite(${column}) THEN ${column} WHEN ${cursorPrecision(column)} = ${date} THEN ${column} END`;
+
+  return sql`coalesce((SELECT ${kept} FROM ${fromOf(at.table)} WHERE ${at.tiebreak} = ${at.id}), ${end})`;
 }
 
 /**
@@ -141,12 +150,15 @@ function timestampBound({ column, direction }: SortKey, value: Date, at: Anchor)
  * serves the page, as SQLite seconds are bounded.
  */
 function millisecondBound({ column, direction }: SortKey, value: Date, at: Anchor): SQL {
-	const date = sql.param(value, column as never)
-	const type = (column as { withTimezone?: unknown }).withTimezone === true ? sql`timestamptz` : sql`timestamp`
-	const edge =
-		direction === "asc" ? sql`CAST(${date} AS ${type})` : sql`(CAST(${date} AS ${type}) + interval '1 millisecond')`
-	const kept = sql`CASE WHEN ${cursorPrecision(column)} = ${date} THEN ${column} END`
-	return sql`coalesce((SELECT ${kept} FROM ${fromOf(at.table)} WHERE ${at.tiebreak} = ${at.id}), ${edge})`
+  const date = sql.param(value, column as never);
+  const type = (column as { withTimezone?: unknown }).withTimezone === true ? sql`timestamptz` : sql`timestamp`;
+
+  const edge =
+    direction === "asc" ? sql`CAST(${date} AS ${type})` : sql`(CAST(${date} AS ${type}) + interval '1 millisecond')`;
+
+  const kept = sql`CASE WHEN ${cursorPrecision(column)} = ${date} THEN ${column} END`;
+
+  return sql`coalesce((SELECT ${kept} FROM ${fromOf(at.table)} WHERE ${at.tiebreak} = ${at.id}), ${edge})`;
 }
 
 /**
@@ -154,8 +166,9 @@ function millisecondBound({ column, direction }: SortKey, value: Date, at: Ancho
  * two that read an infinity as an Invalid Date (a `timestamp` reads it as 2000-01-01)
  */
 function pgInfinity(column: SQLWrapper, sign: "-" | "+"): SQL {
-	const word = sign === "-" ? sql`'-infinity'` : sql`'infinity'`
-	return (column as { columnType?: unknown }).columnType === "PgDate" ? sql`${word}::date` : sql`${word}::timestamptz`
+  const word = sign === "-" ? sql`'-infinity'` : sql`'infinity'`;
+
+  return (column as { columnType?: unknown }).columnType === "PgDate" ? sql`${word}::date` : sql`${word}::timestamptz`;
 }
 
 /**
@@ -167,15 +180,16 @@ function pgInfinity(column: SQLWrapper, sign: "-" | "+"): SQL {
  * skipping none, as a date-mode `timestamp` does.
  */
 function unheldBound({ column, direction }: SortKey, at: Anchor): SQL {
-	const sqlite = onSqlite(column, at.table)
-	const sign = direction === "asc" ? "-" : "+"
-	const end = sqlite ? (sign === "-" ? sql`-9e999` : sql`9e999`) : pgInfinity(column, sign)
-	return sql`coalesce((SELECT ${column} FROM ${fromOf(at.table)} WHERE ${at.tiebreak} = ${at.id}), ${end})`
+  const sqlite = onSqlite(column, at.table);
+  const sign = direction === "asc" ? "-" : "+";
+  const end = sqlite ? (sign === "-" ? sql`-9e999` : sql`9e999`) : pgInfinity(column, sign);
+
+  return sql`coalesce((SELECT ${column} FROM ${fromOf(at.table)} WHERE ${at.tiebreak} = ${at.id}), ${end})`;
 }
 
 /** Whether `column` is a SQLite number, which D1 may hand over as null when it holds ±Infinity */
 const holdsInfinity = (column: SQLWrapper) =>
-	is(column, SQLiteColumn) && (column.dataType.startsWith("number") || column.dataType === "object date")
+  is(column, SQLiteColumn) && (column.dataType.startsWith("number") || column.dataType === "object date");
 
 /**
  * A null on a SQLite number key: the row's own value where it is ±Infinity, NULL where it is NULL.
@@ -186,25 +200,30 @@ const holdsInfinity = (column: SQLWrapper) =>
  * aggregate over the row tells a gone row from a NULL one.
  */
 function infiniteBound({ column, direction, nulls }: SortKey, at: Anchor): SQL {
-	const earliest = effectiveNulls(direction, nulls) === "first" || at.nonFinite === "exact"
-	const gone = earliest ? sql`NULL` : direction === "asc" ? sql`-9e999` : sql`9e999`
-	return sql`(SELECT CASE WHEN count(*) = 0 THEN ${gone} WHEN max(${column}) IN (9e999, -9e999) THEN max(${column}) END FROM ${fromOf(at.table)} WHERE ${at.tiebreak} = ${at.id})`
+  const earliest = effectiveNulls(direction, nulls) === "first" || at.nonFinite === "exact";
+  const gone = earliest ? sql`NULL` : direction === "asc" ? sql`-9e999` : sql`9e999`;
+
+  return sql`(SELECT CASE WHEN count(*) = 0 THEN ${gone} WHEN max(${column}) IN (9e999, -9e999) THEN max(${column}) END FROM ${fromOf(at.table)} WHERE ${at.tiebreak} = ${at.id})`;
 }
 
 /** The doubles either side of the finite, non-zero `value`, as exact integers, and whether its mantissa is odd */
 function neighbours(value: number): { down: bigint; odd: boolean; up: bigint } {
-	const view = new DataView(new ArrayBuffer(8))
-	view.setFloat64(0, value)
-	const bits = view.getBigUint64(0)
-	/* one bit more is one step away from zero, whatever the sign; past the largest double is Infinity,
-	   which integers reach at the midpoint to 2^1024, as if that were the next double */
-	const at = (step: bigint): bigint => {
-		view.setBigUint64(0, bits + step)
-		const next = view.getFloat64(0)
-		return Number.isFinite(next) ? BigInt(next) : (value > 0 ? 1n : -1n) * 2n ** 1024n
-	}
-	const [toZero, fromZero] = [at(-1n), at(1n)]
-	return { down: value > 0 ? toZero : fromZero, odd: (bits & 1n) === 1n, up: value > 0 ? fromZero : toZero }
+  const view = new DataView(new ArrayBuffer(8));
+  view.setFloat64(0, value);
+  const bits = view.getBigUint64(0);
+
+  // one bit more is one step away from zero, whatever the sign; past the largest double is Infinity,
+  // which integers reach at the midpoint to 2^1024, as if that were the next double
+  const at = (step: bigint): bigint => {
+    view.setBigUint64(0, bits + step);
+    const next = view.getFloat64(0);
+
+    return Number.isFinite(next) ? BigInt(next) : (value > 0 ? 1n : -1n) * 2n ** 1024n;
+  };
+
+  const [toZero, fromZero] = [at(-1n), at(1n)];
+
+  return { down: value > 0 ? toZero : fromZero, odd: (bits & 1n) === 1n, up: value > 0 ? fromZero : toZero };
 }
 
 /**
@@ -213,13 +232,15 @@ function neighbours(value: number): { down: bigint; odd: boolean; up: bigint } {
  * plus one. Ties round to the even mantissa, so an odd one keeps neither midpoint.
  */
 function roundingEdge(value: number, direction: "asc" | "desc"): bigint {
-	const exact = BigInt(value)
-	const { down, odd, up } = neighbours(value)
-	/* twice the midpoint to the neighbour: odd where the gap is 1, at a power of two, so no integer ties */
-	const twice = exact + (direction === "asc" ? down : up)
-	const tie = twice % 2n === 0n
-	if (direction === "asc") return (tie ? twice / 2n + (odd ? 1n : 0n) : (twice + 1n) / 2n) - 1n
-	return (tie ? twice / 2n - (odd ? 1n : 0n) : (twice - 1n) / 2n) + 1n
+  const exact = BigInt(value);
+  const { down, odd, up } = neighbours(value);
+  // twice the midpoint to the neighbour: odd where the gap is 1, at a power of two, so no integer ties
+  const twice = exact + (direction === "asc" ? down : up);
+  const tie = twice % 2n === 0n;
+
+  if (direction === "asc") return (tie ? twice / 2n + (odd ? 1n : 0n) : (twice + 1n) / 2n) - 1n;
+
+  return (tie ? twice / 2n - (odd ? 1n : 0n) : (twice - 1n) / 2n) + 1n;
 }
 
 /**
@@ -230,17 +251,17 @@ function roundingEdge(value: number, direction: "asc" | "desc"): bigint {
  * budget the id alone
  */
 const exactBound = ({ column, direction }: SortKey, value: number, at: Anchor): SQL =>
-	sql`coalesce((SELECT ${column} FROM ${fromOf(at.table)} WHERE ${at.tiebreak} = ${at.id}), ${integerLiteral(roundingEdge(value, direction))})`
+  sql`coalesce((SELECT ${column} FROM ${fromOf(at.table)} WHERE ${at.tiebreak} = ${at.id}), ${integerLiteral(roundingEdge(value, direction))})`;
 
 /** A 500 when a list with no table to read from got a reference: paginate was not told the list is derived */
 function assertNoReference(values: readonly unknown[]): void {
-	if (!values.some((value) => value instanceof CursorRef)) return
-	throw new DatabaseError({
-		cause:
-			"this cursor carries a sort value by reference, which a derived list with no anchor cannot read back; give buildDerivedListQuery the table its rows are as anchor",
-		errorKey: databaseErrorKeys.SORT_NOT_WIRED,
-		status: "internal_server_error",
-	})
+  if (!values.some((value) => value instanceof CursorRef)) return;
+  throw new DatabaseError({
+    cause:
+      "this cursor carries a sort value by reference, which a derived list with no anchor cannot read back; give buildDerivedListQuery the table its rows are as anchor",
+    errorKey: databaseErrorKeys.SORT_NOT_WIRED,
+    status: "internal_server_error",
+  });
 }
 
 /**
@@ -250,20 +271,28 @@ function assertNoReference(values: readonly unknown[]): void {
  * bound as given, as an anchorless list binds it
  */
 function anchored(keys: readonly SortKey[], values: readonly unknown[], at: Anchor): unknown[] {
-	return values.map((value, i) => {
-		const key = keys[i] as SortKey
-		if (!readsBack(key.column, at.table)) return value
-		if (value instanceof CursorRef)
-			return new AnchorBound("row", textBound(key, value, at), !onSqlite(key.column, at.table))
-		if (value instanceof Date && Number.isNaN(value.getTime())) return new AnchorBound("row", unheldBound(key, at))
-		if (value instanceof Date && holdsText(key.column)) return new AnchorBound("row", storedTimeBound(key, value, at))
-		if (value instanceof Date && misreadsInfinity(key.column) && misreadInfinity(value))
-			return new AnchorBound("row", timestampBound(key, value, at))
-		if (value instanceof Date && cursorPrecision(key.column) !== key.column)
-			return new AnchorBound("row", millisecondBound(key, value, at))
-		if (lossy(value)) return new AnchorBound("row", exactBound(key, value, at))
-		return value === null && holdsInfinity(key.column) ? new AnchorBound("infinite", infiniteBound(key, at)) : value
-	})
+  return values.map((value, i) => {
+    const key = keys[i] as SortKey;
+
+    if (!readsBack(key.column, at.table)) return value;
+
+    if (value instanceof CursorRef)
+      return new AnchorBound("row", textBound(key, value, at), !onSqlite(key.column, at.table));
+
+    if (value instanceof Date && Number.isNaN(value.getTime())) return new AnchorBound("row", unheldBound(key, at));
+
+    if (value instanceof Date && holdsText(key.column)) return new AnchorBound("row", storedTimeBound(key, value, at));
+
+    if (value instanceof Date && misreadsInfinity(key.column) && misreadInfinity(value))
+      return new AnchorBound("row", timestampBound(key, value, at));
+
+    if (value instanceof Date && cursorPrecision(key.column) !== key.column)
+      return new AnchorBound("row", millisecondBound(key, value, at));
+
+    if (lossy(value)) return new AnchorBound("row", exactBound(key, value, at));
+
+    return value === null && holdsInfinity(key.column) ? new AnchorBound("infinite", infiniteBound(key, at)) : value;
+  });
 }
 
-export { anchored, assertNoReference, fromOf, roundingEdge }
+export { anchored, assertNoReference, fromOf, roundingEdge };

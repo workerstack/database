@@ -12,9 +12,10 @@
  * UPDATE and DELETE, the file made or changed; a view takes only the writes its INSTEAD OF triggers fire
  * on (trigger-write.mjs). What D1 refuses comes back in D1's own words.
  */
-import { readFileSync } from "node:fs"
-import { pathToFileURL } from "node:url"
-import { EVENTS, quote, triggerEvent, writeOf } from "./trigger-write.mjs"
+import { readFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+
+import { EVENTS, quote, triggerEvent, writeOf } from "./trigger-write.mjs";
 
 /**
  * @typedef {{ all(): Promise<{ results?: Array<Record<string, unknown>> | undefined }> }} D1Statement
@@ -35,8 +36,9 @@ import { EVENTS, quote, triggerEvent, writeOf } from "./trigger-write.mjs"
  * @returns {string}
  */
 function d1Error(error) {
-	const { cause, message } = /** @type {Error} */ (error)
-	return cause instanceof Error ? cause.message : message
+  const { cause, message } = /** @type {Error} */ (error);
+
+  return cause instanceof Error ? cause.message : message;
 }
 
 /**
@@ -45,7 +47,7 @@ function d1Error(error) {
  * @param {readonly string[]} statements
  */
 async function run(db, statements) {
-	await db.batch(statements.map((sql) => db.prepare(sql)))
+  await db.batch(statements.map((sql) => db.prepare(sql)));
 }
 
 /**
@@ -54,15 +56,16 @@ async function run(db, statements) {
  * @returns {Promise<Map<string, SchemaObject>>}
  */
 async function master(db) {
-	const { results = [] } = await db
-		.prepare("SELECT type, name, tbl_name, sql FROM sqlite_master WHERE sql IS NOT NULL")
-		.all()
-	return new Map(
-		results.map((row) => [
-			`${String(row["type"])} ${String(row["name"])}`,
-			{ sql: String(row["sql"]), table: String(row["tbl_name"]), type: String(row["type"]) },
-		]),
-	)
+  const { results = [] } = await db
+    .prepare("SELECT type, name, tbl_name, sql FROM sqlite_master WHERE sql IS NOT NULL")
+    .all();
+
+  return new Map(
+    results.map((row) => [
+      `${String(row["type"])} ${String(row["name"])}`,
+      { sql: String(row["sql"]), table: String(row["tbl_name"]), type: String(row["type"]) },
+    ]),
+  );
 }
 
 /**
@@ -74,8 +77,9 @@ async function master(db) {
  * @param {string} table
  */
 async function isRowTable(db, table) {
-	const { results = [] } = await db.prepare(`PRAGMA table_list(${quote(table)})`).all()
-	return results.some((row) => row["schema"] === "main" && row["type"] === "table")
+  const { results = [] } = await db.prepare(`PRAGMA table_list(${quote(table)})`).all();
+
+  return results.some((row) => row["schema"] === "main" && row["type"] === "table");
 }
 
 /**
@@ -86,27 +90,31 @@ async function isRowTable(db, table) {
  * @returns {Promise<string[]>}
  */
 async function probes(db, before) {
-	const after = [...(await master(db))]
-	const changed = after.filter(([key, object]) => before.get(key)?.sql !== object.sql)
-	const views = changed.filter(([, object]) => object.type === "view").map(([, object]) => object.table)
-	const tables = new Set(changed.filter(([, object]) => object.type === "trigger").map(([, object]) => object.table))
-	for (const [, object] of changed)
-		if (object.type === "table" && (await isRowTable(db, object.table))) tables.add(object.table)
-	/** @type {string[]} */
-	const writes = []
-	for (const table of tables) {
-		const { results = [] } = await db.prepare(`PRAGMA table_xinfo(${quote(table)})`).all()
-		const columns = results.filter((row) => row["hidden"] === 0).map((row) => String(row["name"]))
-		for (const event of eventsOf(after, table)) writes.push(`EXPLAIN ${writeOf(table, event, columns)}`)
-	}
-	return [...views.map((view) => `EXPLAIN SELECT * FROM ${quote(view)}`), ...writes]
+  const after = [...(await master(db))];
+  const changed = after.filter(([key, object]) => before.get(key)?.sql !== object.sql);
+  const views = changed.filter(([, object]) => object.type === "view").map(([, object]) => object.table);
+  const tables = new Set(changed.filter(([, object]) => object.type === "trigger").map(([, object]) => object.table));
+
+  for (const [, object] of changed)
+    if (object.type === "table" && (await isRowTable(db, object.table))) tables.add(object.table);
+  /** @type {string[]} */
+  const writes = [];
+
+  for (const table of tables) {
+    const { results = [] } = await db.prepare(`PRAGMA table_xinfo(${quote(table)})`).all();
+    const columns = results.filter((row) => row["hidden"] === 0).map((row) => String(row["name"]));
+
+    for (const event of eventsOf(after, table)) writes.push(`EXPLAIN ${writeOf(table, event, columns)}`);
+  }
+
+  return [...views.map((view) => `EXPLAIN SELECT * FROM ${quote(view)}`), ...writes];
 }
 
 /**
  * `name` as SQLite compares names, ASCII letters folded alone: a trigger's tbl_name is spelled as its ON clause was
  * @param {string} name
  */
-const fold = (name) => name.replace(/[A-Z]/g, (letter) => letter.toLowerCase())
+const fold = (name) => name.replaceAll(/[A-Z]/g, (letter) => letter.toLowerCase());
 
 /**
  * The writes `table` takes in the schema `objects`: a table every one, a view each its triggers fire on
@@ -114,12 +122,15 @@ const fold = (name) => name.replace(/[A-Z]/g, (letter) => letter.toLowerCase())
  * @param {string} table
  */
 function eventsOf(objects, table) {
-	const on = objects.filter(([, object]) => fold(object.table) === fold(table))
-	if (!on.some(([, object]) => object.type === "view")) return EVENTS
-	const fired = new Set(
-		on.filter(([, object]) => object.type === "trigger").map(([, object]) => triggerEvent(object.sql)),
-	)
-	return EVENTS.filter((event) => fired.has(event))
+  const on = objects.filter(([, object]) => fold(object.table) === fold(table));
+
+  if (!on.some(([, object]) => object.type === "view")) return EVENTS;
+
+  const fired = new Set(
+    on.filter(([, object]) => object.type === "trigger").map(([, object]) => triggerEvent(object.sql)),
+  );
+
+  return EVENTS.filter((event) => fired.has(event));
 }
 
 /**
@@ -127,29 +138,30 @@ function eventsOf(objects, table) {
  * which a disconnect shows ("other side closed"), not a D1 error
  */
 class Scratch {
-	/**
-	 * @param {Wrangler} wrangler
-	 * @param {ProofInput} input
-	 * @param {PlatformProxy} proxy
-	 */
-	constructor(wrangler, input, proxy) {
-		this.wrangler = wrangler
-		this.configPath = input.configPath
-		this.proxy = proxy
-		/** @type {string[][]} each batch the scratch D1 has run: the seed, then each file's */
-		this.ran = [input.seed]
-	}
+  /**
+   * @param {Wrangler} wrangler
+   * @param {ProofInput} input
+   * @param {PlatformProxy} proxy
+   */
+  constructor(wrangler, input, proxy) {
+    this.wrangler = wrangler;
+    this.configPath = input.configPath;
+    this.proxy = proxy;
+    /** @type {string[][]} each batch the scratch D1 has run: the seed, then each file's */
+    this.ran = [input.seed];
+  }
 
-	get db() {
-		return /** @type {D1Database} */ (this.proxy.env["DB"])
-	}
+  get db() {
+    return /** @type {D1Database} */ (this.proxy.env["DB"]);
+  }
 
-	/** A fresh scratch D1 in place of this one, running each batch this one ran */
-	async reopen() {
-		await this.proxy.dispose()
-		this.proxy = await this.wrangler.getPlatformProxy({ configPath: this.configPath, persist: false })
-		for (const batch of this.ran) await run(this.db, batch)
-	}
+  /** A fresh scratch D1 in place of this one, running each batch this one ran */
+  async reopen() {
+    await this.proxy.dispose();
+    this.proxy = await this.wrangler.getPlatformProxy({ configPath: this.configPath, persist: false });
+
+    for (const batch of this.ran) await run(this.db, batch);
+  }
 }
 
 /**
@@ -157,13 +169,14 @@ class Scratch {
  * @param {D1Database} db
  */
 async function answers(db) {
-	try {
-		await db.prepare("SELECT 1").all()
-		return true
-	} catch {
-		// reason: any failure of SELECT 1 means the scratch D1 is gone, whatever its words
-		return false
-	}
+  try {
+    await db.prepare("SELECT 1").all();
+
+    return true;
+  } catch {
+    // reason: any failure of SELECT 1 means the scratch D1 is gone, whatever its words
+    return false;
+  }
 }
 
 /**
@@ -174,18 +187,22 @@ async function answers(db) {
  * @returns {Promise<{ crashed: true } | { error: string } | undefined>}
  */
 async function compile(scratch, probe) {
-	for (const fresh of [false, true]) {
-		if (fresh) await scratch.reopen()
-		try {
-			await run(scratch.db, [probe])
-			return undefined
-		} catch (error) {
-			// reason: a D1 that no longer answers crashed, so its error says nothing of the probe; the loop retries it fresh
-			if (await answers(scratch.db)) return { error: d1Error(error) }
-		}
-	}
-	await scratch.reopen()
-	return { crashed: true }
+  for (const fresh of [false, true]) {
+    if (fresh) await scratch.reopen();
+
+    try {
+      await run(scratch.db, [probe]);
+
+      return;
+    } catch (error) {
+      // reason: a D1 that no longer answers crashed, so its error says nothing of the probe; the loop retries it fresh
+      if (await answers(scratch.db)) return { error: d1Error(error) };
+    }
+  }
+
+  await scratch.reopen();
+
+  return { crashed: true };
 }
 
 /**
@@ -196,34 +213,42 @@ async function compile(scratch, probe) {
  * @returns {Promise<{ refused?: string; unproven?: string }>}
  */
 async function proveFile(scratch, file) {
-	const before = await master(scratch.db)
-	/** @type {string[]} */
-	let statements
-	try {
-		/* wrangler's split refuses a file it would rewrite, as its apply does */
-		statements = scratch.wrangler.unstable_splitSqlQuery(file.query)
-		await run(scratch.db, statements)
-	} catch (error) {
-		return {
-			refused: `${file.name}: D1 refuses this file on its own engine, as wrangler's apply would: ${d1Error(error)}; leave out what D1 does not run`,
-		}
-	}
-	scratch.ran.push(statements)
-	/** @type {string[]} */
-	const crashed = []
-	for (const probe of await probes(scratch.db, before)) {
-		const compiled = await compile(scratch, probe)
-		const what = probe.replace(/^EXPLAIN /, "")
-		if (compiled !== undefined && "error" in compiled)
-			return {
-				refused: `${file.name}: D1 applies this file, then refuses ${what}: ${compiled.error}, so it would fail on the live database once applied; leave out what D1 does not run`,
-			}
-		if (compiled !== undefined) crashed.push(what)
-	}
-	if (crashed.length === 0) return {}
-	return {
-		unproven: `database's local D1 (wrangler's workerd) crashed compiling ${crashed.join(", ")} once this file applied, and again on a fresh copy, so D1's engine proves nothing of it; wrangler's apply compiles no such statement, so this does not show the live database refuses the file`,
-	}
+  const before = await master(scratch.db);
+  /** @type {string[]} */
+  let statements;
+
+  try {
+    // wrangler's split refuses a file it would rewrite, as its apply does
+    statements = scratch.wrangler.unstable_splitSqlQuery(file.query);
+    await run(scratch.db, statements);
+  } catch (error) {
+    return {
+      refused: `${file.name}: D1 refuses this file on its own engine, as wrangler's apply would: ${d1Error(error)}; leave out what D1 does not run`,
+    };
+  }
+
+  scratch.ran.push(statements);
+  /** @type {string[]} */
+  const crashed = [];
+
+  for (const probe of await probes(scratch.db, before)) {
+    const compiled = await compile(scratch, probe);
+    const what = probe.replace(/^EXPLAIN /, "");
+
+    if (compiled !== undefined && "error" in compiled) {
+      return {
+        refused: `${file.name}: D1 applies this file, then refuses ${what}: ${compiled.error}, so it would fail on the live database once applied; leave out what D1 does not run`,
+      };
+    }
+
+    if (compiled !== undefined) crashed.push(what);
+  }
+
+  if (crashed.length === 0) return {};
+
+  return {
+    unproven: `database's local D1 (wrangler's workerd) crashed compiling ${crashed.join(", ")} once this file applied, and again on a fresh copy, so D1's engine proves nothing of it; wrangler's apply compiles no such statement, so this does not show the live database refuses the file`,
+  };
 }
 
 /**
@@ -233,25 +258,31 @@ async function proveFile(scratch, file) {
  * @returns {Promise<ProofResult>}
  */
 export async function prove(input) {
-	const wrangler = /** @type {Wrangler} */ (await import(pathToFileURL(input.wrangler).href))
-	const scratch = new Scratch(
-		wrangler,
-		input,
-		await wrangler.getPlatformProxy({ configPath: input.configPath, persist: false }),
-	)
-	try {
-		await run(scratch.db, input.seed)
-		/** @type {Array<{ name: string; why: string }>} */
-		const unproven = []
-		for (const file of input.files) {
-			const { refused, unproven: why } = await proveFile(scratch, file)
-			if (refused !== undefined) return { refused }
-			if (why !== undefined) unproven.push({ name: file.name, why })
-		}
-		return unproven.length === 0 ? {} : { unproven }
-	} finally {
-		await scratch.proxy.dispose()
-	}
+  const wrangler = /** @type {Wrangler} */ (await import(pathToFileURL(input.wrangler).href));
+
+  const scratch = new Scratch(
+    wrangler,
+    input,
+    await wrangler.getPlatformProxy({ configPath: input.configPath, persist: false }),
+  );
+
+  try {
+    await run(scratch.db, input.seed);
+    /** @type {Array<{ name: string; why: string }>} */
+    const unproven = [];
+
+    for (const file of input.files) {
+      const { refused, unproven: why } = await proveFile(scratch, file);
+
+      if (refused !== undefined) return { refused };
+
+      if (why !== undefined) unproven.push({ name: file.name, why });
+    }
+
+    return unproven.length === 0 ? {} : { unproven };
+  } finally {
+    await scratch.proxy.dispose();
+  }
 }
 
 /**
@@ -260,5 +291,5 @@ export async function prove(input) {
  * @returns {Promise<ProofResult>}
  */
 export async function main(input) {
-	return await prove(/** @type {ProofInput} */ (JSON.parse(readFileSync(input, "utf8"))))
+  return await prove(/** @type {ProofInput} */ (JSON.parse(readFileSync(input, "utf8"))));
 }

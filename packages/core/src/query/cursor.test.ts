@@ -1,379 +1,397 @@
-import { describe, expect, it } from "vitest"
-import { DatabaseError } from "../error.ts"
-import { decodeBase64Url, encodeBase64Url } from "./base64url.ts"
-import {
-	mintCursor,
-	CursorRef,
-	cursorProblem,
-	effectiveNulls,
-	encodeCursor,
-	openCursor,
-	readCursor,
-	sortSignature,
-} from "./cursor.ts"
-import { seal } from "./cursor-seal.ts"
-import type { SortField } from "./types.ts"
-import { CURSOR_SECRET, SEALED } from "./__fixtures__/cursor-secret.ts"
+import { describe, expect, it } from "vitest";
 
-const BY_CREATED: SortField[] = [{ direction: "desc", field: "created_at" }]
+import { DatabaseError } from "../error.ts";
+import { CURSOR_SECRET, SEALED } from "./__fixtures__/cursor-secret.ts";
+import { decodeBase64Url, encodeBase64Url } from "./base64url.ts";
+import { seal } from "./cursor-seal.ts";
+import {
+  mintCursor,
+  CursorRef,
+  cursorProblem,
+  effectiveNulls,
+  encodeCursor,
+  openCursor,
+  readCursor,
+  sortSignature,
+} from "./cursor.ts";
+import type { SortField } from "./types.ts";
+
+const BY_CREATED: SortField[] = [{ direction: "desc", field: "created_at" }];
 
 /** Runs `fn` and returns what it threw; fails the test if it returns normally. */
 function thrown(fn: () => unknown): unknown {
-	try {
-		fn()
-	} catch (error) {
-		return error
-	}
-	throw new Error("expected the call to throw")
+  try {
+    fn();
+  } catch (error) {
+    return error;
+  }
+
+  throw new Error("expected the call to throw");
 }
 
 /** Any payload as JSON, sealed under the test secret and scope */
-const wire = (body: unknown): string => seal(new TextEncoder().encode(JSON.stringify(body)), SEALED)
+const wire = (body: unknown): string => seal(new TextEncoder().encode(JSON.stringify(body)), SEALED);
 
 /** Raw payload bytes, sealed under the test secret and scope */
-const sealed = (bytes: Uint8Array): string => seal(bytes, SEALED)
+const sealed = (bytes: Uint8Array): string => seal(bytes, SEALED);
 
 /** What the test cursor `cursor` opens to */
-const decoded = (cursor: string) => openCursor(cursor, SEALED)
+const decoded = (cursor: string) => openCursor(cursor, SEALED);
 
 /** Builds a cursor payload under the created_at.desc signature. */
 function payload(v: unknown[], i: unknown = 1) {
-	return { i, s: "created_at.desc.nullsfirst", v }
+  return { i, s: "created_at.desc.nullsfirst", v };
 }
 
 /** A cursor whose one sort value is the date `time` */
-const forged = (time: number) => wire({ i: "id1", s: "", v: [{ $date: time }] })
+const forged = (time: number) => wire({ i: "id1", s: "", v: [{ $date: time }] });
 
 describe("cursor encode/decode", () => {
-	it("roundtrips every value with its sort signature and id", () => {
-		const encoded = encodeCursor(
-			{ i: "usr_abc123", s: "created_at.desc.nullsfirst", v: ["2024-01-01", 42, null] },
-			SEALED,
-		)
-		expect(decoded(encoded)).toEqual({
-			carried: [false, false, false],
-			id: "usr_abc123",
-			sort: "created_at.desc.nullsfirst",
-			values: ["2024-01-01", 42, null],
-		})
-	})
+  it("roundtrips every value with its sort signature and id", () => {
+    const encoded = encodeCursor(
+      { i: "usr_abc123", s: "created_at.desc.nullsfirst", v: ["2024-01-01", 42, null] },
+      SEALED,
+    );
 
-	it("roundtrips non-ASCII values", () => {
-		const encoded = encodeCursor({ i: "id1", s: "", v: ["Žena — 東京"] }, SEALED)
-		expect(decoded(encoded)?.values).toEqual(["Žena — 東京"])
-	})
+    expect(decoded(encoded)).toEqual({
+      carried: [false, false, false],
+      id: "usr_abc123",
+      sort: "created_at.desc.nullsfirst",
+      values: ["2024-01-01", 42, null],
+    });
+  });
 
-	it("roundtrips Date values as Dates", () => {
-		const at = new Date("2024-01-01T00:00:00Z")
-		expect(decoded(encodeCursor({ i: "id1", s: "", v: [at] }, SEALED))?.values[0]).toEqual(at)
-	})
+  it("roundtrips non-ASCII values", () => {
+    const encoded = encodeCursor({ i: "id1", s: "", v: ["Žena — 東京"] }, SEALED);
+    expect(decoded(encoded)?.values).toEqual(["Žena — 東京"]);
+  });
 
-	it("is URL-safe", () => {
-		const encoded = encodeCursor({ i: "id?/+", s: "", v: ["???>>>"] }, SEALED)
-		expect(encoded).toMatch(/^[\w-]+$/)
-	})
+  it("roundtrips Date values as Dates", () => {
+    const at = new Date("2024-01-01T00:00:00Z");
+    expect(decoded(encodeCursor({ i: "id1", s: "", v: [at] }, SEALED))?.values[0]).toEqual(at);
+  });
 
-	it("returns null for the empty string", () => {
-		expect(decoded("")).toBeNull()
-	})
+  it("is URL-safe", () => {
+    const encoded = encodeCursor({ i: "id?/+", s: "", v: ["???>>>"] }, SEALED);
+    expect(encoded).toMatch(/^[\w-]+$/);
+  });
 
-	it("returns null for garbage", () => {
-		expect(decoded("not-valid-json!!")).toBeNull()
-	})
+  it("returns null for the empty string", () => {
+    expect(decoded("")).toBeNull();
+  });
 
-	it("returns null for a date no JS Date holds (Q-D4)", () => {
-		expect(decoded(forged(1e300))).toBeNull()
-		expect(decoded(forged(-8.64e15 - 1))).toBeNull()
-		expect(decoded(forged(8.64e15))?.values).toEqual([new Date(8.64e15)])
-	})
+  it("returns null for garbage", () => {
+    expect(decoded("not-valid-json!!")).toBeNull();
+  });
 
-	it("returns null for a sealed payload that is not UTF-8 JSON", () => {
-		expect(decoded(sealed(new TextEncoder().encode("{not json")))).toBeNull()
-		expect(decoded(sealed(new Uint8Array([0xff, 0xfe])))).toBeNull()
-	})
+  it("returns null for a date no JS Date holds (Q-D4)", () => {
+    expect(decoded(forged(1e300))).toBeNull();
+    expect(decoded(forged(-8.64e15 - 1))).toBeNull();
+    expect(decoded(forged(8.64e15))?.values).toEqual([new Date(8.64e15)]);
+  });
 
-	it("returns null for the v1 shape { c, i }", () => {
-		expect(decoded(wire({ c: "val", i: "id1" }))).toBeNull()
-	})
-})
+  it("returns null for a sealed payload that is not UTF-8 JSON", () => {
+    expect(decoded(sealed(new TextEncoder().encode("{not json")))).toBeNull();
+    expect(decoded(sealed(new Uint8Array([0xff, 0xfe])))).toBeNull();
+  });
+
+  it("returns null for the v1 shape { c, i }", () => {
+    expect(decoded(wire({ c: "val", i: "id1" }))).toBeNull();
+  });
+});
 
 describe("cursor values JSON has no number for (R4)", () => {
-	it("carries ±Infinity and NaN as themselves, not as null", () => {
-		const encoded = encodeCursor({ i: 1, s: "", v: [Infinity, -Infinity, Number.NaN] }, SEALED)
-		expect(decoded(encoded)?.values).toEqual([Infinity, -Infinity, Number.NaN])
-	})
+  it("carries ±Infinity and NaN as themselves, not as null", () => {
+    const encoded = encodeCursor({ i: 1, s: "", v: [Infinity, -Infinity, Number.NaN] }, SEALED);
+    expect(decoded(encoded)?.values).toEqual([Infinity, -Infinity, Number.NaN]);
+  });
 
-	it("opens no other name under the number tag", () => {
-		expect(decoded(wire({ i: 1, s: "", v: [{ $num: "infinity" }] }))).toBeNull()
-		expect(decoded(wire({ i: 1, s: "", v: [{ $num: 5 }] }))).toBeNull()
-	})
+  it("opens no other name under the number tag", () => {
+    expect(decoded(wire({ i: 1, s: "", v: [{ $num: "infinity" }] }))).toBeNull();
+    expect(decoded(wire({ i: 1, s: "", v: [{ $num: 5 }] }))).toBeNull();
+  });
 
-	/* U2 of the 0.12 round: a reference carries its prefix and the whole value's length, in code points */
-	it("opens a reference only as a prefix and a length the prefix fits in, so a 0.12 reference restarts the list", () => {
-		expect(decoded(wire({ i: 1, s: "", v: [{ $ref: ["a𝟘", 2] }] }))?.values).toEqual([new CursorRef("a𝟘", 2)])
-		for (const ref of ["ab", ["ab"], ["ab", 2, 3], [5, 2], ["ab", 1.5], ["ab", 2 ** 53], ["a𝟘b", 2]])
-			expect(decoded(wire({ i: 1, s: "", v: [{ $ref: ref }] }))).toBeNull()
-	})
+  // U2 of the 0.12 round: a reference carries its prefix and the whole value's length, in code points
+  it("opens a reference only as a prefix and a length the prefix fits in, so a 0.12 reference restarts the list", () => {
+    expect(decoded(wire({ i: 1, s: "", v: [{ $ref: ["a𝟘", 2] }] }))?.values).toEqual([new CursorRef("a𝟘", 2)]);
 
-	/* 3.24: a date-mode ±infinity reads as one, and its bound is read from its row */
-	it("carries a Date no JS Date holds as itself, never as the null group", () => {
-		const sort: SortField[] = [{ direction: "asc", field: "at" }]
-		const [value] = decoded(mintCursor({ at: new Date(Number.NaN), id: 1 }, sort, SEALED))?.values ?? []
-		expect(value).toBeInstanceOf(Date)
-		expect(Number.isNaN((value as Date).getTime())).toBe(true)
-		expect(decoded(mintCursor({ at: null, id: 1 }, sort, SEALED))?.values).toEqual([null])
-	})
-})
+    for (const ref of ["ab", ["ab"], ["ab", 2, 3], [5, 2], ["ab", 1.5], ["ab", 2 ** 53], ["a𝟘b", 2]])
+      expect(decoded(wire({ i: 1, s: "", v: [{ $ref: ref }] }))).toBeNull();
+  });
+
+  // 3.24: a date-mode ±infinity reads as one, and its bound is read from its row
+  it("carries a Date no JS Date holds as itself, never as the null group", () => {
+    const sort: SortField[] = [{ direction: "asc", field: "at" }];
+    const [value] = decoded(mintCursor({ at: new Date(Number.NaN), id: 1 }, sort, SEALED))?.values ?? [];
+    expect(value).toBeInstanceOf(Date);
+    expect(Number.isNaN((value as Date).getTime())).toBe(true);
+    expect(decoded(mintCursor({ at: null, id: 1 }, sort, SEALED))?.values).toEqual([null]);
+  });
+});
 
 describe("sortSignature", () => {
-	it("spells out the effective null placement", () => {
-		expect(sortSignature([{ direction: "asc", field: "name" }])).toBe("name.asc.nullslast")
-		expect(sortSignature([{ direction: "desc", field: "name" }])).toBe("name.desc.nullsfirst")
-		expect(sortSignature([{ direction: "desc", field: "name", nulls: "last" }])).toBe("name.desc.nullslast")
-	})
+  it("spells out the effective null placement", () => {
+    expect(sortSignature([{ direction: "asc", field: "name" }])).toBe("name.asc.nullslast");
+    expect(sortSignature([{ direction: "desc", field: "name" }])).toBe("name.desc.nullsfirst");
+    expect(sortSignature([{ direction: "desc", field: "name", nulls: "last" }])).toBe("name.desc.nullslast");
+  });
 
-	it("treats the default and the explicit placement as the same sort", () => {
-		expect(sortSignature([{ direction: "asc", field: "a", nulls: "last" }])).toBe(
-			sortSignature([{ direction: "asc", field: "a" }]),
-		)
-	})
-})
+  it("treats the default and the explicit placement as the same sort", () => {
+    expect(sortSignature([{ direction: "asc", field: "a", nulls: "last" }])).toBe(
+      sortSignature([{ direction: "asc", field: "a" }]),
+    );
+  });
+});
 
 describe("effectiveNulls", () => {
-	it("follows PostgreSQL defaults", () => {
-		expect(effectiveNulls("asc")).toBe("last")
-		expect(effectiveNulls("desc")).toBe("first")
-		expect(effectiveNulls("asc", "first")).toBe("first")
-	})
-})
+  it("follows PostgreSQL defaults", () => {
+    expect(effectiveNulls("asc")).toBe("last");
+    expect(effectiveNulls("desc")).toBe("first");
+    expect(effectiveNulls("asc", "first")).toBe("first");
+  });
+});
 
 describe("mintCursor", () => {
-	it("captures every sort key and the id", () => {
-		const sort: SortField[] = [
-			{ direction: "asc", field: "name" },
-			{ direction: "desc", field: "created_at" },
-		]
-		const cursor = mintCursor({ created_at: 5, id: "abc", name: "x" }, sort, SEALED)
-		expect(decoded(cursor)).toEqual({ carried: [false, false], id: "abc", sort: sortSignature(sort), values: ["x", 5] })
-	})
+  it("captures every sort key and the id", () => {
+    const sort: SortField[] = [
+      { direction: "asc", field: "name" },
+      { direction: "desc", field: "created_at" },
+    ];
 
-	it("reads the id from a custom field", () => {
-		const cursor = mintCursor({ _id: "row1", created_at: 1 }, BY_CREATED, { ...SEALED, idField: "_id" })
-		expect(decoded(cursor)?.id).toBe("row1")
-	})
+    const cursor = mintCursor({ created_at: 5, id: "abc", name: "x" }, sort, SEALED);
+    expect(decoded(cursor)).toEqual({
+      carried: [false, false],
+      id: "abc",
+      sort: sortSignature(sort),
+      values: ["x", 5],
+    });
+  });
 
-	it("records a null sort value as null", () => {
-		expect(decoded(mintCursor({ created_at: null, id: "abc" }, BY_CREATED, SEALED))?.values).toEqual([null])
-	})
-})
+  it("reads the id from a custom field", () => {
+    const cursor = mintCursor({ _id: "row1", created_at: 1 }, BY_CREATED, { ...SEALED, idField: "_id" });
+    expect(decoded(cursor)?.id).toBe("row1");
+  });
+
+  it("records a null sort value as null", () => {
+    expect(decoded(mintCursor({ created_at: null, id: "abc" }, BY_CREATED, SEALED))?.values).toEqual([null]);
+  });
+});
 
 describe("cursorProblem / readCursor", () => {
-	const cursor = mintCursor({ created_at: 1, id: "abc" }, BY_CREATED, SEALED)
+  const cursor = mintCursor({ created_at: 1, id: "abc" }, BY_CREATED, SEALED);
 
-	it("accepts a cursor under the sort that minted it", () => {
-		expect(cursorProblem(cursor)).toBeNull()
-		expect(readCursor(cursor, BY_CREATED, SEALED).values).toEqual([1])
-	})
+  it("accepts a cursor under the sort that minted it", () => {
+    expect(cursorProblem(cursor)).toBeNull();
+    expect(readCursor(cursor, BY_CREATED, SEALED).values).toEqual([1]);
+  });
 
-	it("rejects a cursor under a different sort, which only opening it can tell", () => {
-		const other: SortField[] = [{ direction: "asc", field: "created_at" }]
-		expect(() => readCursor(cursor, other, SEALED)).toThrow(
-			expect.objectContaining({ cause: "Cursor was issued for a different order", errorKey: "invalid_cursor" }),
-		)
-	})
+  it("rejects a cursor under a different sort, which only opening it can tell", () => {
+    const other: SortField[] = [{ direction: "asc", field: "created_at" }];
+    expect(() => readCursor(cursor, other, SEALED)).toThrow(
+      expect.objectContaining({ cause: "Cursor was issued for a different order", errorKey: "invalid_cursor" }),
+    );
+  });
 
-	it("rejects garbage with a 400", () => {
-		expect(cursorProblem("garbage")).toBe("Invalid cursor")
-		const error = thrown(() => readCursor("garbage", BY_CREATED, SEALED))
-		expect(error).toBeInstanceOf(DatabaseError)
-		expect(error).toMatchObject({ errorKey: "invalid_cursor", status: 400 })
-	})
-})
+  it("rejects garbage with a 400", () => {
+    expect(cursorProblem("garbage")).toBe("Invalid cursor");
+    const error = thrown(() => readCursor("garbage", BY_CREATED, SEALED));
+    expect(error).toBeInstanceOf(DatabaseError);
+    expect(error).toMatchObject({ errorKey: "invalid_cursor", status: 400 });
+  });
+});
 
 describe("openCursor — what a cursor may carry (Q-M3, Q-H4)", () => {
-	it("keeps a numeric id a number and decodes a tagged date", () => {
-		expect(decoded(wire(payload([{ $date: 5 }], 7)))).toEqual({
-			carried: [false],
-			id: 7,
-			sort: "created_at.desc.nullsfirst",
-			values: [new Date(5)],
-		})
-	})
+  it("keeps a numeric id a number and decodes a tagged date", () => {
+    expect(decoded(wire(payload([{ $date: 5 }], 7)))).toEqual({
+      carried: [false],
+      id: 7,
+      sort: "created_at.desc.nullsfirst",
+      values: [new Date(5)],
+    });
+  });
 
-	it.each([
-		["a non-object payload", 5],
-		["a null payload", null],
-		["a boolean id", payload([1], true)],
-		["an object value", payload([{ x: 1 }])],
-		["a date tag beside another key", payload([{ $date: 1, x: 2 }])],
-		["a date tag that is not a number", payload([{ $date: "nope" }])],
-		["an array value", payload([[1]])],
-	])("is null for %s", (_label, body) => {
-		expect(decoded(wire(body))).toBeNull()
-	})
+  it.each([
+    ["a non-object payload", 5],
+    ["a null payload", null],
+    ["a boolean id", payload([1], true)],
+    ["an object value", payload([{ x: 1 }])],
+    ["a date tag beside another key", payload([{ $date: 1, x: 2 }])],
+    ["a date tag that is not a number", payload([{ $date: "nope" }])],
+    ["an array value", payload([[1]])],
+  ])("is null for %s", (_label, body) => {
+    expect(decoded(wire(body))).toBeNull();
+  });
 
-	it("readCursor throws invalid_cursor for one that does not decode", () => {
-		expect(() => readCursor("%%%", [{ direction: "desc", field: "created_at" }], SEALED)).toThrow(DatabaseError)
-	})
-})
+  it("readCursor throws invalid_cursor for one that does not decode", () => {
+    expect(() => readCursor("%%%", [{ direction: "desc", field: "created_at" }], SEALED)).toThrow(DatabaseError);
+  });
+});
 
 describe("sealed and scoped cursors (R1, R2)", () => {
-	const minted = mintCursor(
-		{ created_at: 1, id: "abc", salary: 73519 },
-		[{ direction: "desc", field: "salary" }],
-		SEALED,
-	)
-	const bySalary: SortField[] = [{ direction: "desc", field: "salary" }]
-	const invalid = expect.objectContaining({ errorKey: "invalid_cursor", status: 400 })
+  const minted = mintCursor(
+    { created_at: 1, id: "abc", salary: 73519 },
+    [{ direction: "desc", field: "salary" }],
+    SEALED,
+  );
 
-	it("hands a client no sort value: the cursor's bytes hold none of the row's salary", () => {
-		const raw = String.fromCharCode(...(decodeBase64Url(minted) as Uint8Array))
-		expect(raw).not.toContain("73519")
-		expect(minted).not.toContain(encodeBase64Url(new TextEncoder().encode('"v":[73519]')).slice(0, 8))
-		expect(readCursor(minted, bySalary, SEALED).values).toEqual([73519])
-	})
+  const bySalary: SortField[] = [{ direction: "desc", field: "salary" }];
+  const invalid = expect.objectContaining({ errorKey: "invalid_cursor", status: 400 });
 
-	it("refuses a cursor a client wrote itself: 0.10's signed shape, plain JSON, or bytes of its own", () => {
-		const json = encodeBase64Url(
-			new TextEncoder().encode(JSON.stringify({ i: "abc", s: sortSignature(bySalary), v: [1] })),
-		)
-		for (const forgery of [`${json}.${"A".repeat(43)}`, json, encodeBase64Url(new Uint8Array(64).fill(1))])
-			expect(() => readCursor(forgery, bySalary, SEALED)).toThrow(invalid)
-	})
+  it("hands a client no sort value: the cursor's bytes hold none of the row's salary", () => {
+    const raw = String.fromCharCode(...(decodeBase64Url(minted) as Uint8Array));
+    expect(raw).not.toContain("73519");
+    expect(minted).not.toContain(encodeBase64Url(new TextEncoder().encode('"v":[73519]')).slice(0, 8));
+    expect(readCursor(minted, bySalary, SEALED).values).toEqual([73519]);
+  });
 
-	it("refuses a cursor minted in another scope, the same secret and sort notwithstanding", () => {
-		expect(() => readCursor(minted, bySalary, { ...SEALED, cursorScope: "test:other-tenant" })).toThrow(invalid)
-	})
+  it("refuses a cursor a client wrote itself: 0.10's signed shape, plain JSON, or bytes of its own", () => {
+    const json = encodeBase64Url(
+      new TextEncoder().encode(JSON.stringify({ i: "abc", s: sortSignature(bySalary), v: [1] })),
+    );
 
-	it("refuses a tampered cursor, and one spelled another way", () => {
-		const raw = decodeBase64Url(minted) as Uint8Array
-		const tampered = encodeBase64Url(raw.map((byte, i) => (i === raw.length - 20 ? byte ^ 1 : byte)))
-		expect(() => readCursor(tampered, bySalary, SEALED)).toThrow(invalid)
-		expect(() => readCursor(`${minted}A`, bySalary, SEALED)).toThrow(invalid)
-	})
+    for (const forgery of [`${json}.${"A".repeat(43)}`, json, encodeBase64Url(new Uint8Array(64).fill(1))])
+      expect(() => readCursor(forgery, bySalary, SEALED)).toThrow(invalid);
+  });
 
-	it("refuses a cursor another secret sealed", () => {
-		expect(() => readCursor(minted, bySalary, { ...SEALED, cursorSecret: `${CURSOR_SECRET}-other` })).toThrow(invalid)
-	})
+  it("refuses a cursor minted in another scope, the same secret and sort notwithstanding", () => {
+    expect(() => readCursor(minted, bySalary, { ...SEALED, cursorScope: "test:other-tenant" })).toThrow(invalid);
+  });
 
-	it("throws a 500 on a secret under 32 bytes or no scope, minting or reading", () => {
-		const unwired = expect.objectContaining({ errorKey: "cursor_not_wired", status: 500 })
-		expect(() => readCursor(minted, bySalary, { ...SEALED, cursorSecret: "short" })).toThrow(unwired)
-		expect(() => mintCursor({ created_at: 1, id: "abc" }, BY_CREATED, { ...SEALED, cursorScope: "" })).toThrow(unwired)
-		expect(() => mintCursor({ created_at: 1, id: "abc" }, BY_CREATED, undefined as unknown as typeof SEALED)).toThrow(
-			unwired,
-		)
-	})
+  it("refuses a tampered cursor, and one spelled another way", () => {
+    const raw = decodeBase64Url(minted) as Uint8Array;
+    const tampered = encodeBase64Url(raw.map((byte, i) => (i === raw.length - 20 ? byte ^ 1 : byte)));
+    expect(() => readCursor(tampered, bySalary, SEALED)).toThrow(invalid);
+    expect(() => readCursor(`${minted}A`, bySalary, SEALED)).toThrow(invalid);
+  });
 
-	it("lets the schema check only the shape, which needs no secret", () => {
-		expect(cursorProblem(minted)).toBeNull()
-		expect(cursorProblem(`${minted.slice(0, 10)}.${"A".repeat(43)}`)).toBe("Invalid cursor")
-		expect(cursorProblem("")).toBe("Invalid cursor")
-		expect(cursorProblem(`a+b${minted}`)).toBe("Invalid cursor")
-	})
-})
+  it("refuses a cursor another secret sealed", () => {
+    expect(() => readCursor(minted, bySalary, { ...SEALED, cursorSecret: `${CURSOR_SECRET}-other` })).toThrow(invalid);
+  });
 
-/* U12 of the 0.12 round: a handler that cannot seal says so for every cursor, a long one included */
+  it("throws a 500 on a secret under 32 bytes or no scope, minting or reading", () => {
+    const unwired = expect.objectContaining({ errorKey: "cursor_not_wired", status: 500 });
+    expect(() => readCursor(minted, bySalary, { ...SEALED, cursorSecret: "short" })).toThrow(unwired);
+    expect(() => mintCursor({ created_at: 1, id: "abc" }, BY_CREATED, { ...SEALED, cursorScope: "" })).toThrow(unwired);
+    expect(() => mintCursor({ created_at: 1, id: "abc" }, BY_CREATED, undefined as unknown as typeof SEALED)).toThrow(
+      unwired,
+    );
+  });
+
+  it("lets the schema check only the shape, which needs no secret", () => {
+    expect(cursorProblem(minted)).toBeNull();
+    expect(cursorProblem(`${minted.slice(0, 10)}.${"A".repeat(43)}`)).toBe("Invalid cursor");
+    expect(cursorProblem("")).toBe("Invalid cursor");
+    expect(cursorProblem(`a+b${minted}`)).toBe("Invalid cursor");
+  });
+});
+
+// U12 of the 0.12 round: a handler that cannot seal says so for every cursor, a long one included
 describe("readCursor on options that cannot seal", () => {
-	it("answers a cursor past 8192 with cursor_not_wired, as every other", () => {
-		const long = "A".repeat(8193)
-		const sort: SortField[] = [{ direction: "asc", field: "id" }]
-		for (const options of [
-			{ ...SEALED, cursorScope: "" },
-			{ ...SEALED, cursorSecret: "short" },
-		])
-			expect(() => readCursor(long, sort, options)).toThrow(
-				expect.objectContaining({ errorKey: "cursor_not_wired", status: 500 }),
-			)
-	})
-})
+  it("answers a cursor past 8192 with cursor_not_wired, as every other", () => {
+    const long = "A".repeat(8193);
+    const sort: SortField[] = [{ direction: "asc", field: "id" }];
 
-/* QL7 of r23: a numeric(78, 0) in drizzle's bigint mode reads a uint256 as a bigint of up to 78 digits */
+    for (const options of [
+      { ...SEALED, cursorScope: "" },
+      { ...SEALED, cursorSecret: "short" },
+    ]) {
+      expect(() => readCursor(long, sort, options)).toThrow(
+        expect.objectContaining({ errorKey: "cursor_not_wired", status: 500 }),
+      );
+    }
+  });
+});
+
+// QL7 of r23: a numeric(78, 0) in drizzle's bigint mode reads a uint256 as a bigint of up to 78 digits
 describe("a cursor on a bigint of any length (QL7 of r23)", () => {
-	const BY_K: SortField[] = [{ direction: "asc", field: "k" }]
+  const BY_K: SortField[] = [{ direction: "asc", field: "k" }];
 
-	it.each([10n ** 20n, 2n ** 255n, -(2n ** 255n)])("mints one on %s, which the next page reads back", (k) => {
-		expect(readCursor(mintCursor({ id: "a", k }, BY_K, SEALED), BY_K, SEALED).values).toEqual([k])
-	})
-})
+  it.each([10n ** 20n, 2n ** 255n, -(2n ** 255n)])("mints one on %s, which the next page reads back", (k) => {
+    expect(readCursor(mintCursor({ id: "a", k }, BY_K, SEALED), BY_K, SEALED).values).toEqual([k]);
+  });
+});
 
-/* QL5 of r22b: the codec is closed over what a mint takes, so every cursor database mints is one it reads */
+// QL5 of r22b: the codec is closed over what a mint takes, so every cursor database mints is one it reads
 describe("a minted cursor is one database reads (QL5 of r22b; sibling: what openCursor refuses)", () => {
-	const BY_K: SortField[] = [{ direction: "asc", field: "k" }]
+  const BY_K: SortField[] = [{ direction: "asc", field: "k" }];
 
-	it.each([
-		["an object", { n: 1 }],
-		["an array", [1, 2]],
-		["a function", () => 1],
-		["a symbol", Symbol("k")],
-	])("refuses %s as sort_not_wired naming its field, a 500 on the page that reads it", (kind, value) => {
-		expect(thrown(() => mintCursor({ id: "a", k: value }, BY_K, SEALED))).toMatchObject({
-			cause: `the sort by k reads ${kind}, which no cursor carries: sort by a column of text, numbers, booleans, times or bytes`,
-			errorKey: "sort_not_wired",
-			status: 500,
-		})
-	})
+  it.each([
+    ["an object", { n: 1 }],
+    ["an array", [1, 2]],
+    ["a function", () => 1],
+    ["a symbol", Symbol("k")],
+  ])("refuses %s as sort_not_wired naming its field, a 500 on the page that reads it", (kind, value) => {
+    expect(thrown(() => mintCursor({ id: "a", k: value }, BY_K, SEALED))).toMatchObject({
+      cause: `the sort by k reads ${kind}, which no cursor carries: sort by a column of text, numbers, booleans, times or bytes`,
+      errorKey: "sort_not_wired",
+      status: 500,
+    });
+  });
 
-	it.each([
-		["null", null],
-		["a boolean", true],
-		["a number that is not finite", Number.NaN],
-		["a time", new Date(0)],
-		["bytes", new Uint8Array([1])],
-		["an object", { n: 1 }],
-	])("refuses a tiebreak id that reads %s, naming it", (kind, id) => {
-		expect(thrown(() => mintCursor({ id, k: 1 }, BY_K, SEALED))).toMatchObject({
-			cause: `the tiebreak id id reads ${kind}, which no cursor carries: key the table by text or an integer`,
-			errorKey: "sort_not_wired",
-		})
-	})
+  it.each([
+    ["null", null],
+    ["a boolean", true],
+    ["a number that is not finite", Number.NaN],
+    ["a time", new Date(0)],
+    ["bytes", new Uint8Array([1])],
+    ["an object", { n: 1 }],
+  ])("refuses a tiebreak id that reads %s, naming it", (kind, id) => {
+    expect(thrown(() => mintCursor({ id, k: 1 }, BY_K, SEALED))).toMatchObject({
+      cause: `the tiebreak id id reads ${kind}, which no cursor carries: key the table by text or an integer`,
+      errorKey: "sort_not_wired",
+    });
+  });
 
-	it("refuses a computed sort before any field, as buildListQuery does, whatever the row holds", () => {
-		const unsupported = {
-			cause: "Cursor pagination needs every sort key to be a column; use page instead",
-			errorKey: "cursor_pagination_unsupported",
-			status: 400,
-		}
-		const byRelevance: SortField[] = [{ direction: "desc", field: "@relevance" }, ...BY_K]
-		for (const row of [{ id: "a" }, { "@relevance": 0.5, id: "a", k: 1 }, {}])
-			expect(
-				thrown(() => mintCursor(row, byRelevance, SEALED)),
-				JSON.stringify(row),
-			).toMatchObject(unsupported)
-	})
+  it("refuses a computed sort before any field, as buildListQuery does, whatever the row holds", () => {
+    const unsupported = {
+      cause: "Cursor pagination needs every sort key to be a column; use page instead",
+      errorKey: "cursor_pagination_unsupported",
+      status: 400,
+    };
 
-	it("refuses a row without a sort field or without its id, naming each", () => {
-		expect(thrown(() => mintCursor({ id: "a" }, BY_K, SEALED))).toMatchObject({
-			cause: "the next cursor is minted from each row's k; select them, and the built query's extras",
-			errorKey: "sort_not_wired",
-		})
-		expect(thrown(() => mintCursor({ k: 1 }, BY_K, { ...SEALED, idField: "_id" }))).toMatchObject({
-			cause: "the next cursor is minted from each row's _id; select them, and the built query's extras",
-			errorKey: "sort_not_wired",
-		})
-	})
-})
+    const byRelevance: SortField[] = [{ direction: "desc", field: "@relevance" }, ...BY_K];
 
-/* database-9d's AB2 ruling: a per-key flag says a value is carried text; a cursor without it holds every value as read */
+    for (const row of [{ id: "a" }, { "@relevance": 0.5, id: "a", k: 1 }, {}]) {
+      expect(
+        thrown(() => mintCursor(row, byRelevance, SEALED)),
+        JSON.stringify(row),
+      ).toMatchObject(unsupported);
+    }
+  });
+
+  it("refuses a row without a sort field or without its id, naming each", () => {
+    expect(thrown(() => mintCursor({ id: "a" }, BY_K, SEALED))).toMatchObject({
+      cause: "the next cursor is minted from each row's k; select them, and the built query's extras",
+      errorKey: "sort_not_wired",
+    });
+    expect(thrown(() => mintCursor({ k: 1 }, BY_K, { ...SEALED, idField: "_id" }))).toMatchObject({
+      cause: "the next cursor is minted from each row's _id; select them, and the built query's extras",
+      errorKey: "sort_not_wired",
+    });
+  });
+});
+
+// database-9d's AB2 ruling: a per-key flag says a value is carried text; a cursor without it holds every value as read
 describe("the carried flag a cursor holds per key (database-9d's AB2 ruling; sibling: the 0.20.1 cursor, custom-keys.test.ts)", () => {
-	const BY_TWO: SortField[] = [
-		{ direction: "asc", field: "k" },
-		{ direction: "asc", field: "n" },
-	]
+  const BY_TWO: SortField[] = [
+    { direction: "asc", field: "k" },
+    { direction: "asc", field: "n" },
+  ];
 
-	it("writes the flag only for a cursor carrying a text, and reads one without it as every key as read", () => {
-		const flagged = mintCursor({ id: 1, k: "0.1000000000000000001", n: "12" }, BY_TWO, {
-			...SEALED,
-			carried: new Set(["k"]),
-		})
-		expect(decoded(flagged)?.carried).toEqual([true, false])
-		const plain = mintCursor({ id: 1, k: "12", n: "3" }, BY_TWO, SEALED)
-		expect(decoded(plain)?.carried).toEqual([false, false])
-		expect(decoded(wire(payload(["12"])))?.carried).toEqual([false])
-	})
+  it("writes the flag only for a cursor carrying a text, and reads one without it as every key as read", () => {
+    const flagged = mintCursor({ id: 1, k: "0.1000000000000000001", n: "12" }, BY_TWO, {
+      ...SEALED,
+      carried: new Set(["k"]),
+    });
 
-	it("refuses a flag that is no list of booleans, one a key", () => {
-		for (const c of [[1], ["true"], [true, false], true, null])
-			expect(decoded(wire({ ...payload(["12"]), c })), JSON.stringify(c)).toBeNull()
-	})
-})
+    expect(decoded(flagged)?.carried).toEqual([true, false]);
+    const plain = mintCursor({ id: 1, k: "12", n: "3" }, BY_TWO, SEALED);
+    expect(decoded(plain)?.carried).toEqual([false, false]);
+    expect(decoded(wire(payload(["12"])))?.carried).toEqual([false]);
+  });
+
+  it("refuses a flag that is no list of booleans, one a key", () => {
+    for (const c of [[1], ["true"], [true, false], true, null])
+      expect(decoded(wire({ ...payload(["12"]), c })), JSON.stringify(c)).toBeNull();
+  });
+});

@@ -8,18 +8,18 @@
 
 /** What makes a suite outside tests/integration/postgres one of them */
 export const PG_REACH =
-	/support\/(?:pg|pg-check|pg-lock|pg-pause|pg-roles|pg-run-lock|pg-url|stale-replay)\.ts"|DATABASE_TEST_PG_URL/
+  /support\/(?:pg|pg-check|pg-lock|pg-pause|pg-roles|pg-run-lock|pg-url|stale-replay)\.ts"|DATABASE_TEST_PG_URL/;
 
 /** The suites, by directory and by name */
 export const PG_INTEGRATION = [
-	"tests/integration/postgres/**/*.test.ts",
-	"tests/integration/codegen/pg-json-stored-document.test.ts",
-	"tests/integration/codegen/pg-arrays.test.ts",
-	"tests/integration/codegen/pg-ip.test.ts",
-	"tests/integration/codegen/pg-plain-json.test.ts",
-	"tests/integration/codegen/pg-schemas.test.ts",
-	"tests/integration/codegen/pg-types.test.ts",
-	"tests/integration/codegen/pg-typmods.test.ts",
-	"tests/integration/codegen/pg-unique-names.test.ts",
-	"tests/integration/sqlite/constraint-map-keys.test.ts",
-]
+  "tests/integration/postgres/**/*.test.ts",
+  "tests/integration/codegen/pg-json-stored-document.test.ts",
+  "tests/integration/codegen/pg-arrays.test.ts",
+  "tests/integration/codegen/pg-ip.test.ts",
+  "tests/integration/codegen/pg-plain-json.test.ts",
+  "tests/integration/codegen/pg-schemas.test.ts",
+  "tests/integration/codegen/pg-types.test.ts",
+  "tests/integration/codegen/pg-typmods.test.ts",
+  "tests/integration/codegen/pg-unique-names.test.ts",
+  "tests/integration/sqlite/constraint-map-keys.test.ts",
+];

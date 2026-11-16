@@ -8,63 +8,64 @@
  * replay database is dropped WITH
  * (FORCE), so a backend that came in after the cleanup ended the others cannot hold it.
  */
-import { sqlIdentifier } from "../../codegen/utils/case.ts"
-import type { PgTarget } from "./atlas-target.ts"
-import { type Connect, failureOf, loadPostgres } from "./pg-live-objects.ts"
-import { codeOf, leftovers, overBackends, type Sql } from "./pg-replay-database.ts"
-import type { Run } from "./pg-replay-roles.ts"
-import { postgresOptionsOf } from "./pg-url.ts"
+import { sqlIdentifier } from "../../codegen/utils/case.ts";
+import type { PgTarget } from "./atlas-target.ts";
+import { type Connect, failureOf, loadPostgres } from "./pg-live-objects.ts";
+import { codeOf, leftovers, overBackends, type Sql } from "./pg-replay-database.ts";
+import type { Run } from "./pg-replay-roles.ts";
+import { postgresOptionsOf } from "./pg-url.ts";
 
 /** `step` run, its failure passed: one whose failure leaves something has it said by the drop that then fails (dropOr) */
 async function settle(step: () => Promise<unknown>): Promise<void> {
-	try {
-		await step()
-	} catch {
-		// reason: a step before a drop, whose failure the drop it serves says when that drop fails in turn
-	}
+  try {
+    await step();
+  } catch {
+    // reason: a step before a drop, whose failure the drop it serves says when that drop fails in turn
+  }
 }
 
 /** How a drop that failed is said: what it left on devUrl's server, a database, role or slot by name, with dev's error */
-type Leave = (left: string, error: unknown) => void
+type Leave = (left: string, error: unknown) => void;
 
 /** `drop` run, a failure `leave`d: cleaning up never replaces the replay's verdict, and never leaves something unsaid */
 async function dropOr(leave: Leave, left: string, drop: () => Promise<unknown>): Promise<void> {
-	try {
-		await drop()
-	} catch (error) {
-		// reason: said by leave; a drop decides no verdict
-		leave(left, error)
-	}
+  try {
+    await drop();
+  } catch (error) {
+    // reason: said by leave; a drop decides no verdict
+    leave(left, error);
+  }
 }
 
 /** How the drops reach devUrl's server: a session in `database`, which a subscription's drop needs, and how a failed drop is said */
-type Drops = { into: (database: string) => Sql; leave: Leave }
+type Drops = { into: (database: string) => Sql; leave: Leave };
 
 /** A `leave` that prints, `failed` naming devUrl in dev's error */
 function leaving(print: (line: string) => void, failed: Parameters<typeof failureOf>[1]): Leave {
-	return (left, error) =>
-		print(
-			`database could not drop ${left}, which a replay left on devUrl's server: ${failureOf(error, failed)}; the next check or apply that reaches that server drops it`,
-		)
+  return (left, error) =>
+    print(
+      `database could not drop ${left}, which a replay left on devUrl's server: ${failureOf(error, failed)}; the next check or apply that reaches that server drops it`,
+    );
 }
 
 /** Drops the replication slot `slot`, if it is still there */
 async function dropSlot(admin: Sql, slot: string): Promise<void> {
-	await admin.unsafe("SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots WHERE slot_name = $1", [
-		slot,
-	])
+  await admin.unsafe("SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots WHERE slot_name = $1", [
+    slot,
+  ]);
 }
 
-/* a database's subscriptions and logical slots, by its name, in one read */
+// a database's subscriptions and logical slots, by its name, in one read
 const HOLDS =
-	"SELECT coalesce((SELECT array_agg(s.subname::text) FROM pg_subscription s JOIN pg_database d ON d.oid = s.subdbid WHERE d.datname = $1), '{}') AS subscriptions, coalesce((SELECT array_agg(slot_name::text) FROM pg_replication_slots WHERE database = $1), '{}') AS slots"
+  "SELECT coalesce((SELECT array_agg(s.subname::text) FROM pg_subscription s JOIN pg_database d ON d.oid = s.subdbid WHERE d.datname = $1), '{}') AS subscriptions, coalesce((SELECT array_agg(slot_name::text) FROM pg_replication_slots WHERE database = $1), '{}') AS slots";
 
 /** Drops the subscription `name` on `sql`, a session in its database, disabled and its slot let go first, so it reaches no publisher */
 async function dropSubscription(sql: Sql, name: string): Promise<void> {
-	const subscription = sqlIdentifier(name)
-	for (const step of ["DISABLE", "SET (slot_name = NONE)"])
-		await sql.unsafe(`ALTER SUBSCRIPTION ${subscription} ${step}`, [])
-	await sql.unsafe(`DROP SUBSCRIPTION ${subscription}`, [])
+  const subscription = sqlIdentifier(name);
+
+  for (const step of ["DISABLE", "SET (slot_name = NONE)"])
+    await sql.unsafe(`ALTER SUBSCRIPTION ${subscription} ${step}`, []);
+  await sql.unsafe(`DROP SUBSCRIPTION ${subscription}`, []);
 }
 
 /**
@@ -72,18 +73,21 @@ async function dropSubscription(sql: Sql, name: string): Promise<void> {
  * subscriptions, from a session in it, and its logical slots
  */
 async function emptyDatabase(admin: Sql, database: string, { into, leave }: Drops): Promise<void> {
-	const [holds] = await admin.unsafe(HOLDS, [database])
-	const subscriptions = (holds?.["subscriptions"] ?? []) as string[]
-	if (subscriptions.length > 0) {
-		const sql = into(database)
-		try {
-			for (const name of subscriptions) await dropOr(leave, `subscription ${name}`, () => dropSubscription(sql, name))
-		} finally {
-			await settle(() => sql.end({ timeout: 0 }))
-		}
-	}
-	for (const slot of (holds?.["slots"] ?? []) as string[])
-		await dropOr(leave, `replication slot ${slot}`, () => dropSlot(admin, slot))
+  const [holds] = await admin.unsafe(HOLDS, [database]);
+  const subscriptions = (holds?.["subscriptions"] ?? []) as string[];
+
+  if (subscriptions.length > 0) {
+    const sql = into(database);
+
+    try {
+      for (const name of subscriptions) await dropOr(leave, `subscription ${name}`, () => dropSubscription(sql, name));
+    } finally {
+      await settle(() => sql.end({ timeout: 0 }));
+    }
+  }
+
+  for (const slot of (holds?.["slots"] ?? []) as string[])
+    await dropOr(leave, `replication slot ${slot}`, () => dropSlot(admin, slot));
 }
 
 /**
@@ -93,30 +97,31 @@ async function emptyDatabase(admin: Sql, database: string, { into, leave }: Drop
  * not, and fails
  */
 async function dropRole(admin: Sql, role: string): Promise<void> {
-	try {
-		await admin.unsafe(`DROP ROLE IF EXISTS ${sqlIdentifier(role)}`, [])
-	} catch (error) {
-		// reason: another role made it, so it is not this run's to drop, nor its failure
-		if (codeOf(error) === "42501") return
-		const [left] = await admin.unsafe("SELECT 1 FROM pg_roles WHERE rolname = $1", [role])
-		if (left !== undefined) throw error
-	}
+  try {
+    await admin.unsafe(`DROP ROLE IF EXISTS ${sqlIdentifier(role)}`, []);
+  } catch (error) {
+    // reason: another role made it, so it is not this run's to drop, nor its failure
+    if (codeOf(error) === "42501") return;
+    const [left] = await admin.unsafe("SELECT 1 FROM pg_roles WHERE rolname = $1", [role]);
+
+    if (left !== undefined) throw error;
+  }
 }
 
-/* whether a role is a replay's, tagged with the backend that made it */
+// whether a role is a replay's, tagged with the backend that made it
 const TAGGED_ROLE =
-	"SELECT 1 FROM pg_roles r JOIN pg_shdescription d ON d.objoid = r.oid AND d.classoid = 'pg_authid'::regclass WHERE r.rolname = $1 AND d.description LIKE 'database\\_replay %'"
+  "SELECT 1 FROM pg_roles r JOIN pg_shdescription d ON d.objoid = r.oid AND d.classoid = 'pg_authid'::regclass WHERE r.rolname = $1 AND d.description LIKE 'database\\_replay %'";
 
 /**
  * Drop `role`, one the replay made or adopted, while it is still a replay's: a name the replay
  * renamed or dropped may since name another session's role, which is not the replay's to drop
  */
 async function dropMade(admin: Sql, role: string): Promise<void> {
-	if ((await admin.unsafe(TAGGED_ROLE, [role])).length > 0) await dropRole(admin, role)
+  if ((await admin.unsafe(TAGGED_ROLE, [role])).length > 0) await dropRole(admin, role);
 }
 
-/* how long a sweep waits for a dead replay's backends to end once it ended them, in milliseconds */
-const ENDING_MS = 5000
+// how long a sweep waits for a dead replay's backends to end once it ended them, in milliseconds
+const ENDING_MS = 5000;
 
 /**
  * End `pids` and wait, up to ENDING_MS, until none is left: a backend ends its transaction as it
@@ -124,13 +129,15 @@ const ENDING_MS = 5000
  * what it makes to the drop that then fails, which says it
  */
 async function endBackends(admin: Sql, pids: readonly unknown[]): Promise<void> {
-	if (pids.length === 0) return
-	for (const pid of pids) await settle(() => admin.unsafe("SELECT pg_terminate_backend($1)", [pid]))
-	const left = `SELECT 1 FROM pg_stat_activity WHERE pid IN (${pids.map(Number).join(", ")})`
-	for (const until = Date.now() + ENDING_MS; Date.now() < until;) {
-		if ((await admin.unsafe(left, [])).length === 0) return
-		await new Promise((done) => setTimeout(done, 50))
-	}
+  if (pids.length === 0) return;
+
+  for (const pid of pids) await settle(() => admin.unsafe("SELECT pg_terminate_backend($1)", [pid]));
+  const left = `SELECT 1 FROM pg_stat_activity WHERE pid IN (${pids.map(Number).join(", ")})`;
+
+  for (const until = Date.now() + ENDING_MS; Date.now() < until;) {
+    if ((await admin.unsafe(left, [])).length === 0) return;
+    await new Promise((done) => setTimeout(done, 50));
+  }
 }
 
 /**
@@ -140,28 +147,32 @@ async function endBackends(admin: Sql, pids: readonly unknown[]): Promise<void> 
  * template no more, and the tagged roles
  */
 async function sweep(admin: Sql, now: number, drops: Drops): Promise<void> {
-	const { leave } = drops
-	const { pids, sessions } = await overBackends(admin, now)
-	await endBackends(admin, pids)
-	/* what ended changed the server's backends, which are read again */
-	const { databases, roles } = await leftovers(admin, now, {
-		droppable: true,
-		sessions: pids.length === 0 ? sessions : undefined,
-	})
-	for (const { name, template } of databases) {
-		await settle(() => emptyDatabase(admin, name, drops))
-		/* Postgres drops no template, which a committing DO can make the replay's database */
-		if (template) await settle(() => admin.unsafe(`ALTER DATABASE ${sqlIdentifier(name)} IS_TEMPLATE false`, []))
-		await dropOr(leave, `database ${name}`, () => admin.unsafe(`DROP DATABASE IF EXISTS ${sqlIdentifier(name)}`, []))
-	}
-	for (const role of roles) await dropOr(leave, `role ${role}`, () => dropRole(admin, role))
+  const { leave } = drops;
+  const { pids, sessions } = await overBackends(admin, now);
+  await endBackends(admin, pids);
+
+  // what ended changed the server's backends, which are read again
+  const { databases, roles } = await leftovers(admin, now, {
+    droppable: true,
+    sessions: pids.length === 0 ? sessions : undefined,
+  });
+
+  for (const { name, template } of databases) {
+    await settle(() => emptyDatabase(admin, name, drops));
+
+    // Postgres drops no template, which a committing DO can make the replay's database
+    if (template) await settle(() => admin.unsafe(`ALTER DATABASE ${sqlIdentifier(name)} IS_TEMPLATE false`, []));
+    await dropOr(leave, `database ${name}`, () => admin.unsafe(`DROP DATABASE IF EXISTS ${sqlIdentifier(name)}`, []));
+  }
+
+  for (const role of roles) await dropOr(leave, `role ${role}`, () => dropRole(admin, role));
 }
 
-/* why database loads postgres.js in an apply */
-const SWEEPS = "sweep what a killed check left on a postgres:// devUrl's server"
+// why database loads postgres.js in an apply
+const SWEEPS = "sweep what a killed check left on a postgres:// devUrl's server";
 
-/* how long apply waits to reach devUrl's server for its sweep, in seconds, where the URL sets no connect_timeout */
-const SWEEP_TIMEOUT = 5
+// how long apply waits to reach devUrl's server for its sweep, in seconds, where the URL sets no connect_timeout
+const SWEEP_TIMEOUT = 5;
 
 /**
  * The sweep, run on `target`'s dev server before an apply: a check killed past its
@@ -173,43 +184,48 @@ const SWEEP_TIMEOUT = 5
  * fails is `print`ed and passed
  */
 async function sweepDev(
-	target: PgTarget,
-	print: (line: string) => void,
-	load: () => Promise<Connect> = () => loadPostgres(SWEEPS),
+  target: PgTarget,
+  print: (line: string) => void,
+  load: () => Promise<Connect> = () => loadPostgres(SWEEPS),
 ): Promise<void> {
-	if (target.devUrl.startsWith("docker:")) return
-	await settle(async () => {
-		const connect = await load()
-		const server = connect({ ...postgresOptionsOf(target.url, "url"), max: 1, onnotice: () => undefined })
-		try {
-			const { databases, roles } = await leftovers(server, Date.now(), { droppable: false })
-			if (databases.length + roles.length === 0) return
-		} finally {
-			await server.end()
-		}
-		const options = postgresOptionsOf(target.devUrl, "devUrl")
-		const failed = { field: "devUrl", url: target.devUrl, urls: [target.devUrl, target.url] } as const
-		const admin = connect({
-			connect_timeout: SWEEP_TIMEOUT,
-			...options,
-			max: 1,
-			onnotice: () => undefined,
-		})
-		try {
-			await sweep(admin, Date.now(), {
-				into: (database) =>
-					connect({ connect_timeout: SWEEP_TIMEOUT, ...options, database, max: 1, onnotice: () => undefined }),
-				leave: leaving(print, failed),
-			})
-		} catch (error) {
-			// reason: housekeeping never stops an apply; what it left is said, and the next run that reaches devUrl sweeps it
-			print(
-				`Apply did not sweep what a killed check left on the target's server, as devUrl's server did not answer: ${failureOf(error, failed)}; a CREATE ROLE of a role it left stops apply until a check or apply that reaches devUrl sweeps it`,
-			)
-		} finally {
-			await admin.end()
-		}
-	})
+  if (target.devUrl.startsWith("docker:")) return;
+  await settle(async () => {
+    const connect = await load();
+    const server = connect({ ...postgresOptionsOf(target.url, "url"), max: 1, onnotice: () => {} });
+
+    try {
+      const { databases, roles } = await leftovers(server, Date.now(), { droppable: false });
+
+      if (databases.length + roles.length === 0) return;
+    } finally {
+      await server.end();
+    }
+
+    const options = postgresOptionsOf(target.devUrl, "devUrl");
+    const failed = { field: "devUrl", url: target.devUrl, urls: [target.devUrl, target.url] } as const;
+
+    const admin = connect({
+      connect_timeout: SWEEP_TIMEOUT,
+      ...options,
+      max: 1,
+      onnotice: () => {},
+    });
+
+    try {
+      await sweep(admin, Date.now(), {
+        into: (database) =>
+          connect({ connect_timeout: SWEEP_TIMEOUT, ...options, database, max: 1, onnotice: () => {} }),
+        leave: leaving(print, failed),
+      });
+    } catch (error) {
+      // reason: housekeeping never stops an apply; what it left is said, and the next run that reaches devUrl sweeps it
+      print(
+        `Apply did not sweep what a killed check left on the target's server, as devUrl's server did not answer: ${failureOf(error, failed)}; a CREATE ROLE of a role it left stops apply until a check or apply that reaches devUrl sweeps it`,
+      );
+    } finally {
+      await admin.end();
+    }
+  });
 }
 
 /**
@@ -220,20 +236,21 @@ async function sweepDev(
  * keeps no creator for a role, a database or a slot, and another session may have made it
  */
 async function cleanUp(run: Run, drops: Drops): Promise<void> {
-	const { leave } = drops
-	await settle(() => run.sql.end({ timeout: 0 }))
-	await settle(() =>
-		run.admin.unsafe(
-			"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()",
-			[run.database],
-		),
-	)
-	await settle(() => emptyDatabase(run.admin, run.database, drops))
-	await settle(() => run.admin.unsafe(`ALTER DATABASE ${run.database} IS_TEMPLATE false`, []))
-	await dropOr(leave, `database ${run.database}`, () =>
-		run.admin.unsafe(`DROP DATABASE IF EXISTS ${run.database} WITH (FORCE)`, []),
-	)
-	for (const role of run.created) await dropOr(leave, `role ${role}`, () => dropMade(run.admin, role))
+  const { leave } = drops;
+  await settle(() => run.sql.end({ timeout: 0 }));
+  await settle(() =>
+    run.admin.unsafe(
+      "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()",
+      [run.database],
+    ),
+  );
+  await settle(() => emptyDatabase(run.admin, run.database, drops));
+  await settle(() => run.admin.unsafe(`ALTER DATABASE ${run.database} IS_TEMPLATE false`, []));
+  await dropOr(leave, `database ${run.database}`, () =>
+    run.admin.unsafe(`DROP DATABASE IF EXISTS ${run.database} WITH (FORCE)`, []),
+  );
+
+  for (const role of run.created) await dropOr(leave, `role ${role}`, () => dropMade(run.admin, role));
 }
 
-export { cleanUp, type Drops, dropMade, dropOr, dropRole, dropSlot, type Leave, leaving, settle, sweep, sweepDev }
+export { cleanUp, type Drops, dropMade, dropRole, leaving, sweep, sweepDev };

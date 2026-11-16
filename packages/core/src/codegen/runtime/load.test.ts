@@ -1,197 +1,215 @@
-import { spawn } from "node:child_process"
-import fs from "node:fs"
-import os from "node:os"
-import path from "node:path"
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { type MigrateRun, type RunOptions, run as realRun } from "../../migrate/core/process.ts"
-import { recordWhole, running, runs, type Seen, send, sendGroup } from "../../../tests/support/pid.ts"
-import { fixtureRoot } from "../__fixtures__/temp.ts"
-import { childArgs, LOAD_TIMEOUT_MS, loadSnapshot, watchSupervisor } from "./load.ts"
+import { spawn } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
-let dir: string
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { recordWhole, running, runs, type Seen, send, sendGroup } from "../../../tests/support/pid.ts";
+import { type MigrateRun, type RunOptions, run as realRun } from "../../migrate/core/process.ts";
+import { fixtureRoot } from "../__fixtures__/temp.ts";
+import { childArgs, LOAD_TIMEOUT_MS, loadSnapshot, watchSupervisor } from "./load.ts";
+
+let dir: string;
 
 beforeEach(() => {
-	dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-load-"))
-})
+  dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-load-"));
+});
 
 afterEach(() => {
-	vi.unstubAllEnvs()
-	fs.rmSync(dir, { force: true, recursive: true })
-})
+  vi.unstubAllEnvs();
+  fs.rmSync(dir, { force: true, recursive: true });
+});
 
 /** The job the supervisor is handed, its last argument */
-type Job = { args: string[]; cmd: string; status: string; timeoutMs: number }
-const jobOf = (args: readonly string[]): Job => JSON.parse(args.at(-1) as string) as Job
+type Job = { args: string[]; cmd: string; status: string; timeoutMs: number };
+
+const jobOf = (args: readonly string[]): Job => JSON.parse(args.at(-1) as string) as Job;
 
 /**
  * A runner that answers `code` and `stderr`, writes `result` to the result file the child is given,
  * and, when `timedOut`, the supervisor's timeout to its status file
  */
 function fakeRun(
-	code: number,
-	{ result, stderr = "", timedOut = false }: { result?: unknown; stderr?: string; timedOut?: boolean } = {},
+  code: number,
+  { result, stderr = "", timedOut = false }: { result?: unknown; stderr?: string; timedOut?: boolean } = {},
 ): MigrateRun & { calls: Array<[string, string[], RunOptions]> } {
-	const calls: Array<[string, string[], RunOptions]> = []
-	const run = (async (cmd: string, args: readonly string[], options: RunOptions = {}) => {
-		calls.push([cmd, [...args], options])
-		const job = jobOf(args)
-		if (result !== undefined) fs.writeFileSync(job.args.at(-1) as string, JSON.stringify(result))
-		if (timedOut) fs.writeFileSync(job.status, JSON.stringify({ timedOut: true }))
-		return { code, stderr, stdout: "" }
-	}) as MigrateRun & { calls: typeof calls }
-	run.calls = calls
-	return run
+  const calls: Array<[string, string[], RunOptions]> = [];
+
+  const run = (async (cmd: string, args: readonly string[], options: RunOptions = {}) => {
+    calls.push([cmd, [...args], options]);
+    const job = jobOf(args);
+
+    if (result !== undefined) fs.writeFileSync(job.args.at(-1) as string, JSON.stringify(result));
+
+    if (timedOut) fs.writeFileSync(job.status, JSON.stringify({ timedOut: true }));
+
+    return { code, stderr, stdout: "" };
+  }) as MigrateRun & { calls: typeof calls };
+
+  run.calls = calls;
+
+  return run;
 }
 
 describe("childArgs", () => {
-	it("runs child.ts alone by -e: under bun with no dotenv file, under node with the hooks and the resolve flag first", () => {
-		const bun = childArgs("bun", ["t.ts", "r.json"])
-		expect(bun.slice(0, 2)).toEqual(["--no-env-file", "-e"])
-		expect(bun[2]).toMatch(/await import\("file:\/\/.*\/runtime\/child\.ts"\)/)
-		expect(bun.slice(3)).toEqual(["t.ts", "r.json"])
-		const node = childArgs("node", ["t.ts", "r.json"])
-		expect(node.slice(0, 3)).toEqual([
-			"--experimental-import-meta-resolve",
-			"--disable-warning=ExperimentalWarning",
-			"--import",
-		])
-		expect(node[3]).toMatch(/^data:text\/javascript,import\{install\}from"file:\/\/.*node-hooks\.mjs";install\(\)$/)
-		expect(node.slice(4, 6)).toEqual(["--input-type=module", "-e"])
-		expect(node.slice(-2)).toEqual(["t.ts", "r.json"])
-	})
-})
+  it("runs child.ts alone by -e: under bun with no dotenv file, under node with the hooks and the resolve flag first", () => {
+    const bun = childArgs("bun", ["t.ts", "r.json"]);
+    expect(bun.slice(0, 2)).toEqual(["--no-env-file", "-e"]);
+    expect(bun[2]).toMatch(/await import\("file:\/\/.*\/runtime\/child\.ts"\)/);
+    expect(bun.slice(3)).toEqual(["t.ts", "r.json"]);
+    const node = childArgs("node", ["t.ts", "r.json"]);
+    expect(node.slice(0, 3)).toEqual([
+      "--experimental-import-meta-resolve",
+      "--disable-warning=ExperimentalWarning",
+      "--import",
+    ]);
+    expect(node[3]).toMatch(/^data:text\/javascript,import\{install\}from"file:\/\/.*node-hooks\.mjs";install\(\)$/);
+    expect(node.slice(4, 6)).toEqual(["--input-type=module", "-e"]);
+    expect(node.slice(-2)).toEqual(["t.ts", "r.json"]);
+  });
+});
 
 /** The tables file of the fixture directory */
-const tables = () => path.join(dir, "db.core.tables.ts")
+const tables = () => path.join(dir, "db.core.tables.ts");
 
 /** The loader's watch alone, as `groups` writes it, in a process leading a group of its own, with a grandchild; its end once its stdin closes */
 async function watchedEnd(groups: boolean): Promise<{ end: NodeJS.Signals | number | null; left: number[] }> {
-	const file = path.join(dir, "grandchild.json")
-	const script = `${watchSupervisor(groups)}const { spawn } = await import("node:child_process"); const g = spawn("sleep", ["600"], { stdio: "ignore" }); ${recordWhole(file, "String(g.pid)")}`
-	const loader = spawn(process.execPath, ["--input-type=module", "-e", script], {
-		detached: true,
-		stdio: ["pipe", "ignore", "ignore"],
-	})
-	const ended = new Promise<NodeJS.Signals | number | null>((resolve) =>
-		loader.on("exit", (code, signal) => resolve(signal ?? code)),
-	)
-	for (let tries = 0; tries < 400 && !fs.existsSync(file); tries++) await new Promise((r) => setTimeout(r, 50))
-	const grandchild = running(Number(fs.readFileSync(file, "utf8")), loader.pid)
-	loader.stdin.end()
-	const end = await ended
-	return { end, left: await leftOf([grandchild]) }
+  const file = path.join(dir, "grandchild.json");
+  const script = `${watchSupervisor(groups)}const { spawn } = await import("node:child_process"); const g = spawn("sleep", ["600"], { stdio: "ignore" }); ${recordWhole(file, "String(g.pid)")}`;
+
+  const loader = spawn(process.execPath, ["--input-type=module", "-e", script], {
+    detached: true,
+    stdio: ["pipe", "ignore", "ignore"],
+  });
+
+  const ended = new Promise<NodeJS.Signals | number | null>((resolve) =>
+    loader.on("exit", (code, signal) => resolve(signal ?? code)),
+  );
+
+  for (let tries = 0; tries < 400 && !fs.existsSync(file); tries++) await new Promise((r) => setTimeout(r, 50));
+  const grandchild = running(Number(fs.readFileSync(file, "utf8")), loader.pid);
+  loader.stdin.end();
+  const end = await ended;
+
+  return { end, left: await leftOf([grandchild]) };
 }
 
 describe("the loader's watch on its supervisor", () => {
-	it("kills the loader's group, its grandchild included, where it leads one", async () => {
-		expect(await watchedEnd(true)).toEqual({ end: "SIGKILL", left: [] })
-	})
+  it("kills the loader's group, its grandchild included, where it leads one", async () => {
+    expect(await watchedEnd(true)).toEqual({ end: "SIGKILL", left: [] });
+  });
 
-	it("exits 1 alone where it leads no group (Windows)", async () => {
-		const { end, left } = await watchedEnd(false)
-		expect([end, left.length]).toEqual([1, 1])
-	})
-})
+  it("exits 1 alone where it leads no group (Windows)", async () => {
+    const { end, left } = await watchedEnd(false);
+    expect([end, left.length]).toEqual([1, 1]);
+  });
+});
 
 describe("loadSnapshot", () => {
-	/* F58: the child runs where database runs, as the app and drizzle-kit do, never beside the tables file */
-	it("runs the child with PATH, HOME and NODE_OPTIONS only, a minute to finish, in database's working directory", async () => {
-		vi.stubEnv("DATABASE_SECRET", "parent")
-		vi.stubEnv("NODE_OPTIONS", "--max-old-space-size=512")
-		const run = fakeRun(0, { result: { snapshot: { tables: [] } } })
-		expect(await loadSnapshot(tables(), { run, runtime: "bun" })).toEqual({ tables: [] })
-		const [cmd, args, options] = run.calls[0] as [string, string[], RunOptions]
-		expect(cmd).toBe(process.execPath)
-		expect(Object.keys(options.exactEnv ?? {}).sort()).toEqual(["HOME", "NODE_OPTIONS", "PATH"])
-		/* the child gets the minute; codegen stops the supervisor only if it outlives the child's timeout */
-		expect(options).toMatchObject({ cwd: process.cwd(), timeoutMs: LOAD_TIMEOUT_MS + 10_000 })
-		expect(jobOf(args)).toMatchObject({ cmd: process.execPath, timeoutMs: LOAD_TIMEOUT_MS })
-		expect(LOAD_TIMEOUT_MS).toBe(60_000)
-		const given = fakeRun(0, { result: { snapshot: { tables: [] } } })
-		await loadSnapshot(tables(), { cwd: "/srv/app", run: given, runtime: "bun" })
-		expect(given.calls[0]?.[2]).toMatchObject({ cwd: "/srv/app" })
-	})
+  // F58: the child runs where database runs, as the app and drizzle-kit do, never beside the tables file
+  it("runs the child with PATH, HOME and NODE_OPTIONS only, a minute to finish, in database's working directory", async () => {
+    vi.stubEnv("DATABASE_SECRET", "parent");
+    vi.stubEnv("NODE_OPTIONS", "--max-old-space-size=512");
+    const run = fakeRun(0, { result: { snapshot: { tables: [] } } });
+    expect(await loadSnapshot(tables(), { run, runtime: "bun" })).toEqual({ tables: [] });
+    const [cmd, args, options] = run.calls[0] as [string, string[], RunOptions];
+    expect(cmd).toBe(process.execPath);
+    expect(Object.keys(options.exactEnv ?? {}).sort()).toEqual(["HOME", "NODE_OPTIONS", "PATH"]);
+    // the child gets the minute; codegen stops the supervisor only if it outlives the child's timeout
+    expect(options).toMatchObject({ cwd: process.cwd(), timeoutMs: LOAD_TIMEOUT_MS + 10_000 });
+    expect(jobOf(args)).toMatchObject({ cmd: process.execPath, timeoutMs: LOAD_TIMEOUT_MS });
+    expect(LOAD_TIMEOUT_MS).toBe(60_000);
+    const given = fakeRun(0, { result: { snapshot: { tables: [] } } });
+    await loadSnapshot(tables(), { cwd: "/srv/app", run: given, runtime: "bun" });
+    expect(given.calls[0]?.[2]).toMatchObject({ cwd: "/srv/app" });
+  });
 
-	it("leaves out a variable the parent does not have", async () => {
-		vi.stubEnv("NODE_OPTIONS", undefined)
-		const run = fakeRun(0, { result: { snapshot: { tables: [] } } })
-		await loadSnapshot(tables(), { run, runtime: "node" })
-		expect(Object.keys(run.calls[0]?.[2].exactEnv ?? {})).not.toContain("NODE_OPTIONS")
-	})
+  it("leaves out a variable the parent does not have", async () => {
+    vi.stubEnv("NODE_OPTIONS", undefined);
+    const run = fakeRun(0, { result: { snapshot: { tables: [] } } });
+    await loadSnapshot(tables(), { run, runtime: "node" });
+    expect(Object.keys(run.calls[0]?.[2].exactEnv ?? {})).not.toContain("NODE_OPTIONS");
+  });
 
-	it("names the file for a load past the timeout, an error the child reports, and a child that wrote nothing", async () => {
-		/* the supervisor's status file says so, whatever code it exits with; codegen's stopping it says so too */
-		await expect(loadSnapshot(tables(), { run: fakeRun(124, { timedOut: true }) })).rejects.toThrow(
-			`database timed out after 60 s loading ${tables()}`,
-		)
-		await expect(loadSnapshot(tables(), { run: fakeRun(124) })).rejects.toThrow(
-			`database timed out after 60 s loading ${tables()}`,
-		)
-		await expect(loadSnapshot(tables(), { run: fakeRun(0, { result: { error: "t.x: bad" } }) })).rejects.toThrow(
-			`database could not load ${tables()}: t.x: bad`,
-		)
-		await expect(loadSnapshot(tables(), { run: fakeRun(1, { stderr: "boom\n" }) })).rejects.toThrow(
-			`database could not load ${tables()}: boom`,
-		)
-		await expect(loadSnapshot(tables(), { run: fakeRun(139) })).rejects.toThrow(
-			`database could not load ${tables()}: the loader exited 139`,
-		)
-	})
+  it("names the file for a load past the timeout, an error the child reports, and a child that wrote nothing", async () => {
+    // the supervisor's status file says so, whatever code it exits with; codegen's stopping it says so too
+    await expect(loadSnapshot(tables(), { run: fakeRun(124, { timedOut: true }) })).rejects.toThrow(
+      `database timed out after 60 s loading ${tables()}`,
+    );
+    await expect(loadSnapshot(tables(), { run: fakeRun(124) })).rejects.toThrow(
+      `database timed out after 60 s loading ${tables()}`,
+    );
+    await expect(loadSnapshot(tables(), { run: fakeRun(0, { result: { error: "t.x: bad" } }) })).rejects.toThrow(
+      `database could not load ${tables()}: t.x: bad`,
+    );
+    await expect(loadSnapshot(tables(), { run: fakeRun(1, { stderr: "boom\n" }) })).rejects.toThrow(
+      `database could not load ${tables()}: boom`,
+    );
+    await expect(loadSnapshot(tables(), { run: fakeRun(139) })).rejects.toThrow(
+      `database could not load ${tables()}: the loader exited 139`,
+    );
+  });
 
-	it("loads for real in a child on the runtime the tests run on, removing its scratch directory", async () => {
-		fs.writeFileSync(
-			tables(),
-			`import { sqliteTable } from "drizzle-orm/sqlite-core"\nimport { c } from "@workerstack/database/sqlite/columns"\nexport const note = sqliteTable("note", { id: c.id("not") })\n`,
-		)
-		const scratch: string[] = []
-		const run: MigrateRun = async (cmd, args, options) => {
-			scratch.push(path.dirname(jobOf(args).status))
-			return realRun(cmd, args, options)
-		}
-		expect((await loadSnapshot(tables(), { run })).tables.map((table) => table.exportName)).toEqual(["note"])
-		expect(scratch[0]?.startsWith(path.join(os.tmpdir(), "database-codegen-"))).toBe(true)
-		expect(fs.existsSync(scratch[0] as string)).toBe(false)
-	})
-})
+  it("loads for real in a child on the runtime the tests run on, removing its scratch directory", async () => {
+    fs.writeFileSync(
+      tables(),
+      `import { sqliteTable } from "drizzle-orm/sqlite-core"\nimport { c } from "@workerstack/database/sqlite/columns"\nexport const note = sqliteTable("note", { id: c.id("not") })\n`,
+    );
+    const scratch: string[] = [];
+
+    const run: MigrateRun = async (cmd, args, options) => {
+      scratch.push(path.dirname(jobOf(args).status));
+
+      return realRun(cmd, args, options);
+    };
+
+    expect((await loadSnapshot(tables(), { run })).tables.map((table) => table.exportName)).toEqual(["note"]);
+    expect(scratch[0]?.startsWith(path.join(os.tmpdir(), "database-codegen-"))).toBe(true);
+    expect(fs.existsSync(scratch[0] as string)).toBe(false);
+  });
+});
 
 describe("loadSnapshot on bun", () => {
-	it("runs the child the bun way when codegen runs on bun", async () => {
-		Object.defineProperty(process.versions, "bun", { configurable: true, value: "1.4.3" })
-		try {
-			const run = fakeRun(0, { result: { snapshot: { tables: [] } } })
-			await loadSnapshot(path.join(dir, "db.core.tables.ts"), { run })
-			const args = run.calls[0]?.[1] as string[]
-			expect(args.slice(0, 2)).toEqual(["--no-env-file", "-e"])
-			expect(jobOf(args).args.slice(0, 2)).toEqual(["--no-env-file", "-e"])
-		} finally {
-			Reflect.deleteProperty(process.versions, "bun")
-		}
-	})
-})
+  it("runs the child the bun way when codegen runs on bun", async () => {
+    Object.defineProperty(process.versions, "bun", { configurable: true, value: "1.4.3" });
 
-/* F42 of the 0.13.0 round: a module that keeps a timer or a pool open must not keep the child alive
-   once the snapshot is written, so the parent reads it at once instead of waiting out the timeout */
+    try {
+      const run = fakeRun(0, { result: { snapshot: { tables: [] } } });
+      await loadSnapshot(path.join(dir, "db.core.tables.ts"), { run });
+      const args = run.calls[0]?.[1] as string[];
+      expect(args.slice(0, 2)).toEqual(["--no-env-file", "-e"]);
+      expect(jobOf(args).args.slice(0, 2)).toEqual(["--no-env-file", "-e"]);
+    } finally {
+      Reflect.deleteProperty(process.versions, "bun");
+    }
+  });
+});
+
+// F42 of the 0.13.0 round: a module that keeps a timer or a pool open must not keep the child alive
+// once the snapshot is written, so the parent reads it at once instead of waiting out the timeout
 describe("loadSnapshot on a module that holds the event loop open", () => {
-	/* told by what happens, not by a clock: a child that waited for the timer would run out the
-	   loader's timeout, which reads as a timeout, and a timer that fired would leave its file */
-	it("reads the snapshot without waiting for the module's timer", async () => {
-		const fired = path.join(dir, "timer-fired")
-		fs.writeFileSync(
-			tables(),
-			`import { writeFileSync } from "node:fs"\nsetInterval(() => writeFileSync(${JSON.stringify(fired)}, "x"), 600_000)\nexport {}\n`,
-		)
-		expect(await loadSnapshot(tables(), { run: realRun, timeoutMs: 30_000 })).toEqual({ tables: [] })
-		expect(fs.existsSync(fired)).toBe(false)
-	}, 60_000)
-})
+  // told by what happens, not by a clock: a child that waited for the timer would run out the
+  // loader's timeout, which reads as a timeout, and a timer that fired would leave its file
+  it("reads the snapshot without waiting for the module's timer", async () => {
+    const fired = path.join(dir, "timer-fired");
+    fs.writeFileSync(
+      tables(),
+      `import { writeFileSync } from "node:fs"\nsetInterval(() => writeFileSync(${JSON.stringify(fired)}, "x"), 600_000)\nexport {}\n`,
+    );
+    expect(await loadSnapshot(tables(), { run: realRun, timeoutMs: 30_000 })).toEqual({ tables: [] });
+    expect(fs.existsSync(fired)).toBe(false);
+  }, 60_000);
+});
 
 /** The stuck module in the fixture directory, recording its pids to `pids.json` beside it */
 function stuckTables(): string {
-	fs.writeFileSync(
-		tables(),
-		`import { spawn } from "node:child_process"\nprocess.on("SIGTERM", () => {})\nconst grandchild = spawn("sleep", ["600"], { stdio: "ignore" })\n${recordWhole(path.join(dir, "pids.json"), "JSON.stringify({ grandchild: grandchild.pid, loader: process.pid, supervisor: process.ppid })")}\nfor (;;) {}\n`,
-	)
-	return tables()
+  fs.writeFileSync(
+    tables(),
+    `import { spawn } from "node:child_process"\nprocess.on("SIGTERM", () => {})\nconst grandchild = spawn("sleep", ["600"], { stdio: "ignore" })\n${recordWhole(path.join(dir, "pids.json"), "JSON.stringify({ grandchild: grandchild.pid, loader: process.pid, supervisor: process.ppid })")}\nfor (;;) {}\n`,
+  );
+
+  return tables();
 }
 
 /**
@@ -199,96 +217,96 @@ function stuckTables(): string {
  * a full coverage run loads (it once missed a 3 s timeout), and the test is of the kill, not the start
  */
 async function pidsOf(): Promise<{ grandchild: Seen; loader: Seen; supervisor: Seen }> {
-	const file = path.join(dir, "pids.json")
-	for (let tries = 0; tries < 400 && !fs.existsSync(file); tries++) await new Promise((r) => setTimeout(r, 50))
-	expect(fs.existsSync(file), "the module started and recorded its pids").toBe(true)
-	const pids = JSON.parse(fs.readFileSync(file, "utf8")) as { grandchild: number; loader: number; supervisor: number }
-	/* the supervisor first, then each as the child of the one before, which holds it, so each pid names the process the module started */
-	const supervisor = running(pids.supervisor)
-	const loader = running(pids.loader, pids.supervisor)
-	return { grandchild: running(pids.grandchild, pids.loader), loader, supervisor }
+  const file = path.join(dir, "pids.json");
+
+  for (let tries = 0; tries < 400 && !fs.existsSync(file); tries++) await new Promise((r) => setTimeout(r, 50));
+  expect(fs.existsSync(file), "the module started and recorded its pids").toBe(true);
+  const pids = JSON.parse(fs.readFileSync(file, "utf8")) as { grandchild: number; loader: number; supervisor: number };
+  // the supervisor first, then each as the child of the one before, which holds it, so each pid names the process the module started
+  const supervisor = running(pids.supervisor);
+  const loader = running(pids.loader, pids.supervisor);
+
+  return { grandchild: running(pids.grandchild, pids.loader), loader, supervisor };
 }
 
-/*
- * F43 of the 0.13.0 round: a module that ignores SIGTERM, starts a sleeping grandchild and spins in
- * a synchronous loop. The timeout kills the loader's whole group, and so does a Ctrl-C, which reaches
- * codegen and its supervisor but never the loader's own group.
- */
+// F43 of the 0.13.0 round: a module that ignores SIGTERM, starts a sleeping grandchild and spins in
+// a synchronous loop. The timeout kills the loader's whole group, and so does a Ctrl-C, which reaches
+// codegen and its supervisor but never the loader's own group.
 describe("loadSnapshot on a module stuck in a synchronous loop, with a process of its own", () => {
-	it("times out, naming the file and the time, and leaves neither the loader nor its grandchild", async () => {
-		const loading = loadSnapshot(stuckTables(), { run: realRun, timeoutMs: 10_000 })
-		const { grandchild, loader } = await pidsOf()
-		await expect(loading).rejects.toThrow(`database timed out after 10 s loading ${tables()}`)
-		await new Promise((r) => setTimeout(r, 200))
-		expect([runs(loader), runs(grandchild)]).toEqual([false, false])
-	})
+  it("times out, naming the file and the time, and leaves neither the loader nor its grandchild", async () => {
+    const loading = loadSnapshot(stuckTables(), { run: realRun, timeoutMs: 10_000 });
+    const { grandchild, loader } = await pidsOf();
+    await expect(loading).rejects.toThrow(`database timed out after 10 s loading ${tables()}`);
+    await new Promise((r) => setTimeout(r, 200));
+    expect([runs(loader), runs(grandchild)]).toEqual([false, false]);
+  });
 
-	it("leaves nothing when codegen is Ctrl-C'd while the module loads, its scratch included (KC5 of r22b)", async () => {
-		const script = path.join(dir, "codegen.ts")
-		fs.writeFileSync(
-			script,
-			`import { loadSnapshot } from ${JSON.stringify(new URL("./load.ts", import.meta.url).pathname)}\nloadSnapshot(${JSON.stringify(stuckTables())})\n`,
-		)
-		/* a terminal's Ctrl-C signals the foreground group: codegen and its supervisor */
-		const tmp = fs.mkdtempSync(path.join(dir, "tmp-"))
-		const codegen = spawn("bun", [script], { detached: true, env: { ...process.env, TMPDIR: tmp }, stdio: "ignore" })
-		const ended = new Promise((resolve) => codegen.on("exit", resolve))
-		const { grandchild, loader } = await pidsOf()
-		expect(sendGroup(codegen, "SIGINT")).toBe(true)
-		await ended
-		await new Promise((r) => setTimeout(r, 200))
-		expect([runs(loader), runs(grandchild), fs.readdirSync(tmp)]).toEqual([false, false, []])
-	})
-	it("leaves nothing when database alone gets SIGTERM while the module loads, and ends by it (KC5 of r22b)", async () => {
-		const { codegen, ended, tmp } = codegenOf("bun")
-		const { grandchild, loader, supervisor } = await pidsOf()
-		/* a supervisor, a container stop or a CI step timeout signals database's pid alone, not its group */
-		expect(codegen.kill("SIGTERM")).toBe(true)
-		const end = await ended
-		expect([await leftOf([supervisor, loader, grandchild]), fs.readdirSync(tmp), end]).toEqual([[], [], "SIGTERM"])
-	})
+  it("leaves nothing when codegen is Ctrl-C'd while the module loads, its scratch included (KC5 of r22b)", async () => {
+    const script = path.join(dir, "codegen.ts");
+    fs.writeFileSync(
+      script,
+      `import { loadSnapshot } from ${JSON.stringify(new URL("./load.ts", import.meta.url).pathname)}\nloadSnapshot(${JSON.stringify(stuckTables())})\n`,
+    );
+    // a terminal's Ctrl-C signals the foreground group: codegen and its supervisor
+    const tmp = fs.mkdtempSync(path.join(dir, "tmp-"));
+    const codegen = spawn("bun", [script], { detached: true, env: { ...process.env, TMPDIR: tmp }, stdio: "ignore" });
+    const ended = new Promise((resolve) => codegen.on("exit", resolve));
+    const { grandchild, loader } = await pidsOf();
+    expect(sendGroup(codegen, "SIGINT")).toBe(true);
+    await ended;
+    await new Promise((r) => setTimeout(r, 200));
+    expect([runs(loader), runs(grandchild), fs.readdirSync(tmp)]).toEqual([false, false, []]);
+  });
+  it("leaves nothing when database alone gets SIGTERM while the module loads, and ends by it (KC5 of r22b)", async () => {
+    const { codegen, ended, tmp } = codegenOf("bun");
+    const { grandchild, loader, supervisor } = await pidsOf();
+    // a supervisor, a container stop or a CI step timeout signals database's pid alone, not its group
+    expect(codegen.kill("SIGTERM")).toBe(true);
+    const end = await ended;
+    expect([await leftOf([supervisor, loader, grandchild]), fs.readdirSync(tmp), end]).toEqual([[], [], "SIGTERM"]);
+  });
 
-	it("leaves neither the supervisor nor the module when database is killed outright while it loads (KC5 of r22b)", async () => {
-		const { codegen, ended } = codegenOf("bun")
-		const { grandchild, loader, supervisor } = await pidsOf()
-		/* no step of database's runs on SIGKILL: the supervisor reads database's end from its stdin closing */
-		expect(codegen.kill("SIGKILL")).toBe(true)
-		await ended
-		expect(await leftOf([supervisor, loader, grandchild])).toEqual([])
-	})
-})
+  it("leaves neither the supervisor nor the module when database is killed outright while it loads (KC5 of r22b)", async () => {
+    const { codegen, ended } = codegenOf("bun");
+    const { grandchild, loader, supervisor } = await pidsOf();
+    // no step of database's runs on SIGKILL: the supervisor reads database's end from its stdin closing
+    expect(codegen.kill("SIGKILL")).toBe(true);
+    await ended;
+    expect(await leftOf([supervisor, loader, grandchild])).toEqual([]);
+  });
+});
 
-/*
- * AA4-3 of area A round four: the supervisor dies unseen (killed by pid, the OOM killer) while the
- * module waits on its event loop. The loader, its group's leader, takes its group with it.
- */
+// AA4-3 of area A round four: the supervisor dies unseen (killed by pid, the OOM killer) while the
+// module waits on its event loop. The loader, its group's leader, takes its group with it.
 describe("loadSnapshot when the supervisor dies unseen while the module waits", () => {
-	it("leaves neither the loader nor its grandchild", async () => {
-		fs.writeFileSync(
-			tables(),
-			`import { spawn } from "node:child_process"\nconst grandchild = spawn("sleep", ["600"], { stdio: "ignore" })\n${recordWhole(path.join(dir, "pids.json"), "JSON.stringify({ grandchild: grandchild.pid, loader: process.pid, supervisor: process.ppid })")}\nawait new Promise(() => setInterval(() => {}, 1000))\n`,
-		)
-		const loading = loadSnapshot(tables(), { run: realRun })
-		const { grandchild, loader, supervisor } = await pidsOf()
-		expect(send(supervisor, "SIGKILL")).toBe(true)
-		await expect(loading).rejects.toThrow(`database could not load ${tables()}`)
-		expect(await leftOf([loader, grandchild])).toEqual([])
-	})
-})
+  it("leaves neither the loader nor its grandchild", async () => {
+    fs.writeFileSync(
+      tables(),
+      `import { spawn } from "node:child_process"\nconst grandchild = spawn("sleep", ["600"], { stdio: "ignore" })\n${recordWhole(path.join(dir, "pids.json"), "JSON.stringify({ grandchild: grandchild.pid, loader: process.pid, supervisor: process.ppid })")}\nawait new Promise(() => setInterval(() => {}, 1000))\n`,
+    );
+    const loading = loadSnapshot(tables(), { run: realRun });
+    const { grandchild, loader, supervisor } = await pidsOf();
+    expect(send(supervisor, "SIGKILL")).toBe(true);
+    await expect(loading).rejects.toThrow(`database could not load ${tables()}`);
+    expect(await leftOf([loader, grandchild])).toEqual([]);
+  });
+});
 
 /** codegen of the stuck module in a process of `runtime`'s own, with a temp directory of its own, and how it ended */
 function codegenOf(runtime: "bun" | "node") {
-	const script = path.join(dir, "codegen.ts")
-	fs.writeFileSync(
-		script,
-		`import { loadSnapshot } from ${JSON.stringify(new URL("./load.ts", import.meta.url).pathname)}\nawait loadSnapshot(${JSON.stringify(stuckTables())})\n`,
-	)
-	const tmp = fs.mkdtempSync(path.join(dir, "tmp-"))
-	const codegen = spawn(runtime, [script], { env: { ...process.env, TMPDIR: tmp }, stdio: "ignore" })
-	const ended = new Promise<NodeJS.Signals | number | null>((resolve) =>
-		codegen.on("exit", (code, signal) => resolve(signal ?? code)),
-	)
-	return { codegen, ended, tmp }
+  const script = path.join(dir, "codegen.ts");
+  fs.writeFileSync(
+    script,
+    `import { loadSnapshot } from ${JSON.stringify(new URL("./load.ts", import.meta.url).pathname)}\nawait loadSnapshot(${JSON.stringify(stuckTables())})\n`,
+  );
+  const tmp = fs.mkdtempSync(path.join(dir, "tmp-"));
+  const codegen = spawn(runtime, [script], { env: { ...process.env, TMPDIR: tmp }, stdio: "ignore" });
+
+  const ended = new Promise<NodeJS.Signals | number | null>((resolve) =>
+    codegen.on("exit", (code, signal) => resolve(signal ?? code)),
+  );
+
+  return { codegen, ended, tmp };
 }
 
 /**
@@ -296,48 +314,50 @@ function codegenOf(runtime: "bun" | "node") {
  * behind; a killed process stays a zombie until it is reaped, so the wait polls
  */
 async function leftOf(seen: readonly Seen[]): Promise<number[]> {
-	for (const deadline = Date.now() + 10_000; Date.now() < deadline && seen.some(runs);)
-		await new Promise((r) => setTimeout(r, 100))
-	const left = seen.filter(runs)
-	for (const each of left) send(each, "SIGKILL")
-	return left.map((each) => each.pid)
+  for (const deadline = Date.now() + 10_000; Date.now() < deadline && seen.some(runs);)
+    await new Promise((r) => setTimeout(r, 100));
+  const left = seen.filter(runs);
+
+  for (const each of left) send(each, "SIGKILL");
+
+  return left.map((each) => each.pid);
 }
 
-/* F44 of the 0.13.0 round: a seeder the tables module imports only on demand never runs at codegen */
+// F44 of the 0.13.0 round: a seeder the tables module imports only on demand never runs at codegen
 describe("loadSnapshot on a tables module that imports a seeder on demand", () => {
-	it("loads the tables module without running the seeder", async () => {
-		const ran = path.join(dir, "seeded")
-		fs.writeFileSync(
-			path.join(dir, "seed.ts"),
-			`import fs from "node:fs"\nfs.writeFileSync(${JSON.stringify(ran)}, "ran")\nexport {}\n`,
-		)
-		fs.writeFileSync(tables(), `export async function seed() {\n\tawait import("./seed.ts")\n}\n`)
-		expect(await loadSnapshot(tables(), { run: realRun })).toEqual({ tables: [] })
-		expect(fs.existsSync(ran)).toBe(false)
-	})
-})
+  it("loads the tables module without running the seeder", async () => {
+    const ran = path.join(dir, "seeded");
+    fs.writeFileSync(
+      path.join(dir, "seed.ts"),
+      `import fs from "node:fs"\nfs.writeFileSync(${JSON.stringify(ran)}, "ran")\nexport {}\n`,
+    );
+    fs.writeFileSync(tables(), `export async function seed() {\n\tawait import("./seed.ts")\n}\n`);
+    expect(await loadSnapshot(tables(), { run: realRun })).toEqual({ tables: [] });
+    expect(fs.existsSync(ran)).toBe(false);
+  });
+});
 
-/* F54 of the 0.13.0 round: a tables module in a CommonJS package loads under node as node runs it */
+// F54 of the 0.13.0 round: a tables module in a CommonJS package loads under node as node runs it
 describe("loadSnapshot on a tables module of a CommonJS package", () => {
-	/* no module syntax, so node runs it as CommonJS, and bun runs it either way */
-	it("loads one that reads __dirname and requires, as node and bun both run it", async () => {
-		fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name: "app" }))
-		fs.writeFileSync(path.join(dir, "seed.json"), '{ "ok": true }\n')
-		fs.writeFileSync(
-			tables(),
-			`const path = require("node:path")\nconst seed: { ok: boolean } = require(path.join(__dirname, "seed.json"))\nif (!seed.ok) throw new Error("no seed")\n`,
-		)
-		expect(await loadSnapshot(tables(), { run: realRun })).toEqual({ tables: [] })
-	})
-})
+  // no module syntax, so node runs it as CommonJS, and bun runs it either way
+  it("loads one that reads __dirname and requires, as node and bun both run it", async () => {
+    fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name: "app" }));
+    fs.writeFileSync(path.join(dir, "seed.json"), '{ "ok": true }\n');
+    fs.writeFileSync(
+      tables(),
+      `const path = require("node:path")\nconst seed: { ok: boolean } = require(path.join(__dirname, "seed.json"))\nif (!seed.ok) throw new Error("no seed")\n`,
+    );
+    expect(await loadSnapshot(tables(), { run: realRun })).toEqual({ tables: [] });
+  });
+});
 
-/* D4-4 of the area D round-four review: README item 2's refusal of analyze rests on loadSnapshot's own check */
+// D4-4 of the area D round-four review: README item 2's refusal of analyze rests on loadSnapshot's own check
 describe("loadSnapshot inside a Bun single-file executable", () => {
-	it("refuses before it starts a child", async () => {
-		const run = fakeRun(0, { result: { snapshot: { tables: [] } } })
-		await expect(loadSnapshot(tables(), { moduleUrl: "file:///$bunfs/root/app-exe", run })).rejects.toThrow(
-			"database codegen loads the tables file in a child process, which cannot read the modules a Bun single-file executable embeds: run codegen with bun or node, not from a compiled executable",
-		)
-		expect(run.calls).toEqual([])
-	})
-})
+  it("refuses before it starts a child", async () => {
+    const run = fakeRun(0, { result: { snapshot: { tables: [] } } });
+    await expect(loadSnapshot(tables(), { moduleUrl: "file:///$bunfs/root/app-exe", run })).rejects.toThrow(
+      "database codegen loads the tables file in a child process, which cannot read the modules a Bun single-file executable embeds: run codegen with bun or node, not from a compiled executable",
+    );
+    expect(run.calls).toEqual([]);
+  });
+});

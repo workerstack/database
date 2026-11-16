@@ -8,82 +8,85 @@
  * a file could lose, so its files skip the approval, and the output says "empty target". It reads
  * the database, and applies nothing to it.
  */
-import { readFileSync } from "node:fs"
-import { join } from "node:path"
-import type { ScratchEngine } from "../drivers/local-db.ts"
-import type { ExtractedSchema, ParsedMigration } from "../migration-types.ts"
-import type { MigrateConnection } from "../types.ts"
-import type { Approval } from "./approval.ts"
-import type { TargetKind } from "./classify-target.ts"
-import { verifySum } from "./atlas-dir.ts"
-import { HISTORY_TABLES, notEngineTables } from "./engine-tables.ts"
-import { refuseUnseenReach } from "./live-guard.ts"
-import { parseMigration } from "./parse.ts"
-import { creatable, type LiveObject, liveObjects } from "./proof-copy.ts"
-import { type Proof, provePending } from "./proof-run.ts"
-import { Refused } from "./refused.ts"
-import type { MigrateRun } from "./process.ts"
-import { extractSchema } from "./schema.ts"
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import type { ScratchEngine } from "../drivers/local-db.ts";
+import type { ExtractedSchema, ParsedMigration } from "../migration-types.ts";
+import type { MigrateConnection } from "../types.ts";
+import type { Approval } from "./approval.ts";
+import { verifySum } from "./atlas-dir.ts";
+import type { TargetKind } from "./classify-target.ts";
+import { HISTORY_TABLES, notEngineTables } from "./engine-tables.ts";
+import { refuseUnseenReach } from "./live-guard.ts";
+import { parseMigration } from "./parse.ts";
+import type { MigrateRun } from "./process.ts";
+import { creatable, type LiveObject, liveObjects } from "./proof-copy.ts";
+import { type Proof, provePending } from "./proof-run.ts";
+import { Refused } from "./refused.ts";
+import { extractSchema } from "./schema.ts";
 
 /** A pending migration: its file name and text, classified against the files before it */
-type Pending = { before: ExtractedSchema; migration: ParsedMigration; name: string; sql: string }
+type Pending = { before: ExtractedSchema; migration: ParsedMigration; name: string; sql: string };
 
 type PlanOptions = {
-	/** whether a classified migration may run: approval.ts's rule, asking a person when it must */
-	approve(migration: ParsedMigration): Promise<Approval>
-	/** whether the database records `name` (whose text is `sql`) as applied */
-	applied(name: string, sql: string): boolean
-	dir: string
-	exec: MigrateRun
-	/** the file names of `dir`, in the order they apply */
-	files: readonly string[]
-	print(line: string): void
-	/** false for one file applied on its own, which no atlas.sum or order covers */
-	whole?: boolean | undefined
-	/** the database, whose own foreign keys and triggers a guarded rebuild is checked against */
-	conn?: MigrateConnection | undefined
-	/** where the files apply, whose own rule of what it runs check holds them to; local unnamed */
-	kind?: TargetKind | undefined
-	/** the tables the target's migration history lives in, which an empty target may hold (default: database's and wrangler's) */
-	historyTables?: readonly string[] | undefined
-	/**
-	 * the target's own engine, run after the proof: it runs the pending files as the target would, throws what it
-	 * refuses (D1), and answers each file it could not prove and why, which leaves that file cautious
-	 */
-	engine?:
-		| ((
-				files: ReadonlyArray<{ name: string; sql: string }>,
-				live: readonly LiveObject[],
-		  ) => Promise<ReadonlyArray<{ name: string; why: string }>>)
-		| undefined
-	/** the SQLite the proof copy runs on: libsql's for a libsql or Turso target, which applies its files there; default the runtime's */
-	proofEngine?: ScratchEngine | undefined
-}
+  /** whether a classified migration may run: approval.ts's rule, asking a person when it must */
+  approve(migration: ParsedMigration): Promise<Approval>;
+  /** whether the database records `name` (whose text is `sql`) as applied */
+  applied(name: string, sql: string): boolean;
+  dir: string;
+  exec: MigrateRun;
+  /** the file names of `dir`, in the order they apply */
+  files: readonly string[];
+  print(line: string): void;
+  /** false for one file applied on its own, which no atlas.sum or order covers */
+  whole?: boolean | undefined;
+  /** the database, whose own foreign keys and triggers a guarded rebuild is checked against */
+  conn?: MigrateConnection | undefined;
+  /** where the files apply, whose own rule of what it runs check holds them to; local unnamed */
+  kind?: TargetKind | undefined;
+  /** the tables the target's migration history lives in, which an empty target may hold (default: database's and wrangler's) */
+  historyTables?: readonly string[] | undefined;
+  /**
+   * the target's own engine, run after the proof: it runs the pending files as the target would, throws what it
+   * refuses (D1), and answers each file it could not prove and why, which leaves that file cautious
+   */
+  engine?:
+    | ((
+        files: ReadonlyArray<{ name: string; sql: string }>,
+        live: readonly LiveObject[],
+      ) => Promise<ReadonlyArray<{ name: string; why: string }>>)
+    | undefined;
+  /** the SQLite the proof copy runs on: libsql's for a libsql or Turso target, which applies its files there; default the runtime's */
+  proofEngine?: ScratchEngine | undefined;
+};
 
 /** The leading number of a migration file name: `20260101000000_x.sql` is 20260101000000 */
-const leadingNumber = (name: string): number => Number.parseInt(name.split("_")[0] as string, 10)
+const leadingNumber = (name: string): number => Number.parseInt(name.split("_")[0] as string, 10);
 
 /** A file's place by its leading number; one without a number goes after every one with */
 const rank = (name: string): number => {
-	const number = leadingNumber(name)
-	return Number.isFinite(number) ? number : Number.POSITIVE_INFINITY
-}
+  const number = leadingNumber(name);
+
+  return Number.isFinite(number) ? number : Number.POSITIVE_INFINITY;
+};
 
 /** The order wrangler applies D1 migrations in: by leading number, files without one last, then by name */
 function wranglerOrder(names: readonly string[]): string[] {
-	/* two files without a number differ by NaN, which falls through to the name, compared as wrangler does */
-	return names.toSorted((a, b) => rank(a) - rank(b) || Number(a > b) - Number(a < b))
+  // two files without a number differ by NaN, which falls through to the name, compared as wrangler does
+  return names.toSorted((a, b) => rank(a) - rank(b) || Number(a > b) - Number(a < b));
 }
 
 /** Refuses a pending file that sorts before an applied one: it would run after files written later */
 function refuseOutOfOrder(files: readonly string[], applied: ReadonlySet<string>): void {
-	const last = files.findLastIndex((name) => applied.has(name))
-	const late = files.slice(0, Math.max(last, 0)).find((name) => !applied.has(name))
-	if (late !== undefined) {
-		throw new Error(
-			`${late} was never applied, yet it sorts before ${files[last] as string}, which was; rename it to sort after the applied files`,
-		)
-	}
+  const last = files.findLastIndex((name) => applied.has(name));
+  const late = files.slice(0, Math.max(last, 0)).find((name) => !applied.has(name));
+
+  if (late !== undefined) {
+    throw new Error(
+      `${late} was never applied, yet it sorts before ${files[last] as string}, which was; rename it to sort after the applied files`,
+    );
+  }
 }
 
 /**
@@ -92,9 +95,10 @@ function refuseOutOfOrder(files: readonly string[], applied: ReadonlySet<string>
  * which every whole-directory run refuses
  */
 function refuseSkipping(file: string, before: readonly string[], applied: ReadonlySet<string>): void {
-	const waiting = before.find((name) => !applied.has(name))
-	if (waiting !== undefined)
-		throw new Error(`${waiting} is pending and sorts before ${file}; apply ${waiting} first, or run without --file`)
+  const waiting = before.find((name) => !applied.has(name));
+
+  if (waiting !== undefined)
+    throw new Error(`${waiting} is pending and sorts before ${file}; apply ${waiting} first, or run without --file`);
 }
 
 /**
@@ -102,61 +106,71 @@ function refuseSkipping(file: string, before: readonly string[], applied: Readon
  * finding of the proof listed as `proof run: …`
  */
 function withProof(migration: ParsedMigration, proof: Proof): ParsedMigration {
-	const { classification } = migration
-	/* the engine read what each write does: its findings replace the writes the classifier left pending */
-	const pending = new Set(classification.pendingStatements)
-	const unsafeStatements = [
-		...classification.unsafeStatements.filter((entry) => !pending.has(entry)),
-		...proof.unsafe.map((note) => `proof run: ${note}`),
-	]
-	const cautiousStatements = [
-		...classification.cautiousStatements,
-		...proof.cautious.map((note) => `proof run: ${note}`),
-	]
-	const safety = unsafeStatements.length > 0 ? "unsafe" : cautiousStatements.length > 0 ? "cautious" : "safe"
-	return {
-		...migration,
-		classification: { ...classification, cautiousStatements, pendingStatements: [], safety, unsafeStatements },
-	}
+  const { classification } = migration;
+  // the engine read what each write does: its findings replace the writes the classifier left pending
+  const pending = new Set(classification.pendingStatements);
+
+  const unsafeStatements = [
+    ...classification.unsafeStatements.filter((entry) => !pending.has(entry)),
+    ...proof.unsafe.map((note) => `proof run: ${note}`),
+  ];
+
+  const cautiousStatements = [
+    ...classification.cautiousStatements,
+    ...proof.cautious.map((note) => `proof run: ${note}`),
+  ];
+
+  const safety = unsafeStatements.length > 0 ? "unsafe" : cautiousStatements.length > 0 ? "cautious" : "safe";
+
+  return {
+    ...migration,
+    classification: { ...classification, cautiousStatements, pendingStatements: [], safety, unsafeStatements },
+  };
 }
 
 /** The tables the proof could not seed, as lines to print: one per distinct list, naming the files it holds for */
 function unprovenLines(proofs: ReadonlyMap<string, Proof>): string[] {
-	const files = new Map<string, string[]>()
-	for (const [name, proof] of proofs) {
-		if (proof.unproven.length === 0) continue
-		const tables = proof.unproven.map(({ table, why }) => `${table} (${why})`).join(", ")
-		files.set(tables, [...(files.get(tables) ?? []), name])
-	}
-	return [...files].map(
-		([tables, names]) => `Proof run: ${names.join(", ")}: unproven, database could not seed ${tables}`,
-	)
+  const files = new Map<string, string[]>();
+
+  for (const [name, proof] of proofs) {
+    if (proof.unproven.length === 0) continue;
+    const tables = proof.unproven.map(({ table, why }) => `${table} (${why})`).join(", ");
+    files.set(tables, [...(files.get(tables) ?? []), name]);
+  }
+
+  return [...files].map(
+    ([tables, names]) => `Proof run: ${names.join(", ")}: unproven, database could not seed ${tables}`,
+  );
 }
 
 /** Each unapplied file, classified against the schema the files before it leave */
 function classifyPending(
-	files: readonly string[],
-	texts: readonly string[],
-	{ applied, kind }: { applied: ReadonlySet<string>; kind: TargetKind },
+  files: readonly string[],
+  texts: readonly string[],
+  { applied, kind }: { applied: ReadonlySet<string>; kind: TargetKind },
 ): Pending[] {
-	const pending: Pending[] = []
-	let schema = extractSchema("")
-	for (const [i, name] of files.entries()) {
-		const sql = texts[i] as string
-		const before = schema
-		schema = extractSchema(sql, before)
-		if (!applied.has(name))
-			pending.push({ before, migration: parseMigration(sql, name, { before, dialect: "sqlite", kind }), name, sql })
-	}
-	return pending
+  const pending: Pending[] = [];
+  let schema = extractSchema("");
+
+  for (const [i, name] of files.entries()) {
+    const sql = texts[i] as string;
+    const before = schema;
+    schema = extractSchema(sql, before);
+
+    if (!applied.has(name))
+      pending.push({ before, migration: parseMigration(sql, name, { before, dialect: "sqlite", kind }), name, sql });
+  }
+
+  return pending;
 }
 
 /** Whether the database holds no table but its engine's and its migration histories: nothing in it can be lost */
 async function isEmptyTarget(conn: MigrateConnection, historyTables: readonly string[]): Promise<boolean> {
-	const { rows } = await conn.execute(
-		`SELECT count(*) FROM sqlite_master WHERE type = 'table'${notEngineTables(conn, historyTables)}`,
-	)
-	return Number(rows[0]?.[0]) === 0
+  const { rows } = await conn.execute(
+    `SELECT count(*) FROM sqlite_master WHERE type = 'table'${notEngineTables(conn, historyTables)}`,
+  );
+
+  return Number(rows[0]?.[0]) === 0;
 }
 
 /**
@@ -164,62 +178,79 @@ async function isEmptyTarget(conn: MigrateConnection, historyTables: readonly st
  * approved without asking, as nothing in it can be lost
  */
 async function approveAll(
-	classified: readonly Pending[],
-	{ empty, options, proofs }: { empty: boolean; options: PlanOptions; proofs: ReadonlyMap<string, Proof> },
+  classified: readonly Pending[],
+  { empty, options, proofs }: { empty: boolean; options: PlanOptions; proofs: ReadonlyMap<string, Proof> },
 ): Promise<Pending[]> {
-	const { print } = options
-	if (empty) {
-		const n = classified.length
-		print(
-			`Empty target: no tables and no applied history, so nothing can be lost; ${n === 1 ? "1 file applies" : `${n} files apply`} without the unsafe gate`,
-		)
-	}
-	for (const line of unprovenLines(proofs)) print(line)
-	const pending: Pending[] = []
-	for (const each of classified) {
-		const proof = proofs.get(each.name)
-		const migration = proof === undefined ? each.migration : withProof(each.migration, proof)
-		if (proof?.failed !== undefined) print(`Proof run: ${each.name}: ${proof.failed}`)
-		const approval = empty ? { ok: true as const } : await options.approve(migration)
-		if (!approval.ok) throw new Refused(approval.message, { pending: classified.map(({ name }) => name) })
-		if (approval.approvedBy !== undefined) print(`Approved in ${each.name}: ${approval.approvedBy}`)
-		for (const caution of approval.cautions ?? []) print(`Cautious in ${each.name}: ${caution}`)
-		pending.push({ ...each, migration })
-	}
-	return pending
+  const { print } = options;
+
+  if (empty) {
+    const n = classified.length;
+    print(
+      `Empty target: no tables and no applied history, so nothing can be lost; ${n === 1 ? "1 file applies" : `${n} files apply`} without the unsafe gate`,
+    );
+  }
+
+  for (const line of unprovenLines(proofs)) print(line);
+  const pending: Pending[] = [];
+
+  for (const each of classified) {
+    const proof = proofs.get(each.name);
+    const migration = proof === undefined ? each.migration : withProof(each.migration, proof);
+
+    if (proof?.failed !== undefined) print(`Proof run: ${each.name}: ${proof.failed}`);
+    const approval = empty ? { ok: true as const } : await options.approve(migration);
+
+    if (!approval.ok) throw new Refused(approval.message, { pending: classified.map(({ name }) => name) });
+
+    if (approval.approvedBy !== undefined) print(`Approved in ${each.name}: ${approval.approvedBy}`);
+
+    for (const caution of approval.cautions ?? []) print(`Cautious in ${each.name}: ${caution}`);
+    pending.push({ ...each, migration });
+  }
+
+  return pending;
 }
 
 /** Prove the pending files on the live schema, read once for the proof and the target's own engine, which runs after it */
 async function proveLive(
-	conn: MigrateConnection,
-	classified: readonly Pending[],
-	options: PlanOptions,
+  conn: MigrateConnection,
+  classified: readonly Pending[],
+  options: PlanOptions,
 ): Promise<Map<string, Proof>> {
-	const live = creatable(await liveObjects(conn, notEngineTables(conn)))
-	const proofs = await provePending(conn, classified, { engine: options.proofEngine, live })
-	for (const { name, why } of (await options.engine?.(classified, live)) ?? [])
-		(proofs.get(name) as Proof).cautious.push(`unproven on D1's engine: ${why}`)
-	return proofs
+  const live = creatable(await liveObjects(conn, notEngineTables(conn)));
+  const proofs = await provePending(conn, classified, { engine: options.proofEngine, live });
+
+  for (const { name, why } of (await options.engine?.(classified, live)) ?? [])
+    (proofs.get(name) as Proof).cautious.push(`unproven on D1's engine: ${why}`);
+
+  return proofs;
 }
 
 /** Check the pending migrations of `options.files`, prove them on the database's schema, and approve each; returns them in apply order */
 async function planApply(options: PlanOptions): Promise<Pending[]> {
-	const { conn, dir, files } = options
-	if (options.whole !== false) await verifySum(options.exec, dir)
-	const texts = files.map((name) => readFileSync(join(dir, name), "utf8"))
-	const applied = new Set(files.filter((name, i) => options.applied(name, texts[i] as string)))
-	if (options.whole !== false) refuseOutOfOrder(files, applied)
-	const classified = classifyPending(files, texts, { applied, kind: options.kind ?? "local" })
-	/* the live guard refuses outright and names the cause, so it runs before the proof and approval */
-	if (conn !== undefined) await refuseUnseenReach(conn, classified)
-	const proofs =
-		conn === undefined || classified.length === 0
-			? new Map<string, Proof>()
-			: await proveLive(conn, classified, options)
-	const histories = options.historyTables ?? HISTORY_TABLES
-	const empty =
-		conn !== undefined && applied.size === 0 && classified.length > 0 && (await isEmptyTarget(conn, histories))
-	return approveAll(classified, { empty, options, proofs })
+  const { conn, dir, files } = options;
+
+  if (options.whole !== false) await verifySum(options.exec, dir);
+  const texts = files.map((name) => readFileSync(join(dir, name), "utf8"));
+  const applied = new Set(files.filter((name, i) => options.applied(name, texts[i] as string)));
+
+  if (options.whole !== false) refuseOutOfOrder(files, applied);
+  const classified = classifyPending(files, texts, { applied, kind: options.kind ?? "local" });
+
+  // the live guard refuses outright and names the cause, so it runs before the proof and approval
+  if (conn !== undefined) await refuseUnseenReach(conn, classified);
+
+  const proofs =
+    conn === undefined || classified.length === 0
+      ? new Map<string, Proof>()
+      : await proveLive(conn, classified, options);
+
+  const histories = options.historyTables ?? HISTORY_TABLES;
+
+  const empty =
+    conn !== undefined && applied.size === 0 && classified.length > 0 && (await isEmptyTarget(conn, histories));
+
+  return approveAll(classified, { empty, options, proofs });
 }
 
-export { type Pending, planApply, type PlanOptions, refuseSkipping, wranglerOrder }
+export { type Pending, planApply, type PlanOptions, refuseSkipping, wranglerOrder };

@@ -1,3 +1,4 @@
+import { connectionLost, UNAVAILABLE } from "../connection-lost.ts";
 /**
  * PostgreSQL errors mapped to DatabaseErrors, one handler per SQLSTATE. The server's error is found
  * by walking `.cause` past wrappers such as drizzle's; node-postgres, postgres.js and Bun.SQL
@@ -5,217 +6,233 @@
  * https://www.postgresql.org/docs/current/errcodes-appendix.html
  */
 import {
-	checkedOnce,
-	type ConstraintFallback,
-	type Found,
-	findNamed,
-	lookup,
-	own,
-	shown,
-	shownColumn,
-	type TableMap,
-	toDatabaseError,
-} from "../constraint-map.ts"
-import { DatabaseError } from "../error.ts"
-import { type ConstraintMap, databaseErrorKeys } from "../types.ts"
-import { truncateUtf8 } from "../identifier.ts"
-import { connectionLost, UNAVAILABLE } from "../connection-lost.ts"
-import { mapTable } from "./map-table.ts"
-import { type PgErrorRead, readPgError } from "./read-error.ts"
-import { statementTable } from "../statement-head.ts"
-import { valueError } from "../value-error.ts"
+  checkedOnce,
+  type ConstraintFallback,
+  type Found,
+  findNamed,
+  lookup,
+  own,
+  shown,
+  shownColumn,
+  type TableMap,
+  toDatabaseError,
+} from "../constraint-map.ts";
+import { DatabaseError } from "../error.ts";
+import { truncateUtf8 } from "../identifier.ts";
+import { statementTable } from "../statement-head.ts";
+import { type ConstraintMap, databaseErrorKeys } from "../types.ts";
+import { valueError } from "../value-error.ts";
+import { mapTable } from "./map-table.ts";
+import { type PgErrorRead, readPgError } from "./read-error.ts";
 
 /** A violation, `table` the violated table's key in the maps: qualified for a pgSchema's */
 type Violation = {
-	maps: readonly ConstraintMap[]
-	read: PgErrorRead
-	source: unknown
-	table: string | undefined
-}
+  maps: readonly ConstraintMap[];
+  read: PgErrorRead;
+  source: unknown;
+  table: string | undefined;
+};
 
 /** The columns an error may name: as the maps show them, none of a table they key nowhere (constraint-map.ts) */
-const visible = (v: Violation, columns: readonly string[]): readonly string[] => shown(v.maps, v.table, columns)
+const visible = (v: Violation, columns: readonly string[]): readonly string[] => shown(v.maps, v.table, columns);
 
 /** `column`, as visible shows it */
 const visibleColumn = (v: Violation, column: string | undefined): string | undefined =>
-	shownColumn(v.maps, v.table, column)
+  shownColumn(v.maps, v.table, column);
 
-const toError = (v: Violation, found: Found) => toDatabaseError(found, v.source)
+const toError = (v: Violation, found: Found) => toDatabaseError(found, v.source);
 
-/* Postgres names a primary key `<table>_pkey`, the table cut so the whole fits its 63-byte identifiers */
-const pkeyOf = (table: string) => `${truncateUtf8(table, 58)}_pkey`
+// Postgres names a primary key `<table>_pkey`, the table cut so the whole fits its 63-byte identifiers
+const pkeyOf = (table: string) => `${truncateUtf8(table, 58)}_pkey`;
 
 function unique(v: Violation): DatabaseError {
-	const { constraint, keyColumns: columns } = v.read
-	const { table } = v
-	/* Postgres names the key for the table alone, its schema apart */
-	if (constraint !== undefined && v.read.table !== undefined && constraint === pkeyOf(v.read.table))
-		return primaryKey(v)
-	/* a composite unique is keyed by its columns together; one column alone would blame half the pair. An
-	   expression may spell any column, a private one too, so a key holding one names none, and is
-	   found in the map by the index's name alone */
-	const { keyExpression } = v.read
-	const named = keyExpression ? [] : visible(v, columns)
-	const column = named.length === 1 ? named[0] : undefined
-	const byColumns = (t: TableMap) => (keyExpression ? undefined : own(t.unique, columns.join(",")))
-	const entry = lookup(v.maps, table, (t) => byColumns(t) ?? own(t.unique, constraint))
-	const listed = named.map((c) => (table === undefined ? c : `${table}.${c}`)).join(", ")
-	const cause = listed === "" ? "Duplicate value detected" : `Duplicate value for ${listed}`
-	const fallback = { cause, errorKey: databaseErrorKeys.UNIQUE_CONSTRAINT_VIOLATION, status: "conflict" } as const
-	return toError(v, { column, entry, fallback, table })
+  const { constraint, keyColumns: columns } = v.read;
+  const { table } = v;
+
+  // Postgres names the key for the table alone, its schema apart
+  if (constraint !== undefined && v.read.table !== undefined && constraint === pkeyOf(v.read.table))
+    return primaryKey(v);
+  // a composite unique is keyed by its columns together; one column alone would blame half the pair. An
+  // expression may spell any column, a private one too, so a key holding one names none, and is
+  // found in the map by the index's name alone
+  const { keyExpression } = v.read;
+  const named = keyExpression ? [] : visible(v, columns);
+  const column = named.length === 1 ? named[0] : undefined;
+  const byColumns = (t: TableMap) => (keyExpression ? undefined : own(t.unique, columns.join(",")));
+  const entry = lookup(v.maps, table, (t) => byColumns(t) ?? own(t.unique, constraint));
+  const listed = named.map((c) => (table === undefined ? c : `${table}.${c}`)).join(", ");
+  const cause = listed === "" ? "Duplicate value detected" : `Duplicate value for ${listed}`;
+  const fallback = { cause, errorKey: databaseErrorKeys.UNIQUE_CONSTRAINT_VIOLATION, status: "conflict" } as const;
+
+  return toError(v, { column, entry, fallback, table });
 }
 
 function primaryKey(v: Violation): DatabaseError {
-	const { keyColumns: columns } = v.read
-	const { table } = v
-	/* a map written before 0.5.0 may list the key column under `unique` */
-	const entry = lookup(v.maps, table, (t) => t.primaryKey ?? own(t.unique, columns[0]))
-	const fallback = {
-		cause: "Duplicate primary key value",
-		errorKey: databaseErrorKeys.PRIMARY_KEY_VIOLATION,
-		status: "conflict",
-	} as const
-	return toError(v, { entry, fallback, table })
+  const { keyColumns: columns } = v.read;
+  const { table } = v;
+  // a map written before 0.5.0 may list the key column under `unique`
+  const entry = lookup(v.maps, table, (t) => t.primaryKey ?? own(t.unique, columns[0]));
+
+  const fallback = {
+    cause: "Duplicate primary key value",
+    errorKey: databaseErrorKeys.PRIMARY_KEY_VIOLATION,
+    status: "conflict",
+  } as const;
+
+  return toError(v, { entry, fallback, table });
 }
 
-/* a statement no wrapper recorded names no table */
-const NO_TABLE = { schema: undefined, table: undefined }
+// a statement no wrapper recorded names no table
+const NO_TABLE = { schema: undefined, table: undefined };
 
 function foreignKey(v: Violation): DatabaseError {
-	const { constraint, keyColumns: columns, referenced } = v.read
-	const { table } = v
-	/* the key named is the parent's, on a child's constraint: nothing in the map describes it. The
-	   table is the statement's, the parent's, as SQLite can name it too; unknown without the SQL */
-	if (referenced) {
-		const fallback = {
-			cause: "The record is still referenced by other records",
-			errorKey: databaseErrorKeys.FOREIGN_KEY_VIOLATION,
-			status: "conflict",
-		} as const
-		return toError(v, {
-			entry: undefined,
-			fallback,
-			table: mapTable(v.maps, statementTable(v.read.query, "postgres") ?? NO_TABLE),
-		})
-	}
-	/* a composite key is found in the map by its first column, as codegen writes it, and names no
-	   column: one would blame half the key, and may sit beside a private one */
-	const entry = lookup(v.maps, table, (t) => own(t.foreignKey, columns[0]) ?? own(t.foreignKey, constraint))
-	const fallback = {
-		cause: "Referenced record does not exist or is still in use",
-		errorKey: databaseErrorKeys.FOREIGN_KEY_VIOLATION,
-		status: "conflict",
-	} as const
-	const column = columns.length === 1 ? visibleColumn(v, columns[0]) : undefined
-	return toError(v, { column, entry, fallback, table })
+  const { constraint, keyColumns: columns, referenced } = v.read;
+  const { table } = v;
+
+  // the key named is the parent's, on a child's constraint: nothing in the map describes it. The
+  // table is the statement's, the parent's, as SQLite can name it too; unknown without the SQL
+  if (referenced) {
+    const fallback = {
+      cause: "The record is still referenced by other records",
+      errorKey: databaseErrorKeys.FOREIGN_KEY_VIOLATION,
+      status: "conflict",
+    } as const;
+
+    return toError(v, {
+      entry: undefined,
+      fallback,
+      table: mapTable(v.maps, statementTable(v.read.query, "postgres") ?? NO_TABLE),
+    });
+  }
+
+  // a composite key is found in the map by its first column, as codegen writes it, and names no
+  // column: one would blame half the key, and may sit beside a private one
+  const entry = lookup(v.maps, table, (t) => own(t.foreignKey, columns[0]) ?? own(t.foreignKey, constraint));
+
+  const fallback = {
+    cause: "Referenced record does not exist or is still in use",
+    errorKey: databaseErrorKeys.FOREIGN_KEY_VIOLATION,
+    status: "conflict",
+  } as const;
+
+  const column = columns.length === 1 ? visibleColumn(v, columns[0]) : undefined;
+
+  return toError(v, { column, entry, fallback, table });
 }
 
 function check(v: Violation): DatabaseError {
-	const { constraint } = v.read
-	const { table } = v
-	const fallback = {
-		cause: "Data validation failed",
-		errorKey: databaseErrorKeys.CHECK_CONSTRAINT_VIOLATION,
-		status: "bad_request",
-	} as const
-	if (table !== undefined)
-		return toError(v, { entry: lookup(v.maps, table, (t) => own(t.check, constraint)), fallback, table })
-	const found = findNamed(v.maps, "check", constraint)
-	return toError(v, { entry: found?.entry, fallback, table: found?.table })
+  const { constraint } = v.read;
+  const { table } = v;
+
+  const fallback = {
+    cause: "Data validation failed",
+    errorKey: databaseErrorKeys.CHECK_CONSTRAINT_VIOLATION,
+    status: "bad_request",
+  } as const;
+
+  if (table !== undefined)
+    return toError(v, { entry: lookup(v.maps, table, (t) => own(t.check, constraint)), fallback, table });
+  const found = findNamed(v.maps, "check", constraint);
+
+  return toError(v, { entry: found?.entry, fallback, table: found?.table });
 }
 
 function notNull(v: Violation): DatabaseError {
-	const { table } = v
-	const column = visibleColumn(v, v.read.column)
-	return new DatabaseError({
-		cause: column === undefined ? "Required field missing" : `Required field missing: ${column}`,
-		column,
-		errorKey: databaseErrorKeys.REQUIRED_FIELD_MISSING,
-		source: v.source,
-		status: "bad_request",
-		table,
-	})
+  const { table } = v;
+  const column = visibleColumn(v, v.read.column);
+
+  return new DatabaseError({
+    cause: column === undefined ? "Required field missing" : `Required field missing: ${column}`,
+    column,
+    errorKey: databaseErrorKeys.REQUIRED_FIELD_MISSING,
+    source: v.source,
+    status: "bad_request",
+    table,
+  });
 }
 
 /** An EXCLUDE constraint's violation, an overlapping row: the map's entry by name, else a 409 */
 function exclusion(v: Violation): DatabaseError {
-	const { constraint } = v.read
-	const { table } = v
-	const fallback = {
-		cause: "The record conflicts with an existing one",
-		errorKey: databaseErrorKeys.EXCLUSION_CONSTRAINT_VIOLATION,
-		status: "conflict",
-	} as const
-	return toError(v, { entry: lookup(v.maps, table, (t) => own(t.exclusion, constraint)), fallback, table })
+  const { constraint } = v.read;
+  const { table } = v;
+
+  const fallback = {
+    cause: "The record conflicts with an existing one",
+    errorKey: databaseErrorKeys.EXCLUSION_CONSTRAINT_VIOLATION,
+    status: "conflict",
+  } as const;
+
+  return toError(v, { entry: lookup(v.maps, table, (t) => own(t.exclusion, constraint)), fallback, table });
 }
 
 /** A rule a trigger or function enforces with RAISE EXCEPTION (P0001): a 400 whose cause is its message */
 function raised(v: Violation): DatabaseError {
-	return new DatabaseError({
-		cause: v.read.message ?? "Constraint violated",
-		errorKey: databaseErrorKeys.CONSTRAINT_VIOLATION,
-		source: v.source,
-		status: "bad_request",
-		table: v.table,
-	})
+  return new DatabaseError({
+    cause: v.read.message ?? "Constraint violated",
+    errorKey: databaseErrorKeys.CONSTRAINT_VIOLATION,
+    source: v.source,
+    status: "bad_request",
+    table: v.table,
+  });
 }
 
 const CONSTRAINTS: Record<string, (v: Violation) => DatabaseError> = {
-	"23502": notNull,
-	"23503": foreignKey,
-	"23505": unique,
-	"23514": check,
-	"23P01": exclusion,
-	P0001: raised,
-}
+  "23502": notNull,
+  "23503": foreignKey,
+  "23505": unique,
+  "23514": check,
+  "23P01": exclusion,
+  P0001: raised,
+};
 
 const READONLY: ConstraintFallback = {
-	cause: "Database is currently in maintenance mode. Please retry shortly.",
-	errorKey: databaseErrorKeys.DATABASE_READONLY,
-	status: "service_unavailable",
-}
+  cause: "Database is currently in maintenance mode. Please retry shortly.",
+  errorKey: databaseErrorKeys.DATABASE_READONLY,
+  status: "service_unavailable",
+};
+
 const EXHAUSTED: ConstraintFallback = {
-	cause: "Database resources exhausted. Please retry your request.",
-	errorKey: databaseErrorKeys.DATABASE_IO_ERROR,
-	status: "internal_server_error",
-}
+  cause: "Database resources exhausted. Please retry your request.",
+  errorKey: databaseErrorKeys.DATABASE_IO_ERROR,
+  status: "internal_server_error",
+};
 
-/* a serialization failure and a deadlock mean "retry the transaction" by Postgres' own
- * guidance; a statement timeout is the same call under load */
+// a serialization failure and a deadlock mean "retry the transaction" by Postgres' own
+// guidance; a statement timeout is the same call under load
 const RETRY: ConstraintFallback = {
-	cause: "The database could not finish the transaction. Please retry.",
-	errorKey: databaseErrorKeys.DATABASE_UNAVAILABLE,
-	status: "service_unavailable",
-}
+  cause: "The database could not finish the transaction. Please retry.",
+  errorKey: databaseErrorKeys.DATABASE_UNAVAILABLE,
+  status: "service_unavailable",
+};
 
-/* resource and availability SQLSTATEs, which a retry or a bigger plan can fix */
+// resource and availability SQLSTATEs, which a retry or a bigger plan can fix
 const RESOURCE: Record<string, ConstraintFallback> = {
-	"40001": RETRY,
-	"40P01": RETRY,
-	"57014": RETRY,
-	"08001": UNAVAILABLE,
-	"08003": UNAVAILABLE,
-	"08004": UNAVAILABLE,
-	"08006": UNAVAILABLE,
-	"25006": READONLY,
-	"53000": EXHAUSTED,
-	"53100": {
-		cause: "Your plan's database storage limit has been reached. Please upgrade your plan or delete unused data.",
-		errorKey: databaseErrorKeys.STORAGE_LIMIT_REACHED,
-		status: "unprocessable_entity",
-	},
-	"53200": EXHAUSTED,
-	/* too many connections, and a server out of them: what a pooler or a serverless plan hits first */
-	"53300": UNAVAILABLE,
-	"53400": UNAVAILABLE,
-	"55P03": RETRY,
-	/* a terminated backend, a shutdown, an idle session or transaction the server ended */
-	"57P01": UNAVAILABLE,
-	"57P02": UNAVAILABLE,
-	"57P03": UNAVAILABLE,
-	"57P05": UNAVAILABLE,
-	"25P03": UNAVAILABLE,
-}
+  "40001": RETRY,
+  "40P01": RETRY,
+  "57014": RETRY,
+  "08001": UNAVAILABLE,
+  "08003": UNAVAILABLE,
+  "08004": UNAVAILABLE,
+  "08006": UNAVAILABLE,
+  "25006": READONLY,
+  "53000": EXHAUSTED,
+  "53100": {
+    cause: "Your plan's database storage limit has been reached. Please upgrade your plan or delete unused data.",
+    errorKey: databaseErrorKeys.STORAGE_LIMIT_REACHED,
+    status: "unprocessable_entity",
+  },
+  "53200": EXHAUSTED,
+  // too many connections, and a server out of them: what a pooler or a serverless plan hits first
+  "53300": UNAVAILABLE,
+  "53400": UNAVAILABLE,
+  "55P03": RETRY,
+  // a terminated backend, a shutdown, an idle session or transaction the server ended
+  "57P01": UNAVAILABLE,
+  "57P02": UNAVAILABLE,
+  "57P03": UNAVAILABLE,
+  "57P05": UNAVAILABLE,
+  "25P03": UNAVAILABLE,
+};
 
 /**
  * The DatabaseError a PostgreSQL error is: a constraint violation through the app's maps, a value the
@@ -223,25 +240,31 @@ const RESOURCE: Record<string, ConstraintFallback> = {
  * key; undefined for anything else. It throws nothing, so a caller can ask what an error is.
  */
 function classifyPgError(error: unknown, given: readonly ConstraintMap[]): DatabaseError | undefined {
-	const constraintMaps = checkedOnce(given)
-	const read = readPgError(error)
-	if (read === null) return connectionLost(error) ? new DatabaseError({ ...UNAVAILABLE, source: error }) : undefined
-	/* the reported table, or for a partition its parent's entry lists, the parent; never the
-	   statement's table, which a trigger or a cascade did not write */
-	const violation: Violation = { maps: constraintMaps, read, source: error, table: mapTable(constraintMaps, read) }
-	const handler = own(CONSTRAINTS, read.code)
-	if (handler !== undefined) return handler(violation)
-	const value = valueError(read, { column: visibleColumn(violation, read.column), table: read.table }, error)
-	if (value !== undefined) return value
-	const resource = own(RESOURCE, read.code)
-	if (resource !== undefined) return new DatabaseError({ ...resource, source: error })
-	return connectionLost(error) ? new DatabaseError({ ...UNAVAILABLE, source: error }) : undefined
+  const constraintMaps = checkedOnce(given);
+  const read = readPgError(error);
+
+  if (read === null) return connectionLost(error) ? new DatabaseError({ ...UNAVAILABLE, source: error }) : undefined;
+  // the reported table, or for a partition its parent's entry lists, the parent; never the
+  // statement's table, which a trigger or a cascade did not write
+  const violation: Violation = { maps: constraintMaps, read, source: error, table: mapTable(constraintMaps, read) };
+  const handler = own(CONSTRAINTS, read.code);
+
+  if (handler !== undefined) return handler(violation);
+  const value = valueError(read, { column: visibleColumn(violation, read.column), table: read.table }, error);
+
+  if (value !== undefined) return value;
+  const resource = own(RESOURCE, read.code);
+
+  if (resource !== undefined) return new DatabaseError({ ...resource, source: error });
+
+  return connectionLost(error) ? new DatabaseError({ ...UNAVAILABLE, source: error }) : undefined;
 }
 
 /** Throw the DatabaseError classifyPgError finds for `error`; anything else is left for the caller */
 function pgErrorHandler(error: unknown, constraintMaps: readonly ConstraintMap[]): void {
-	const classified = classifyPgError(error, constraintMaps)
-	if (classified !== undefined) throw classified
+  const classified = classifyPgError(error, constraintMaps);
+
+  if (classified !== undefined) throw classified;
 }
 
-export { classifyPgError, pgErrorHandler, type PgErrorRead, readPgError }
+export { classifyPgError, pgErrorHandler, type PgErrorRead, readPgError };

@@ -16,42 +16,51 @@
  * pattern-grammar.ts holds it.
  */
 
-import { unportableOf } from "./pattern-grammar.ts"
+import { unportableOf } from "./pattern-grammar.ts";
 
-/* a lone surrogate, which the engine's source holds as written; a pair is one scalar value */
+// a lone surrogate, which the engine's source holds as written; a pair is one scalar value
 function loneSurrogateOf(source: string): string | null {
-	const lone = /\p{Cs}/u.exec(source)
-	if (lone === null) return null
-	const code = `U+${(lone[0].codePointAt(0) as number).toString(16).toUpperCase()}`
-	return `a lone surrogate, ${code}, which a JSON document carries as \\u${code.slice(2).toLowerCase()}, Go's reader as U+FFFD and Rust's not at all: write the character meant`
+  const lone = /\p{Cs}/u.exec(source);
+
+  if (lone === null) return null;
+  const code = `U+${(lone[0].codePointAt(0) as number).toString(16).toUpperCase()}`;
+
+  return `a lone surrogate, ${code}, which a JSON document carries as \\u${code.slice(2).toLowerCase()}, Go's reader as U+FFFD and Rust's not at all: write the character meant`;
 }
 
 /** The regex literal database emits for `pattern`, the constraint at `place`; an error naming why it cannot */
 function patternLiteral(pattern: string, place: string): string {
-	const parts = /^\/([\s\S]+)\/([a-z]*)$/.exec(pattern)
-	if (parts === null)
-		throw new Error(`${place}: pattern ${JSON.stringify(pattern)} is not a regex: write it as /source/flags`)
-	const [, source, flags] = parts as unknown as [string, string, string]
-	const refused = [...flags].filter((flag) => flag !== "u")
-	if (refused.length > 0) {
-		throw new Error(
-			`${place}: pattern ${pattern} takes the flag ${refused.join("")}, which JSON Schema cannot publish; write the rule into the source (a case-insensitive letter as [A-Za-z]), with u at most`,
-		)
-	}
-	let compiled: RegExp
-	try {
-		compiled = new RegExp(source, "u")
-	} catch (error) {
-		throw new Error(
-			`${place}: pattern ${pattern} does not compile under u, the mode JSON Schema reads a pattern in: ${(error as Error).message}`,
-			{ cause: error },
-		)
-	}
-	const unportable = loneSurrogateOf(compiled.source) ?? unportableOf(compiled.source)
-	if (unportable !== null) throw new Error(`${place}: pattern ${pattern} holds ${unportable}`)
-	/* the engine's own source, the text a regex literal holds: a slash escaped outside a class only, a
-	 * line terminator as its escape, so the pattern publishes as the regex in the tables file would */
-	return `/${compiled.source}/u`
+  const parts = /^\/([\s\S]+)\/([a-z]*)$/.exec(pattern);
+
+  if (parts === null)
+    throw new Error(`${place}: pattern ${JSON.stringify(pattern)} is not a regex: write it as /source/flags`);
+  const [, source, flags] = parts as unknown as [string, string, string];
+  const refused = [...flags].filter((flag) => flag !== "u");
+
+  if (refused.length > 0) {
+    throw new Error(
+      `${place}: pattern ${pattern} takes the flag ${refused.join("")}, which JSON Schema cannot publish; write the rule into the source (a case-insensitive letter as [A-Za-z]), with u at most`,
+    );
+  }
+
+  let compiled: RegExp;
+
+  try {
+    compiled = new RegExp(source, "u");
+  } catch (error) {
+    throw new Error(
+      `${place}: pattern ${pattern} does not compile under u, the mode JSON Schema reads a pattern in: ${(error as Error).message}`,
+      { cause: error },
+    );
+  }
+
+  const unportable = loneSurrogateOf(compiled.source) ?? unportableOf(compiled.source);
+
+  if (unportable !== null) throw new Error(`${place}: pattern ${pattern} holds ${unportable}`);
+
+  // the engine's own source, the text a regex literal holds: a slash escaped outside a class only, a
+  // line terminator as its escape, so the pattern publishes as the regex in the tables file would
+  return `/${compiled.source}/u`;
 }
 
 /**
@@ -61,8 +70,9 @@ function patternLiteral(pattern: string, place: string): string {
  * a source holding one is handed to RegExp as a string, whose value a transpiler keeps
  */
 function regexExpression(literal: string): string {
-	if ([...literal].every((char) => (char.codePointAt(0) as number) < 0x80)) return literal
-	return `new RegExp(${JSON.stringify(literal.slice(1, literal.lastIndexOf("/")))}, "u")`
+  if ([...literal].every((char) => (char.codePointAt(0) as number) < 0x80)) return literal;
+
+  return `new RegExp(${JSON.stringify(literal.slice(1, literal.lastIndexOf("/")))}, "u")`;
 }
 
-export { patternLiteral, regexExpression }
+export { patternLiteral, regexExpression };

@@ -22,14 +22,15 @@
  *   table's replica identity where it is not the default. As `platform` labels, database-wide, which a
  *   platform may hold of its own: event triggers and publications. Each but an extension's.
  */
-import type { LiveObjects } from "./pg-live-types.ts"
+import type { LiveObjects } from "./pg-live-types.ts";
+
 /** The input argument types of a routine `p`, as the parser spells them (see the routine arm) */
 const SIGNATURE = `(SELECT coalesce(string_agg(CASE WHEN tn.nspname IN ('pg_catalog', $1) THEN '' ELSE tn.nspname || '.' END || t.typname || CASE WHEN x.arr THEN '[]' ELSE '' END, ',' ORDER BY a.ord), '')
  FROM unnest(p.proargtypes::oid[]) WITH ORDINALITY AS a(oid, ord)
  JOIN pg_catalog.pg_type at ON at.oid = a.oid
  CROSS JOIN LATERAL (SELECT at.typcategory = 'A' AND at.typelem <> 0 AS arr) x
  JOIN pg_catalog.pg_type t ON t.oid = CASE WHEN x.arr THEN at.typelem ELSE at.oid END
- JOIN pg_catalog.pg_namespace tn ON tn.oid = t.typnamespace)`
+ JOIN pg_catalog.pg_namespace tn ON tn.oid = t.typnamespace)`;
 
 export const CATALOG: string = `SELECT 'routine' AS what, p.proname AS name, CASE p.prokind WHEN 'p' THEN 'procedure' ELSE 'function' END AS kind, NULL AS on_table,
 ${SIGNATURE} AS signature,
@@ -116,65 +117,71 @@ UNION ALL
 SELECT 'platform', 'publication ' || pb.pubname, NULL, NULL, NULL, NULL, NULL, NULL
 FROM pg_catalog.pg_publication pb
 UNION ALL
-SELECT 'user', current_user::text, NULL, NULL, NULL, NULL, NULL, NULL`
+SELECT 'user', current_user::text, NULL, NULL, NULL, NULL, NULL, NULL`;
 
 /**
  * What each arm of CATALOG compares, in the arms' order, as a refusal names it: the one list COMPARED
  * is written from, held to CATALOG's arms by its test, so an arm cannot go unnamed
  */
 export const ARM_KINDS: ReadonlyArray<readonly [what: string, kinds: readonly string[]]> = [
-	["routine", ["functions", "procedures"]],
-	["trigger", ["triggers"]],
-	["relation", ["views", "materialized views", "sequences"]],
-	["policy", ["policies"]],
-	["kind", ["domains", "composite types", "range types"]],
-	["kind", ["collations"]],
-	["rule", ["rules"]],
-	["rls", ["row level security"]],
-	["extension", ["extensions"]],
-	["other", ["aggregates"]],
-	["other", ["SECURITY DEFINER"]],
-	["other", ["operators"]],
-	["other", ["casts"]],
-	["other", ["views' options"]],
-	["other", ["materialized views' indexes"]],
-	["other", ["replica identity"]],
-	["platform", ["event triggers"]],
-	["platform", ["publications"]],
-	["user", []],
-]
+  ["routine", ["functions", "procedures"]],
+  ["trigger", ["triggers"]],
+  ["relation", ["views", "materialized views", "sequences"]],
+  ["policy", ["policies"]],
+  ["kind", ["domains", "composite types", "range types"]],
+  ["kind", ["collations"]],
+  ["rule", ["rules"]],
+  ["rls", ["row level security"]],
+  ["extension", ["extensions"]],
+  ["other", ["aggregates"]],
+  ["other", ["SECURITY DEFINER"]],
+  ["other", ["operators"]],
+  ["other", ["casts"]],
+  ["other", ["views' options"]],
+  ["other", ["materialized views' indexes"]],
+  ["other", ["replica identity"]],
+  ["platform", ["event triggers"]],
+  ["platform", ["publications"]],
+  ["user", []],
+];
 
 /** What a baseline compares itself, as its refusals name it */
 export const COMPARED: string = /* @__PURE__ */ (() => {
-	const kinds = ARM_KINDS.flatMap(([, named]) => named)
-	return `${kinds.slice(0, -1).join(", ")} and ${kinds.at(-1) as string}`
-})()
+  const kinds = ARM_KINDS.flatMap(([, named]) => named);
+
+  return `${kinds.slice(0, -1).join(", ")} and ${kinds.at(-1) as string}`;
+})();
 
 /** `live` read on dev, with dev's role named as the target's wherever a policy names it (the reviewer's addition A) */
 export function asTarget(live: LiveObjects, targetUser: string): LiveObjects {
-	const devUser = live.user
-	if (devUser === targetUser) return live
-	const spelled = /^(for \w+, to )(.*)(, (?:permissive|restrictive))$/
-	const policies = new Map(
-		[...live.policies].map(([table, each]) => [
-			table,
-			new Map(
-				[...each].map(([name, how]) => {
-					/* the catalog read spells every policy so (CATALOG) */
-					const [, head, roles, tail] = spelled.exec(how) as RegExpExecArray as unknown as [
-						string,
-						string,
-						string,
-						string,
-					]
-					const mapped = roles
-						.split(", ")
-						.map((role) => (role === devUser ? targetUser : role))
-						.sort()
-					return [name, `${head}${mapped.join(", ")}${tail}`]
-				}),
-			),
-		]),
-	)
-	return { ...live, policies, user: targetUser }
+  const devUser = live.user;
+
+  if (devUser === targetUser) return live;
+  const spelled = /^(for \w+, to )(.*)(, (?:permissive|restrictive))$/;
+
+  const policies = new Map(
+    [...live.policies].map(([table, each]) => [
+      table,
+      new Map(
+        [...each].map(([name, how]) => {
+          // the catalog read spells every policy so (CATALOG)
+          const [, head, roles, tail] = spelled.exec(how) as RegExpExecArray as unknown as [
+            string,
+            string,
+            string,
+            string,
+          ];
+
+          const mapped = roles
+            .split(", ")
+            .map((role) => (role === devUser ? targetUser : role))
+            .sort();
+
+          return [name, `${head}${mapped.join(", ")}${tail}`];
+        }),
+      ),
+    ]),
+  );
+
+  return { ...live, policies, user: targetUser };
 }

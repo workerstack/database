@@ -1,207 +1,229 @@
-import { chmodSync, mkdirSync, readdirSync, writeFileSync } from "node:fs"
-import { join } from "node:path"
-import { afterEach, describe, expect, it, vi } from "vitest"
-import { stopsEnded } from "../migrate/core/cleanup.ts"
-import type { RunResult } from "../migrate/core/process.ts"
-import { diffProject as diffProjectIn, fakeAtlas } from "./__fixtures__/diff.ts"
-import { makeIo, projects, runCliWithFakes } from "./__fixtures__/io.ts"
+import { chmodSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
-const temp = projects()
-const project = temp.make
-afterEach(temp.clean)
-const diffProject = () => diffProjectIn(project)
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { stopsEnded } from "../migrate/core/cleanup.ts";
+import type { RunResult } from "../migrate/core/process.ts";
+import { diffProject as diffProjectIn, fakeAtlas } from "./__fixtures__/diff.ts";
+import { makeIo, projects, runCliWithFakes } from "./__fixtures__/io.ts";
+
+const temp = projects();
+const project = temp.make;
+
+afterEach(temp.clean);
+
+const diffProject = () => diffProjectIn(project);
 
 describe("database migrate diff --dry-run", () => {
-	it("writes nothing: exit 0 in sync, exit 1 printing the SQL a diff would write", async () => {
-		const dir = diffProject()
-		const run = fakeAtlas((replayed) =>
-			writeFileSync(join(replayed, "20260101000000_init.sql"), "CREATE TABLE post (id TEXT PRIMARY KEY);\n"),
-		)
-		const drift = makeIo(dir, run)
-		expect(await runCliWithFakes(["migrate", "diff", "core", "--dry-run"], drift)).toBe(1)
-		expect(drift.outputs).toEqual(["-- 20260101000000_init.sql", "CREATE TABLE post (id TEXT PRIMARY KEY);\n"])
-		expect(drift.errors).toEqual([
-			"core has drifted from its migrations: database migrate diff core would write the SQL above",
-		])
-		expect(readdirSync(dir)).toEqual(["drizzle.config.ts"])
-		mkdirSync(join(dir, "atlas-migrations"))
-		writeFileSync(join(dir, "atlas-migrations", "1_init.sql"), "SELECT 1;\n")
-		const synced = makeIo(
-			dir,
-			fakeAtlas(() => undefined),
-		)
-		expect(await runCliWithFakes(["migrate", "diff", "core", "--dry-run"], synced)).toBe(0)
-		expect(synced.outputs).toEqual(["Schema is already in sync — no migration needed"])
-		expect(readdirSync(join(dir, "atlas-migrations"))).toEqual(["1_init.sql"])
-	})
+  it("writes nothing: exit 0 in sync, exit 1 printing the SQL a diff would write", async () => {
+    const dir = diffProject();
 
-	/* KC2 of r22b: 0.20 diffed a new ./atlas-migrations against no history, whatever database.migrate.config.ts said */
-	it("refuses no database named, with its usage, writing nothing, as a check that could not run (exit 2)", async () => {
-		const dir = diffProject()
-		const run = fakeAtlas((replayed) => writeFileSync(join(replayed, "20260101000000_x.sql"), "SELECT 1;\n"))
-		const io = makeIo(dir, run)
-		expect(await runCliWithFakes(["migrate", "diff", "--dry-run"], io)).toBe(2)
-		expect(io.errors).toEqual(["Usage: database migrate diff <database> [name] [-e <name>] [--dry-run]"])
-		expect({ calls: run.calls, files: readdirSync(dir) }).toEqual({ calls: [], files: ["drizzle.config.ts"] })
-	})
+    const run = fakeAtlas((replayed) =>
+      writeFileSync(join(replayed, "20260101000000_init.sql"), "CREATE TABLE post (id TEXT PRIMARY KEY);\n"),
+    );
 
-	it("diffs an empty copy when there is no migrations directory", async () => {
-		const dir = diffProject()
-		const run = fakeAtlas((replayed) => writeFileSync(join(replayed, "20260101000000_x.sql"), "SELECT 1;\n"))
-		const io = makeIo(dir, run)
-		expect(await runCliWithFakes(["migrate", "diff", "core", "--dry-run"], io)).toBe(1)
-		expect(io.errors).toEqual([
-			"core has drifted from its migrations: database migrate diff core would write the SQL above",
-		])
-		expect(readdirSync(dir)).toEqual(["drizzle.config.ts"])
-	})
+    const drift = makeIo(dir, run);
+    expect(await runCliWithFakes(["migrate", "diff", "core", "--dry-run"], drift)).toBe(1);
+    expect(drift.outputs).toEqual(["-- 20260101000000_init.sql", "CREATE TABLE post (id TEXT PRIMARY KEY);\n"]);
+    expect(drift.errors).toEqual([
+      "core has drifted from its migrations: database migrate diff core would write the SQL above",
+    ]);
+    expect(readdirSync(dir)).toEqual(["drizzle.config.ts"]);
+    mkdirSync(join(dir, "atlas-migrations"));
+    writeFileSync(join(dir, "atlas-migrations", "1_init.sql"), "SELECT 1;\n");
 
-	it("says when the schema is already in sync", async () => {
-		const io = makeIo(
-			diffProject(),
-			fakeAtlas(() => undefined),
-		)
-		expect(await runCliWithFakes(["migrate", "diff", "core"], io)).toBe(0)
-		expect(io.outputs).toEqual(["Schema is already in sync — no migration needed"])
-	})
-})
+    const synced = makeIo(
+      dir,
+      fakeAtlas(() => {}),
+    );
 
-/* KC8 of r23: drift and a check that could not run both exited 1, so a gate could not tell them apart */
+    expect(await runCliWithFakes(["migrate", "diff", "core", "--dry-run"], synced)).toBe(0);
+    expect(synced.outputs).toEqual(["Schema is already in sync — no migration needed"]);
+    expect(readdirSync(join(dir, "atlas-migrations"))).toEqual(["1_init.sql"]);
+  });
+
+  // KC2 of r22b: 0.20 diffed a new ./atlas-migrations against no history, whatever database.migrate.config.ts said
+  it("refuses no database named, with its usage, writing nothing, as a check that could not run (exit 2)", async () => {
+    const dir = diffProject();
+    const run = fakeAtlas((replayed) => writeFileSync(join(replayed, "20260101000000_x.sql"), "SELECT 1;\n"));
+    const io = makeIo(dir, run);
+    expect(await runCliWithFakes(["migrate", "diff", "--dry-run"], io)).toBe(2);
+    expect(io.errors).toEqual(["Usage: database migrate diff <database> [name] [-e <name>] [--dry-run]"]);
+    expect({ calls: run.calls, files: readdirSync(dir) }).toEqual({ calls: [], files: ["drizzle.config.ts"] });
+  });
+
+  it("diffs an empty copy when there is no migrations directory", async () => {
+    const dir = diffProject();
+    const run = fakeAtlas((replayed) => writeFileSync(join(replayed, "20260101000000_x.sql"), "SELECT 1;\n"));
+    const io = makeIo(dir, run);
+    expect(await runCliWithFakes(["migrate", "diff", "core", "--dry-run"], io)).toBe(1);
+    expect(io.errors).toEqual([
+      "core has drifted from its migrations: database migrate diff core would write the SQL above",
+    ]);
+    expect(readdirSync(dir)).toEqual(["drizzle.config.ts"]);
+  });
+
+  it("says when the schema is already in sync", async () => {
+    const io = makeIo(
+      diffProject(),
+      fakeAtlas(() => {}),
+    );
+
+    expect(await runCliWithFakes(["migrate", "diff", "core"], io)).toBe(0);
+    expect(io.outputs).toEqual(["Schema is already in sync — no migration needed"]);
+  });
+});
+
+// KC8 of r23: drift and a check that could not run both exited 1, so a gate could not tell them apart
 /** An Atlas diff that writes a migration, so the schema has drifted */
 const drifting = (replayed: string) =>
-	writeFileSync(join(replayed, "20260101000000_x.sql"), "CREATE TABLE post (id TEXT PRIMARY KEY);\n")
+  writeFileSync(join(replayed, "20260101000000_x.sql"), "CREATE TABLE post (id TEXT PRIMARY KEY);\n");
+
 /** An Atlas diff that fails, so the check cannot run */
-const failing = () => ({ code: 1, stderr: "Error: dial tcp: connection refused", stdout: "" })
+const failing = () => ({ code: 1, stderr: "Error: dial tcp: connection refused", stdout: "" });
 
 describe("database migrate diff --dry-run's exit", () => {
-	it("is 1 for drift, 2 when the check could not run, and 0 in sync", async () => {
-		const codes = []
-		for (const diff of [drifting, failing, () => undefined]) {
-			const io = makeIo(diffProject(), fakeAtlas(diff))
-			codes.push(await runCliWithFakes(["migrate", "diff", "core", "--dry-run"], io))
-		}
-		expect(codes).toEqual([1, 2, 0])
-	})
+  it("is 1 for drift, 2 when the check could not run, and 0 in sync", async () => {
+    const codes = [];
 
-	it("says why the check could not run, as without --dry-run, where the same failure exits 1", async () => {
-		const [dry, plain] = [makeIo(diffProject(), fakeAtlas(failing)), makeIo(diffProject(), fakeAtlas(failing))]
-		expect([
-			await runCliWithFakes(["migrate", "diff", "core", "--dry-run"], dry),
-			await runCliWithFakes(["migrate", "diff", "core"], plain),
-		]).toEqual([2, 1])
-		expect(dry.errors).toEqual(plain.errors)
-		expect(dry.errors.join("\n")).toContain("connection refused")
-	})
+    for (const diff of [drifting, failing, () => {}]) {
+      const io = makeIo(diffProject(), fakeAtlas(diff));
+      codes.push(await runCliWithFakes(["migrate", "diff", "core", "--dry-run"], io));
+    }
 
-	it("is 2 when a migrate config throws what is not an Error, saying it", async () => {
-		const dir = diffProject()
-		writeFileSync(join(dir, "database.migrate.config.ts"), 'throw "no DATABASE_URL"\n')
-		const io = makeIo(dir, fakeAtlas(drifting))
-		expect(await runCliWithFakes(["migrate", "diff", "core", "--dry-run"], io)).toBe(2)
-		expect(io.errors.join("\n")).toContain("no DATABASE_URL")
-	})
+    expect(codes).toEqual([1, 2, 0]);
+  });
 
-	it("is 2 for an option it does not take, and 0 for its help", async () => {
-		const [unknown, help] = [makeIo(diffProject()), makeIo(diffProject())]
-		expect([
-			await runCliWithFakes(["migrate", "diff", "core", "--dry-run", "--nope"], unknown),
-			await runCliWithFakes(["migrate", "diff", "--dry-run", "--help"], help),
-		]).toEqual([2, 0])
-		expect(unknown.errors).toEqual(["Unknown option: --nope"])
-	})
-})
+  it("says why the check could not run, as without --dry-run, where the same failure exits 1", async () => {
+    const [dry, plain] = [makeIo(diffProject(), fakeAtlas(failing)), makeIo(diffProject(), fakeAtlas(failing))];
+    expect([
+      await runCliWithFakes(["migrate", "diff", "core", "--dry-run"], dry),
+      await runCliWithFakes(["migrate", "diff", "core"], plain),
+    ]).toEqual([2, 1]);
+    expect(dry.errors).toEqual(plain.errors);
+    expect(dry.errors.join("\n")).toContain("connection refused");
+  });
+
+  it("is 2 when a migrate config throws what is not an Error, saying it", async () => {
+    const dir = diffProject();
+    writeFileSync(join(dir, "database.migrate.config.ts"), 'throw "no DATABASE_URL"\n');
+    const io = makeIo(dir, fakeAtlas(drifting));
+    expect(await runCliWithFakes(["migrate", "diff", "core", "--dry-run"], io)).toBe(2);
+    expect(io.errors.join("\n")).toContain("no DATABASE_URL");
+  });
+
+  it("is 2 for an option it does not take, and 0 for its help", async () => {
+    const [unknown, help] = [makeIo(diffProject()), makeIo(diffProject())];
+    expect([
+      await runCliWithFakes(["migrate", "diff", "core", "--dry-run", "--nope"], unknown),
+      await runCliWithFakes(["migrate", "diff", "--dry-run", "--help"], help),
+    ]).toEqual([2, 0]);
+    expect(unknown.errors).toEqual(["Unknown option: --nope"]);
+  });
+});
 
 describe("database migrate diff: its migrations dir", () => {
-	/* D2-7 of the area D round-two review: a file there fell through to ENOTDIR after drizzle-kit and Atlas ran;
-	   Atlas's version read bypasses `run`, so it is counted on its own (D4-7 of round four) */
-	it("refuses a migrations dir that is a file before anything runs, Atlas's version read included, as the other commands do", async () => {
-		const dir = diffProject()
-		writeFileSync(join(dir, "atlas-migrations"), "SELECT 1;\n")
-		for (const [argv, code] of [
-			[["migrate", "diff", "core"], 1],
-			[["migrate", "diff", "core", "--dry-run"], 2],
-		] as const) {
-			const run = fakeAtlas(() => undefined)
-			const base = makeIo(dir, run)
-			let versionReads = 0
-			const readAtlasVersion = base.readAtlasVersion as () => Promise<RunResult>
-			const io = {
-				...base,
-				readAtlasVersion: () => {
-					versionReads++
-					return readAtlasVersion()
-				},
-			}
-			expect(await runCliWithFakes(argv, io)).toBe(code)
-			expect({ calls: run.calls, errors: io.errors, versionReads }).toEqual({
-				calls: [],
-				errors: [`Migrations dir ${join(dir, "atlas-migrations")} is not a directory`],
-				versionReads: 0,
-			})
-		}
-	})
+  // D2-7 of the area D round-two review: a file there fell through to ENOTDIR after drizzle-kit and Atlas ran;
+  // Atlas's version read bypasses `run`, so it is counted on its own (D4-7 of round four)
+  it("refuses a migrations dir that is a file before anything runs, Atlas's version read included, as the other commands do", async () => {
+    const dir = diffProject();
+    writeFileSync(join(dir, "atlas-migrations"), "SELECT 1;\n");
 
-	it("removes its copy when copying the migrations dir fails", async () => {
-		const dir = diffProject()
-		mkdirSync(join(dir, "atlas-migrations"))
-		writeFileSync(join(dir, "atlas-migrations", "1_init.sql"), "SELECT 1;\n")
-		chmodSync(join(dir, "atlas-migrations", "1_init.sql"), 0o000)
-		const tmp = project()
-		vi.stubEnv("TMPDIR", tmp)
-		try {
-			const io = makeIo(
-				dir,
-				fakeAtlas(() => undefined),
-			)
-			expect(await runCliWithFakes(["migrate", "diff", "core", "--dry-run"], io)).toBe(2)
-			expect(io.errors.join("\n")).toContain("EACCES")
-			expect(readdirSync(tmp)).toEqual([])
-		} finally {
-			vi.unstubAllEnvs()
-			chmodSync(join(dir, "atlas-migrations", "1_init.sql"), 0o644)
-		}
-	})
-})
+    for (const [argv, code] of [
+      [["migrate", "diff", "core"], 1],
+      [["migrate", "diff", "core", "--dry-run"], 2],
+    ] as const) {
+      const run = fakeAtlas(() => {});
+      const base = makeIo(dir, run);
+      let versionReads = 0;
+      const readAtlasVersion = base.readAtlasVersion as () => Promise<RunResult>;
 
-/* KC5 of r22b: a Ctrl-C mid dry run left its copy of the migrations dir in the temp directory */
+      const io = {
+        ...base,
+        readAtlasVersion: () => {
+          versionReads++;
+
+          return readAtlasVersion();
+        },
+      };
+
+      expect(await runCliWithFakes(argv, io)).toBe(code);
+      expect({ calls: run.calls, errors: io.errors, versionReads }).toEqual({
+        calls: [],
+        errors: [`Migrations dir ${join(dir, "atlas-migrations")} is not a directory`],
+        versionReads: 0,
+      });
+    }
+  });
+
+  it("removes its copy when copying the migrations dir fails", async () => {
+    const dir = diffProject();
+    mkdirSync(join(dir, "atlas-migrations"));
+    writeFileSync(join(dir, "atlas-migrations", "1_init.sql"), "SELECT 1;\n");
+    chmodSync(join(dir, "atlas-migrations", "1_init.sql"), 0o000);
+    const tmp = project();
+    vi.stubEnv("TMPDIR", tmp);
+
+    try {
+      const io = makeIo(
+        dir,
+        fakeAtlas(() => {}),
+      );
+
+      expect(await runCliWithFakes(["migrate", "diff", "core", "--dry-run"], io)).toBe(2);
+      expect(io.errors.join("\n")).toContain("EACCES");
+      expect(readdirSync(tmp)).toEqual([]);
+    } finally {
+      vi.unstubAllEnvs();
+      chmodSync(join(dir, "atlas-migrations", "1_init.sql"), 0o644);
+    }
+  });
+});
+
+// KC5 of r22b: a Ctrl-C mid dry run left its copy of the migrations dir in the temp directory
 describe("database migrate diff --dry-run stopped by a signal (KC5 of r22b; sibling: S2 of r22's proof scratch)", () => {
-	it.each([["SIGINT"], ["SIGTERM"]] as const)(
-		"on %s leaves nothing in the temp directory, then ends by it",
-		async (signal) => {
-			const dir = diffProject()
-			const tmp = project()
-			vi.stubEnv("TMPDIR", tmp)
-			const kill = vi.spyOn(process, "kill").mockImplementation(() => true)
-			/* the worker's own listeners stand aside, so database's is the only one, as in the CLI's process */
-			const worker = process.listeners(signal)
-			process.removeAllListeners(signal)
-			try {
-				const seen: string[][] = []
-				const io = makeIo(
-					dir,
-					fakeAtlas(() => {
-						seen.push(readdirSync(tmp))
-						process.emit(signal, signal)
-					}),
-				)
-				await runCliWithFakes(["migrate", "diff", "core", "--dry-run"], io)
-				await new Promise((resolve) => setImmediate(resolve))
-				expect({
-					during: seen.map((names) => names.length > 0),
-					kill: kill.mock.calls,
-					left: readdirSync(tmp),
-				}).toEqual({
-					during: [true],
-					kill: [[process.pid, signal]],
-					left: [],
-				})
-			} finally {
-				await stopsEnded()
-				kill.mockRestore()
-				vi.unstubAllEnvs()
-				process.removeAllListeners(signal)
-				for (const listener of worker) process.on(signal, listener)
-			}
-		},
-	)
-})
+  it.each([["SIGINT"], ["SIGTERM"]] as const)(
+    "on %s leaves nothing in the temp directory, then ends by it",
+    async (signal) => {
+      const dir = diffProject();
+      const tmp = project();
+      vi.stubEnv("TMPDIR", tmp);
+      const kill = vi.spyOn(process, "kill").mockImplementation(() => true);
+      // the worker's own listeners stand aside, so database's is the only one, as in the CLI's process
+      const worker = process.listeners(signal);
+      process.removeAllListeners(signal);
+
+      try {
+        const seen: string[][] = [];
+
+        const io = makeIo(
+          dir,
+          fakeAtlas(() => {
+            seen.push(readdirSync(tmp));
+            process.emit(signal, signal);
+          }),
+        );
+
+        await runCliWithFakes(["migrate", "diff", "core", "--dry-run"], io);
+        await new Promise((resolve) => setImmediate(resolve));
+        expect({
+          during: seen.map((names) => names.length > 0),
+          kill: kill.mock.calls,
+          left: readdirSync(tmp),
+        }).toEqual({
+          during: [true],
+          kill: [[process.pid, signal]],
+          left: [],
+        });
+      } finally {
+        await stopsEnded();
+        kill.mockRestore();
+        vi.unstubAllEnvs();
+        process.removeAllListeners(signal);
+
+        for (const listener of worker) process.on(signal, listener);
+      }
+    },
+  );
+});

@@ -4,123 +4,135 @@
  * text, epoch milliseconds, a drizzle date in either unit), and `contains` finds a member of a
  * JSON array column.
  */
-import { createClient } from "@libsql/client"
-import { drizzle } from "drizzle-orm/libsql"
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { type FilterField, validateFilter } from "../../../src/query/filter-validate.ts"
-import { filterToSQL } from "../../../src/query/sqlite/executor.ts"
+import { createClient } from "@libsql/client";
+import { drizzle } from "drizzle-orm/libsql";
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+import { type FilterField, validateFilter } from "../../../src/query/filter-validate.ts";
+import { filterToSQL } from "../../../src/query/sqlite/executor.ts";
 
 const event = sqliteTable("event", {
-	ms: integer("ms").notNull(),
-	name: text("name").primaryKey(),
-	nums: text("nums", { mode: "json" }),
-	/* a plain text column holding a JSON array, or a scalar JSON value (27.8 of plan 15) */
-	raw: text("raw"),
-	/* the same column, filtered as a date field */
-	rawDay: text("raw"),
-	seconds: integer("seconds", { mode: "timestamp" }).notNull(),
-	stamp: integer("stamp", { mode: "timestamp_ms" }).notNull(),
-	tags: text("tags", { mode: "json" }),
-	text: text("text").notNull(),
-})
+  ms: integer("ms").notNull(),
+  name: text("name").primaryKey(),
+  nums: text("nums", { mode: "json" }),
+  // a plain text column holding a JSON array, or a scalar JSON value (27.8 of plan 15)
+  raw: text("raw"),
+  // the same column, filtered as a date field
+  rawDay: text("raw"),
+  seconds: integer("seconds", { mode: "timestamp" }).notNull(),
+  stamp: integer("stamp", { mode: "timestamp_ms" }).notNull(),
+  tags: text("tags", { mode: "json" }),
+  text: text("text").notNull(),
+});
 
-const MIDNIGHT = Date.UTC(2024, 0, 1)
-const NOON = Date.UTC(2024, 0, 1, 12)
+const MIDNIGHT = Date.UTC(2024, 0, 1);
+const NOON = Date.UTC(2024, 0, 1, 12);
 
-const client = createClient({ url: ":memory:" })
-const db = drizzle({ client })
+const client = createClient({ url: ":memory:" });
+const db = drizzle({ client });
 
 beforeAll(async () => {
-	await client.execute(
-		"CREATE TABLE event (name TEXT PRIMARY KEY, text TEXT NOT NULL, ms INTEGER NOT NULL, stamp INTEGER NOT NULL, seconds INTEGER NOT NULL, tags TEXT, nums TEXT, raw TEXT)",
-	)
-	for (const [name, at, tags, nums, raw] of [
-		["midnight", MIDNIGHT, '["red","blue"]', "[1,2]", `[2.5,${MIDNIGHT}]`],
-		["noon", NOON, '["green"]', "[3]", "2.5"],
-	] as const)
-		await client.execute({
-			args: [name, new Date(at).toISOString(), at, at, at / 1000, tags, nums, raw],
-			sql: "INSERT INTO event VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		})
-})
-afterAll(() => client.close())
+  await client.execute(
+    "CREATE TABLE event (name TEXT PRIMARY KEY, text TEXT NOT NULL, ms INTEGER NOT NULL, stamp INTEGER NOT NULL, seconds INTEGER NOT NULL, tags TEXT, nums TEXT, raw TEXT)",
+  );
 
-const ISO: FilterField = { format: "iso", operators: ["eq", "gte", "lt", "in"], type: "date" }
+  for (const [name, at, tags, nums, raw] of [
+    ["midnight", MIDNIGHT, '["red","blue"]', "[1,2]", `[2.5,${MIDNIGHT}]`],
+    ["noon", NOON, '["green"]', "[3]", "2.5"],
+  ] as const) {
+    await client.execute({
+      args: [name, new Date(at).toISOString(), at, at, at / 1000, tags, nums, raw],
+      sql: "INSERT INTO event VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    });
+  }
+});
+
+afterAll(() => client.close());
+
+const ISO: FilterField = { format: "iso", operators: ["eq", "gte", "lt", "in"], type: "date" };
+
 const FIELDS: Record<string, FilterField> = {
-	ms: ISO,
-	nums: { operators: ["contains"], type: "number" },
-	raw: { operators: ["contains"], type: "number" },
-	rawDay: { operators: ["contains"], type: "date" },
-	seconds: ISO,
-	stamp: ISO,
-	tags: { operators: ["contains"], type: "string" },
-	text: ISO,
-}
+  ms: ISO,
+  nums: { operators: ["contains"], type: "number" },
+  raw: { operators: ["contains"], type: "number" },
+  rawDay: { operators: ["contains"], type: "date" },
+  seconds: ISO,
+  stamp: ISO,
+  tags: { operators: ["contains"], type: "string" },
+  text: ISO,
+};
 
 /** The rows `filter` matches, validated as a request is, then lowered */
 async function matched(filter: string): Promise<string[]> {
-	const result = validateFilter(filter, FIELDS)
-	if (!result?.valid) throw new Error(`invalid: ${JSON.stringify(result)}`)
-	const where = filterToSQL(result.ast, { mainTable: event })
-	if (where === null) throw new Error(`not wired: ${filter}`)
-	const rows = await db.select({ name: event.name }).from(event).where(where).orderBy(event.name)
-	return rows.map((row) => row.name)
+  const result = validateFilter(filter, FIELDS);
+
+  if (!result?.valid) throw new Error(`invalid: ${JSON.stringify(result)}`);
+  const where = filterToSQL(result.ast, { mainTable: event });
+
+  if (where === null) throw new Error(`not wired: ${filter}`);
+  const rows = await db.select({ name: event.name }).from(event).where(where).orderBy(event.name);
+
+  return rows.map((row) => row.name);
 }
 
 describe("an ISO date filter, by the instant it names (Q5)", () => {
-	it.each(["text", "ms", "stamp", "seconds"])(
-		"matches %s by instant, an offset, a bare date and no seconds",
-		async (column) => {
-			expect(await matched(`${column}.eq.2024-01-01T01:00+01:00`), "offset").toEqual(["midnight"])
-			expect(await matched(`${column}.eq.2024-01-01`), "bare date").toEqual(["midnight"])
-			expect(await matched(`${column}.gte.2024-01-01T12:00Z`), "no seconds").toEqual(["noon"])
-			expect(await matched(`${column}.lt.2024-01-01T06:00:00.001-06:00`), "a millisecond after noon").toEqual([
-				"midnight",
-				"noon",
-			])
-			expect(await matched(`${column}.in.(2024-01-01T07:00-05:00,2023-12-31)`), "in").toEqual(["noon"])
-			/* a fraction past milliseconds is compared exactly (QL3 of r23): noon is before noon and 0.9 ms */
-			expect(await matched(`${column}.lt.2024-01-01T12:00:00.0009Z`), "a fraction kept").toEqual(["midnight", "noon"])
-		},
-	)
-})
+  it.each(["text", "ms", "stamp", "seconds"])(
+    "matches %s by instant, an offset, a bare date and no seconds",
+    async (column) => {
+      expect(await matched(`${column}.eq.2024-01-01T01:00+01:00`), "offset").toEqual(["midnight"]);
+      expect(await matched(`${column}.eq.2024-01-01`), "bare date").toEqual(["midnight"]);
+      expect(await matched(`${column}.gte.2024-01-01T12:00Z`), "no seconds").toEqual(["noon"]);
+      expect(await matched(`${column}.lt.2024-01-01T06:00:00.001-06:00`), "a millisecond after noon").toEqual([
+        "midnight",
+        "noon",
+      ]);
+      expect(await matched(`${column}.in.(2024-01-01T07:00-05:00,2023-12-31)`), "in").toEqual(["noon"]);
+      // a fraction past milliseconds is compared exactly (QL3 of r23): noon is before noon and 0.9 ms
+      expect(await matched(`${column}.lt.2024-01-01T12:00:00.0009Z`), "a fraction kept").toEqual(["midnight", "noon"]);
+    },
+  );
+});
 
 describe("contains on a JSON array column (C13)", () => {
-	it("finds a row whose array holds the value, typed as the field declares", async () => {
-		expect(await matched("tags.contains.red")).toEqual(["midnight"])
-		expect(await matched("tags.contains.purple")).toEqual([])
-		expect(await matched("nums.contains.3")).toEqual(["noon"])
-		expect(await matched("or(tags.contains.green,nums.contains.1)")).toEqual(["midnight", "noon"])
-	})
+  it("finds a row whose array holds the value, typed as the field declares", async () => {
+    expect(await matched("tags.contains.red")).toEqual(["midnight"]);
+    expect(await matched("tags.contains.purple")).toEqual([]);
+    expect(await matched("nums.contains.3")).toEqual(["noon"]);
+    expect(await matched("or(tags.contains.green,nums.contains.1)")).toEqual(["midnight", "noon"]);
+  });
 
-	/* 27.8 of plan 15: a number or a date on a plain text column holding JSON, and a scalar JSON value is no set */
-	it("finds a number or a date in a plain text column's JSON array, and none in a scalar JSON value", async () => {
-		expect(await matched("raw.contains.2.5")).toEqual(["midnight"])
-		expect(await matched(`rawDay.contains.${MIDNIGHT}`)).toEqual(["midnight"])
-	})
-})
+  // 27.8 of plan 15: a number or a date on a plain text column holding JSON, and a scalar JSON value is no set
+  it("finds a number or a date in a plain text column's JSON array, and none in a scalar JSON value", async () => {
+    expect(await matched("raw.contains.2.5")).toEqual(["midnight"]);
+    expect(await matched(`rawDay.contains.${MIDNIGHT}`)).toEqual(["midnight"]);
+  });
+});
 
-/* 27.15 of plan 15: json_type raises on text that is no JSON, so a row of it is matched by nothing, never a 500 */
+// 27.15 of plan 15: json_type raises on text that is no JSON, so a row of it is matched by nothing, never a 500
 describe("contains on a plain text column some of whose rows hold no JSON", () => {
-	const note = sqliteTable("note", { body: text("body"), name: text("name").primaryKey() })
+  const note = sqliteTable("note", { body: text("body"), name: text("name").primaryKey() });
 
-	it("finds the rows whose JSON array holds the value, and passes over text that is no JSON", async () => {
-		await client.execute("CREATE TABLE note (name TEXT PRIMARY KEY, body TEXT)")
-		for (const [name, body] of [
-			["array", '["red","blue"]'],
-			["prose", "red, but no JSON"],
-			["object", '{"red":1}'],
-			["none", null],
-		])
-			await client.execute({ args: [name, body], sql: "INSERT INTO note VALUES (?, ?)" })
-		const result = validateFilter("body.contains.red", { body: { operators: ["contains"], type: "string" } })
-		if (!result?.valid) throw new Error("invalid")
-		const where = filterToSQL(result.ast, { mainTable: note })
-		const rows = await db
-			.select({ name: note.name })
-			.from(note)
-			.where(where ?? undefined)
-		expect(rows.map((row) => row.name)).toEqual(["array"])
-	})
-})
+  it("finds the rows whose JSON array holds the value, and passes over text that is no JSON", async () => {
+    await client.execute("CREATE TABLE note (name TEXT PRIMARY KEY, body TEXT)");
+
+    for (const [name, body] of [
+      ["array", '["red","blue"]'],
+      ["prose", "red, but no JSON"],
+      ["object", '{"red":1}'],
+      ["none", null],
+    ] as const)
+      await client.execute({ args: [name, body], sql: "INSERT INTO note VALUES (?, ?)" });
+    const result = validateFilter("body.contains.red", { body: { operators: ["contains"], type: "string" } });
+
+    if (!result?.valid) throw new Error("invalid");
+    const where = filterToSQL(result.ast, { mainTable: note });
+
+    const rows = await db
+      .select({ name: note.name })
+      .from(note)
+      .where(where ?? undefined);
+
+    expect(rows.map((row) => row.name)).toEqual(["array"]);
+  });
+});

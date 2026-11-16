@@ -6,85 +6,95 @@
  * rows (AB5 of area B), whose anchored bound reads an aggregate of the anchor row. Ids are out of key
  * order, so a predicate that falls to the id shows. Each engine's suite runs it on its own driver.
  */
-import { eq } from "drizzle-orm"
-import { integer, real, type SQLiteAsyncDatabase, sqliteTable, text } from "drizzle-orm/sqlite-core"
-import { queryHelpers } from "../../../src/query/drizzle.ts"
-import { buildDerivedListQuery } from "../../../src/query/sqlite/build-list-query.ts"
-import { SEALED } from "../../../src/query/__fixtures__/cursor-secret.ts"
+import { eq } from "drizzle-orm";
+import { integer, real, type SQLiteAsyncDatabase, sqliteTable, text } from "drizzle-orm/sqlite-core";
+
+import { SEALED } from "../../../src/query/__fixtures__/cursor-secret.ts";
+import { queryHelpers } from "../../../src/query/drizzle.ts";
+import { buildDerivedListQuery } from "../../../src/query/sqlite/build-list-query.ts";
 
 const post = sqliteTable("post", {
-	at: integer("at", { mode: "timestamp" }),
-	big: integer("big"),
-	id: text("id").primaryKey(),
-	n: real("n"),
-	x: real("x"),
-})
-const metric = sqliteTable("metric", {
-	at: integer("at", { mode: "timestamp" }),
-	big: integer("big"),
-	n: real("n"),
-	post_id: text("post_id"),
-	x: real("x"),
-})
+  at: integer("at", { mode: "timestamp" }),
+  big: integer("big"),
+  id: text("id").primaryKey(),
+  n: real("n"),
+  x: real("x"),
+});
 
-/* 2^60 + 200, + 210 and + 250 read as one double, 2^60 + 256; the stored seconds differ below the millisecond */
+const metric = sqliteTable("metric", {
+  at: integer("at", { mode: "timestamp" }),
+  big: integer("big"),
+  n: real("n"),
+  post_id: text("post_id"),
+  x: real("x"),
+});
+
+// 2^60 + 200, + 210 and + 250 read as one double, 2^60 + 256; the stored seconds differ below the millisecond
 export const SEED: readonly string[] = [
-	"CREATE TABLE post (id TEXT PRIMARY KEY, big INTEGER, x REAL, at REAL, n REAL)",
-	"CREATE TABLE metric (post_id TEXT, big INTEGER, x REAL, at REAL, n REAL)",
-	"INSERT INTO post VALUES ('d', 1152921504606847176, -9e999, 100.0001, NULL), ('a', 1152921504606847186, 1, 100.0004, NULL), ('c', 1152921504606847226, 2, 100.0007, 1.5), ('b', 1152921504606847500, 9e999, 100.002, 2.5)",
-	"INSERT INTO metric SELECT id, big, x, at, n FROM post",
-]
+  "CREATE TABLE post (id TEXT PRIMARY KEY, big INTEGER, x REAL, at REAL, n REAL)",
+  "CREATE TABLE metric (post_id TEXT, big INTEGER, x REAL, at REAL, n REAL)",
+  "INSERT INTO post VALUES ('d', 1152921504606847176, -9e999, 100.0001, NULL), ('a', 1152921504606847186, 1, 100.0004, NULL), ('c', 1152921504606847226, 2, 100.0007, 1.5), ('b', 1152921504606847500, 9e999, 100.002, 2.5)",
+  "INSERT INTO metric SELECT id, big, x, at, n FROM post",
+];
 
 /** Every id, ascending and descending */
-export const SERVED = { asc: ["d", "a", "c", "b"], desc: ["b", "c", "a", "d"] } as const
+export const SERVED = { asc: ["d", "a", "c", "b"], desc: ["b", "c", "a", "d"] } as const;
 
-/* by `n`, whose NULLs are a and d, ordered among themselves by the id in the key's direction */
+// by `n`, whose NULLs are a and d, ordered among themselves by the id in the key's direction
 export const SERVED_NULLS = {
-	"asc first": ["a", "d", "c", "b"],
-	"asc last": ["c", "b", "a", "d"],
-	"desc first": ["d", "a", "b", "c"],
-	"desc last": ["b", "c", "d", "a"],
-} as const
+  "asc first": ["a", "d", "c", "b"],
+  "asc last": ["c", "b", "a", "d"],
+  "desc first": ["d", "a", "b", "c"],
+  "desc last": ["b", "c", "d", "a"],
+} as const;
 
-export type JoinedKey = "at" | "big" | "n" | "x"
-export type ListShape = "anchored own" | "anchored joined" | "anchorless"
+export type JoinedKey = "at" | "big" | "n" | "x";
+
+export type ListShape = "anchored own" | "anchored joined" | "anchorless";
 
 /** Every id the list of `shape` by `key` serves, one a page, by cursor, at most eight pages */
 export async function servedBy(
-	db: SQLiteAsyncDatabase<any, any>,
-	{
-		direction,
-		key,
-		nulls,
-		shape,
-	}: { direction: "asc" | "desc"; key: JoinedKey; nulls?: "first" | "last"; shape: ListShape },
+  db: SQLiteAsyncDatabase<any, any>,
+  {
+    direction,
+    key,
+    nulls,
+    shape,
+  }: { direction: "asc" | "desc"; key: JoinedKey; nulls?: "first" | "last"; shape: ListShape },
 ): Promise<string[]> {
-	const column = shape === "anchored joined" ? metric[key] : post[key]
-	const ids: string[] = []
-	let cursor: string | undefined
-	for (let n = 1; n <= 8; n++) {
-		const parsed = { cursor, limit: 1, parsedSort: [{ direction, field: "k", ...(nulls && { nulls }) }] }
-		const built =
-			shape === "anchorless"
-				? buildDerivedListQuery({ ...SEALED, idColumn: post.id, parsed, sortColumns: { k: column } })
-				: buildDerivedListQuery({
-						...SEALED,
-						anchor: { idColumn: post.id, table: post },
-						parsed,
-						sortColumns: { k: column },
-					})
-		const query = db
-			.select({ id: post.id, k: column, ...built.extras })
-			.from(post)
-			.innerJoin(metric, eq(metric.post_id, post.id))
-			.$dynamic()
-		const rows = await (built.where === undefined ? query : query.where(built.where))
-			.orderBy(...built.orderBy)
-			.limit(built.limit)
-		const [items, meta] = queryHelpers.paginate(rows, built)
-		ids.push(...items.map((row) => row.id))
-		if (meta.nextCursor === null) return ids
-		cursor = meta.nextCursor
-	}
-	return ids
+  const column = shape === "anchored joined" ? metric[key] : post[key];
+  const ids: string[] = [];
+  let cursor: string | undefined;
+
+  for (let n = 1; n <= 8; n++) {
+    const parsed = { cursor, limit: 1, parsedSort: [{ direction, field: "k", ...(nulls && { nulls }) }] };
+
+    const built =
+      shape === "anchorless"
+        ? buildDerivedListQuery({ ...SEALED, idColumn: post.id, parsed, sortColumns: { k: column } })
+        : buildDerivedListQuery({
+            ...SEALED,
+            anchor: { idColumn: post.id, table: post },
+            parsed,
+            sortColumns: { k: column },
+          });
+
+    const query = db
+      .select({ id: post.id, k: column, ...built.extras })
+      .from(post)
+      .innerJoin(metric, eq(metric.post_id, post.id))
+      .$dynamic();
+
+    const rows = await (built.where === undefined ? query : query.where(built.where))
+      .orderBy(...built.orderBy)
+      .limit(built.limit);
+
+    const [items, meta] = queryHelpers.paginate(rows, built);
+    ids.push(...items.map((row) => row.id));
+
+    if (meta.nextCursor === null) return ids;
+    cursor = meta.nextCursor;
+  }
+
+  return ids;
 }

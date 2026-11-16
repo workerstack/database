@@ -4,36 +4,40 @@
  * awaits it first, and a caller of `classifyMigration` on Postgres does too.
  */
 
-import { optionalPeer } from "./optional-peer.ts"
-import { PARSE } from "./peer-needs.ts"
-import { qualifySchemaElements } from "./pg-schema-elts.ts"
+import { optionalPeer } from "./optional-peer.ts";
+import { PARSE } from "./peer-needs.ts";
+import { qualifySchemaElements } from "./pg-schema-elts.ts";
 
-type Parser = { parseSync(sql: string): { stmts?: unknown } }
+type Parser = { parseSync(sql: string): { stmts?: unknown } };
 
-/* an optional peer, named by a string so a consumer without it still type-checks database */
-const LIBPG_QUERY: string = "libpg-query"
+// an optional peer, named by a string so a consumer without it still type-checks database
+const LIBPG_QUERY: string = "libpg-query";
 
 // per-process-constant: the parser module, set once by loadPostgresParser
-let parser: Parser | undefined
+let parser: Parser | undefined;
 
 /** Load libpg-query, database's Postgres parser, once; a Postgres file is classified only after it */
 async function loadPostgresParser(): Promise<void> {
-	if (parser !== undefined) return
-	const lib = await optionalPeer(
-		PARSE,
-		async () => (await import(LIBPG_QUERY)) as Parser & { loadModule(): Promise<void> },
-	)
-	await lib.loadModule()
-	parser = lib
+  if (parser !== undefined) return;
+
+  const lib = await optionalPeer(
+    PARSE,
+    async () => (await import(LIBPG_QUERY)) as Parser & { loadModule(): Promise<void> },
+  );
+
+  await lib.loadModule();
+  parser = lib;
 }
 
 /** The loaded parser; throws when it was never loaded */
 function postgresParser(): Parser {
-	if (parser === undefined)
-		throw new Error(
-			"call loadPostgresParser() before classifying a Postgres migration: database reads it with libpg-query",
-		)
-	return parser
+  if (parser === undefined) {
+    throw new Error(
+      "call loadPostgresParser() before classifying a Postgres migration: database reads it with libpg-query",
+    );
+  }
+
+  return parser;
 }
 
 /**
@@ -41,9 +45,10 @@ function postgresParser(): Parser {
  * elements qualified as Postgres resolves them (pg-schema-elts.ts), before anything keeps the tree
  */
 function parsePostgres(sql: string): { stmts?: unknown } {
-	const tree = postgresParser().parseSync(sql)
-	qualifySchemaElements(tree.stmts)
-	return tree
+  const tree = postgresParser().parseSync(sql);
+  qualifySchemaElements(tree.stmts);
+
+  return tree;
 }
 
-export { loadPostgresParser, parsePostgres, postgresParser }
+export { loadPostgresParser, parsePostgres, postgresParser };

@@ -4,13 +4,15 @@
  * ordered and sought as the column itself, so an index serves it; this truncation only guards the
  * bound read from the anchor row, which holds the exact value (cursor-ref.ts).
  */
-import { type SQLWrapper, sql } from "drizzle-orm"
+import { type SQLWrapper, sql } from "drizzle-orm";
 
 /** `column` as a cursor compares it: a finer Postgres timestamp truncated to milliseconds */
 function cursorPrecision(column: SQLWrapper): SQLWrapper {
-	const { columnType, precision } = column as { columnType?: unknown; precision?: unknown }
-	if (columnType !== "PgTimestamp" || (typeof precision === "number" && precision <= 3)) return column
-	return sql`date_trunc('milliseconds', ${column})`
+  const { columnType, precision } = column as { columnType?: unknown; precision?: unknown };
+
+  if (columnType !== "PgTimestamp" || (typeof precision === "number" && precision <= 3)) return column;
+
+  return sql`date_trunc('milliseconds', ${column})`;
 }
 
-export { cursorPrecision }
+export { cursorPrecision };

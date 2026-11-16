@@ -6,80 +6,90 @@
  * The registry is read from __snapshots__/peer-registry.json, recorded by
  * support/write-peer-registry.ts.
  */
-import { readFileSync } from "node:fs"
-import { join } from "node:path"
-import semver from "semver"
-import { describe, expect, it } from "vitest"
-import { OPTIONAL_PEER_RANGES } from "../../src/migrate/core/optional-peer.ts"
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
-const CORE = join(import.meta.dirname, "../..")
+import semver from "semver";
+import { describe, expect, it } from "vitest";
+
+import { OPTIONAL_PEER_RANGES } from "../../src/migrate/core/optional-peer.ts";
+
+const CORE = join(import.meta.dirname, "../..");
+
 const { peerDependencies, peerDependenciesMeta } = JSON.parse(readFileSync(join(CORE, "package.json"), "utf8")) as {
-	peerDependencies: Record<string, string>
-	peerDependenciesMeta: Record<string, { optional?: boolean }>
-}
-const { catalog } = (
-	JSON.parse(readFileSync(join(CORE, "../../package.json"), "utf8")) as {
-		workspaces: { catalog: Record<string, string> }
-	}
-).workspaces
-const REGISTRY = JSON.parse(
-	readFileSync(join(import.meta.dirname, "__snapshots__/peer-registry.json"), "utf8"),
-) as Record<string, { admitted: string[]; floorPeers: Record<string, string>; range: string }>
-const README = readFileSync(join(CORE, "../../README.md"), "utf8")
+  peerDependencies: Record<string, string>;
+  peerDependenciesMeta: Record<string, { optional?: boolean }>;
+};
 
-/* a build of a branch's commit, as drizzle publishes one: a prerelease ending in the commit's hash */
-const isCommitBuild = (version: string): boolean => /-[0-9a-f]{7,40}$/.test(version)
+const { catalog } = (
+  JSON.parse(readFileSync(join(CORE, "../../package.json"), "utf8")) as {
+    workspaces: { catalog: Record<string, string> };
+  }
+).workspaces;
+
+const REGISTRY = JSON.parse(
+  readFileSync(join(import.meta.dirname, "__snapshots__/peer-registry.json"), "utf8"),
+) as Record<string, { admitted: string[]; floorPeers: Record<string, string>; range: string }>;
+
+const README = readFileSync(join(CORE, "README.md"), "utf8");
+
+// a build of a branch's commit, as drizzle publishes one: a prerelease ending in the commit's hash
+const isCommitBuild = (version: string): boolean => /-[0-9a-f]{7,40}$/.test(version);
 
 /** The floor of database's range for `name` */
-const floorOf = (name: string): string => semver.minVersion(peerDependencies[name] as string)?.version as string
+const floorOf = (name: string): string => semver.minVersion(peerDependencies[name] as string)?.version as string;
 
 describe("database's peer ranges, against the registry", () => {
-	it("are the ranges the registry was recorded for: rerun support/write-peer-registry.ts after a change", () => {
-		expect(Object.fromEntries(Object.entries(REGISTRY).map(([name, { range }]) => [name, range]))).toEqual(
-			peerDependencies,
-		)
-	})
+  it("are the ranges the registry was recorded for: rerun support/write-peer-registry.ts after a change", () => {
+    expect(Object.fromEntries(Object.entries(REGISTRY).map(([name, { range }]) => [name, range]))).toEqual(
+      peerDependencies,
+    );
+  });
 
-	it("each admit no commit build", () => {
-		const builds = Object.entries(REGISTRY).flatMap(([name, { admitted }]) =>
-			admitted.filter(isCommitBuild).map((version) => `${name}@${version}`),
-		)
-		expect(builds).toEqual([])
-	})
+  it("each admit no commit build", () => {
+    const builds = Object.entries(REGISTRY).flatMap(([name, { admitted }]) =>
+      admitted.filter(isCommitBuild).map((version) => `${name}@${version}`),
+    );
 
-	it("have floors that install together: each floor's peers among database's are met by database's floor of them", () => {
-		const unmet = Object.entries(REGISTRY).flatMap(([name, { floorPeers }]) =>
-			Object.entries(floorPeers)
-				.filter(([peer]) => peer in peerDependencies)
-				.filter(([peer, range]) => !semver.satisfies(floorOf(peer), range))
-				.map(
-					([peer, range]) => `${name}@${floorOf(name)} needs ${peer} ${range}, database's floor is ${floorOf(peer)}`,
-				),
-		)
-		expect(unmet).toEqual([])
-	})
-})
+    expect(builds).toEqual([]);
+  });
+
+  it("have floors that install together: each floor's peers among database's are met by database's floor of them", () => {
+    const unmet = Object.entries(REGISTRY).flatMap(([name, { floorPeers }]) =>
+      Object.entries(floorPeers)
+        .filter(([peer]) => peer in peerDependencies)
+        .filter(([peer, range]) => !semver.satisfies(floorOf(peer), range))
+        .map(
+          ([peer, range]) => `${name}@${floorOf(name)} needs ${peer} ${range}, database's floor is ${floorOf(peer)}`,
+        ),
+    );
+
+    expect(unmet).toEqual([]);
+  });
+});
 
 describe("the README's install lines", () => {
-	const lines = README.split("\n").filter((line) => /^(?:bun add|npm install|pnpm add) /.test(line))
+  const lines = README.split("\n").filter((line) => /^(?:bun add|npm install|pnpm add) /.test(line));
 
-	it("pin drizzle at the version database's suites run, inside the peer range", () => {
-		expect(lines).toHaveLength(3)
-		for (const line of lines) {
-			const pin = /(?:^| )drizzle-orm(?:@(\S+))?(?: |$)/.exec(line)?.[1]
-			expect(pin, line).toBe(catalog["drizzle-orm"])
-			expect(semver.satisfies(pin as string, peerDependencies["drizzle-orm"] as string), line).toBe(true)
-		}
-	})
-})
+  it("pin drizzle at the version database's suites run, inside the peer range", () => {
+    expect(lines).toHaveLength(3);
 
-/* K7 of r20: the range a missing peer's refusal names is the one package.json states */
+    for (const line of lines) {
+      const pin = /(?:^| )drizzle-orm(?:@(\S+))?(?: |$)/.exec(line)?.[1];
+      expect(pin, line).toBe(catalog["drizzle-orm"]);
+      expect(semver.satisfies(pin as string, peerDependencies["drizzle-orm"] as string), line).toBe(true);
+    }
+  });
+});
+
+// K7 of r20: the range a missing peer's refusal names is the one package.json states
 describe("database's refusal for a missing optional peer", () => {
-	it("names each optional peer a command needs with its range in package.json", () => {
-		/* typescript is a peer for database's declarations alone (KT2 of r22b): no command runs it */
-		const optional = Object.keys(peerDependenciesMeta).filter(
-			(name) => peerDependenciesMeta[name]?.optional === true && name !== "typescript",
-		)
-		expect(OPTIONAL_PEER_RANGES).toEqual(Object.fromEntries(optional.map((name) => [name, peerDependencies[name]])))
-	})
-})
+  it("names each optional peer a command needs with its range in package.json", () => {
+    // typescript is a peer for database's declarations alone (KT2 of r22b): no command runs it
+    const optional = Object.keys(peerDependenciesMeta).filter(
+      (name) => peerDependenciesMeta[name]?.optional === true && name !== "typescript",
+    );
+
+    expect(OPTIONAL_PEER_RANGES).toEqual(Object.fromEntries(optional.map((name) => [name, peerDependencies[name]])));
+  });
+});

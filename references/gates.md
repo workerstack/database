@@ -10,8 +10,8 @@ This repo has these `package.json` scripts. Hooks and CI call only these names, 
 
 | script              | runs                                                                                  |
 | ------------------- | ------------------------------------------------------------------------------------- |
-| `fmt` / `fmt:check` | oxfmt                                                                                 |
-| `lint` / `lint:fix` | oxlint, with `.oxlintrc.json` and the repo's own rule plugin in `packages/core/lint/` |
+| `fmt` / `fmt:check` | `repo fmt`, over the generated `.oxfmtrc.jsonc`                                       |
+| `lint` / `lint:fix` | `repo lint`, over the generated `.oxlintrc.jsonc` and the plugin in `packages/core/lint/` |
 | `typecheck`         | the package's type check                                                              |
 | `test`              | the package's suite                                                                   |
 
@@ -19,12 +19,12 @@ This repo has these `package.json` scripts. Hooks and CI call only these names, 
 
 | when       | what                                                                                                                                                                         | blocks                |
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
-| pre-commit | `oxlint --fix`, then `oxfmt` on staged files (restaged); `oxfmt --check` and `oxlint` on them; `bun run typecheck`                                                           | the commit            |
-| commit-msg | commitlint (Conventional Commits)                                                                                                                                            | the commit            |
-| pre-push   | `fmt:check`, `lint` on the whole tree                                                                                                                                        | the push              |
+| pre-commit | `bun repo precommit`: formats the staged files, lints them against `.repo/lint-baseline.json`, type-checks, syncs, runs the related tests and `bun repo check` | the commit |
+| commit-msg | `bun repo commit-msg` (Conventional Commits subject) | the commit |
+| pre-push   | `bun repo commit-msg --pre-push` over the pushed commits | the push |
 | CI         | the full gates on every push to `main`: `fmt:check`, `lint`, `typecheck`, `typecheck:strict`, `test:coverage`, `test:bun`, `test:differential`, `test:e2e`, `test:consumers` | new work, until fixed |
 
-`packages/core/tests/structure/workflows.test.ts` checks the jobs in `.github/workflows/ci.yml` against that list.
+CI's `commits` job runs `bun repo commit-msg --range "$BASE..HEAD"` over the pushed commits. `packages/core/tests/structure/workflows.test.ts` checks the jobs in `.github/workflows/ci.yml` against that list.
 
 ## Push and CI
 

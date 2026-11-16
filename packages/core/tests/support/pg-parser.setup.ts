@@ -3,6 +3,6 @@
  * a Postgres migration loads it first (pg-tree.ts). pg-tree.test.ts checks the refusal without it
  * on a fresh module.
  */
-import { loadPostgresParser } from "../../src/migrate/core/pg-parser.ts"
+import { loadPostgresParser } from "../../src/migrate/core/pg-parser.ts";
 
-await loadPostgresParser()
+await loadPostgresParser();

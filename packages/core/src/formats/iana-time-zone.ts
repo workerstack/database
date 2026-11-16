@@ -4,7 +4,7 @@
 
 // lookup-table: the 597 time zone names of tzdata 2026f, one line per area, read by isIanaTimeZone
 const NAMES: ReadonlySet<string> = /* @__PURE__ */ new Set(
-	/* @__PURE__ */ `Africa/Abidjan Africa/Accra Africa/Addis_Ababa Africa/Algiers Africa/Asmara Africa/Asmera Africa/Bamako
+  /* @__PURE__ */ `Africa/Abidjan Africa/Accra Africa/Addis_Ababa Africa/Algiers Africa/Asmara Africa/Asmera Africa/Bamako
 Africa/Bangui Africa/Banjul Africa/Bissau Africa/Blantyre Africa/Brazzaville Africa/Bujumbura Africa/Cairo
 Africa/Casablanca Africa/Ceuta Africa/Conakry Africa/Dakar Africa/Dar_es_Salaam Africa/Djibouti Africa/Douala
 Africa/El_Aaiun Africa/Freetown Africa/Gaborone Africa/Harare Africa/Johannesburg Africa/Juba Africa/Kampala
@@ -105,7 +105,7 @@ Poland Portugal ROC ROK Singapore Turkey UCT
 US/Alaska US/Aleutian US/Arizona US/Central US/East-Indiana US/Eastern US/Hawaii US/Indiana-Starke US/Michigan
 US/Mountain US/Pacific US/Samoa
 UTC Universal W-SU WET Zulu`.split(/\s/u),
-)
+);
 
 /**
  * Whether `value` names a time zone of IANA tzdata 2026f, exactly as written: a zone or a link to one, such as
@@ -113,5 +113,5 @@ UTC Universal W-SU WET Zulu`.split(/\s/u),
  * placeholder, is no zone. Any string is taken; this never throws.
  */
 export function isIanaTimeZone(value: string): boolean {
-	return NAMES.has(value)
+  return NAMES.has(value);
 }

@@ -3,57 +3,59 @@
  *
  * Generates constraint maps from analyzed table metadata for database error handling.
  */
-import path from "node:path"
-import type { FieldMeta, TableMeta } from "../analyzer-types.ts"
-import { namesColumn } from "../utils/sql-name.ts"
-import { pgIdentifier } from "../../identifier.ts"
-import { writeGenFile } from "../utils/fs.ts"
-import { errorKeyPrefix, qualifiedName } from "../utils/table-name.ts"
-import { enumCheckName } from "./enum-checks.ts"
-import { partitionsOf } from "./constraints-partitions.ts"
-import {
-	type Constraint,
-	type ConstraintMap,
-	generateConstraintMapCode,
-	type TableConstraints,
-} from "./constraints-code.ts"
-import type { GeneratorContext } from "./context-types.ts"
+import path from "node:path";
 
-type Dialect = "postgres" | "sqlite"
+import { pgIdentifier } from "../../identifier.ts";
+import type { FieldMeta, TableMeta } from "../analyzer-types.ts";
+import { writeGenFile } from "../utils/fs.ts";
+import { namesColumn } from "../utils/sql-name.ts";
+import { errorKeyPrefix, qualifiedName } from "../utils/table-name.ts";
+import {
+  type Constraint,
+  type ConstraintMap,
+  generateConstraintMapCode,
+  type TableConstraints,
+} from "./constraints-code.ts";
+import { partitionsOf } from "./constraints-partitions.ts";
+import type { GeneratorContext } from "./context-types.ts";
+import { enumCheckName } from "./enum-checks.ts";
+
+type Dialect = "postgres" | "sqlite";
 
 /** Where the constraints generator writes the constraint map */
 export type ConstraintsConfig = {
-	/** the file written, relative to the codegen working directory */
-	output: string
-	/** database.config.ts's `partitions`: each partitioned table's partitions, keyed as the map keys it */
-	partitions?: Readonly<Record<string, readonly string[]>> | undefined
-}
+  /** the file written, relative to the codegen working directory */
+  output: string;
+  /** database.config.ts's `partitions`: each partitioned table's partitions, keyed as the map keys it */
+  partitions?: Readonly<Record<string, readonly string[]>> | undefined;
+};
 
-const conflict = (cause: string, errorKey: string): Constraint => ({ cause, errorKey, statusKey: "conflict" })
+const conflict = (cause: string, errorKey: string): Constraint => ({ cause, errorKey, statusKey: "conflict" });
 
-/* what a violated CHECK reports when its name follows none of database's own conventions: what the handler reports unmapped */
-const CHECK_FAILED = { cause: "Check constraint violated", statusKey: "bad_request" } as const
+// what a violated CHECK reports when its name follows none of database's own conventions: what the handler reports unmapped
+const CHECK_FAILED = { cause: "Check constraint violated", statusKey: "bad_request" } as const;
 
 /**
  * The one answer of each kind a table's constraints on a private column share: a key and cause from
  * neither the column nor the constraint's name, which a default name (`doc_token_key`) spells and
  * an explicit one often does. One object per kind, so the repeat check knows a repeat as its own
  */
-type Hidden = Record<"check" | "duplicate" | "reference" | "value", Constraint>
+type Hidden = Record<"check" | "duplicate" | "reference" | "value", Constraint>;
 
 const hiddenOf = (table: TableMeta): Hidden => {
-	const prefix = errorKeyPrefix(table)
-	return {
-		check: { ...CHECK_FAILED, errorKey: `${prefix}_check_failed` },
-		duplicate: conflict("A record with these values already exists", `${prefix}_duplicate`),
-		reference: conflict("Referenced record does not exist", `${prefix}_reference_not_found`),
-		value: { cause: "Invalid enum value", errorKey: `${prefix}_value_invalid`, statusKey: "bad_request" },
-	}
-}
+  const prefix = errorKeyPrefix(table);
+
+  return {
+    check: { ...CHECK_FAILED, errorKey: `${prefix}_check_failed` },
+    duplicate: conflict("A record with these values already exists", `${prefix}_duplicate`),
+    reference: conflict("Referenced record does not exist", `${prefix}_reference_not_found`),
+    value: { cause: "Invalid enum value", errorKey: `${prefix}_value_invalid`, statusKey: "bad_request" },
+  };
+};
 
 /** Whether SQL database rendered names a private column of the table, as it quotes each by its SQL name */
 const touchesPrivate = (table: TableMeta, expression: string) =>
-	table.fields.some((field) => field.constraints.private && namesColumn(expression, field.sqlName))
+  table.fields.some((field) => field.constraints.private && namesColumn(expression, field.sqlName));
 
 /**
  * The column-level and index-level unique constraints, keyed by the column's SQL name; a
@@ -61,36 +63,44 @@ const touchesPrivate = (table: TableMeta, expression: string) =>
  * index on an expression by its name
  */
 function uniqueOf(table: TableMeta, hidden: Hidden): Record<string, Constraint> | undefined {
-	const unique: Record<string, Constraint> = {}
-	for (const field of table.fields.filter((f) => f.unique !== null)) {
-		unique[field.sqlName] = field.constraints.private
-			? hidden.duplicate
-			: conflict(
-					`A record with this ${field.name} value already exists`,
-					`${errorKeyPrefix(table)}_${field.name}_duplicate`,
-				)
-	}
-	/* a partial index fails with the same "UNIQUE constraint failed: <table>.<column>" as a full one */
-	for (const { columns } of [...table.uniqueIndexes, ...table.partialUniqueIndexes]) {
-		/* the engine reports the columns' SQL names; the error key keeps the property names */
-		const fields = columns.map((col) => table.fields.find((f) => f.name === col) as FieldMeta)
-		const sqlNames = fields.map((field) => field.sqlName)
-		if (fields.some((field) => field.constraints.private)) {
-			unique[sqlNames.join(",")] = hidden.duplicate
-			continue
-		}
-		const cause =
-			columns.length === 1
-				? `A record with this ${columns[0]} value already exists`
-				: `A record with this ${columns.join(" and ")} combination already exists`
-		unique[sqlNames.join(",")] = conflict(cause, `${errorKeyPrefix(table)}_${columns.join("_")}_duplicate`)
-	}
-	/* an index on an expression is reported by its name, which the handlers look up under unique */
-	for (const { expression, name } of table.expressionIndexes)
-		unique[name] = touchesPrivate(table, expression)
-			? hidden.duplicate
-			: conflict(`A record with this ${expression} value already exists`, `${name}_duplicate`)
-	return Object.keys(unique).length > 0 ? unique : undefined
+  const unique: Record<string, Constraint> = {};
+
+  for (const field of table.fields.filter((f) => f.unique !== null)) {
+    unique[field.sqlName] = field.constraints.private
+      ? hidden.duplicate
+      : conflict(
+          `A record with this ${field.name} value already exists`,
+          `${errorKeyPrefix(table)}_${field.name}_duplicate`,
+        );
+  }
+
+  // a partial index fails with the same "UNIQUE constraint failed: <table>.<column>" as a full one
+  for (const { columns } of [...table.uniqueIndexes, ...table.partialUniqueIndexes]) {
+    // the engine reports the columns' SQL names; the error key keeps the property names
+    const fields = columns.map((col) => table.fields.find((f) => f.name === col) as FieldMeta);
+    const sqlNames = fields.map((field) => field.sqlName);
+
+    if (fields.some((field) => field.constraints.private)) {
+      unique[sqlNames.join(",")] = hidden.duplicate;
+      continue;
+    }
+
+    const cause =
+      columns.length === 1
+        ? `A record with this ${columns[0]} value already exists`
+        : `A record with this ${columns.join(" and ")} combination already exists`;
+
+    unique[sqlNames.join(",")] = conflict(cause, `${errorKeyPrefix(table)}_${columns.join("_")}_duplicate`);
+  }
+
+  // an index on an expression is reported by its name, which the handlers look up under unique
+  for (const { expression, name } of table.expressionIndexes) {
+    unique[name] = touchesPrivate(table, expression)
+      ? hidden.duplicate
+      : conflict(`A record with this ${expression} value already exists`, `${name}_duplicate`);
+  }
+
+  return Object.keys(unique).length > 0 ? unique : undefined;
 }
 
 /**
@@ -99,39 +109,43 @@ function uniqueOf(table: TableMeta, hidden: Hidden): Record<string, Constraint> 
  * `…_within_valid_range` is no date), so every other CHECK is a 400 as the handler's fallback
  */
 function checkVerdict(name: string, expression: string): Omit<Constraint, "errorKey"> {
-	if (name.endsWith("_enum")) return { cause: "Invalid enum value", statusKey: "bad_request" }
-	const bytes = name.includes("_size") ? expression.match(/<=\s*(\d+)/)?.[1] : undefined
-	if (bytes === undefined) return CHECK_FAILED
-	return {
-		cause: `Exceeds maximum size of ${Math.round(Number.parseInt(bytes, 10) / 1024)}KB`,
-		statusKey: "bad_request",
-	}
+  if (name.endsWith("_enum")) return { cause: "Invalid enum value", statusKey: "bad_request" };
+  const bytes = name.includes("_size") ? expression.match(/<=\s*(\d+)/)?.[1] : undefined;
+
+  if (bytes === undefined) return CHECK_FAILED;
+
+  return {
+    cause: `Exceeds maximum size of ${Math.round(Number.parseInt(bytes, 10) / 1024)}KB`,
+    statusKey: "bad_request",
+  };
 }
 
 /** A CHECK's name under its table, which a name already starting with the table carries once */
 const keyed = (table: TableMeta, name: string) =>
-	name.startsWith(`${errorKeyPrefix(table)}_`) ? name : `${errorKeyPrefix(table)}_${name}`
+  name.startsWith(`${errorKeyPrefix(table)}_`) ? name : `${errorKeyPrefix(table)}_${name}`;
 
 /**
  * The SQL the reader renders database's enum CHECK of a column to, once a table applies it: the column
  * by its SQL name, and each value a literal
  */
 const enumCheckExpression = (sqlName: string, values: readonly string[]): string =>
-	`"${sqlName}" IN (${values.map((value) => `'${value.replaceAll("'", "''")}'`).join(", ")})`
+  `"${sqlName}" IN (${values.map((value) => `'${value.replaceAll("'", "''")}'`).join(", ")})`;
 
 /**
  * The declared CHECKs of a table that are not database's own enum CHECK, applied: one under database's
  * name for an enum column is database's when it checks what database writes, and refused otherwise
  */
 function declaredChecks(table: TableMeta, enums: readonly FieldMeta[]): TableMeta["checkConstraints"] {
-	return table.checkConstraints.filter((chk) => {
-		const field = enums.find((each) => enumCheckName(table, each.name) === chk.name)
-		if (field === undefined) return true
-		if (chk.expression === enumCheckExpression(field.sqlName, field.enumValues as string[])) return false
-		throw new Error(
-			`${qualifiedName(table)}: the CHECK ${chk.name} takes the name database gives the enum CHECK of ${qualifiedName(table)}.${field.name}, but checks something else; rename it`,
-		)
-	})
+  return table.checkConstraints.filter((chk) => {
+    const field = enums.find((each) => enumCheckName(table, each.name) === chk.name);
+
+    if (field === undefined) return true;
+
+    if (chk.expression === enumCheckExpression(field.sqlName, field.enumValues as string[])) return false;
+    throw new Error(
+      `${qualifiedName(table)}: the CHECK ${chk.name} takes the name database gives the enum CHECK of ${qualifiedName(table)}.${field.name}, but checks something else; rename it`,
+    );
+  });
 }
 
 /**
@@ -140,68 +154,85 @@ function declaredChecks(table: TableMeta, enums: readonly FieldMeta[]): TableMet
  * fail codegen.
  */
 function checksOf(table: TableMeta, dialect: Dialect, hidden: Hidden): Record<string, Constraint> | undefined {
-	const key = (name: string) => (dialect === "postgres" ? pgIdentifier(name) : name)
-	const enums = table.fields.filter((each) => (each.enumValues?.length ?? 0) > 0)
-	/* an enum CHECK the table does not apply never fires, so it has no entry */
-	const applied = new Set(table.checkConstraints.map((chk) => chk.name))
-	const entries: Array<[string, string, Constraint]> = declaredChecks(table, enums).map((chk) => [
-		chk.name,
-		key(chk.name),
-		touchesPrivate(table, chk.expression)
-			? hidden.check
-			: { ...checkVerdict(chk.name, chk.expression), errorKey: `${keyed(table, chk.name)}_failed` },
-	])
-	for (const field of enums) {
-		const name = enumCheckName(table, field.name)
-		if (!applied.has(name)) continue
-		entries.push([
-			name,
-			key(name),
-			field.constraints.private
-				? hidden.value
-				: { ...checkVerdict(name, ""), errorKey: `${errorKeyPrefix(table)}_${field.name}_enum_invalid` },
-		])
-	}
-	const out: Record<string, Constraint> = {}
-	const declared = new Map<string, string>()
-	for (const [name, reported, constraint] of entries) {
-		const first = declared.get(reported)
-		if (first === name) throw new Error(`${qualifiedName(table)}: two CHECKs are named ${name}; rename one`)
-		if (first !== undefined)
-			throw new Error(
-				`${qualifiedName(table)}: the CHECKs ${first} and ${name} share the 63 bytes Postgres keeps of their names; rename one`,
-			)
-		declared.set(reported, name)
-		out[reported] = constraint
-	}
-	return entries.length > 0 ? out : undefined
+  const key = (name: string) => (dialect === "postgres" ? pgIdentifier(name) : name);
+  const enums = table.fields.filter((each) => (each.enumValues?.length ?? 0) > 0);
+  // an enum CHECK the table does not apply never fires, so it has no entry
+  const applied = new Set(table.checkConstraints.map((chk) => chk.name));
+
+  const entries: Array<[string, string, Constraint]> = declaredChecks(table, enums).map((chk) => [
+    chk.name,
+    key(chk.name),
+    touchesPrivate(table, chk.expression)
+      ? hidden.check
+      : { ...checkVerdict(chk.name, chk.expression), errorKey: `${keyed(table, chk.name)}_failed` },
+  ]);
+
+  for (const field of enums) {
+    const name = enumCheckName(table, field.name);
+
+    if (!applied.has(name)) continue;
+    entries.push([
+      name,
+      key(name),
+      field.constraints.private
+        ? hidden.value
+        : { ...checkVerdict(name, ""), errorKey: `${errorKeyPrefix(table)}_${field.name}_enum_invalid` },
+    ]);
+  }
+
+  const out: Record<string, Constraint> = {};
+  const declared = new Map<string, string>();
+
+  for (const [name, reported, constraint] of entries) {
+    const first = declared.get(reported);
+
+    if (first === name) throw new Error(`${qualifiedName(table)}: two CHECKs are named ${name}; rename one`);
+
+    if (first !== undefined) {
+      throw new Error(
+        `${qualifiedName(table)}: the CHECKs ${first} and ${name} share the 63 bytes Postgres keeps of their names; rename one`,
+      );
+    }
+
+    declared.set(reported, name);
+    out[reported] = constraint;
+  }
+
+  return entries.length > 0 ? out : undefined;
 }
 
 function constraintsOf(table: TableMeta, dialect: Dialect): TableConstraints {
-	const entry: TableConstraints = {}
-	const hidden = hiddenOf(table)
-	if (table.fields.some((f) => f.isPrimaryKey) || table.hasCompositePrimaryKey) {
-		entry.primaryKey = conflict("Record with this ID already exists", `${errorKeyPrefix(table)}_id_duplicate`)
-	}
-	const fkFields = table.fields.filter((f) => f.foreignKey !== null)
-	if (fkFields.length > 0) {
-		entry.foreignKey = Object.fromEntries(
-			fkFields.map((field) => [
-				field.sqlName,
-				field.constraints.private
-					? hidden.reference
-					: conflict("Referenced record does not exist", `${errorKeyPrefix(table)}_${field.name}_reference_not_found`),
-			]),
-		)
-	}
-	const unique = uniqueOf(table, hidden)
-	if (unique) entry.unique = unique
-	const check = checksOf(table, dialect, hidden)
-	if (check) entry.check = check
-	/* the columns the handlers name in no error, sorted by code unit */
-	const hiddenColumns = table.fields.filter((f) => f.constraints.private).map((f) => f.sqlName)
-	if (hiddenColumns.length > 0) entry.private = hiddenColumns.sort()
-	return entry
+  const entry: TableConstraints = {};
+  const hidden = hiddenOf(table);
+
+  if (table.fields.some((f) => f.isPrimaryKey) || table.hasCompositePrimaryKey)
+    entry.primaryKey = conflict("Record with this ID already exists", `${errorKeyPrefix(table)}_id_duplicate`);
+
+  const fkFields = table.fields.filter((f) => f.foreignKey !== null);
+
+  if (fkFields.length > 0) {
+    entry.foreignKey = Object.fromEntries(
+      fkFields.map((field) => [
+        field.sqlName,
+        field.constraints.private
+          ? hidden.reference
+          : conflict("Referenced record does not exist", `${errorKeyPrefix(table)}_${field.name}_reference_not_found`),
+      ]),
+    );
+  }
+
+  const unique = uniqueOf(table, hidden);
+
+  if (unique) entry.unique = unique;
+  const check = checksOf(table, dialect, hidden);
+
+  if (check) entry.check = check;
+  // the columns the handlers name in no error, sorted by code unit
+  const hiddenColumns = table.fields.filter((f) => f.constraints.private).map((f) => f.sqlName);
+
+  if (hiddenColumns.length > 0) entry.private = hiddenColumns.sort();
+
+  return entry;
 }
 
 /**
@@ -209,16 +240,19 @@ function constraintsOf(table: TableMeta, dialect: Dialect): TableConstraints {
  * key's column by column, and a table's reference to itself among them
  */
 function referencedColumns(tables: readonly TableMeta[]): Map<string, string[]> {
-	const out = new Map<string, Set<string>>()
-	for (const fk of tables.flatMap((table) => table.fields.flatMap((field) => field.foreignKey ?? []))) {
-		/* the analyzer refuses a reference to a table the tables file does not export, so each target is here */
-		const target = tables.find((table) => table.varName === fk.refTable) as TableMeta
-		for (const column of fk.key?.refColumns ?? [fk.refColumn]) {
-			const { sqlName } = target.fields.find((field) => field.name === column) as FieldMeta
-			out.set(qualifiedName(target), (out.get(qualifiedName(target)) ?? new Set()).add(sqlName))
-		}
-	}
-	return new Map([...out].map(([table, columns]) => [table, [...columns].sort()]))
+  const out = new Map<string, Set<string>>();
+
+  for (const fk of tables.flatMap((table) => table.fields.flatMap((field) => field.foreignKey ?? []))) {
+    // the analyzer refuses a reference to a table the tables file does not export, so each target is here
+    const target = tables.find((table) => table.varName === fk.refTable) as TableMeta;
+
+    for (const column of fk.key?.refColumns ?? [fk.refColumn]) {
+      const { sqlName } = target.fields.find((field) => field.name === column) as FieldMeta;
+      out.set(qualifiedName(target), (out.get(qualifiedName(target)) ?? new Set()).add(sqlName));
+    }
+  }
+
+  return new Map([...out].map(([table, columns]) => [table, [...columns].sort()]));
 }
 
 /**
@@ -229,72 +263,86 @@ function referencedColumns(tables: readonly TableMeta[]): Map<string, string[]> 
  * constraints share is no repeat: to a client that never sees the column, they mean one thing.
  */
 export function buildConstraintMap(
-	tables: readonly TableMeta[],
-	dialect: Dialect = "sqlite",
-	partitions: Readonly<Record<string, readonly string[]>> = {},
+  tables: readonly TableMeta[],
+  dialect: Dialect = "sqlite",
+  partitions: Readonly<Record<string, readonly string[]>> = {},
 ): ConstraintMap {
-	const map: ConstraintMap = {}
-	const owner = new Map<string, { constraint: Constraint; place: string }>()
-	const referenced = referencedColumns(tables)
-	const partitioned = partitionsOf(tables, dialect, partitions)
-	for (const table of tables) {
-		const entry = constraintsOf(table, dialect)
-		const columns = referenced.get(qualifiedName(table))
-		if (columns !== undefined) entry.referenced = columns
-		const listed = partitioned.get(qualifiedName(table))
-		if (listed !== undefined) entry.partitions = listed
-		for (const [place, constraint] of placed(qualifiedName(table), entry)) {
-			const first = owner.get(constraint.errorKey)
-			if (first?.constraint === constraint) continue
-			if (first !== undefined)
-				throw new Error(
-					`the error key ${constraint.errorKey} names two constraints: ${first.place} and ${place}; rename a column`,
-				)
-			owner.set(constraint.errorKey, { constraint, place })
-		}
-		map[qualifiedName(table)] = entry
-	}
-	return map
+  const map: ConstraintMap = {};
+  const owner = new Map<string, { constraint: Constraint; place: string }>();
+  const referenced = referencedColumns(tables);
+  const partitioned = partitionsOf(tables, dialect, partitions);
+
+  for (const table of tables) {
+    const entry = constraintsOf(table, dialect);
+    const columns = referenced.get(qualifiedName(table));
+
+    if (columns !== undefined) entry.referenced = columns;
+    const listed = partitioned.get(qualifiedName(table));
+
+    if (listed !== undefined) entry.partitions = listed;
+
+    for (const [place, constraint] of placed(qualifiedName(table), entry)) {
+      const first = owner.get(constraint.errorKey);
+
+      if (first?.constraint === constraint) continue;
+
+      if (first !== undefined) {
+        throw new Error(
+          `the error key ${constraint.errorKey} names two constraints: ${first.place} and ${place}; rename a column`,
+        );
+      }
+
+      owner.set(constraint.errorKey, { constraint, place });
+    }
+
+    map[qualifiedName(table)] = entry;
+  }
+
+  return map;
 }
 
 /** Each constraint of a table's entry with where it stands: `user.unique.email` */
 function placed(table: string, entry: TableConstraints): Array<[string, Constraint]> {
-	const groups = (["check", "foreignKey", "unique"] as const).flatMap((group) =>
-		Object.entries(entry[group] ?? {}).map(([name, constraint]): [string, Constraint] => [
-			`${table}.${group}.${name}`,
-			constraint,
-		]),
-	)
-	return [...(entry.primaryKey ? [[`${table}.primaryKey`, entry.primaryKey] as [string, Constraint]] : []), ...groups]
+  const groups = (["check", "foreignKey", "unique"] as const).flatMap((group) =>
+    Object.entries(entry[group] ?? {}).map(([name, constraint]): [string, Constraint] => [
+      `${table}.${group}.${name}`,
+      constraint,
+    ]),
+  );
+
+  return [...(entry.primaryKey ? [[`${table}.primaryKey`, entry.primaryKey] as [string, Constraint]] : []), ...groups];
 }
 
 /** Every constraint in the map, flattened */
 export function constraintsIn(map: ConstraintMap): Constraint[] {
-	return Object.values(map).flatMap(({ check, foreignKey, primaryKey, unique }) => [
-		...(primaryKey ? [primaryKey] : []),
-		...[check, foreignKey, unique].flatMap((group) => Object.values(group ?? {})),
-	])
+  return Object.values(map).flatMap(({ check, foreignKey, primaryKey, unique }) => [
+    ...(primaryKey ? [primaryKey] : []),
+    ...[check, foreignKey, unique].flatMap((group) => Object.values(group ?? {})),
+  ]);
 }
 
 function countConstraints(map: ConstraintMap): number {
-	let total = 0
-	for (const { check, foreignKey, primaryKey, unique } of Object.values(map)) {
-		if (primaryKey) total++
-		for (const group of [check, foreignKey, unique]) total += Object.keys(group ?? {}).length
-	}
-	return total
+  let total = 0;
+
+  for (const { check, foreignKey, primaryKey, unique } of Object.values(map)) {
+    if (primaryKey) total++;
+
+    for (const group of [check, foreignKey, unique]) total += Object.keys(group ?? {}).length;
+  }
+
+  return total;
 }
 
 /** Generate constraint map from analyzed tables */
 export function generateConstraints(ctx: GeneratorContext, config: ConstraintsConfig): void {
-	const { dbName, tables } = ctx.analysis
-	const outputPath = path.resolve(ctx.cwd, config.output)
-	const constraintMap = buildConstraintMap(tables, ctx.dialect, config.partitions)
-	writeGenFile(outputPath, generateConstraintMapCode(constraintMap, dbName), {
-		generator: "database",
-		staged: ctx.staged,
-	})
+  const { dbName, tables } = ctx.analysis;
+  const outputPath = path.resolve(ctx.cwd, config.output);
+  const constraintMap = buildConstraintMap(tables, ctx.dialect, config.partitions);
+  writeGenFile(outputPath, generateConstraintMapCode(constraintMap, dbName), {
+    generator: "database",
+    staged: ctx.staged,
+  });
 
-	ctx.log(`Generated constraint map for ${dbName} database at: ${outputPath}`)
-	ctx.log(`Tables: ${Object.keys(constraintMap).length}, Total constraints: ${countConstraints(constraintMap)}`)
+  ctx.log(`Generated constraint map for ${dbName} database at: ${outputPath}`);
+  ctx.log(`Tables: ${Object.keys(constraintMap).length}, Total constraints: ${countConstraints(constraintMap)}`);
 }

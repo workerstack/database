@@ -1,193 +1,199 @@
-import { fixtureRoot } from "../__fixtures__/temp.ts"
-import fs from "node:fs"
-import path from "node:path"
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import type { TableMeta } from "../analyzer-types.ts"
-import { generateEntities } from "./entities.ts"
-import { testContext } from "./__fixtures__/context.ts"
+import fs from "node:fs";
+import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { fixtureRoot } from "../__fixtures__/temp.ts";
+import type { TableMeta } from "../analyzer-types.ts";
+import { testContext } from "./__fixtures__/context.ts";
+import { generateEntities } from "./entities.ts";
 
 function makeTable(varName: string, idPrefix: string | null): TableMeta {
-	return {
-		checkConstraints: [],
-		expressionIndexes: [],
-		schema: null,
-		fields: [],
-		hasCompositePrimaryKey: false,
-		idPrefix,
-		sqlName: varName,
-		timestamps: {
-			createdAt: false,
-			deletedAt: false,
-			names: { createdAt: null, deletedAt: null, updatedAt: null },
-			style: "camelCase",
-			updatedAt: false,
-		},
-		partialUniqueIndexes: [],
-		uniqueIndexes: [],
-		varName,
-	}
+  return {
+    checkConstraints: [],
+    expressionIndexes: [],
+    fields: [],
+    hasCompositePrimaryKey: false,
+    idPrefix,
+    partialUniqueIndexes: [],
+    schema: null,
+    sqlName: varName,
+    timestamps: {
+      createdAt: false,
+      deletedAt: false,
+      names: { createdAt: null, deletedAt: null, updatedAt: null },
+      style: "camelCase",
+      updatedAt: false,
+    },
+    uniqueIndexes: [],
+    varName,
+  };
 }
 
 /** A fresh temp directory per test, removed after it. */
 function useTmpDir(prefix: string): () => string {
-	let dir = ""
-	beforeEach(() => {
-		dir = fs.mkdtempSync(path.join(fixtureRoot(), prefix))
-	})
-	afterEach(() => fs.rmSync(dir, { force: true, recursive: true }))
-	return () => dir
+  let dir = "";
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(fixtureRoot(), prefix));
+  });
+  afterEach(() => fs.rmSync(dir, { force: true, recursive: true }));
+
+  return () => dir;
 }
 
 describe("generateEntities — the prefix map", () => {
-	const tmpDir = useTmpDir("database-gen-entities-")
+  const tmpDir = useTmpDir("database-gen-entities-");
 
-	it("generates prefix map and typed helper", () => {
-		const tables = [makeTable("user", "usr"), makeTable("organization", "org")]
-		const output = path.join(tmpDir(), "entities.gen.ts")
+  it("generates prefix map and typed helper", () => {
+    const tables = [makeTable("user", "usr"), makeTable("organization", "org")];
+    const output = path.join(tmpDir(), "entities.gen.ts");
 
-		generateEntities(testContext(tables, { cwd: tmpDir(), dbName: "test" }), { output })
+    generateEntities(testContext(tables, { cwd: tmpDir(), dbName: "test" }), { output });
 
-		const content = fs.readFileSync(output, "utf-8")
-		expect(content).toContain("const entityPrefixes = {")
-		expect(content).toContain('\torganization: "org",')
-		expect(content).toContain('\tuser: "usr",')
-		expect(content).toContain("} as const")
-		expect(content).toContain("type EntityName = keyof typeof entityPrefixes")
-		expect(content).toContain("function generateEntityId<T extends EntityName>(entity: T): string")
-		expect(content).toContain("return generateId(entityPrefixes[entity])")
-	})
+    const content = fs.readFileSync(output, "utf-8");
+    expect(content).toContain("const entityPrefixes = {");
+    expect(content).toContain('\torganization: "org",');
+    expect(content).toContain('\tuser: "usr",');
+    expect(content).toContain("} as const");
+    expect(content).toContain("type EntityName = keyof typeof entityPrefixes");
+    expect(content).toContain("function generateEntityId<T extends EntityName>(entity: T): string");
+    expect(content).toContain("return generateId(entityPrefixes[entity])");
+  });
 
-	it("exports generateUlid and EntityName type", () => {
-		const tables = [makeTable("user", "usr")]
-		const output = path.join(tmpDir(), "entities.gen.ts")
+  it("exports generateUlid and EntityName type", () => {
+    const tables = [makeTable("user", "usr")];
+    const output = path.join(tmpDir(), "entities.gen.ts");
 
-		generateEntities(testContext(tables, { cwd: tmpDir(), dbName: "test" }), { output })
+    generateEntities(testContext(tables, { cwd: tmpDir(), dbName: "test" }), { output });
 
-		const content = fs.readFileSync(output, "utf-8")
-		expect(content).toContain("export { entityPrefixes, generateEntityId, generateUlid, type EntityName }")
-	})
+    const content = fs.readFileSync(output, "utf-8");
+    expect(content).toContain("export { entityPrefixes, generateEntityId, generateUlid, type EntityName }");
+  });
 
-	it("skips tables without idPrefix (serialId)", () => {
-		const tables = [makeTable("user", "usr"), makeTable("counter", null), makeTable("project", "proj")]
-		const output = path.join(tmpDir(), "entities.gen.ts")
+  it("skips tables without idPrefix (serialId)", () => {
+    const tables = [makeTable("user", "usr"), makeTable("counter", null), makeTable("project", "proj")];
+    const output = path.join(tmpDir(), "entities.gen.ts");
 
-		generateEntities(testContext(tables, { cwd: tmpDir(), dbName: "test" }), { output })
+    generateEntities(testContext(tables, { cwd: tmpDir(), dbName: "test" }), { output });
 
-		const content = fs.readFileSync(output, "utf-8")
-		expect(content).toContain('\tuser: "usr",')
-		expect(content).toContain('\tproject: "proj",')
-		expect(content).not.toContain("counter")
-	})
+    const content = fs.readFileSync(output, "utf-8");
+    expect(content).toContain('\tuser: "usr",');
+    expect(content).toContain('\tproject: "proj",');
+    expect(content).not.toContain("counter");
+  });
 
-	it("skips generation when no tables have prefixes", () => {
-		const tables = [makeTable("counter", null), makeTable("sequence", null)]
-		const output = path.join(tmpDir(), "entities.gen.ts")
+  it("skips generation when no tables have prefixes", () => {
+    const tables = [makeTable("counter", null), makeTable("sequence", null)];
+    const output = path.join(tmpDir(), "entities.gen.ts");
 
-		generateEntities(testContext(tables, { cwd: tmpDir(), dbName: "test" }), { output })
+    generateEntities(testContext(tables, { cwd: tmpDir(), dbName: "test" }), { output });
 
-		expect(fs.existsSync(output)).toBe(false)
-	})
-})
+    expect(fs.existsSync(output)).toBe(false);
+  });
+});
 
 describe("generateEntities — imports and header", () => {
-	const tmpDir = useTmpDir("database-gen-entities-")
+  const tmpDir = useTmpDir("database-gen-entities-");
 
-	it("uses default @workerstack/database import", () => {
-		const tables = [makeTable("user", "usr")]
-		const output = path.join(tmpDir(), "entities.gen.ts")
+  it("uses default @workerstack/database import", () => {
+    const tables = [makeTable("user", "usr")];
+    const output = path.join(tmpDir(), "entities.gen.ts");
 
-		generateEntities(testContext(tables, { cwd: tmpDir(), dbName: "test" }), { output })
+    generateEntities(testContext(tables, { cwd: tmpDir(), dbName: "test" }), { output });
 
-		const content = fs.readFileSync(output, "utf-8")
-		expect(content).toContain('import { generateId, generateUlid } from "@workerstack/database"')
-	})
+    const content = fs.readFileSync(output, "utf-8");
+    expect(content).toContain('import { generateId, generateUlid } from "@workerstack/database"');
+  });
 
-	it("uses custom importFrom when provided", () => {
-		const tables = [makeTable("user", "usr")]
-		const output = path.join(tmpDir(), "entities.gen.ts")
+  it("uses custom importFrom when provided", () => {
+    const tables = [makeTable("user", "usr")];
+    const output = path.join(tmpDir(), "entities.gen.ts");
 
-		generateEntities(testContext(tables, { cwd: tmpDir(), dbName: "test" }), { importFrom: "my-database", output })
+    generateEntities(testContext(tables, { cwd: tmpDir(), dbName: "test" }), { importFrom: "my-database", output });
 
-		const content = fs.readFileSync(output, "utf-8")
-		expect(content).toContain('import { generateId, generateUlid } from "my-database"')
-	})
+    const content = fs.readFileSync(output, "utf-8");
+    expect(content).toContain('import { generateId, generateUlid } from "my-database"');
+  });
 
-	it("includes header comment with generation timestamp", () => {
-		const tables = [makeTable("user", "usr")]
-		const output = path.join(tmpDir(), "entities.gen.ts")
+  it("includes header comment with generation timestamp", () => {
+    const tables = [makeTable("user", "usr")];
+    const output = path.join(tmpDir(), "entities.gen.ts");
 
-		generateEntities(testContext(tables, { cwd: tmpDir(), dbName: "test" }), { output })
+    generateEntities(testContext(tables, { cwd: tmpDir(), dbName: "test" }), { output });
 
-		const content = fs.readFileSync(output, "utf-8")
-		expect(content).toContain("@generated by database")
-		expect(content).toContain("do not edit")
-		expect(content).toMatch(/checksum: [\da-f]+/)
-	})
-})
+    const content = fs.readFileSync(output, "utf-8");
+    expect(content).toContain("@generated by database");
+    expect(content).toContain("do not edit");
+    expect(content).toMatch(/checksum: [\da-f]+/);
+  });
+});
 
 describe("generateEntities — package.json exports", () => {
-	const tmpDir = useTmpDir("database-gen-entities-")
+  const tmpDir = useTmpDir("database-gen-entities-");
 
-	it("updates package.json with ./entities export", () => {
-		const pkgPath = path.join(tmpDir(), "package.json")
-		fs.writeFileSync(pkgPath, JSON.stringify({ exports: { ".": "./src/index.ts" }, name: "test" }))
+  it("updates package.json with ./entities export", () => {
+    const pkgPath = path.join(tmpDir(), "package.json");
+    fs.writeFileSync(pkgPath, JSON.stringify({ exports: { ".": "./src/index.ts" }, name: "test" }));
 
-		/* entities output is in a src/ subdirectory */
-		const srcDir = path.join(tmpDir(), "src")
-		fs.mkdirSync(srcDir)
-		const output = path.join(srcDir, "db.test.entities.gen.ts")
+    // entities output is in a src/ subdirectory
+    const srcDir = path.join(tmpDir(), "src");
+    fs.mkdirSync(srcDir);
+    const output = path.join(srcDir, "db.test.entities.gen.ts");
 
-		const tables = [makeTable("user", "usr")]
-		generateEntities(testContext(tables, { cwd: tmpDir(), dbName: "test" }), { output, updatePackageJson: true })
+    const tables = [makeTable("user", "usr")];
+    generateEntities(testContext(tables, { cwd: tmpDir(), dbName: "test" }), { output, updatePackageJson: true });
 
-		const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8")) as Record<string, unknown>
-		const exports = pkg.exports as Record<string, string>
-		expect(exports["./entities"]).toBe("./src/db.test.entities.gen.ts")
-		expect(exports["."]).toBe("./src/index.ts")
-	})
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8")) as Record<string, unknown>;
+    const exports = pkg.exports as Record<string, string>;
+    expect(exports["./entities"]).toBe("./src/db.test.entities.gen.ts");
+    expect(exports["."]).toBe("./src/index.ts");
+  });
 
-	it("writes the file and leaves package.json alone when none is found above the output", () => {
-		const output = path.join(tmpDir(), "entities.gen.ts")
-		generateEntities(testContext([makeTable("user", "usr")], { cwd: tmpDir() }), { output, updatePackageJson: true })
+  it("writes the file and leaves package.json alone when none is found above the output", () => {
+    const output = path.join(tmpDir(), "entities.gen.ts");
+    generateEntities(testContext([makeTable("user", "usr")], { cwd: tmpDir() }), { output, updatePackageJson: true });
 
-		expect(fs.readdirSync(tmpDir())).toEqual(["entities.gen.ts"])
-	})
+    expect(fs.readdirSync(tmpDir())).toEqual(["entities.gen.ts"]);
+  });
 
-	it("replaces existing ./entities export on re-run", () => {
-		const pkgPath = path.join(tmpDir(), "package.json")
-		fs.writeFileSync(
-			pkgPath,
-			JSON.stringify({
-				exports: { ".": "./src/index.ts", "./entities": "./old-path.ts" },
-				name: "test",
-			}),
-		)
+  it("replaces existing ./entities export on re-run", () => {
+    const pkgPath = path.join(tmpDir(), "package.json");
+    fs.writeFileSync(
+      pkgPath,
+      JSON.stringify({
+        exports: { ".": "./src/index.ts", "./entities": "./old-path.ts" },
+        name: "test",
+      }),
+    );
 
-		const output = path.join(tmpDir(), "db.test.entities.gen.ts")
-		const tables = [makeTable("user", "usr")]
-		generateEntities(testContext(tables, { cwd: tmpDir(), dbName: "test" }), { output, updatePackageJson: true })
+    const output = path.join(tmpDir(), "db.test.entities.gen.ts");
+    const tables = [makeTable("user", "usr")];
+    generateEntities(testContext(tables, { cwd: tmpDir(), dbName: "test" }), { output, updatePackageJson: true });
 
-		const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8")) as Record<string, unknown>
-		const exports = pkg.exports as Record<string, string>
-		expect(exports["./entities"]).toBe("./db.test.entities.gen.ts")
-	})
-})
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8")) as Record<string, unknown>;
+    const exports = pkg.exports as Record<string, string>;
+    expect(exports["./entities"]).toBe("./db.test.entities.gen.ts");
+  });
+});
 
 describe("generateEntities — a package whose exports is a single target (S-13)", () => {
-	it("keeps that target as the . export", () => {
-		const dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-gen-entities-s13-"))
-		try {
-			fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ exports: "./index.ts", name: "app" }))
-			generateEntities(testContext([makeTable("user", "usr")], { cwd: dir }), {
-				output: path.join(dir, "e.gen.ts"),
-				updatePackageJson: true,
-			})
-			const pkg = JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf-8")) as {
-				exports: Record<string, string>
-			}
-			expect(pkg.exports["."]).toBe("./index.ts")
-		} finally {
-			fs.rmSync(dir, { force: true, recursive: true })
-		}
-	})
-})
+  it("keeps that target as the . export", () => {
+    const dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-gen-entities-s13-"));
+
+    try {
+      fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ exports: "./index.ts", name: "app" }));
+      generateEntities(testContext([makeTable("user", "usr")], { cwd: dir }), {
+        output: path.join(dir, "e.gen.ts"),
+        updatePackageJson: true,
+      });
+
+      const pkg = JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf-8")) as {
+        exports: Record<string, string>;
+      };
+
+      expect(pkg.exports["."]).toBe("./index.ts");
+    } finally {
+      fs.rmSync(dir, { force: true, recursive: true });
+    }
+  });
+});

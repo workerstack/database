@@ -3,15 +3,17 @@
  * when its module is imported, so a range zod cannot build fails here and never on an app's import.
  * Each dialect's columns sit at the edge of the range database holds them to.
  */
-import path from "node:path"
-import { describe, expect, it } from "vitest"
-import { codegen, generatedFiles, project, useProjects } from "../support/codegen-project.ts"
+import path from "node:path";
 
-useProjects()
+import { describe, expect, it } from "vitest";
 
-const CONFIG = `export default { databases: { core: { tables: "./src/db/db.core.tables.ts" } } }\n`
+import { codegen, generatedFiles, project, useProjects } from "../support/codegen-project.ts";
 
-/* every text kind at its tightest range, beside a column of every other kind */
+useProjects();
+
+const CONFIG = `export default { databases: { core: { tables: "./src/db/db.core.tables.ts" } } }\n`;
+
+// every text kind at its tightest range, beside a column of every other kind
 const COLUMNS = `id: c.id("itm"),
 	pw: c.text("pw", { password: true, min: 72 }).notNull(),
 	pw_short: c.text("pw_short", { password: true, max: 8 }),
@@ -29,10 +31,10 @@ const COLUMNS = `id: c.id("itm"),
 	doc: c.json("doc", docSchema),
 	at: c.timestamp("at"),
 	created_at: c.createdAt("created_at"),
-	updated_at: c.updatedAt("updated_at"),`
+	updated_at: c.updatedAt("updated_at"),`;
 
 const TABLES = {
-	postgres: `import * as z from "zod"
+  postgres: `import * as z from "zod"
 import { pgTable } from "drizzle-orm/pg-core"
 import { c } from "@workerstack/database/pg/columns"
 export const docSchema = z.object({ a: z.string() })
@@ -40,7 +42,7 @@ export const item = pgTable("item", {
 	${COLUMNS}
 })
 `,
-	sqlite: `import * as z from "zod"
+  sqlite: `import * as z from "zod"
 import { sqliteTable } from "drizzle-orm/sqlite-core"
 import { c } from "@workerstack/database/sqlite/columns"
 export const docSchema = z.object({ a: z.string() })
@@ -48,18 +50,19 @@ export const item = sqliteTable("item", {
 	${COLUMNS}
 })
 `,
-}
+};
 
 describe("every generated DTO module loads", () => {
-	it.each(Object.entries(TABLES))(
-		"on %s, _shared among them",
-		async (_, tables) => {
-			const dir = project({ "database.config.ts": CONFIG, "src/db/db.core.tables.ts": tables })
-			await codegen(dir)
-			const modules = generatedFiles(dir).filter((file) => file.includes("dtos") && file.endsWith(".gen.ts"))
-			expect(modules.some((file) => file.includes("_shared"))).toBe(true)
-			for (const file of modules) await expect(import(path.join(dir, file)), file).resolves.toBeDefined()
-		},
-		120_000,
-	)
-})
+  it.each(Object.entries(TABLES))(
+    "on %s, _shared among them",
+    async (_, tables) => {
+      const dir = project({ "database.config.ts": CONFIG, "src/db/db.core.tables.ts": tables });
+      await codegen(dir);
+      const modules = generatedFiles(dir).filter((file) => file.includes("dtos") && file.endsWith(".gen.ts"));
+      expect(modules.some((file) => file.includes("_shared"))).toBe(true);
+
+      for (const file of modules) await expect(import(path.join(dir, file)), file).resolves.toBeDefined();
+    },
+    120_000,
+  );
+});

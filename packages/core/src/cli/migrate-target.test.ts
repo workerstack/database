@@ -1,217 +1,237 @@
-import { mkdirSync, writeFileSync } from "node:fs"
-import { join } from "node:path"
-import { afterEach, describe, expect, it } from "vitest"
-import { fakeAtlas } from "./__fixtures__/d1.ts"
-import { makeIo, projects, runCliWithFakes } from "./__fixtures__/io.ts"
-import { parseArgs } from "./args.ts"
-import { resolveMigrateTarget } from "./migrate-target.ts"
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
-const temp = projects()
-afterEach(temp.clean)
+import { afterEach, describe, expect, it } from "vitest";
 
-const PG = { type: "postgres", url: "postgres://app@db.example.com/app?sslmode=verify-full" }
-const LITE = { type: "libsql", url: "file:core.db" }
+import { fakeAtlas } from "./__fixtures__/d1.ts";
+import { makeIo, projects, runCliWithFakes } from "./__fixtures__/io.ts";
+import { parseArgs } from "./args.ts";
+import { resolveMigrateTarget } from "./migrate-target.ts";
+
+const temp = projects();
+
+afterEach(temp.clean);
+
+const PG = { type: "postgres", url: "postgres://app@db.example.com/app?sslmode=verify-full" };
+const LITE = { type: "libsql", url: "file:core.db" };
 
 /** A project whose database.migrate.config.ts (in ./db) declares `databases`, and optionally a database.config.ts */
 function project(databases: Record<string, unknown>, databaseConfig?: string): string {
-	const dir = temp.make()
-	mkdirSync(join(dir, "db"))
-	writeFileSync(join(dir, "database.migrate.config.ts"), `export default { databases: ${JSON.stringify(databases)} }\n`)
-	if (databaseConfig !== undefined) writeFileSync(join(dir, "database.config.ts"), databaseConfig)
-	return dir
+  const dir = temp.make();
+  mkdirSync(join(dir, "db"));
+  writeFileSync(
+    join(dir, "database.migrate.config.ts"),
+    `export default { databases: ${JSON.stringify(databases)} }\n`,
+  );
+
+  if (databaseConfig !== undefined) writeFileSync(join(dir, "database.config.ts"), databaseConfig);
+
+  return dir;
 }
 
 /** A database.config.ts giving database `db` an FTS5 table */
 const fts = (db: string) =>
-	`export default { databases: { ${db}: { tables: "t.ts", fts: { post_fts: { columns: ["title"] } } } } }\n`
+  `export default { databases: { ${db}: { tables: "t.ts", fts: { post_fts: { columns: ["title"] } } } } }\n`;
 
 describe("resolveMigrateTarget", () => {
-	it("is undefined in a project without database.migrate.config.ts", async () => {
-		expect(await resolveMigrateTarget({ cwd: temp.make(), db: "core", mode: "diff" })).toBeUndefined()
-	})
+  it("is undefined in a project without database.migrate.config.ts", async () => {
+    expect(await resolveMigrateTarget({ cwd: temp.make(), db: "core", mode: "diff" })).toBeUndefined();
+  });
 
-	it("resolves a Postgres database with its dialect, defaults and paths against the config", async () => {
-		const cwd = project({
-			core: { drizzleConfigPath: "drizzle.pg.ts", migrationsDir: "db/pg", name: "core", provider: PG },
-		})
-		expect(await resolveMigrateTarget({ cwd, db: "core", mode: "diff" })).toEqual({
-			codegen: "core",
-			configDir: cwd,
-			database: "core",
-			dialect: "postgres",
-			drizzleConfigPath: join(cwd, "drizzle.pg.ts"),
-			label: "core (core)",
-			migrationsDir: join(cwd, "db/pg"),
-			name: "core",
-			provider: { devUrl: "docker://postgres/17/dev", lockTimeout: "5s", schema: "public", ...PG },
-		})
-	})
+  it("resolves a Postgres database with its dialect, defaults and paths against the config", async () => {
+    const cwd = project({
+      core: { drizzleConfigPath: "drizzle.pg.ts", migrationsDir: "db/pg", name: "core", provider: PG },
+    });
 
-	it("takes --dir over the configured directory, and leaves drizzleConfigPath unset when the config does", async () => {
-		const cwd = project({ core: { migrationsDir: "m", name: "core", provider: LITE } })
-		const target = await resolveMigrateTarget({ cwd, db: "core", dir: "other", mode: "apply" })
-		expect(target).toMatchObject({ dialect: "sqlite", drizzleConfigPath: undefined, migrationsDir: join(cwd, "other") })
-	})
+    expect(await resolveMigrateTarget({ cwd, db: "core", mode: "diff" })).toEqual({
+      codegen: "core",
+      configDir: cwd,
+      database: "core",
+      dialect: "postgres",
+      drizzleConfigPath: join(cwd, "drizzle.pg.ts"),
+      label: "core (core)",
+      migrationsDir: join(cwd, "db/pg"),
+      name: "core",
+      provider: { devUrl: "docker://postgres/17/dev", lockTimeout: "5s", schema: "public", ...PG },
+    });
+  });
 
-	it("diffs without -e on environments that inherit the database's provider, and applies only with -e", async () => {
-		const environments = {
-			prod: { name: "core-prod", provider: { ...PG, url: "postgres://p/app" } },
-			staging: { name: "core-staging" },
-		}
-		const cwd = project({ core: { environments, migrationsDir: "m", provider: PG } })
-		expect(await resolveMigrateTarget({ cwd, db: "core", mode: "diff" })).toMatchObject({
-			label: "core (core-prod)",
-			provider: { devUrl: "docker://postgres/17/dev", url: "postgres://p/app" },
-		})
-		expect(await resolveMigrateTarget({ cwd, db: "core", env: "staging", mode: "apply" })).toMatchObject({
-			label: "core (core-staging)",
-			provider: PG,
-		})
-		await expect(resolveMigrateTarget({ cwd, db: "core", mode: "apply" })).rejects.toThrow(
-			"pass -e/--env with one of: prod, staging",
-		)
-	})
-})
+  it("takes --dir over the configured directory, and leaves drizzleConfigPath unset when the config does", async () => {
+    const cwd = project({ core: { migrationsDir: "m", name: "core", provider: LITE } });
+    const target = await resolveMigrateTarget({ cwd, db: "core", dir: "other", mode: "apply" });
+    expect(target).toMatchObject({
+      dialect: "sqlite",
+      drizzleConfigPath: undefined,
+      migrationsDir: join(cwd, "other"),
+    });
+  });
+
+  it("diffs without -e on environments that inherit the database's provider, and applies only with -e", async () => {
+    const environments = {
+      prod: { name: "core-prod", provider: { ...PG, url: "postgres://p/app" } },
+      staging: { name: "core-staging" },
+    };
+
+    const cwd = project({ core: { environments, migrationsDir: "m", provider: PG } });
+    expect(await resolveMigrateTarget({ cwd, db: "core", mode: "diff" })).toMatchObject({
+      label: "core (core-prod)",
+      provider: { devUrl: "docker://postgres/17/dev", url: "postgres://p/app" },
+    });
+    expect(await resolveMigrateTarget({ cwd, db: "core", env: "staging", mode: "apply" })).toMatchObject({
+      label: "core (core-staging)",
+      provider: PG,
+    });
+    await expect(resolveMigrateTarget({ cwd, db: "core", mode: "apply" })).rejects.toThrow(
+      "pass -e/--env with one of: prod, staging",
+    );
+  });
+});
 
 describe("resolveMigrateTarget refusals", () => {
-	it("refuses a database whose environments mix dialects", async () => {
-		const environments = { local: { name: "l", provider: LITE }, prod: { name: "p", provider: PG } }
-		const cwd = project({ core: { environments, migrationsDir: "m" } })
-		await expect(resolveMigrateTarget({ cwd, db: "core", mode: "diff" })).rejects.toThrow(
-			'database "core" mixes sqlite and postgres environments; one database has one dialect',
-		)
-	})
+  it("refuses a database whose environments mix dialects", async () => {
+    const environments = { local: { name: "l", provider: LITE }, prod: { name: "p", provider: PG } };
+    const cwd = project({ core: { environments, migrationsDir: "m" } });
+    await expect(resolveMigrateTarget({ cwd, db: "core", mode: "diff" })).rejects.toThrow(
+      'database "core" mixes sqlite and postgres environments; one database has one dialect',
+    );
+  });
 
-	it("resolves a SQLite and a Postgres database of one config, each with its own dialect", async () => {
-		const cwd = project({
-			analytics: { migrationsDir: "pg", name: "analytics", provider: PG },
-			core: { migrationsDir: "m", name: "core", provider: LITE },
-		})
-		expect((await resolveMigrateTarget({ cwd, db: "analytics", mode: "diff" }))?.dialect).toBe("postgres")
-		expect((await resolveMigrateTarget({ cwd, db: "core", mode: "diff" }))?.dialect).toBe("sqlite")
-	})
+  it("resolves a SQLite and a Postgres database of one config, each with its own dialect", async () => {
+    const cwd = project({
+      analytics: { migrationsDir: "pg", name: "analytics", provider: PG },
+      core: { migrationsDir: "m", name: "core", provider: LITE },
+    });
 
-	it("names the databases when the config declares none by that name", async () => {
-		const cwd = project({ core: { migrationsDir: "m", name: "core", provider: LITE } })
-		await expect(resolveMigrateTarget({ cwd, db: "blog", mode: "diff" })).rejects.toThrow(
-			'database.migrate.config.ts declares no database "blog". Available: core',
-		)
-	})
+    expect((await resolveMigrateTarget({ cwd, db: "analytics", mode: "diff" }))?.dialect).toBe("postgres");
+    expect((await resolveMigrateTarget({ cwd, db: "core", mode: "diff" }))?.dialect).toBe("sqlite");
+  });
 
-	it("refuses FTS5 tables on a Postgres database, and allows them on SQLite", async () => {
-		const pg = project({ core: { migrationsDir: "m", name: "core", provider: PG } }, fts("core"))
-		await expect(resolveMigrateTarget({ cwd: pg, db: "core", mode: "diff" })).rejects.toThrow(
-			'database.config.ts gives the Postgres database "core" FTS5 tables, which are SQLite; use a tsvector column with a GIN index',
-		)
-		const lite = project({ core: { migrationsDir: "m", name: "core", provider: LITE } }, fts("core"))
-		expect((await resolveMigrateTarget({ cwd: lite, db: "core", mode: "diff" }))?.dialect).toBe("sqlite")
-	})
-})
+  it("names the databases when the config declares none by that name", async () => {
+    const cwd = project({ core: { migrationsDir: "m", name: "core", provider: LITE } });
+    await expect(resolveMigrateTarget({ cwd, db: "blog", mode: "diff" })).rejects.toThrow(
+      'database.migrate.config.ts declares no database "blog". Available: core',
+    );
+  });
+
+  it("refuses FTS5 tables on a Postgres database, and allows them on SQLite", async () => {
+    const pg = project({ core: { migrationsDir: "m", name: "core", provider: PG } }, fts("core"));
+    await expect(resolveMigrateTarget({ cwd: pg, db: "core", mode: "diff" })).rejects.toThrow(
+      'database.config.ts gives the Postgres database "core" FTS5 tables, which are SQLite; use a tsvector column with a GIN index',
+    );
+    const lite = project({ core: { migrationsDir: "m", name: "core", provider: LITE } }, fts("core"));
+    expect((await resolveMigrateTarget({ cwd: lite, db: "core", mode: "diff" }))?.dialect).toBe("sqlite");
+  });
+});
 
 /** Environments `names`, each with the provider `provider` gives it */
 const envs = (names: readonly string[], provider: (name: string) => Record<string, unknown>) =>
-	Object.fromEntries(names.map((name) => [name, { name: `core-${name}`, provider: provider(name) }]))
+  Object.fromEntries(names.map((name) => [name, { name: `core-${name}`, provider: provider(name) }]));
 
 /** One of anyrow's D1 environments, each its own database and wrangler environment */
 const anyrowD1 = (name: string) => ({
-	databaseName: `anyrow-${name}`,
-	local: name === "local",
-	type: "d1",
-	wranglerEnv: name,
-})
+  databaseName: `anyrow-${name}`,
+  local: name === "local",
+  type: "d1",
+  wranglerEnv: name,
+});
 
 /** libsql locally, D1 on ci: environments that differ in whether they are D1 */
-const libsqlOrD1 = (name: string) => (name === "ci" ? { databaseName: "core", type: "d1" } : LITE)
+const libsqlOrD1 = (name: string) => (name === "ci" ? { databaseName: "core", type: "d1" } : LITE);
 
-/* KC4 of r22b: diff refused -e and read the first environment, so the key order chose its devUrl and schema */
+// KC4 of r22b: diff refused -e and read the first environment, so the key order chose its devUrl and schema
 describe("diff reads the environment it is told (KC4; sibling: the D1 environments that agree)", () => {
-	it("takes -e, and reads that environment's devUrl and schema", async () => {
-		expect(parseArgs(["core", "-e", "ci"], "migrate diff").options).toEqual({ env: "ci" })
-		const environments = envs(["local", "ci"], (name) => ({ ...PG, devUrl: `postgres://${name}/dev`, schema: name }))
-		const cwd = project({ core: { environments, migrationsDir: "m" } })
-		expect(await resolveMigrateTarget({ cwd, db: "core", env: "ci", mode: "diff" })).toMatchObject({
-			label: "core (core-ci)",
-			provider: { devUrl: "postgres://ci/dev", schema: "ci" },
-		})
-	})
+  it("takes -e, and reads that environment's devUrl and schema", async () => {
+    expect(parseArgs(["core", "-e", "ci"], "migrate diff").options).toEqual({ env: "ci" });
+    const environments = envs(["local", "ci"], (name) => ({ ...PG, devUrl: `postgres://${name}/dev`, schema: name }));
+    const cwd = project({ core: { environments, migrationsDir: "m" } });
+    expect(await resolveMigrateTarget({ cwd, db: "core", env: "ci", mode: "diff" })).toMatchObject({
+      label: "core (core-ci)",
+      provider: { devUrl: "postgres://ci/dev", schema: "ci" },
+    });
+  });
 
-	it.each([
-		["devUrl", (name: string) => ({ ...PG, devUrl: `postgres://${name}/dev` })],
-		["schema", (name: string) => ({ ...PG, schema: name })],
-		["devUrl and schema", (name: string) => ({ ...PG, devUrl: `postgres://${name}/dev`, schema: name })],
-		["whether it is D1", (name: string) => (name === "ci" ? { databaseName: "core", type: "d1" } : LITE)],
-	])("refuses environments that differ in %s without -e, naming them", async (differ, provider) => {
-		const cwd = project({ core: { environments: envs(["local", "ci"], provider), migrationsDir: "m" } })
-		await expect(resolveMigrateTarget({ cwd, db: "core", mode: "diff" })).rejects.toThrow(
-			`database "core"'s environments differ in ${differ}, which a diff reads: pass -e/--env with one of: local, ci`,
-		)
-	})
+  it.each([
+    ["devUrl", (name: string) => ({ ...PG, devUrl: `postgres://${name}/dev` })],
+    ["schema", (name: string) => ({ ...PG, schema: name })],
+    ["devUrl and schema", (name: string) => ({ ...PG, devUrl: `postgres://${name}/dev`, schema: name })],
+    ["whether it is D1", (name: string) => (name === "ci" ? { databaseName: "core", type: "d1" } : LITE)],
+  ])("refuses environments that differ in %s without -e, naming them", async (differ, provider) => {
+    const cwd = project({ core: { environments: envs(["local", "ci"], provider), migrationsDir: "m" } });
+    await expect(resolveMigrateTarget({ cwd, db: "core", mode: "diff" })).rejects.toThrow(
+      `database "core"'s environments differ in ${differ}, which a diff reads: pass -e/--env with one of: local, ci`,
+    );
+  });
 
-	it("reads the first of environments that agree on what a diff reads, as anyrow's four D1 environments do", async () => {
-		const cwd = project({
-			core: { environments: envs(["local", "dev", "staging", "prod"], anyrowD1), migrationsDir: "m" },
-		})
-		expect(await resolveMigrateTarget({ cwd, db: "core", mode: "diff" })).toMatchObject({ label: "core (core-local)" })
-		const pg = project({
-			core: {
-				environments: envs(["local", "ci"], (name) => ({ ...PG, url: `postgres://${name}/app` })),
-				migrationsDir: "m",
-			},
-		})
-		expect(await resolveMigrateTarget({ cwd: pg, db: "core", mode: "diff" })).toMatchObject({
-			label: "core (core-local)",
-		})
-	})
+  it("reads the first of environments that agree on what a diff reads, as anyrow's four D1 environments do", async () => {
+    const cwd = project({
+      core: { environments: envs(["local", "dev", "staging", "prod"], anyrowD1), migrationsDir: "m" },
+    });
 
-	it("passes database migrate diff's -e through, and refuses the diff without it", async () => {
-		const cwd = project({ core: { environments: envs(["local", "ci"], libsqlOrD1), migrationsDir: "m" } })
-		writeFileSync(join(cwd, "drizzle.config.ts"), 'export default { dialect: "sqlite" }\n')
-		const told = makeIo(cwd, fakeAtlas())
-		expect(await runCliWithFakes(["migrate", "diff", "core", "-e", "ci"], told)).toBe(0)
-		expect(told.errors).toEqual([])
-		const bare = makeIo(cwd, fakeAtlas())
-		expect(await runCliWithFakes(["migrate", "diff", "core"], bare)).toBe(1)
-		expect(bare.errors).toEqual([
-			'database "core"\'s environments differ in whether it is D1, which a diff reads: pass -e/--env with one of: local, ci',
-		])
-	})
-})
+    expect(await resolveMigrateTarget({ cwd, db: "core", mode: "diff" })).toMatchObject({ label: "core (core-local)" });
 
-/* KC4a: a database's provider is its environments' fallback, which no apply uses alone, so a diff never reads it over them */
+    const pg = project({
+      core: {
+        environments: envs(["local", "ci"], (name) => ({ ...PG, url: `postgres://${name}/app` })),
+        migrationsDir: "m",
+      },
+    });
+
+    expect(await resolveMigrateTarget({ cwd: pg, db: "core", mode: "diff" })).toMatchObject({
+      label: "core (core-local)",
+    });
+  });
+
+  it("passes database migrate diff's -e through, and refuses the diff without it", async () => {
+    const cwd = project({ core: { environments: envs(["local", "ci"], libsqlOrD1), migrationsDir: "m" } });
+    writeFileSync(join(cwd, "drizzle.config.ts"), 'export default { dialect: "sqlite" }\n');
+    const told = makeIo(cwd, fakeAtlas());
+    expect(await runCliWithFakes(["migrate", "diff", "core", "-e", "ci"], told)).toBe(0);
+    expect(told.errors).toEqual([]);
+    const bare = makeIo(cwd, fakeAtlas());
+    expect(await runCliWithFakes(["migrate", "diff", "core"], bare)).toBe(1);
+    expect(bare.errors).toEqual([
+      'database "core"\'s environments differ in whether it is D1, which a diff reads: pass -e/--env with one of: local, ci',
+    ]);
+  });
+});
+
+// KC4a: a database's provider is its environments' fallback, which no apply uses alone, so a diff never reads it over them
 describe("diff beside a database's own provider (KC4a; sibling: environments that inherit it)", () => {
-	it("refuses environments beside the database's provider that override devUrl differently", async () => {
-		const environments = envs(["local", "ci"], (name) => ({ ...PG, devUrl: `postgres://${name}/dev` }))
-		const cwd = project({ core: { environments, migrationsDir: "m", provider: PG } })
-		await expect(resolveMigrateTarget({ cwd, db: "core", mode: "diff" })).rejects.toThrow(
-			'database "core"\'s environments differ in devUrl, which a diff reads: pass -e/--env with one of: local, ci',
-		)
-	})
-})
+  it("refuses environments beside the database's provider that override devUrl differently", async () => {
+    const environments = envs(["local", "ci"], (name) => ({ ...PG, devUrl: `postgres://${name}/dev` }));
+    const cwd = project({ core: { environments, migrationsDir: "m", provider: PG } });
+    await expect(resolveMigrateTarget({ cwd, db: "core", mode: "diff" })).rejects.toThrow(
+      'database "core"\'s environments differ in devUrl, which a diff reads: pass -e/--env with one of: local, ci',
+    );
+  });
+});
 
-/* D2-11 of the area D round-two review: in a project of several databases, an environment refusal named none */
+// D2-11 of the area D round-two review: in a project of several databases, an environment refusal named none
 describe("resolveMigrateTarget: an environment refusal names its database", () => {
-	it("prefixes each refusal resolving the database's environments gives", async () => {
-		const cwd = project({
-			blog: { migrationsDir: "m", name: "blog", provider: LITE },
-			core: {
-				environments: { bare: { name: "core-bare", provider: LITE }, prod: { name: "core-prod", provider: LITE } },
-				migrationsDir: "m",
-			},
-		})
-		const cases: Array<[Parameters<typeof resolveMigrateTarget>[0], string]> = [
-			[
-				{ cwd, db: "core", mode: "apply" },
-				'database "core": Database config has environments; pass -e/--env with one of: bare, prod',
-			],
-			[
-				{ cwd, db: "core", env: "nope", mode: "apply" },
-				'database "core": Environment "nope" not found in config. Available: bare, prod',
-			],
-			[
-				{ cwd, db: "blog", env: "prod", mode: "apply" },
-				'database "blog": the database declares no environments, so -e prod names none; drop -e',
-			],
-		]
-		for (const [request, message] of cases) await expect(resolveMigrateTarget(request)).rejects.toThrow(message)
-	})
-})
+  it("prefixes each refusal resolving the database's environments gives", async () => {
+    const cwd = project({
+      blog: { migrationsDir: "m", name: "blog", provider: LITE },
+      core: {
+        environments: { bare: { name: "core-bare", provider: LITE }, prod: { name: "core-prod", provider: LITE } },
+        migrationsDir: "m",
+      },
+    });
+
+    const cases: Array<[Parameters<typeof resolveMigrateTarget>[0], string]> = [
+      [
+        { cwd, db: "core", mode: "apply" },
+        'database "core": Database config has environments; pass -e/--env with one of: bare, prod',
+      ],
+      [
+        { cwd, db: "core", env: "nope", mode: "apply" },
+        'database "core": Environment "nope" not found in config. Available: bare, prod',
+      ],
+      [
+        { cwd, db: "blog", env: "prod", mode: "apply" },
+        'database "blog": the database declares no environments, so -e prod names none; drop -e',
+      ],
+    ];
+
+    for (const [request, message] of cases) await expect(resolveMigrateTarget(request)).rejects.toThrow(message);
+  });
+});

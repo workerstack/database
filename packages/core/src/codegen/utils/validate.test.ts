@@ -1,101 +1,108 @@
-import { fixtureRoot } from "../__fixtures__/temp.ts"
-import fs from "node:fs"
-import path from "node:path"
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { analyze } from "../analyzer.ts"
-import { validateTables as validateAnalysis } from "./validate.ts"
+import fs from "node:fs";
+import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { fixtureRoot } from "../__fixtures__/temp.ts";
+import { analyze } from "../analyzer.ts";
+import { validateTables as validateAnalysis } from "./validate.ts";
 
 /** The validation of the tables file `file`, read at runtime as codegen reads it */
-const validateTables = async (file: string) => validateAnalysis(await analyze(file))
+const validateTables = async (file: string) => validateAnalysis(await analyze(file));
 
-let tmpDir: string
+let tmpDir: string;
 
 beforeEach(() => {
-	tmpDir = fs.mkdtempSync(path.join(fixtureRoot(), "database-validate-"))
-})
+  tmpDir = fs.mkdtempSync(path.join(fixtureRoot(), "database-validate-"));
+});
 
 afterEach(() => {
-	fs.rmSync(tmpDir, { force: true, recursive: true })
-})
+  fs.rmSync(tmpDir, { force: true, recursive: true });
+});
 
 /** Writes `content` as the tables file in the temp dir and returns its path. */
 function writeTables(content: string): string {
-	const fp = path.join(tmpDir, "db.test.tables.ts")
-	fs.writeFileSync(fp, content)
-	return fp
+  const fp = path.join(tmpDir, "db.test.tables.ts");
+  fs.writeFileSync(fp, content);
+
+  return fp;
 }
 
 const STRUCTURE_PRELUDE = `
 import { sqliteTable as createTable, text, uniqueIndex, check } from "drizzle-orm/sqlite-core"
 import { sql } from "drizzle-orm"
 import { c } from "@workerstack/database/sqlite/columns"
-`
+`;
 
 /** Validates `body` under the structural-check prelude. */
 function validateStructure(body: string) {
-	return validateTables(writeTables(STRUCTURE_PRELUDE + body))
+  return validateTables(writeTables(STRUCTURE_PRELUDE + body));
 }
 
 const MACHINE_PRELUDE = `
 import { sqliteTable as createTable } from "drizzle-orm/sqlite-core"
 import { c } from "@workerstack/database/sqlite/columns"
-`
+`;
 
 /** Validates `body` under the state-machine prelude. */
 function validateMachine(body: string) {
-	return validateTables(writeTables(MACHINE_PRELUDE + body))
+  return validateTables(writeTables(MACHINE_PRELUDE + body));
 }
 
 describe("validateTables", () => {
-	it("returns no errors for valid schema", async () => {
-		const fp = writeTables(`
+  it("returns no errors for valid schema", async () => {
+    const fp = writeTables(`
 import { sqliteTable as createTable, text } from "drizzle-orm/sqlite-core"
 import { c } from "@workerstack/database/sqlite/columns"
 export const user = createTable("user", { id: c.id() })
-`)
-		const result = await validateTables(fp)
-		expect(result.errors).toHaveLength(0)
-	})
+`);
 
-	it("warns about missing primary key", async () => {
-		const fp = writeTables(`
+    const result = await validateTables(fp);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it("warns about missing primary key", async () => {
+    const fp = writeTables(`
 import { sqliteTable as createTable, text } from "drizzle-orm/sqlite-core"
 import { c } from "@workerstack/database/sqlite/columns"
 export const log = createTable("log", { msg: c.text("msg") })
-`)
-		const result = await validateTables(fp)
-		expect(result.warnings.some((w) => w.includes("no primary key"))).toBe(true)
-	})
+`);
 
-	it("errors on duplicate table names", async () => {
-		const fp = writeTables(`
+    const result = await validateTables(fp);
+    expect(result.warnings.some((w) => w.includes("no primary key"))).toBe(true);
+  });
+
+  it("errors on duplicate table names", async () => {
+    const fp = writeTables(`
 import { sqliteTable as createTable, text } from "drizzle-orm/sqlite-core"
 import { c } from "@workerstack/database/sqlite/columns"
 export const user = createTable("user", { id: c.id() })
 export const user2 = createTable("user", { id: c.id() })
-`)
-		const result = await validateTables(fp)
-		expect(result.errors.some((e) => e.includes("Duplicate SQL table name"))).toBe(true)
-	})
-})
+`);
+
+    const result = await validateTables(fp);
+    expect(result.errors.some((e) => e.includes("Duplicate SQL table name"))).toBe(true);
+  });
+});
 
 describe("validateTables: foreign keys", () => {
-	it("refuses a foreign key into a table the module never defines, naming the table it is on", async () => {
-		const fp = writeTables(`
+  it("refuses a foreign key into a table the module never defines, naming the table it is on", async () => {
+    const fp = writeTables(`
 import { sqliteTable as createTable, text } from "drizzle-orm/sqlite-core"
 import { c } from "@workerstack/database/sqlite/columns"
 export const post = createTable("post", {
 	id: c.id(),
 	author_id: c.ref("author_id").references(() => missing_table.id),
 })
-`)
-		await expect(validateTables(fp)).rejects.toThrow(
-			"post: a foreign key's target cannot be read: missing_table is not defined",
-		)
-	})
+`);
 
-	it("returns clean result for multi-table schema with valid FKs", async () => {
-		const fp = writeTables(`
+    await expect(validateTables(fp)).rejects.toThrow(
+      "post: a foreign key's target cannot be read: missing_table is not defined",
+    );
+  });
+
+  it("returns clean result for multi-table schema with valid FKs", async () => {
+    const fp = writeTables(`
 import { sqliteTable as createTable, text } from "drizzle-orm/sqlite-core"
 import { c } from "@workerstack/database/sqlite/columns"
 export const user = createTable("user", { id: c.id() })
@@ -103,87 +110,94 @@ export const post = createTable("post", {
 	id: c.id(),
 	user_id: c.ref("user_id").references(() => user.id),
 })
-`)
-		const result = await validateTables(fp)
-		expect(result.errors).toHaveLength(0)
-	})
-})
+`);
+
+    const result = await validateTables(fp);
+    expect(result.errors).toHaveLength(0);
+  });
+});
 
 describe("validateTables — structural checks", () => {
-	it("rejects two tables sharing one SQL name", async () => {
-		const result = await validateStructure(`
+  it("rejects two tables sharing one SQL name", async () => {
+    const result = await validateStructure(`
 export const a = createTable("post", { id: c.id() })
 export const b = createTable("post", { id: c.id() })
-`)
-		expect(result.errors.join("\n")).toContain("Duplicate SQL table name")
-	})
+`);
 
-	it("refuses a foreign key pointing at a table that is not defined", async () => {
-		await expect(
-			validateStructure(`
+    expect(result.errors.join("\n")).toContain("Duplicate SQL table name");
+  });
+
+  it("refuses a foreign key pointing at a table that is not defined", async () => {
+    await expect(
+      validateStructure(`
 export const post = createTable("post", { id: c.id(), author_id: c.ref("author_id").references(() => author.id) })
 `),
-		).rejects.toThrow("author is not defined")
-	})
+    ).rejects.toThrow("author is not defined");
+  });
 
-	it("accepts a foreign key whose target is defined", async () => {
-		const result = await validateStructure(`
+  it("accepts a foreign key whose target is defined", async () => {
+    const result = await validateStructure(`
 export const author = createTable("author", { id: c.id() })
 export const post = createTable("post", { id: c.id(), author_id: c.ref("author_id").references(() => author.id) })
-`)
-		expect(result.errors).toEqual([])
-	})
-})
+`);
+
+    expect(result.errors).toEqual([]);
+  });
+});
 
 describe("validateTables — structural checks: warnings and skipped statements", () => {
-	it("warns about a table with no primary key", async () => {
-		const result = await validateStructure(`
+  it("warns about a table with no primary key", async () => {
+    const result = await validateStructure(`
 export const note = createTable("note", { body: c.text("body") })
-`)
-		expect(result.warnings.join("\n")).toContain("no primary key detected")
-	})
+`);
 
-	it("warns about a repeated constraint name", async () => {
-		const result = await validateStructure(`
+    expect(result.warnings.join("\n")).toContain("no primary key detected");
+  });
+
+  it("warns about a repeated constraint name", async () => {
+    const result = await validateStructure(`
 export const post = createTable("post", { id: c.id(), a: c.text("a"), b: c.text("b") }, (t) => [
 	uniqueIndex("idx_dup").on(t.a),
 	uniqueIndex("idx_dup").on(t.b),
 ])
-`)
-		expect(result.warnings.join("\n")).toContain('duplicate constraint name "idx_dup"')
-	})
+`);
 
-	it("ignores variable statements that are not table definitions", async () => {
-		const result = await validateStructure(`
+    expect(result.warnings.join("\n")).toContain('duplicate constraint name "idx_dup"');
+  });
+
+  it("ignores variable statements that are not table definitions", async () => {
+    const result = await validateStructure(`
 export const notATable = { id: "x" }
 const someOtherCall = (name: string, columns: object) => ({ columns, name })
 export const alsoNot = someOtherCall("post", {})
 export const post = createTable("post", { id: c.id() })
-`)
-		expect(result.errors).toEqual([])
-	})
+`);
 
-	it("refuses a table call drizzle cannot build, as the module does not load", async () => {
-		await expect(validateStructure(`\nexport const post = createTable("post")\n`)).rejects.toThrow(
-			"database could not load",
-		)
-	})
+    expect(result.errors).toEqual([]);
+  });
 
-	it("accepts a composite primary key declared in the options", async () => {
-		const result = await validateStructure(`
+  it("refuses a table call drizzle cannot build, as the module does not load", async () => {
+    await expect(validateStructure(`\nexport const post = createTable("post")\n`)).rejects.toThrow(
+      "database could not load",
+    );
+  });
+
+  it("accepts a composite primary key declared in the options", async () => {
+    const result = await validateStructure(`
 import { primaryKey } from "drizzle-orm/sqlite-core"
 export const post_tag = createTable("post_tag", { post_id: c.ref("post_id"), tag_id: c.ref("tag_id") }, (t) => [
 	primaryKey({ columns: [t.post_id, t.tag_id] }),
 ])
-`)
-		expect(result.errors).toEqual([])
-		expect(result.warnings.join("\n")).not.toContain("no primary key")
-	})
-})
+`);
+
+    expect(result.errors).toEqual([]);
+    expect(result.warnings.join("\n")).not.toContain("no primary key");
+  });
+});
 
 describe("validateTables — state machines", () => {
-	it("accepts a well-formed machine", async () => {
-		const result = await validateMachine(`
+  it("accepts a well-formed machine", async () => {
+    const result = await validateMachine(`
 export const delivery = createTable("delivery", {
 	id: c.id(),
 	status: c.enum("status", ["queued", "sending", "sent"], {
@@ -192,23 +206,25 @@ export const delivery = createTable("delivery", {
 		transitions: { queued: ["sending"], sending: ["sent"] },
 	}).notNull(),
 })
-`)
-		expect(result.errors).toEqual([])
-	})
+`);
 
-	it("rejects a name that is not a declared value", async () => {
-		const result = await validateMachine(`
+    expect(result.errors).toEqual([]);
+  });
+
+  it("rejects a name that is not a declared value", async () => {
+    const result = await validateMachine(`
 export const delivery = createTable("delivery", {
 	id: c.id(),
 	status: c.enum("status", ["queued", "sent"], { initial: "draft", terminal: ["done"] }).notNull(),
 })
-`)
-		expect(result.errors.join("\n")).toContain('initial names "draft"')
-		expect(result.errors.join("\n")).toContain('terminal names "done"')
-	})
+`);
 
-	it("rejects a terminal state that also has outgoing transitions", async () => {
-		const result = await validateMachine(`
+    expect(result.errors.join("\n")).toContain('initial names "draft"');
+    expect(result.errors.join("\n")).toContain('terminal names "done"');
+  });
+
+  it("rejects a terminal state that also has outgoing transitions", async () => {
+    const result = await validateMachine(`
 export const delivery = createTable("delivery", {
 	id: c.id(),
 	status: c.enum("status", ["queued", "sent"], {
@@ -216,14 +232,15 @@ export const delivery = createTable("delivery", {
 		transitions: { sent: ["queued"] },
 	}),
 })
-`)
-		expect(result.errors.join("\n")).toContain("listed as terminal but also has outgoing transitions")
-	})
-})
+`);
+
+    expect(result.errors.join("\n")).toContain("listed as terminal but also has outgoing transitions");
+  });
+});
 
 describe("validateTables — state machines: transition maps", () => {
-	it("rejects a dead state when transitions are declared in full", async () => {
-		const result = await validateMachine(`
+  it("rejects a dead state when transitions are declared in full", async () => {
+    const result = await validateMachine(`
 export const delivery = createTable("delivery", {
 	id: c.id(),
 	status: c.enum("status", ["queued", "sending", "sent", "orphaned"], {
@@ -232,12 +249,13 @@ export const delivery = createTable("delivery", {
 		transitions: { queued: ["sending"], sending: ["sent"], orphaned: ["sent"] },
 	}).notNull(),
 })
-`)
-		expect(result.errors.join("\n")).toContain('"orphaned" is neither initial nor reachable')
-	})
+`);
 
-	it("does not reject an unnamed state when the transitions map is partial", async () => {
-		const result = await validateMachine(`
+    expect(result.errors.join("\n")).toContain('"orphaned" is neither initial nor reachable');
+  });
+
+  it("does not reject an unnamed state when the transitions map is partial", async () => {
+    const result = await validateMachine(`
 export const delivery = createTable("delivery", {
 	id: c.id(),
 	status: c.enum("status", ["queued", "sending", "sent"], {
@@ -245,14 +263,15 @@ export const delivery = createTable("delivery", {
 		transitions: { queued: ["sending"] },
 	}),
 })
-`)
-		expect(result.errors).toEqual([])
-	})
+`);
 
-	it("warns when a partial map names a non-terminal with no outgoing edges", async () => {
-		/* `review` is a non-terminal the map does not name, so this is partial
-		   rather than "declared in full" — dead-state checking stays off. */
-		const result = await validateMachine(`
+    expect(result.errors).toEqual([]);
+  });
+
+  it("warns when a partial map names a non-terminal with no outgoing edges", async () => {
+    // `review` is a non-terminal the map does not name, so this is partial
+    // rather than "declared in full" — dead-state checking stays off.
+    const result = await validateMachine(`
 export const delivery = createTable("delivery", {
 	id: c.id(),
 	status: c.enum("status", ["queued", "stuck", "review", "sent"], {
@@ -260,58 +279,64 @@ export const delivery = createTable("delivery", {
 		transitions: { queued: ["sent"], stuck: [] },
 	}),
 })
-`)
-		expect(result.errors).toEqual([])
-		expect(result.warnings.join("\n")).toContain('"stuck" has no outgoing transitions')
-	})
-})
+`);
+
+    expect(result.errors).toEqual([]);
+    expect(result.warnings.join("\n")).toContain('"stuck" has no outgoing transitions');
+  });
+});
 
 describe("validateTables — state machines: value lists and columns", () => {
-	it("reads a local const value list and validates the machine against it", async () => {
-		const result = await validateMachine(`
+  it("reads a local const value list and validates the machine against it", async () => {
+    const result = await validateMachine(`
 const STATUSES = ["queued", "sent"] as const
 export const delivery = createTable("delivery", {
 	id: c.id(),
 	status: c.enum("status", STATUSES, { terminal: ["sent", "gone"] }),
 })
-`)
-		expect(result.errors).toEqual(['delivery.status: terminal names "gone", which is not a declared value'])
-	})
+`);
 
-	it("warns when two columns declare a machine", async () => {
-		const result = await validateMachine(`
+    expect(result.errors).toEqual(['delivery.status: terminal names "gone", which is not a declared value']);
+  });
+
+  it("warns when two columns declare a machine", async () => {
+    const result = await validateMachine(`
 export const delivery = createTable("delivery", {
 	id: c.id(),
 	status: c.enum("status", ["a", "b"], { terminal: ["b"] }),
 	phase: c.enum("phase", ["x", "y"], { terminal: ["y"] }),
 })
-`)
-		expect(result.errors).toEqual([])
-		expect(result.warnings.join("\n")).toMatch(/2 columns declare a state machine/)
-		expect(result.warnings.join("\n")).toContain("status, phase")
-	})
-})
+`);
+
+    expect(result.errors).toEqual([]);
+    expect(result.warnings.join("\n")).toMatch(/2 columns declare a state machine/);
+    expect(result.warnings.join("\n")).toContain("status, phase");
+  });
+});
 
 describe("validateTables: names two tables may not share (F13, F14)", () => {
-	const prelude = `import { sqliteTable as createTable } from "drizzle-orm/sqlite-core"
+  const prelude = `import { sqliteTable as createTable } from "drizzle-orm/sqlite-core"
 import { c } from "@workerstack/database/sqlite/columns"
-`
-	it("refuses two tables whose names make one generated type name, naming both (F13)", async () => {
-		const result = await validateTables(
-			writeTables(`${prelude}export const post_tag = createTable("post_tag", { id: c.id("pt") })
-export const postTag = createTable("post_tags", { id: c.id("pts") })`),
-		)
-		/* tables in code-unit order, the same on every machine (F40): T before _ */
-		expect(result.errors).toContain('Tables postTag and post_tag both generate the type name "PostTag"')
-	})
+`;
 
-	it("refuses two tables that share an id prefix, naming both (F14)", async () => {
-		const result = await validateTables(
-			writeTables(`${prelude}export const team = createTable("team", { id: c.id("idx") })
+  it("refuses two tables whose names make one generated type name, naming both (F13)", async () => {
+    const result = await validateTables(
+      writeTables(`${prelude}export const post_tag = createTable("post_tag", { id: c.id("pt") })
+export const postTag = createTable("post_tags", { id: c.id("pts") })`),
+    );
+
+    // tables in code-unit order, the same on every machine (F40): T before _
+    expect(result.errors).toContain('Tables postTag and post_tag both generate the type name "PostTag"');
+  });
+
+  it("refuses two tables that share an id prefix, naming both (F14)", async () => {
+    const result = await validateTables(
+      writeTables(`${prelude}export const team = createTable("team", { id: c.id("idx") })
 export const user = createTable("user", { id: c.id("idx") })`),
-		)
-		expect(result.errors).toContain(
-			'Tables team and user share the id prefix "idx"; ids of one would pass for the other',
-		)
-	})
-})
+    );
+
+    expect(result.errors).toContain(
+      'Tables team and user share the id prefix "idx"; ids of one would pass for the other',
+    );
+  });
+});

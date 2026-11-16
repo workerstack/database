@@ -1,149 +1,151 @@
-import { describe, expect, it } from "vitest"
-import { createUlidFactory, generateId, generateUlid } from "./id.ts"
+import { describe, expect, it } from "vitest";
+
+import { createUlidFactory, generateId, generateUlid } from "./id.ts";
 
 describe("generateUlid", () => {
-	it("returns 26-character string", () => {
-		const ulid = generateUlid()
-		expect(ulid).toHaveLength(26)
-	})
+  it("returns 26-character string", () => {
+    const ulid = generateUlid();
+    expect(ulid).toHaveLength(26);
+  });
 
-	it("uses valid Crockford base32 characters", () => {
-		const valid = /^[0123456789abcdefghjkmnpqrstvwxyz]{26}$/
-		for (let i = 0; i < 100; i++) {
-			expect(generateUlid()).toMatch(valid)
-		}
-	})
+  it("uses valid Crockford base32 characters", () => {
+    const valid = /^[0123456789abcdefghjkmnpqrstvwxyz]{26}$/;
 
-	it("is unique across calls", () => {
-		const ids = new Set<string>()
-		for (let i = 0; i < 1000; i++) {
-			ids.add(generateUlid())
-		}
-		expect(ids.size).toBe(1000)
-	})
+    for (let i = 0; i < 100; i++) expect(generateUlid()).toMatch(valid);
+  });
 
-	it("is lexicographically sortable by time", async () => {
-		const first = generateUlid()
-		await new Promise((r) => setTimeout(r, 2))
-		const second = generateUlid()
-		expect(first < second).toBe(true)
-	})
-})
+  it("is unique across calls", () => {
+    const ids = new Set<string>();
+
+    for (let i = 0; i < 1000; i++) ids.add(generateUlid());
+
+    expect(ids.size).toBe(1000);
+  });
+
+  it("is lexicographically sortable by time", async () => {
+    const first = generateUlid();
+    await new Promise((r) => setTimeout(r, 2));
+    const second = generateUlid();
+    expect(first < second).toBe(true);
+  });
+});
 
 describe("generateId", () => {
-	it("returns prefix_ulid format", () => {
-		const id = generateId("usr")
-		expect(id).toMatch(/^usr_[0-9a-z]{26}$/)
-	})
+  it("returns prefix_ulid format", () => {
+    const id = generateId("usr");
+    expect(id).toMatch(/^usr_[0-9a-z]{26}$/);
+  });
 
-	it("uses the given prefix", () => {
-		expect(generateId("org").startsWith("org_")).toBe(true)
-		expect(generateId("prj").startsWith("prj_")).toBe(true)
-		expect(generateId("bat").startsWith("bat_")).toBe(true)
-	})
+  it("uses the given prefix", () => {
+    expect(generateId("org").startsWith("org_")).toBe(true);
+    expect(generateId("prj").startsWith("prj_")).toBe(true);
+    expect(generateId("bat").startsWith("bat_")).toBe(true);
+  });
 
-	it("generates unique IDs", () => {
-		const ids = new Set<string>()
-		for (let i = 0; i < 100; i++) {
-			ids.add(generateId("test"))
-		}
-		expect(ids.size).toBe(100)
-	})
-})
+  it("generates unique IDs", () => {
+    const ids = new Set<string>();
+
+    for (let i = 0; i < 100; i++) ids.add(generateId("test"));
+
+    expect(ids.size).toBe(100);
+  });
+});
 
 /** A factory on a clock the test moves */
 function onClock(start: number) {
-	const clock = { now: start }
-	return { clock, factory: createUlidFactory({ now: () => clock.now }) }
+  const clock = { now: start };
+
+  return { clock, factory: createUlidFactory({ now: () => clock.now }) };
 }
 
 describe("createUlidFactory (S-L3)", () => {
-	it("is strictly increasing within one millisecond", () => {
-		const { factory } = onClock(1_700_000_000_000)
-		const ids = Array.from({ length: 1000 }, () => factory.ulid())
-		expect(ids.every((id, i) => i === 0 || id > (ids[i - 1] as string))).toBe(true)
-		expect(new Set(ids.map((id) => id.slice(0, 10))).size).toBe(1)
-	})
+  it("is strictly increasing within one millisecond", () => {
+    const { factory } = onClock(1_700_000_000_000);
+    const ids = Array.from({ length: 1000 }, () => factory.ulid());
+    expect(ids.every((id, i) => i === 0 || id > (ids[i - 1] as string))).toBe(true);
+    expect(new Set(ids.map((id) => id.slice(0, 10))).size).toBe(1);
+  });
 
-	it("keeps increasing when the clock steps back, on the last time it issued", () => {
-		const { clock, factory } = onClock(1_700_000_000_000)
-		const before = factory.ulid()
-		clock.now -= 1000
-		const after = factory.ulid()
-		expect(after > before).toBe(true)
-		expect(after.slice(0, 10)).toBe(before.slice(0, 10))
-	})
+  it("keeps increasing when the clock steps back, on the last time it issued", () => {
+    const { clock, factory } = onClock(1_700_000_000_000);
+    const before = factory.ulid();
+    clock.now -= 1000;
+    const after = factory.ulid();
+    expect(after > before).toBe(true);
+    expect(after.slice(0, 10)).toBe(before.slice(0, 10));
+  });
 
-	it("starts a fresh random part when the clock moves on", () => {
-		const { clock, factory } = onClock(1_700_000_000_000)
-		const before = factory.ulid()
-		clock.now += 1
-		const after = factory.ulid()
-		expect(after.slice(0, 10) > before.slice(0, 10)).toBe(true)
-	})
+  it("starts a fresh random part when the clock moves on", () => {
+    const { clock, factory } = onClock(1_700_000_000_000);
+    const before = factory.ulid();
+    clock.now += 1;
+    const after = factory.ulid();
+    expect(after.slice(0, 10) > before.slice(0, 10)).toBe(true);
+  });
 
-	it("moves to the next millisecond rather than wrap a full random part", () => {
-		const { factory } = onClock(1_700_000_000_000)
-		const random = new Uint8Array(16).fill(31)
-		const full = createUlidFactory({ now: () => 1_700_000_000_000, random: (bytes) => bytes.set(random) })
-		const first = full.ulid()
-		expect(first.slice(10)).toBe("zzzzzzzzzzzzzzzz")
-		const next = full.ulid()
-		expect(next > first).toBe(true)
-		expect(next.slice(0, 10) > first.slice(0, 10)).toBe(true)
-		expect(factory.ulid()).toHaveLength(26)
-	})
+  it("moves to the next millisecond rather than wrap a full random part", () => {
+    const { factory } = onClock(1_700_000_000_000);
+    const random = new Uint8Array(16).fill(31);
+    const full = createUlidFactory({ now: () => 1_700_000_000_000, random: (bytes) => bytes.set(random) });
+    const first = full.ulid();
+    expect(first.slice(10)).toBe("zzzzzzzzzzzzzzzz");
+    const next = full.ulid();
+    expect(next > first).toBe(true);
+    expect(next.slice(0, 10) > first.slice(0, 10)).toBe(true);
+    expect(factory.ulid()).toHaveLength(26);
+  });
 
-	it("runs on the real clock and Web Crypto by default", () => {
-		const factory = createUlidFactory()
-		const [a, b] = [factory.ulid(), factory.ulid()]
-		expect(a).toMatch(/^[0-9a-hjkmnp-tv-z]{26}$/)
-		expect(b > a).toBe(true)
-	})
+  it("runs on the real clock and Web Crypto by default", () => {
+    const factory = createUlidFactory();
+    const [a, b] = [factory.ulid(), factory.ulid()];
+    expect(a).toMatch(/^[0-9a-hjkmnp-tv-z]{26}$/);
+    expect(b > a).toBe(true);
+  });
 
-	it("issues prefixed ids the same way, and checks the prefix", () => {
-		const { factory } = onClock(1_700_000_000_000)
-		const [a, b] = [factory.id("usr"), factory.id("usr")]
-		expect(a).toMatch(/^usr_[0-9a-hjkmnp-tv-z]{26}$/)
-		expect((b as string) > (a as string)).toBe(true)
-		expect(() => factory.id("Bad")).toThrow("Invalid entity prefix")
-	})
-})
+  it("issues prefixed ids the same way, and checks the prefix", () => {
+    const { factory } = onClock(1_700_000_000_000);
+    const [a, b] = [factory.id("usr"), factory.id("usr")];
+    expect(a).toMatch(/^usr_[0-9a-hjkmnp-tv-z]{26}$/);
+    expect(b > a).toBe(true);
+    expect(() => factory.id("Bad")).toThrow("Invalid entity prefix");
+  });
+});
 
 describe("createUlidFactory's clock (QE7 of r22b)", () => {
-	it("reads a high-resolution clock at its millisecond", () => {
-		const { clock, factory } = onClock(1_700_000_000_000.75)
-		const ids = [factory.ulid(), factory.ulid()]
-		clock.now += 1.5
-		ids.push(factory.ulid())
-		expect(ids.every((id) => /^[0-9a-hjkmnp-tv-z]{26}$/.test(id))).toBe(true)
-		expect(ids.slice(0, 2).map((id) => id.slice(0, 10))).toEqual(
-			Array(2).fill(onClock(1_700_000_000_000).factory.ulid().slice(0, 10)),
-		)
-		expect(ids.every((id, i) => i === 0 || id > (ids[i - 1] as string))).toBe(true)
-	})
+  it("reads a high-resolution clock at its millisecond", () => {
+    const { clock, factory } = onClock(1_700_000_000_000.75);
+    const ids = [factory.ulid(), factory.ulid()];
+    clock.now += 1.5;
+    ids.push(factory.ulid());
+    expect(ids.every((id) => /^[0-9a-hjkmnp-tv-z]{26}$/.test(id))).toBe(true);
+    expect(ids.slice(0, 2).map((id) => id.slice(0, 10))).toEqual(
+      Array(2).fill(onClock(1_700_000_000_000).factory.ulid().slice(0, 10)),
+    );
+    expect(ids.every((id, i) => i === 0 || id > (ids[i - 1] as string))).toBe(true);
+  });
 
-	it("takes ULID's last millisecond and refuses a clock outside 0 to 2^48 - 1, naming it", () => {
-		expect(
-			onClock(2 ** 48 - 0.5)
-				.factory.ulid()
-				.slice(0, 10),
-		).toBe("7zzzzzzzzz")
-		for (const reading of [Number.NaN, Number.POSITIVE_INFINITY, -1, 2 ** 48]) {
-			expect(() => onClock(reading).factory.ulid()).toThrow(
-				new RangeError(`createUlidFactory: the clock must read a millisecond from 0 to 2^48 - 1, got ${reading}`),
-			)
-		}
-	})
+  it("takes ULID's last millisecond and refuses a clock outside 0 to 2^48 - 1, naming it", () => {
+    expect(
+      onClock(2 ** 48 - 0.5)
+        .factory.ulid()
+        .slice(0, 10),
+    ).toBe("7zzzzzzzzz");
 
-	/* B2-11 of area B, QE7 of r23: a full random part at ULID's last millisecond has no next millisecond to move to, which is not a bad clock */
-	it("refuses to move past ULID's last millisecond, saying the factory issued its last", () => {
-		const full = createUlidFactory({ now: () => 2 ** 48 - 1, random: (bytes) => bytes.fill(31) })
-		expect(full.ulid()).toBe("7zzzzzzzzzzzzzzzzzzzzzzzzz")
-		expect(() => full.ulid()).toThrow(
-			new RangeError(
-				"createUlidFactory: no ULID is left after the last millisecond, 2^48 - 1; this factory issued its last",
-			),
-		)
-	})
-})
+    for (const reading of [Number.NaN, Number.POSITIVE_INFINITY, -1, 2 ** 48]) {
+      expect(() => onClock(reading).factory.ulid()).toThrow(
+        new RangeError(`createUlidFactory: the clock must read a millisecond from 0 to 2^48 - 1, got ${reading}`),
+      );
+    }
+  });
+
+  // B2-11 of area B, QE7 of r23: a full random part at ULID's last millisecond has no next millisecond to move to, which is not a bad clock
+  it("refuses to move past ULID's last millisecond, saying the factory issued its last", () => {
+    const full = createUlidFactory({ now: () => 2 ** 48 - 1, random: (bytes) => bytes.fill(31) });
+    expect(full.ulid()).toBe("7zzzzzzzzzzzzzzzzzzzzzzzzz");
+    expect(() => full.ulid()).toThrow(
+      new RangeError(
+        "createUlidFactory: no ULID is left after the last millisecond, 2^48 - 1; this factory issued its last",
+      ),
+    );
+  });
+});

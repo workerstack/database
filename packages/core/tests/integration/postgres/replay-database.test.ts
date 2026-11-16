@@ -6,357 +6,386 @@
  * and its role is dropped after, and what a killed run left is swept an hour on. devUrl's role needs
  * CREATEDB, and devUrl's extensions are copied into the replay's database.
  */
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
-import { join } from "node:path"
-import { afterEach, beforeAll, beforeEach, describe, expect, it, onTestFinished } from "vitest"
-import { approveMigration } from "../../../src/migrate/core/approval.ts"
-import { applyWithAtlas, baselineWithAtlas } from "../../../src/migrate/core/atlas-apply.ts"
-import { hashDir } from "../../../src/migrate/core/atlas-dir.ts"
-import { loadPostgresParser } from "../../../src/migrate/core/pg-parser.ts"
-import { run } from "../../../src/migrate/core/process.ts"
-import type { ParsedMigration } from "../../../src/migrate/migration-types.ts"
-import { pgUrl, withScratchDb } from "../support/pg.ts"
-import { pauses, waitFor } from "../support/pg-pause.ts"
-import { asRole, query, roleOf, testRoles, unique } from "../support/pg-roles.ts"
-import { leavesStale } from "../support/stale-replay.ts"
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-beforeAll(loadPostgresParser)
+import { afterEach, beforeAll, beforeEach, describe, expect, it, onTestFinished } from "vitest";
 
-let dir = ""
+import { approveMigration } from "../../../src/migrate/core/approval.ts";
+import { applyWithAtlas, baselineWithAtlas } from "../../../src/migrate/core/atlas-apply.ts";
+import { hashDir } from "../../../src/migrate/core/atlas-dir.ts";
+import { loadPostgresParser } from "../../../src/migrate/core/pg-parser.ts";
+import { run } from "../../../src/migrate/core/process.ts";
+import type { ParsedMigration } from "../../../src/migrate/migration-types.ts";
+import { pauses, waitFor } from "../support/pg-pause.ts";
+import { asRole, query, roleOf, testRoles, unique } from "../support/pg-roles.ts";
+import { pgUrl, withScratchDb } from "../support/pg.ts";
+import { leavesStale } from "../support/stale-replay.ts";
+
+beforeAll(loadPostgresParser);
+
+let dir = "";
+
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "database-pg-replay-db-"))
-})
-afterEach(() => rmSync(dir, { force: true, recursive: true }))
+  dir = mkdtempSync(join(tmpdir(), "database-pg-replay-db-"));
+});
+
+afterEach(() => rmSync(dir, { force: true, recursive: true }));
 
 /** Each of `statements` on the server, one query apiece, as CREATE and DROP DATABASE need */
 async function onServer(...statements: string[]): Promise<void> {
-	for (const sql of statements) await query(pgUrl(), sql)
+  for (const sql of statements) await query(pgUrl(), sql);
 }
 
 /** The files, named in order and hashed, in `at` */
 async function write(files: readonly string[], at = dir): Promise<void> {
-	files.forEach((sql, i) => writeFileSync(join(at, `20260101${String(i).padStart(6, "0")}_f${i}.sql`), sql))
-	await hashDir(run, at)
+  files.forEach((sql, i) => writeFileSync(join(at, `20260101${String(i).padStart(6, "0")}_f${i}.sql`), sql));
+  await hashDir(run, at);
 }
 
 /** A check of every file against the empty target at `url`: what it printed, and why it refused */
 async function check(devUrl: string, url: string, at = dir): Promise<{ out: string[]; refused?: string | undefined }> {
-	const out: string[] = []
-	try {
-		await applyWithAtlas({
-			approve: (m: ParsedMigration) => approveMigration(m, { target: "core", yes: true }),
-			checkOnly: true,
-			dir: at,
-			print: (line) => out.push(line),
-			target: { devUrl, lockTimeout: "5s", schema: "public", url },
-		})
-		return { out }
-	} catch (error) {
-		return { out, refused: (error as Error).message }
-	}
+  const out: string[] = [];
+
+  try {
+    await applyWithAtlas({
+      approve: (m: ParsedMigration) => approveMigration(m, { target: "core", yes: true }),
+      checkOnly: true,
+      dir: at,
+      print: (line) => out.push(line),
+      target: { devUrl, lockTimeout: "5s", schema: "public", url },
+    });
+
+    return { out };
+  } catch (error) {
+    return { out, refused: (error as Error).message };
+  }
 }
 
 /** Resolves once `role` exists on the server */
 async function untilRole(role: string): Promise<void> {
-	for (;;) {
-		if ((await roleOf(role)).length > 0) return
-		await new Promise((resolve) => setTimeout(resolve, 20))
-	}
+  for (;;) {
+    if ((await roleOf(role)).length > 0) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
 }
 
 /** The settings an ALTER DATABASE left on `target` */
 const settingsOf = (target: string) =>
-	query(
-		pgUrl(),
-		`SELECT 1 FROM pg_db_role_setting s JOIN pg_database d ON d.oid = s.setdatabase WHERE d.datname = '${target}'`,
-	)
+  query(
+    pgUrl(),
+    `SELECT 1 FROM pg_db_role_setting s JOIN pg_database d ON d.oid = s.setdatabase WHERE d.datname = '${target}'`,
+  );
 
 /** The line check prints for `sent`, in the `index`th history file, left out as `what` */
 const left = (sent: string, index: number, what: string) =>
-	`Check left ${JSON.stringify(sent)} in 2026010100000${index}_f${index}.sql out of its replay on devUrl: ${what} reaches past the database the replay runs in, so apply alone runs it`
+  `Check left ${JSON.stringify(sent)} in 2026010100000${index}_f${index}.sql out of its replay on devUrl: ${what} reaches past the database the replay runs in, so apply alone runs it`;
 
 describe("the replay on a server dev and target share leaves what lies past its database as it was", () => {
-	it("leaves out roles' changes, other databases, ALTER SYSTEM and the target's settings, names them, and runs CREATE ROLE", async () => {
-		const [made, pre] = testRoles("database_t_made", "database_t_pre")
-		const other = unique("database_t_other")
-		onTestFinished(() => onServer(`DROP DATABASE IF EXISTS ${other}`))
-		await onServer(`CREATE ROLE ${pre} NOLOGIN`, `CREATE DATABASE ${other}`)
-		await withScratchDb((dev) =>
-			withScratchDb(async (url) => {
-				const target = new URL(url).pathname.slice(1)
-				await write([
-					`-- database:allow-unsafe: the test's history\nCREATE ROLE ${made};\nCREATE TABLE t (id int PRIMARY KEY);\nALTER TABLE t ENABLE ROW LEVEL SECURITY;\nCREATE POLICY p ON t TO ${made} USING (true);\nALTER ROLE ${pre} CONNECTION LIMIT 7;\nALTER DATABASE ${target} SET work_mem = '8MB';\n`,
-					`-- atlas:txmode none\n\n-- database:allow-unsafe: the test's history\nALTER SYSTEM SET work_mem = '9MB';\nDROP DATABASE ${other};\n`,
-				])
-				for (const round of [1, 2]) {
-					const { out, refused } = await check(dev, url)
-					expect(refused, `round ${round}`).toBeUndefined()
-					expect(out.filter((line) => line.startsWith("Check left"))).toEqual([
-						left(`ALTER ROLE ${pre} CONNECTION LIMIT 7`, 0, "ALTER ROLE"),
-						left(`ALTER DATABASE ${target} SET work_mem = '8MB'`, 0, "ALTER DATABASE"),
-						left("ALTER SYSTEM SET work_mem = '9MB'", 1, "ALTER SYSTEM"),
-						left(`DROP DATABASE ${other}`, 1, "DROP DATABASE"),
-					])
-				}
-				expect(await settingsOf(target)).toEqual([])
-				expect(await roleOf(pre)).toEqual([{ rolconnlimit: -1, rolname: pre }])
-				expect(await roleOf(made)).toEqual([])
-				expect(await query(url, `SELECT datname FROM pg_database WHERE datname = '${other}'`)).toEqual([
-					{ datname: other },
-				])
-				expect(await query(url, "SELECT 1 FROM pg_file_settings WHERE name = 'work_mem' AND setting = '9MB'")).toEqual(
-					[],
-				)
-			}),
-		)
-	})
-})
+  it("leaves out roles' changes, other databases, ALTER SYSTEM and the target's settings, names them, and runs CREATE ROLE", async () => {
+    const [made, pre] = testRoles("database_t_made", "database_t_pre");
+    const other = unique("database_t_other");
+    onTestFinished(() => onServer(`DROP DATABASE IF EXISTS ${other}`));
+    await onServer(`CREATE ROLE ${pre} NOLOGIN`, `CREATE DATABASE ${other}`);
+    await withScratchDb((dev) =>
+      withScratchDb(async (url) => {
+        const target = new URL(url).pathname.slice(1);
+        await write([
+          `-- database:allow-unsafe: the test's history\nCREATE ROLE ${made};\nCREATE TABLE t (id int PRIMARY KEY);\nALTER TABLE t ENABLE ROW LEVEL SECURITY;\nCREATE POLICY p ON t TO ${made} USING (true);\nALTER ROLE ${pre} CONNECTION LIMIT 7;\nALTER DATABASE ${target} SET work_mem = '8MB';\n`,
+          `-- atlas:txmode none\n\n-- database:allow-unsafe: the test's history\nALTER SYSTEM SET work_mem = '9MB';\nDROP DATABASE ${other};\n`,
+        ]);
+
+        for (const round of [1, 2]) {
+          const { out, refused } = await check(dev, url);
+          expect(refused, `round ${round}`).toBeUndefined();
+          expect(out.filter((line) => line.startsWith("Check left"))).toEqual([
+            left(`ALTER ROLE ${pre} CONNECTION LIMIT 7`, 0, "ALTER ROLE"),
+            left(`ALTER DATABASE ${target} SET work_mem = '8MB'`, 0, "ALTER DATABASE"),
+            left("ALTER SYSTEM SET work_mem = '9MB'", 1, "ALTER SYSTEM"),
+            left(`DROP DATABASE ${other}`, 1, "DROP DATABASE"),
+          ]);
+        }
+
+        expect(await settingsOf(target)).toEqual([]);
+        expect(await roleOf(pre)).toEqual([{ rolconnlimit: -1, rolname: pre }]);
+        expect(await roleOf(made)).toEqual([]);
+        expect(await query(url, `SELECT datname FROM pg_database WHERE datname = '${other}'`)).toEqual([
+          { datname: other },
+        ]);
+        expect(await query(url, "SELECT 1 FROM pg_file_settings WHERE name = 'work_mem' AND setting = '9MB'")).toEqual(
+          [],
+        );
+      }),
+    );
+  });
+});
 
 describe("baseline's replay, and two at once, on a server dev and target share", () => {
-	it("baselines a target those files built, leaving the same statements out", async () => {
-		const [made, pre] = testRoles("database_t_made", "database_t_pre")
-		await query(pgUrl(), `CREATE ROLE ${pre} NOLOGIN; CREATE ROLE ${made} NOLOGIN`)
-		await withScratchDb((dev) =>
-			withScratchDb(async (url) => {
-				const target = new URL(url).pathname.slice(1)
-				const tables = `CREATE TABLE t (id int PRIMARY KEY);\nALTER TABLE t ENABLE ROW LEVEL SECURITY;\nCREATE POLICY p ON t TO ${made} USING (true);\n`
-				await query(url, tables)
-				await write([
-					`CREATE ROLE ${made};\n${tables}ALTER ROLE ${pre} CONNECTION LIMIT 7;\nALTER DATABASE ${target} SET work_mem = '8MB';\n`,
-				])
-				await baselineWithAtlas({
-					dir,
-					print: () => undefined,
-					target: { devUrl: dev, lockTimeout: "5s", schema: "public", url },
-				})
-				expect(await roleOf(pre)).toEqual([{ rolconnlimit: -1, rolname: pre }])
-				/* the role existed, so the replay used it and dropped nothing */
-				expect(await roleOf(made)).toEqual([{ rolconnlimit: -1, rolname: made }])
-				expect(await settingsOf(target)).toEqual([])
-			}),
-		)
-	})
+  it("baselines a target those files built, leaving the same statements out", async () => {
+    const [made, pre] = testRoles("database_t_made", "database_t_pre");
+    await query(pgUrl(), `CREATE ROLE ${pre} NOLOGIN; CREATE ROLE ${made} NOLOGIN`);
+    await withScratchDb((dev) =>
+      withScratchDb(async (url) => {
+        const target = new URL(url).pathname.slice(1);
+        const tables = `CREATE TABLE t (id int PRIMARY KEY);\nALTER TABLE t ENABLE ROW LEVEL SECURITY;\nCREATE POLICY p ON t TO ${made} USING (true);\n`;
+        await query(url, tables);
+        await write([
+          `CREATE ROLE ${made};\n${tables}ALTER ROLE ${pre} CONNECTION LIMIT 7;\nALTER DATABASE ${target} SET work_mem = '8MB';\n`,
+        ]);
+        await baselineWithAtlas({
+          dir,
+          print: () => {},
+          target: { devUrl: dev, lockTimeout: "5s", schema: "public", url },
+        });
+        expect(await roleOf(pre)).toEqual([{ rolconnlimit: -1, rolname: pre }]);
+        // the role existed, so the replay used it and dropped nothing
+        expect(await roleOf(made)).toEqual([{ rolconnlimit: -1, rolname: made }]);
+        expect(await settingsOf(target)).toEqual([]);
+      }),
+    );
+  });
 
-	it("passes two replays at once whose history creates one role, and drops it after both", async () => {
-		const [made] = testRoles("database_t_made")
-		await withScratchDb((dev) =>
-			withScratchDb(async (url) => {
-				await write([
-					`-- database:allow-unsafe: the test's history\nCREATE ROLE ${made};\nCREATE TABLE t (id int PRIMARY KEY);\nALTER TABLE t ENABLE ROW LEVEL SECURITY;\nCREATE POLICY p ON t TO ${made} USING (true);\n`,
-				])
-				const both = await Promise.all([check(dev, url), check(dev, url)])
-				expect(both.map(({ refused }) => refused)).toEqual([undefined, undefined])
-				expect(await roleOf(made)).toEqual([])
-			}),
-		)
-	})
-})
+  it("passes two replays at once whose history creates one role, and drops it after both", async () => {
+    const [made] = testRoles("database_t_made");
+    await withScratchDb((dev) =>
+      withScratchDb(async (url) => {
+        await write([
+          `-- database:allow-unsafe: the test's history\nCREATE ROLE ${made};\nCREATE TABLE t (id int PRIMARY KEY);\nALTER TABLE t ENABLE ROW LEVEL SECURITY;\nCREATE POLICY p ON t TO ${made} USING (true);\n`,
+        ]);
+        const both = await Promise.all([check(dev, url), check(dev, url)]);
+        expect(both.map(({ refused }) => refused)).toEqual([undefined, undefined]);
+        expect(await roleOf(made)).toEqual([]);
+      }),
+    );
+  });
+});
 
 describe("the replay's sweep", () => {
-	leavesStale()
-	it("drops what a killed 0.19 run left an hour ago, and keeps a younger run's and every untagged role", async () => {
-		const hourAgo = Date.now() - 61 * 60_000
-		/* 0.19 named a replay database for its run's start and eight hex digits */
-		const [leaked, young] = [
-			`database_replay_${hourAgo}_${unique("t").slice(-8)}`,
-			`database_replay_${Date.now()}_${unique("t").slice(-8)}`,
-		]
-		const [stale, fresh, untagged] = testRoles("database_t_stale", "database_t_fresh", "database_replay_untagged")
-		onTestFinished(() => onServer(`DROP DATABASE IF EXISTS ${leaked}`, `DROP DATABASE IF EXISTS ${young}`))
-		await onServer(
-			`CREATE DATABASE ${leaked}`,
-			`CREATE DATABASE ${young}`,
-			`CREATE ROLE ${stale}; CREATE ROLE ${fresh}; CREATE ROLE ${untagged}; COMMENT ON ROLE ${stale} IS 'database_replay ${hourAgo}'; COMMENT ON ROLE ${fresh} IS 'database_replay ${Date.now()}'`,
-		)
-		await withScratchDb((dev) =>
-			withScratchDb(async (url) => {
-				await write(["CREATE TABLE t (id int PRIMARY KEY);\n"])
-				expect((await check(dev, url)).refused).toBeUndefined()
-			}),
-		)
-		const names = (
-			await query(pgUrl(), `SELECT datname FROM pg_database WHERE datname IN ('${leaked}', '${young}')`)
-		).map((row) => row["datname"])
-		expect(names).toEqual([young])
-		const roles = await query(
-			pgUrl(),
-			`SELECT rolname FROM pg_roles WHERE rolname IN ('${stale}', '${fresh}', '${untagged}') ORDER BY rolname`,
-		)
-		expect(roles.map((row) => row["rolname"])).toEqual([fresh, untagged].sort())
-	})
-})
+  leavesStale();
+  it("drops what a killed 0.19 run left an hour ago, and keeps a younger run's and every untagged role", async () => {
+    const hourAgo = Date.now() - 61 * 60_000;
+
+    // 0.19 named a replay database for its run's start and eight hex digits
+    const [leaked, young] = [
+      `database_replay_${hourAgo}_${unique("t").slice(-8)}`,
+      `database_replay_${Date.now()}_${unique("t").slice(-8)}`,
+    ];
+
+    const [stale, fresh, untagged] = testRoles("database_t_stale", "database_t_fresh", "database_replay_untagged");
+    onTestFinished(() => onServer(`DROP DATABASE IF EXISTS ${leaked}`, `DROP DATABASE IF EXISTS ${young}`));
+    await onServer(
+      `CREATE DATABASE ${leaked}`,
+      `CREATE DATABASE ${young}`,
+      `CREATE ROLE ${stale}; CREATE ROLE ${fresh}; CREATE ROLE ${untagged}; COMMENT ON ROLE ${stale} IS 'database_replay ${hourAgo}'; COMMENT ON ROLE ${fresh} IS 'database_replay ${Date.now()}'`,
+    );
+    await withScratchDb((dev) =>
+      withScratchDb(async (url) => {
+        await write(["CREATE TABLE t (id int PRIMARY KEY);\n"]);
+        expect((await check(dev, url)).refused).toBeUndefined();
+      }),
+    );
+
+    const names = (
+      await query(pgUrl(), `SELECT datname FROM pg_database WHERE datname IN ('${leaked}', '${young}')`)
+    ).map((row) => row["datname"]);
+
+    expect(names).toEqual([young]);
+
+    const roles = await query(
+      pgUrl(),
+      `SELECT rolname FROM pg_roles WHERE rolname IN ('${stale}', '${fresh}', '${untagged}') ORDER BY rolname`,
+    );
+
+    expect(roles.map((row) => row["rolname"])).toEqual([fresh, untagged].sort());
+  });
+});
 
 describe("the replay's database", () => {
-	it("refuses a devUrl role without CREATEDB, naming the privilege", async () => {
-		const [role] = testRoles("database_t_nocreatedb")
-		const refused = await withScratchDb(async (dev) => {
-			const as = await asRole(dev, role, "NOCREATEDB")
-			return withScratchDb(async (url) => {
-				await write(["CREATE TABLE t (id int PRIMARY KEY);\n"])
-				return (await check(as, url)).refused
-			})
-		})
-		expect(refused).toMatch(/^devUrl's role cannot create a database \(CREATEDB\)/)
-	}, 60_000)
+  it("refuses a devUrl role without CREATEDB, naming the privilege", async () => {
+    const [role] = testRoles("database_t_nocreatedb");
 
-	it("copies devUrl's extensions in their schema, and refuses naming one it cannot make", async () => {
-		const [role] = testRoles("database_t_creator")
-		await withScratchDb(async (dev) => {
-			await query(dev, "CREATE SCHEMA ext; CREATE EXTENSION citext WITH SCHEMA ext VERSION '1.5'")
-			await withScratchDb(async (url) => {
-				await write(["CREATE TABLE person (id int PRIMARY KEY, mail ext.citext);\n"])
-				expect((await check(dev, url)).refused).toBeUndefined()
-				await query(dev, "CREATE EXTENSION pageinspect")
-				const as = await asRole(dev, role, "CREATEDB")
-				expect((await check(as, url)).refused).toMatch(
-					/^devUrl's database holds the extension pageinspect, which database could not make in the database it replays the history in: permission denied to create extension "pageinspect"/,
-				)
-			})
-		})
-	}, 60_000)
-})
+    const refused = await withScratchDb(async (dev) => {
+      const as = await asRole(dev, role, "NOCREATEDB");
+
+      return withScratchDb(async (url) => {
+        await write(["CREATE TABLE t (id int PRIMARY KEY);\n"]);
+
+        return (await check(as, url)).refused;
+      });
+    });
+
+    expect(refused).toMatch(/^devUrl's role cannot create a database \(CREATEDB\)/);
+  }, 60_000);
+
+  it("copies devUrl's extensions in their schema, and refuses naming one it cannot make", async () => {
+    const [role] = testRoles("database_t_creator");
+    await withScratchDb(async (dev) => {
+      await query(dev, "CREATE SCHEMA ext; CREATE EXTENSION citext WITH SCHEMA ext VERSION '1.5'");
+      await withScratchDb(async (url) => {
+        await write(["CREATE TABLE person (id int PRIMARY KEY, mail ext.citext);\n"]);
+        expect((await check(dev, url)).refused).toBeUndefined();
+        await query(dev, "CREATE EXTENSION pageinspect");
+        const as = await asRole(dev, role, "CREATEDB");
+        expect((await check(as, url)).refused).toMatch(
+          /^devUrl's database holds the extension pageinspect, which database could not make in the database it replays the history in: permission denied to create extension "pageinspect"/,
+        );
+      });
+    });
+  }, 60_000);
+});
 
 describe("the replay's database beside what the history makes", () => {
-	/* P5 of r21: the copy made the extension first, so a history file's plain CREATE EXTENSION, which apply runs, was refused */
-	it("lets the history make an extension devUrl holds, and copies one the history relies on and never makes", async () => {
-		await withScratchDb(async (dev) => {
-			await query(dev, "CREATE EXTENSION pgcrypto; CREATE EXTENSION citext")
-			await withScratchDb(async (url) => {
-				await write([
-					"CREATE TABLE t (id int PRIMARY KEY);\n",
-					"CREATE EXTENSION pgcrypto;\nCREATE TABLE k (id uuid DEFAULT gen_random_uuid(), mail citext);\n",
-				])
-				expect((await check(dev, url)).refused).toBeUndefined()
-			})
-		})
-	}, 60_000)
-})
+  // P5 of r21: the copy made the extension first, so a history file's plain CREATE EXTENSION, which apply runs, was refused
+  it("lets the history make an extension devUrl holds, and copies one the history relies on and never makes", async () => {
+    await withScratchDb(async (dev) => {
+      await query(dev, "CREATE EXTENSION pgcrypto; CREATE EXTENSION citext");
+      await withScratchDb(async (url) => {
+        await write([
+          "CREATE TABLE t (id int PRIMARY KEY);\n",
+          "CREATE EXTENSION pgcrypto;\nCREATE TABLE k (id uuid DEFAULT gen_random_uuid(), mail citext);\n",
+        ]);
+        expect((await check(dev, url)).refused).toBeUndefined();
+      });
+    });
+  }, 60_000);
+});
 
 /** "ok" once `act` ends, or why it threw */
 async function said(act: () => Promise<unknown>): Promise<string> {
-	try {
-		await act()
-		return "ok"
-	} catch (error) {
-		return (error as Error).message
-	}
+  try {
+    await act();
+
+    return "ok";
+  } catch (error) {
+    return (error as Error).message;
+  }
 }
 
 /** What check, apply and baseline say of `files` against a target holding what `seed` makes, apply the oracle */
 async function asApplied(dev: string, seed: string, files: readonly string[]): Promise<Record<string, string>> {
-	const target = (url: string) => ({ devUrl: dev, lockTimeout: "5s", schema: "public", url })
-	await query(dev, seed)
-	const ran = await withScratchDb(async (url) => {
-		await query(url, seed)
-		await write(files)
-		const checked = (await check(dev, url)).refused ?? "ok"
-		const applied = await said(() =>
-			applyWithAtlas({
-				approve: (m: ParsedMigration) => approveMigration(m, { target: "core", yes: true }),
-				dir,
-				print: () => undefined,
-				target: target(url),
-			}),
-		)
-		return { apply: applied, check: checked }
-	})
-	const baseline = await withScratchDb(async (url) => {
-		await query(url, seed)
-		for (const sql of files) await query(url, sql)
-		return said(() => baselineWithAtlas({ dir, print: () => undefined, target: target(url) }))
-	})
-	return { ...ran, baseline }
+  const target = (url: string) => ({ devUrl: dev, lockTimeout: "5s", schema: "public", url });
+  await query(dev, seed);
+
+  const ran = await withScratchDb(async (url) => {
+    await query(url, seed);
+    await write(files);
+    const checked = (await check(dev, url)).refused ?? "ok";
+
+    const applied = await said(() =>
+      applyWithAtlas({
+        approve: (m: ParsedMigration) => approveMigration(m, { target: "core", yes: true }),
+        dir,
+        print: () => {},
+        target: target(url),
+      }),
+    );
+
+    return { apply: applied, check: checked };
+  });
+
+  const baseline = await withScratchDb(async (url) => {
+    await query(url, seed);
+
+    for (const sql of files) await query(url, sql);
+
+    return said(() => baselineWithAtlas({ dir, print: () => {}, target: target(url) }));
+  });
+
+  return { ...ran, baseline };
 }
 
-const AGREE = { apply: "ok", baseline: "ok", check: "ok" }
+const AGREE = { apply: "ok", baseline: "ok", check: "ok" };
 
 describe("the replay copies every extension a plain CREATE EXTENSION doesn't need absent (PR1 of r22b; sibling: r21 P5)", () => {
-	it("copies one an earlier file uses and a later file creates IF NOT EXISTS", async () => {
-		const outcome = await withScratchDb((dev) =>
-			asApplied(dev, "CREATE EXTENSION pgcrypto", [
-				"-- database:allow-unsafe: the test's history\nCREATE TABLE k (id int, salt bytea DEFAULT gen_random_bytes(16));\n",
-				"CREATE EXTENSION IF NOT EXISTS pgcrypto;\n",
-			]),
-		)
-		expect(outcome).toEqual(AGREE)
-	}, 120_000)
+  it("copies one an earlier file uses and a later file creates IF NOT EXISTS", async () => {
+    const outcome = await withScratchDb((dev) =>
+      asApplied(dev, "CREATE EXTENSION pgcrypto", [
+        "-- database:allow-unsafe: the test's history\nCREATE TABLE k (id int, salt bytea DEFAULT gen_random_bytes(16));\n",
+        "CREATE EXTENSION IF NOT EXISTS pgcrypto;\n",
+      ]),
+    );
 
-	it("copies one that requires an extension the history creates IF NOT EXISTS", async () => {
-		const outcome = await withScratchDb((dev) =>
-			asApplied(dev, "CREATE EXTENSION cube; CREATE EXTENSION earthdistance", [
-				"CREATE EXTENSION IF NOT EXISTS cube;\nCREATE TABLE places (id int, at cube);\n",
-			]),
-		)
-		expect(outcome).toEqual(AGREE)
-	}, 120_000)
+    expect(outcome).toEqual(AGREE);
+  }, 120_000);
 
-	it("makes one that requires an extension a file creates plainly right after that file's CREATE, in its schema and version", async () => {
-		await withScratchDb(async (dev) => {
-			await query(
-				dev,
-				"CREATE EXTENSION cube; CREATE SCHEMA geo; CREATE EXTENSION earthdistance WITH SCHEMA geo VERSION '1.1'",
-			)
-			await withScratchDb(async (url) => {
-				await write([
-					"CREATE EXTENSION cube;\nCREATE TABLE places (id int, at cube);\n",
-					"-- database:allow-unsafe: the test's history\nCREATE VIEW reach AS SELECT geo.earth() AS r;\n",
-				])
-				expect((await check(dev, url)).refused).toBeUndefined()
-			})
-		})
-	}, 120_000)
-})
+  it("copies one that requires an extension the history creates IF NOT EXISTS", async () => {
+    const outcome = await withScratchDb((dev) =>
+      asApplied(dev, "CREATE EXTENSION cube; CREATE EXTENSION earthdistance", [
+        "CREATE EXTENSION IF NOT EXISTS cube;\nCREATE TABLE places (id int, at cube);\n",
+      ]),
+    );
+
+    expect(outcome).toEqual(AGREE);
+  }, 120_000);
+
+  it("makes one that requires an extension a file creates plainly right after that file's CREATE, in its schema and version", async () => {
+    await withScratchDb(async (dev) => {
+      await query(
+        dev,
+        "CREATE EXTENSION cube; CREATE SCHEMA geo; CREATE EXTENSION earthdistance WITH SCHEMA geo VERSION '1.1'",
+      );
+      await withScratchDb(async (url) => {
+        await write([
+          "CREATE EXTENSION cube;\nCREATE TABLE places (id int, at cube);\n",
+          "-- database:allow-unsafe: the test's history\nCREATE VIEW reach AS SELECT geo.earth() AS r;\n",
+        ]);
+        expect((await check(dev, url)).refused).toBeUndefined();
+      });
+    });
+  }, 120_000);
+});
 
 describe("the replay's database beside the roles the history makes", () => {
-	/* P6 of r21: since Postgres 16 a role's maker needs the role granted to SET it, as `OWNER TO` does; the grant was left out */
-	it("runs a grant of a role the replay made, under a role that is no superuser, and leaves out one of a role it did not", async () => {
-		const [manager, app, other] = testRoles("database_t_mgr", "database_t_app", "database_t_other")
-		await onServer(`CREATE ROLE ${other}`)
-		await withScratchDb(async (dev) => {
-			const as = await asRole(dev, manager, "CREATEDB CREATEROLE")
-			await withScratchDb(async (url) => {
-				const grant = `GRANT ${app} TO CURRENT_USER`
-				const outside = `GRANT ${other} TO CURRENT_USER`
-				await write([
-					`-- database:allow-unsafe: the test's history\nCREATE ROLE ${app};\n${grant};\n${outside};\nGRANT CREATE ON SCHEMA public TO ${app};\nCREATE TABLE t (id int);\nALTER TABLE t OWNER TO ${app};\n`,
-				])
-				const { out, refused } = await check(as, url)
-				expect(refused).toBeUndefined()
-				expect(out).toContain(left(outside, 0, "GRANT or REVOKE of a role"))
-				expect(out.some((line) => line.includes(JSON.stringify(grant)))).toBe(false)
-			})
-		})
-		expect(await roleOf(app)).toEqual([])
-	}, 60_000)
-})
+  // P6 of r21: since Postgres 16 a role's maker needs the role granted to SET it, as `OWNER TO` does; the grant was left out
+  it("runs a grant of a role the replay made, under a role that is no superuser, and leaves out one of a role it did not", async () => {
+    const [manager, app, other] = testRoles("database_t_mgr", "database_t_app", "database_t_other");
+    await onServer(`CREATE ROLE ${other}`);
+    await withScratchDb(async (dev) => {
+      const as = await asRole(dev, manager, "CREATEDB CREATEROLE");
+      await withScratchDb(async (url) => {
+        const grant = `GRANT ${app} TO CURRENT_USER`;
+        const outside = `GRANT ${other} TO CURRENT_USER`;
+        await write([
+          `-- database:allow-unsafe: the test's history\nCREATE ROLE ${app};\n${grant};\n${outside};\nGRANT CREATE ON SCHEMA public TO ${app};\nCREATE TABLE t (id int);\nALTER TABLE t OWNER TO ${app};\n`,
+        ]);
+        const { out, refused } = await check(as, url);
+        expect(refused).toBeUndefined();
+        expect(out).toContain(left(outside, 0, "GRANT or REVOKE of a role"));
+        expect(out.some((line) => line.includes(JSON.stringify(grant)))).toBe(false);
+      });
+    });
+    expect(await roleOf(app)).toEqual([]);
+  }, 60_000);
+});
 
-/* R1 of the P1 review: a replay that made a role holds it as one that reused it does, so a shorter
-   replay ending first never drops the role from under a later file of the longer one */
+// R1 of the P1 review: a replay that made a role holds it as one that reused it does, so a shorter
+// replay ending first never drops the role from under a later file of the longer one
 describe("two replays at once, one paused between the file making a role and the file using it", () => {
-	const pause = pauses()
+  const pause = pauses();
 
-	it("passes both, and drops the role after both", async () => {
-		const [made] = testRoles("database_t_made")
-		const resume = unique("database_t_resume")
-		const other = mkdtempSync(join(tmpdir(), "database-pg-replay-db-b-"))
-		try {
-			await withScratchDb((dev) =>
-				withScratchDb(async (url) => {
-					const policy = `CREATE TABLE t (id int PRIMARY KEY);\nALTER TABLE t ENABLE ROW LEVEL SECURITY;\nCREATE POLICY p ON t TO ${made} USING (true);\n`
-					const unsafe = "-- database:allow-unsafe: the test's history\n"
-					await write([`${unsafe}CREATE ROLE ${made};\n`, `${unsafe}${waitFor(resume)}`, `${unsafe}${policy}`])
-					await write([`${unsafe}CREATE ROLE ${made};\n${policy}`], other)
-					const long = check(dev, url)
-					await untilRole(made)
-					const short = await check(dev, url, other)
-					await pause.go(resume)
-					expect([short.refused, (await long).refused]).toEqual([undefined, undefined])
-					expect(await roleOf(made)).toEqual([])
-				}),
-			)
-		} finally {
-			rmSync(other, { force: true, recursive: true })
-		}
-	})
-})
+  it("passes both, and drops the role after both", async () => {
+    const [made] = testRoles("database_t_made");
+    const resume = unique("database_t_resume");
+    const other = mkdtempSync(join(tmpdir(), "database-pg-replay-db-b-"));
+
+    try {
+      await withScratchDb((dev) =>
+        withScratchDb(async (url) => {
+          const policy = `CREATE TABLE t (id int PRIMARY KEY);\nALTER TABLE t ENABLE ROW LEVEL SECURITY;\nCREATE POLICY p ON t TO ${made} USING (true);\n`;
+          const unsafe = "-- database:allow-unsafe: the test's history\n";
+          await write([`${unsafe}CREATE ROLE ${made};\n`, `${unsafe}${waitFor(resume)}`, `${unsafe}${policy}`]);
+          await write([`${unsafe}CREATE ROLE ${made};\n${policy}`], other);
+          const long = check(dev, url);
+          await untilRole(made);
+          const short = await check(dev, url, other);
+          await pause.go(resume);
+          expect([short.refused, (await long).refused]).toEqual([undefined, undefined]);
+          expect(await roleOf(made)).toEqual([]);
+        }),
+      );
+    } finally {
+      rmSync(other, { force: true, recursive: true });
+    }
+  });
+});

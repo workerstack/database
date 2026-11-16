@@ -1,7 +1,7 @@
 // pg/columns.d.ts
 import { type PgBigInt53Builder, type PgBooleanBuilder, type PgDoublePrecisionBuilder, type PgIntegerBuilder, type PgJsonbBuilder, type PgSerialBuilder, type PgTextBuilder, type Set$Type, type SetHasDefault, type SetIsPrimaryKey, type SetNotNull } from "drizzle-orm/pg-core";
-import type { EnumOptions, IntegerConstraints, JsonConstraints, RealConstraints, RefConstraints, TextConstraints, TimestampConstraints } from "../sqlite/constraints.ts";
 import type * as z from "zod";
+import type { EnumOptions, IntegerConstraints, JsonConstraints, RealConstraints, RefConstraints, TextConstraints, TimestampConstraints } from "../sqlite/constraints.ts";
 /** A Postgres text column builder */
 type Text = PgTextBuilder<[string, ...string[]]>;
 /** The names a creation timestamp may take, in either casing, so codegen recognizes it */

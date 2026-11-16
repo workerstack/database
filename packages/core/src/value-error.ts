@@ -5,71 +5,77 @@
  * rest of Postgres class 22 (a division by zero, say) comes from the server's own SQL and stays
  * the caller's.
  */
-import { own } from "./constraint-map.ts"
-import { DatabaseError } from "./error.ts"
-import { databaseErrorKeys } from "./types.ts"
+import { own } from "./constraint-map.ts";
+import { DatabaseError } from "./error.ts";
+import { databaseErrorKeys } from "./types.ts";
 
-type ValueProblem = "invalid" | "too_large"
+type ValueProblem = "invalid" | "too_large";
+
 /** A code that is a value's problem only when the engine's message says so */
-type ValueRule = ValueProblem | { message: RegExp; problem: ValueProblem }
+type ValueRule = ValueProblem | { message: RegExp; problem: ValueProblem };
 
 const VALUE_ERRORS: Record<string, ValueRule> = {
-	/* a string past varchar(n), a number out of range, text that is no number, a NUL byte, a
-	 * character the encoding has not got, a date that does not parse or is out of range */
-	"22001": "invalid",
-	"22003": "invalid",
-	"22007": "invalid",
-	"22008": "invalid",
-	"22021": "invalid",
-	"22P02": "invalid",
-	"22P05": "invalid",
-	/* a time zone offset past what Postgres holds, 15:59 either way */
-	"22009": "invalid",
-	/* an interval field past what Postgres holds */
-	"22015": "invalid",
-	/* a bit string of another length than bit(n), malformed xml, and an xml value that is no document */
-	"22026": "invalid",
-	"2200M": "invalid",
-	"2200N": "invalid",
-	/* a value too large for a btree index row */
-	"54000": "too_large",
-	/* a STRICT table's column given another type */
-	SQLITE_CONSTRAINT_DATATYPE: "invalid",
-	SQLITE_MISMATCH: "invalid",
-	/* a string or blob past the engine's limit (D1's is 2 MB); SQLITE_TOOBIG is also a statement past
-	 * its length limit, which the server built, since database binds every value */
-	SQLITE_TOOBIG: { message: /\bstring or blob too big\b/i, problem: "too_large" },
-}
+  // a string past varchar(n), a number out of range, text that is no number, a NUL byte, a
+  // character the encoding has not got, a date that does not parse or is out of range
+  "22001": "invalid",
+  "22003": "invalid",
+  "22007": "invalid",
+  "22008": "invalid",
+  "22021": "invalid",
+  "22P02": "invalid",
+  "22P05": "invalid",
+  // a time zone offset past what Postgres holds, 15:59 either way
+  "22009": "invalid",
+  // an interval field past what Postgres holds
+  "22015": "invalid",
+  // a bit string of another length than bit(n), malformed xml, and an xml value that is no document
+  "22026": "invalid",
+  "2200M": "invalid",
+  "2200N": "invalid",
+  // a value too large for a btree index row
+  "54000": "too_large",
+  // a STRICT table's column given another type
+  SQLITE_CONSTRAINT_DATATYPE: "invalid",
+  SQLITE_MISMATCH: "invalid",
+  // a string or blob past the engine's limit (D1's is 2 MB); SQLITE_TOOBIG is also a statement past
+  // its length limit, which the server built, since database binds every value
+  SQLITE_TOOBIG: { message: /\bstring or blob too big\b/i, problem: "too_large" },
+};
 
 /** The engine's error: its code, and the message a code's rule may read */
-type ValueRead = { code: string; message?: string | undefined }
+type ValueRead = { code: string; message?: string | undefined };
 
 /** Where the engine says the value was, when it says */
-type ValueAt = { column?: string | undefined; table?: string | undefined }
+type ValueAt = { column?: string | undefined; table?: string | undefined };
 
 /** The problem `read` is of a value the column cannot hold, or undefined when it is none */
 function problemOf({ code, message }: ValueRead): ValueProblem | undefined {
-	const rule = own(VALUE_ERRORS, code)
-	if (rule === undefined || typeof rule === "string") return rule
-	return rule.message.test(message ?? "") ? rule.problem : undefined
+  const rule = own(VALUE_ERRORS, code);
+
+  if (rule === undefined || typeof rule === "string") return rule;
+
+  return rule.message.test(message ?? "") ? rule.problem : undefined;
 }
 
 /** The 400 for a value `read` says the column cannot hold, or undefined when it is not one */
 function valueError(read: ValueRead, { column, table }: ValueAt, source: unknown): DatabaseError | undefined {
-	const problem = problemOf(read)
-	if (problem === undefined) return undefined
-	const [what, errorKey] =
-		problem === "invalid"
-			? ["Invalid value", databaseErrorKeys.INVALID_VALUE]
-			: ["Value too large", databaseErrorKeys.VALUE_TOO_LARGE]
-	return new DatabaseError({
-		cause: column === undefined ? what : `${what} for ${column}`,
-		column,
-		errorKey,
-		source,
-		status: "bad_request",
-		table,
-	})
+  const problem = problemOf(read);
+
+  if (problem === undefined) return undefined;
+
+  const [what, errorKey] =
+    problem === "invalid"
+      ? ["Invalid value", databaseErrorKeys.INVALID_VALUE]
+      : ["Value too large", databaseErrorKeys.VALUE_TOO_LARGE];
+
+  return new DatabaseError({
+    cause: column === undefined ? what : `${what} for ${column}`,
+    column,
+    errorKey,
+    source,
+    status: "bad_request",
+    table,
+  });
 }
 
-export { valueError }
+export { valueError };

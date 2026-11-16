@@ -1,38 +1,42 @@
-import { fixtureRoot } from "./__fixtures__/temp.ts"
-import fs from "node:fs"
-import path from "node:path"
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { analyze } from "./analyzer.ts"
+import fs from "node:fs";
+import path from "node:path";
 
-let tmpDir: string
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { fixtureRoot } from "./__fixtures__/temp.ts";
+import { analyze } from "./analyzer.ts";
+
+let tmpDir: string;
 
 beforeEach(() => {
-	tmpDir = fs.mkdtempSync(path.join(fixtureRoot(), "database-analyzer-"))
-})
+  tmpDir = fs.mkdtempSync(path.join(fixtureRoot(), "database-analyzer-"));
+});
 
 afterEach(() => {
-	fs.rmSync(tmpDir, { force: true, recursive: true })
-})
+  fs.rmSync(tmpDir, { force: true, recursive: true });
+});
 
 function writeTablesFile(content: string, filename = "db.test.tables.ts"): string {
-	const fp = path.join(tmpDir, filename)
-	fs.writeFileSync(fp, content)
-	return fp
+  const fp = path.join(tmpDir, filename);
+  fs.writeFileSync(fp, content);
+
+  return fp;
 }
 
 describe("analyzer: which tables it reads", () => {
-	it("reads a table whose columns are a const, as drizzle builds it (F16)", async () => {
-		const fp = writeTablesFile(`
+  it("reads a table whose columns are a const, as drizzle builds it (F16)", async () => {
+    const fp = writeTablesFile(`
 import { sqliteTable, text } from "drizzle-orm/sqlite-core"
 const columns = { id: text("id").primaryKey() }
 export const opaque = sqliteTable("opaque", columns)
 export const post = sqliteTable("post", { id: text("id").primaryKey() })
-`)
-		expect((await analyze(fp)).tables.map((t) => t.varName)).toEqual(["opaque", "post"])
-	})
+`);
 
-	it("sorts tables alphabetically by varName", async () => {
-		const fp = writeTablesFile(`
+    expect((await analyze(fp)).tables.map((t) => t.varName)).toEqual(["opaque", "post"]);
+  });
+
+  it("sorts tables alphabetically by varName", async () => {
+    const fp = writeTablesFile(`
 import { sqliteTable as createTable, text } from "drizzle-orm/sqlite-core"
 
 import { c } from "@workerstack/database/sqlite/columns"
@@ -40,53 +44,60 @@ import { c } from "@workerstack/database/sqlite/columns"
 export const zebra = createTable("zebra", { id: c.id() })
 export const alpha = createTable("alpha", { id: c.id() })
 export const middle = createTable("middle", { id: c.id() })
-`)
-		const result = await analyze(fp)
-		expect(result.tables.map((t) => t.varName)).toEqual(["alpha", "middle", "zebra"])
-	})
+`);
 
-	it("extracts dbName from various file patterns", async () => {
-		expect((await analyze(writeTablesFile("", "db.core.tables.ts"))).dbName).toBe("core")
-		expect((await analyze(writeTablesFile("", "csvme.db.shard.tables.gen.ts"))).dbName).toBe("shard")
-		expect((await analyze(writeTablesFile("", "tables.ts"))).dbName).toBe("db")
-	})
-})
+    const result = await analyze(fp);
+    expect(result.tables.map((t) => t.varName)).toEqual(["alpha", "middle", "zebra"]);
+  });
+
+  it("extracts dbName from various file patterns", async () => {
+    expect((await analyze(writeTablesFile("", "db.core.tables.ts"))).dbName).toBe("core");
+    expect((await analyze(writeTablesFile("", "csvme.db.shard.tables.gen.ts"))).dbName).toBe("shard");
+    expect((await analyze(writeTablesFile("", "tables.ts"))).dbName).toBe("db");
+  });
+});
 
 describe("analyzer: the constants a constraint names", () => {
-	it("resolves imported constants for constraint references when given the project directory", async () => {
-		fs.writeFileSync(path.join(tmpDir, "patterns.ts"), 'export const PATTERNS = { SLUG: "/^[a-z]+$/" } as const\n')
-		const fp = writeTablesFile(`
+  it("resolves imported constants for constraint references when given the project directory", async () => {
+    fs.writeFileSync(path.join(tmpDir, "patterns.ts"), 'export const PATTERNS = { SLUG: "/^[a-z]+$/" } as const\n');
+
+    const fp = writeTablesFile(`
 import { sqliteTable, text } from "drizzle-orm/sqlite-core"
 import { PATTERNS } from "./patterns"
 import { c } from "@workerstack/database/sqlite/columns"
 export const post = sqliteTable("post", { id: text("id").primaryKey(), slug: c.text("slug", { pattern: PATTERNS.SLUG }) })
-`)
-		expect((await analyze(fp)).tables[0]?.fields.find((field) => field.name === "slug")?.constraints.pattern).toBe(
-			"/^[a-z]+$/u",
-		)
-	})
+`);
 
-	it("loads the tables module and what it imports, never another file beside it", async () => {
-		const marker = path.join(tmpDir, "loaded.txt")
-		const effect = (mark: string) =>
-			`import fs from "node:fs"\nfs.appendFileSync(${JSON.stringify(marker)}, "${mark}")\nexport const V = { A: "a" }\n`
-		fs.writeFileSync(path.join(tmpDir, "effect.js"), effect("e"))
-		fs.writeFileSync(path.join(tmpDir, "other.js"), effect("o"))
-		/* a generated file beside the tables, as a second codegen run finds it */
-		fs.writeFileSync(path.join(tmpDir, "db.test.rows.gen.ts"), 'import { V } from "./other.js"\nexport const v = V\n')
-		const fp = writeTablesFile(`
+    expect((await analyze(fp)).tables[0]?.fields.find((field) => field.name === "slug")?.constraints.pattern).toBe(
+      "/^[a-z]+$/u",
+    );
+  });
+
+  it("loads the tables module and what it imports, never another file beside it", async () => {
+    const marker = path.join(tmpDir, "loaded.txt");
+
+    const effect = (mark: string) =>
+      `import fs from "node:fs"\nfs.appendFileSync(${JSON.stringify(marker)}, "${mark}")\nexport const V = { A: "a" }\n`;
+
+    fs.writeFileSync(path.join(tmpDir, "effect.js"), effect("e"));
+    fs.writeFileSync(path.join(tmpDir, "other.js"), effect("o"));
+    // a generated file beside the tables, as a second codegen run finds it
+    fs.writeFileSync(path.join(tmpDir, "db.test.rows.gen.ts"), 'import { V } from "./other.js"\nexport const v = V\n');
+
+    const fp = writeTablesFile(`
 import { sqliteTable, text } from "drizzle-orm/sqlite-core"
 import { V } from "./effect.js"
 export const post = sqliteTable("post", { id: text("id").primaryKey(), a: V.A ? text("a") : text("b") })
-`)
-		expect((await analyze(fp)).tables.map((table) => table.varName)).toEqual(["post"])
-		expect(fs.readFileSync(marker, "utf8")).toBe("e")
-	})
-})
+`);
+
+    expect((await analyze(fp)).tables.map((table) => table.varName)).toEqual(["post"]);
+    expect(fs.readFileSync(marker, "utf8")).toBe("e");
+  });
+});
 
 describe("analyzer: columns", () => {
-	it("extracts basic table with fields", async () => {
-		const fp = writeTablesFile(`
+  it("extracts basic table with fields", async () => {
+    const fp = writeTablesFile(`
 import { sql } from "drizzle-orm"
 import { sqliteTable as createTable, text, integer } from "drizzle-orm/sqlite-core"
 
@@ -99,29 +110,30 @@ export const user = createTable("user", {
 	created_at: c.createdAt("created_at"),
 	updated_at: c.updatedAt("updated_at"),
 })
-`)
-		const result = await analyze(fp)
-		expect(result.dbName).toBe("test")
-		expect(result.tables).toHaveLength(1)
+`);
 
-		const table = result.tables[0]
-		expect(table.varName).toBe("user")
-		expect(table.sqlName).toBe("user")
-		expect(table.fields).toHaveLength(5)
+    const result = await analyze(fp);
+    expect(result.dbName).toBe("test");
+    expect(result.tables).toHaveLength(1);
 
-		const idField = table.fields.find((f) => f.name === "id")
-		expect(idField?.isPrimaryKey).toBe(true)
-		expect(idField?.drizzleHelper).toBe("id")
+    const table = result.tables[0];
+    expect(table?.varName).toBe("user");
+    expect(table?.sqlName).toBe("user");
+    expect(table?.fields).toHaveLength(5);
 
-		const nameField = table.fields.find((f) => f.name === "name")
-		expect(nameField?.drizzleHelper).toBe("text")
-		expect(nameField?.isPrimaryKey).toBe(false)
-	})
-})
+    const idField = table?.fields.find((f) => f.name === "id");
+    expect(idField?.isPrimaryKey).toBe(true);
+    expect(idField?.drizzleHelper).toBe("id");
+
+    const nameField = table?.fields.find((f) => f.name === "name");
+    expect(nameField?.drizzleHelper).toBe("text");
+    expect(nameField?.isPrimaryKey).toBe(false);
+  });
+});
 
 describe("analyzer: references and field constraints", () => {
-	it("extracts FK references", async () => {
-		const fp = writeTablesFile(`
+  it("extracts FK references", async () => {
+    const fp = writeTablesFile(`
 import { sqliteTable as createTable, text } from "drizzle-orm/sqlite-core"
 
 import { c } from "@workerstack/database/sqlite/columns"
@@ -134,22 +146,23 @@ export const post = createTable("post", {
 	id: c.id(),
 	author_id: c.ref("author_id").references(() => user.id, { onDelete: "cascade" }).notNull(),
 })
-`)
-		const result = await analyze(fp)
-		const postTable = result.tables.find((t) => t.varName === "post")
-		const fkField = postTable?.fields.find((f) => f.name === "author_id")
-		/* user.id is a c.id key, so the reference takes the id rules (F10) */
-		expect(fkField?.foreignKey).toEqual({
-			column: "author_id",
-			onDelete: "cascade",
-			refColumn: "id",
-			refTable: "user",
-			toId: true,
-		})
-	})
+`);
 
-	it("extracts field constraints", async () => {
-		const fp = writeTablesFile(`
+    const result = await analyze(fp);
+    const postTable = result.tables.find((t) => t.varName === "post");
+    const fkField = postTable?.fields.find((f) => f.name === "author_id");
+    // user.id is a c.id key, so the reference takes the id rules (F10)
+    expect(fkField?.foreignKey).toEqual({
+      column: "author_id",
+      onDelete: "cascade",
+      refColumn: "id",
+      refTable: "user",
+      toId: true,
+    });
+  });
+
+  it("extracts field constraints", async () => {
+    const fp = writeTablesFile(`
 import { sqliteTable as createTable, text } from "drizzle-orm/sqlite-core"
 
 import { c } from "@workerstack/database/sqlite/columns"
@@ -158,19 +171,20 @@ export const user = createTable("user", {
 	id: c.id(),
 	email: c.text("email", { min: 5, max: 254, email: true }),
 })
-`)
-		const result = await analyze(fp)
-		const emailField = result.tables[0].fields.find((f) => f.name === "email")
-		expect(emailField?.constraints.min).toBe(5)
-		expect(emailField?.constraints.max).toBe(254)
-		expect(emailField?.constraints.email).toBe(true)
-		expect(emailField?.length).toBe(254)
-	})
-})
+`);
+
+    const result = await analyze(fp);
+    const emailField = result.tables[0]?.fields.find((f) => f.name === "email");
+    expect(emailField?.constraints.min).toBe(5);
+    expect(emailField?.constraints.max).toBe(254);
+    expect(emailField?.constraints.email).toBe(true);
+    expect(emailField?.length).toBe(254);
+  });
+});
 
 describe("analyzer: timestamps and unique indexes", () => {
-	it("detects timestamp fields and style", async () => {
-		const fp = writeTablesFile(`
+  it("detects timestamp fields and style", async () => {
+    const fp = writeTablesFile(`
 import { sqliteTable as createTable, text, integer } from "drizzle-orm/sqlite-core"
 
 import { c } from "@workerstack/database/sqlite/columns"
@@ -181,17 +195,18 @@ export const item = createTable("item", {
 	updated_at: c.updatedAt("updated_at"),
 	deleted_at: c.deletedAt("deleted_at"),
 })
-`)
-		const result = await analyze(fp)
-		const table = result.tables[0]
-		expect(table.timestamps.createdAt).toBe(true)
-		expect(table.timestamps.updatedAt).toBe(true)
-		expect(table.timestamps.deletedAt).toBe(true)
-		expect(table.timestamps.style).toBe("snake_case")
-	})
+`);
 
-	it("extracts unique indexes from table options", async () => {
-		const fp = writeTablesFile(`
+    const result = await analyze(fp);
+    const table = result.tables[0];
+    expect(table?.timestamps.createdAt).toBe(true);
+    expect(table?.timestamps.updatedAt).toBe(true);
+    expect(table?.timestamps.deletedAt).toBe(true);
+    expect(table?.timestamps.style).toBe("snake_case");
+  });
+
+  it("extracts unique indexes from table options", async () => {
+    const fp = writeTablesFile(`
 import { sqliteTable as createTable, text, uniqueIndex } from "drizzle-orm/sqlite-core"
 
 import { c } from "@workerstack/database/sqlite/columns"
@@ -204,20 +219,21 @@ export const user = createTable("user", {
 	uniqueIndex("idx_user_email").on(t.email),
 	uniqueIndex("idx_user_slug").on(t.slug),
 ])
-`)
-		const result = await analyze(fp)
-		const table = result.tables[0]
-		expect(table.uniqueIndexes).toHaveLength(2)
-		expect(table.uniqueIndexes[0]).toEqual({
-			columns: ["email"],
-			name: "idx_user_email",
-		})
-	})
-})
+`);
+
+    const result = await analyze(fp);
+    const table = result.tables[0];
+    expect(table?.uniqueIndexes).toHaveLength(2);
+    expect(table?.uniqueIndexes[0]).toEqual({
+      columns: ["email"],
+      name: "idx_user_email",
+    });
+  });
+});
 
 describe("analyzer: checks and enums", () => {
-	it("extracts check constraints", async () => {
-		const fp = writeTablesFile(`
+  it("extracts check constraints", async () => {
+    const fp = writeTablesFile(`
 import { sql } from "drizzle-orm"
 import { sqliteTable as createTable, text, integer, check } from "drizzle-orm/sqlite-core"
 
@@ -229,16 +245,17 @@ export const product = createTable("product", {
 }, (t) => [
 	check("price_positive", sql\`price > 0\`),
 ])
-`)
-		const result = await analyze(fp)
-		const table = result.tables[0]
-		expect(table.checkConstraints).toHaveLength(1)
-		expect(table.checkConstraints[0].name).toBe("price_positive")
-		expect(table.checkConstraints[0].expression).toBe("price > 0")
-	})
+`);
 
-	it("reads the values of an enum held in a local const", async () => {
-		const fp = writeTablesFile(`
+    const result = await analyze(fp);
+    const table = result.tables[0];
+    expect(table?.checkConstraints).toHaveLength(1);
+    expect(table?.checkConstraints[0]?.name).toBe("price_positive");
+    expect(table?.checkConstraints[0]?.expression).toBe("price > 0");
+  });
+
+  it("reads the values of an enum held in a local const", async () => {
+    const fp = writeTablesFile(`
 import { sqliteTable as createTable, text } from "drizzle-orm/sqlite-core"
 
 const ROLES = ["admin", "user"] as const
@@ -249,39 +266,41 @@ export const user = createTable("user", {
 	id: c.id(),
 	role: c.enum("role", ROLES),
 })
-`)
-		const result = await analyze(fp)
-		const roleField = result.tables[0].fields.find((f) => f.name === "role")
-		expect(roleField?.enumValues).toEqual(["admin", "user"])
-	})
-})
+`);
+
+    const result = await analyze(fp);
+    const roleField = result.tables[0]?.fields.find((f) => f.name === "role");
+    expect(roleField?.enumValues).toEqual(["admin", "user"]);
+  });
+});
 
 describe("analyzer: state machines", () => {
-	it("extracts a state machine declared as c.enum's third argument", async () => {
-		const fp = writeTablesFile(`
+  it("extracts a state machine declared as c.enum's third argument", async () => {
+    const fp = writeTablesFile(`
 import { sqliteTable as createTable, text } from "drizzle-orm/sqlite-core"
 import { c } from "@workerstack/database/sqlite/columns"
 export const delivery = createTable("delivery", {
 	id: c.id(),
 	status: c.enum("status", ["queued", "sent"], { initial: "queued", terminal: ["sent"] }).notNull(),
 })
-`)
-		const result = await analyze(fp)
-		const status = result.tables[0]!.fields.find((f) => f.name === "status")
-		expect(status?.enumValues).toEqual(["queued", "sent"])
-		expect(status?.states).toEqual({
-			initial: "queued",
-			terminal: ["sent"],
-			transitions: null,
-		})
-	})
-})
+`);
+
+    const result = await analyze(fp);
+    const status = result.tables[0]!.fields.find((f) => f.name === "status");
+    expect(status?.enumValues).toEqual(["queued", "sent"]);
+    expect(status?.states).toEqual({
+      initial: "queued",
+      terminal: ["sent"],
+      transitions: null,
+    });
+  });
+});
 
 async function fkFor(options: string) {
-	const fp = path.join(tmpDir, "db.test.tables.ts")
-	fs.writeFileSync(
-		fp,
-		`
+  const fp = path.join(tmpDir, "db.test.tables.ts");
+  fs.writeFileSync(
+    fp,
+    `
 import { sqliteTable as createTable, text } from "drizzle-orm/sqlite-core"
 import { c } from "@workerstack/database/sqlite/columns"
 export const author = createTable("author", { id: c.id() })
@@ -290,48 +309,50 @@ id: c.id(),
 author_id: c.ref("author_id").references(() => author.id${options}),
 })
 `,
-	)
-	const analysis = await analyze(fp)
-	return analysis.tables.find((t) => t.sqlName === "post")?.fields.find((f) => f.name === "author_id")?.foreignKey
+  );
+  const analysis = await analyze(fp);
+
+  return analysis.tables.find((t) => t.sqlName === "post")?.fields.find((f) => f.name === "author_id")?.foreignKey;
 }
 
 describe("analyze — referential actions", () => {
-	it("records the referenced table and column", async () => {
-		expect(await fkFor("")).toMatchObject({ column: "author_id", refColumn: "id", refTable: "author" })
-	})
+  it("records the referenced table and column", async () => {
+    expect(await fkFor("")).toMatchObject({ column: "author_id", refColumn: "id", refTable: "author" });
+  });
 
-	const actions = ["cascade", "restrict", "set null", "set default", "no action"]
+  const actions = ["cascade", "restrict", "set null", "set default", "no action"];
 
-	for (const action of actions) {
-		it(`keeps the multi-word-safe onDelete value "${action}"`, async () => {
-			/* \\w+ silently dropped every value containing a space, so three of the
-			   five drizzle referential actions never reached the generators. */
-			expect((await fkFor(`, { onDelete: "${action}" }`))?.onDelete).toBe(action)
-		})
-	}
+  for (const action of actions) {
+    it(`keeps the multi-word-safe onDelete value "${action}"`, async () => {
+      // \\w+ silently dropped every value containing a space, so three of the
+      // five drizzle referential actions never reached the generators.
+      expect((await fkFor(`, { onDelete: "${action}" }`))?.onDelete).toBe(action);
+    });
+  }
 
-	it("keeps onDelete and onUpdate together", async () => {
-		const fk = await fkFor(`, { onDelete: "set null", onUpdate: "cascade" }`)
-		expect(fk?.onDelete).toBe("set null")
-		expect(fk?.onUpdate).toBe("cascade")
-	})
+  it("keeps onDelete and onUpdate together", async () => {
+    const fk = await fkFor(`, { onDelete: "set null", onUpdate: "cascade" }`);
+    expect(fk?.onDelete).toBe("set null");
+    expect(fk?.onUpdate).toBe("cascade");
+  });
 
-	it("leaves both undefined when no options are given", async () => {
-		const fk = await fkFor("")
-		expect(fk?.onDelete).toBeUndefined()
-		expect(fk?.onUpdate).toBeUndefined()
-	})
-})
+  it("leaves both undefined when no options are given", async () => {
+    const fk = await fkFor("");
+    expect(fk?.onDelete).toBeUndefined();
+    expect(fk?.onUpdate).toBeUndefined();
+  });
+});
 
 describe("analyzer: a table declared without export (F8)", () => {
-	it("refuses a key into it, naming the column and the table, as the generated files could not import it", async () => {
-		const fp = writeTablesFile(`
+  it("refuses a key into it, naming the column and the table, as the generated files could not import it", async () => {
+    const fp = writeTablesFile(`
 import { sqliteTable, text } from "drizzle-orm/sqlite-core"
 const hidden = sqliteTable("hidden", { id: text("id").primaryKey() })
 export const post = sqliteTable("post", { id: text("id").primaryKey(), hidden_id: text("hidden_id").references(() => hidden.id) })
-`)
-		await expect(analyze(fp)).rejects.toThrow(
-			"post.hidden_id references the table hidden, which no module of the project exports",
-		)
-	})
-})
+`);
+
+    await expect(analyze(fp)).rejects.toThrow(
+      "post.hidden_id references the table hidden, which no module of the project exports",
+    );
+  });
+});

@@ -3,75 +3,77 @@
  * unrecognized under a name no one wrote ("ENABLE TRIG ALL"); an unlisted command is named in the
  * SQL's own words.
  */
-import { beforeAll, describe, expect, it } from "vitest"
-import { REWRITES } from "./pg-column-add.ts"
-import { ddlFindings } from "./pg-ddl.ts"
-import { historyFacts } from "./pg-history.ts"
-import type { Node } from "./pg-nodes.ts"
-import { loadPostgresParser, postgresParser } from "./pg-parser.ts"
-import { extractSchema } from "./schema.ts"
+import { beforeAll, describe, expect, it } from "vitest";
 
-beforeAll(() => loadPostgresParser())
+import { REWRITES } from "./pg-column-add.ts";
+import { ddlFindings } from "./pg-ddl.ts";
+import { historyFacts } from "./pg-history.ts";
+import type { Node } from "./pg-nodes.ts";
+import { loadPostgresParser, postgresParser } from "./pg-parser.ts";
+import { extractSchema } from "./schema.ts";
+
+beforeAll(() => loadPostgresParser());
 
 /** The DDL findings of `sql`'s one statement, after `history` */
 function after(history: string, sql: string) {
-	const [stmt] = postgresParser().parseSync(sql).stmts as Array<{ stmt: Node }>
-	const [type, node] = Object.entries((stmt as { stmt: Node }).stmt)[0] as [string, Node]
-	return ddlFindings(type, node, historyFacts(extractSchema(history, undefined, "postgres"), "public"))
+  const [stmt] = postgresParser().parseSync(sql).stmts as Array<{ stmt: Node }>;
+  const [type, node] = Object.entries((stmt as { stmt: Node }).stmt)[0] as [string, Node];
+
+  return ddlFindings(type, node, historyFacts(extractSchema(history, undefined, "postgres"), "public"));
 }
 
 /** The DDL findings of `sql`'s one statement, after no history */
-const rated = (sql: string) => after("", sql)
+const rated = (sql: string) => after("", sql);
 
 describe("an ALTER TABLE's command on the whole table", () => {
-	it.each([
-		["ALTER TABLE t ENABLE TRIGGER x", "turns on trigger x of t, whose function runs on later writes"],
-		["ALTER TABLE t ENABLE ALWAYS TRIGGER x", "turns on trigger x of t, whose function runs on later writes"],
-		["ALTER TABLE t ENABLE REPLICA TRIGGER x", "turns on trigger x of t, whose function runs on later writes"],
-		["ALTER TABLE t ENABLE TRIGGER ALL", "turns on every trigger of t, whose functions run on later writes"],
-		["ALTER TABLE t ENABLE TRIGGER USER", "turns on every trigger of t, whose functions run on later writes"],
-	])("rates %j cautious, as the trigger runs again", (sql, note) => {
-		expect(rated(sql)).toEqual([{ level: "cautious", note }])
-	})
+  it.each([
+    ["ALTER TABLE t ENABLE TRIGGER x", "turns on trigger x of t, whose function runs on later writes"],
+    ["ALTER TABLE t ENABLE ALWAYS TRIGGER x", "turns on trigger x of t, whose function runs on later writes"],
+    ["ALTER TABLE t ENABLE REPLICA TRIGGER x", "turns on trigger x of t, whose function runs on later writes"],
+    ["ALTER TABLE t ENABLE TRIGGER ALL", "turns on every trigger of t, whose functions run on later writes"],
+    ["ALTER TABLE t ENABLE TRIGGER USER", "turns on every trigger of t, whose functions run on later writes"],
+  ])("rates %j cautious, as the trigger runs again", (sql, note) => {
+    expect(rated(sql)).toEqual([{ level: "cautious", note }]);
+  });
 
-	it.each([
-		["ALTER TABLE t INHERIT base", "INHERIT"],
-		["ALTER TABLE t NO INHERIT base", "NO INHERIT"],
-		["ALTER TABLE t OF comp", "OF"],
-		["ALTER TABLE t NOT OF", "NOT OF"],
-		["ALTER FOREIGN TABLE t OPTIONS (ADD a 'b')", "GENERIC OPTIONS"],
-	])("rates %j unsafe, naming the command in the SQL's own words", (sql, words) => {
-		expect(rated(sql)).toEqual([
-			{ level: "unsafe", note: `database does not recognize ALTER TABLE … ${words}; approve it in the file` },
-		])
-	})
-})
+  it.each([
+    ["ALTER TABLE t INHERIT base", "INHERIT"],
+    ["ALTER TABLE t NO INHERIT base", "NO INHERIT"],
+    ["ALTER TABLE t OF comp", "OF"],
+    ["ALTER TABLE t NOT OF", "NOT OF"],
+    ["ALTER FOREIGN TABLE t OPTIONS (ADD a 'b')", "GENERIC OPTIONS"],
+  ])("rates %j unsafe, naming the command in the SQL's own words", (sql, words) => {
+    expect(rated(sql)).toEqual([
+      { level: "unsafe", note: `database does not recognize ALTER TABLE … ${words}; approve it in the file` },
+    ]);
+  });
+});
 
-/* PA15 of r23: a partitioned table has no storage, and a move to the tablespace it leaves moves nothing */
+// PA15 of r23: a partitioned table has no storage, and a move to the tablespace it leaves moves nothing
 describe("a move of a table's storage", () => {
-	const PARTITIONED = "CREATE TABLE p (a int) PARTITION BY LIST (a);\n"
+  const PARTITIONED = "CREATE TABLE p (a int) PARTITION BY LIST (a);\n";
 
-	it.each(["ALTER TABLE p SET TABLESPACE pg_default", "ALTER TABLE p SET ACCESS METHOD heap"])(
-		"rates %j on a partitioned table as no rewrite",
-		(sql) => {
-			expect(after(PARTITIONED, sql)).toEqual([])
-		},
-	)
+  it.each(["ALTER TABLE p SET TABLESPACE pg_default", "ALTER TABLE p SET ACCESS METHOD heap"])(
+    "rates %j on a partitioned table as no rewrite",
+    (sql) => {
+      expect(after(PARTITIONED, sql)).toEqual([]);
+    },
+  );
 
-	it("rates a move of every table back into the tablespace they are in as no rewrite", () => {
-		expect(after("", "ALTER TABLE ALL IN TABLESPACE pg_default SET TABLESPACE pg_default")).toEqual([])
-	})
+  it("rates a move of every table back into the tablespace they are in as no rewrite", () => {
+    expect(after("", "ALTER TABLE ALL IN TABLESPACE pg_default SET TABLESPACE pg_default")).toEqual([]);
+  });
 
-	it.each(["ALTER TABLE t SET TABLESPACE fast", "ALTER TABLE t SET ACCESS METHOD heap2"])(
-		"still rates %j on a plain table as a rewrite",
-		(sql) => {
-			expect(after("CREATE TABLE t (a int);\n", sql)).toEqual([{ level: "lock", note: REWRITES }])
-		},
-	)
+  it.each(["ALTER TABLE t SET TABLESPACE fast", "ALTER TABLE t SET ACCESS METHOD heap2"])(
+    "still rates %j on a plain table as a rewrite",
+    (sql) => {
+      expect(after("CREATE TABLE t (a int);\n", sql)).toEqual([{ level: "lock", note: REWRITES }]);
+    },
+  );
 
-	it("still rates a move of every table to another tablespace as a rewrite", () => {
-		expect(after("", "ALTER TABLE ALL IN TABLESPACE pg_default SET TABLESPACE fast")).toEqual([
-			{ level: "lock", note: "moves every table in tablespace pg_default, each rewritten under an exclusive lock" },
-		])
-	})
-})
+  it("still rates a move of every table to another tablespace as a rewrite", () => {
+    expect(after("", "ALTER TABLE ALL IN TABLESPACE pg_default SET TABLESPACE fast")).toEqual([
+      { level: "lock", note: "moves every table in tablespace pg_default, each rewritten under an exclusive lock" },
+    ]);
+  });
+});

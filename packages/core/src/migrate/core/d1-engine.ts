@@ -7,37 +7,39 @@
  * limits are the engine's, with no list of database's to keep. A file whose text wrangler would rewrite is
  * refused before anything runs.
  */
-import { writeFileSync } from "node:fs"
-import { join } from "node:path"
-import { refuseCompiled } from "./compiled.ts"
-import type { ProofInput, ProofResult } from "./d1-engine-child.mjs"
-import { endedWith, runChild } from "./node-child.ts"
-import { binEntry } from "./optional-peer.ts"
-import { type ProjectBin, type MigrateRun, run } from "./process.ts"
-import { copyScript, type LiveObject } from "./proof-copy.ts"
-import { quote } from "./proof-seed.ts"
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { refuseCompiled } from "./compiled.ts";
+import type { ProofInput, ProofResult } from "./d1-engine-child.mjs";
+import { endedWith, runChild } from "./node-child.ts";
+import { binEntry } from "./optional-peer.ts";
+import { type ProjectBin, type MigrateRun, run } from "./process.ts";
+import { copyScript, type LiveObject } from "./proof-copy.ts";
+import { quote } from "./proof-seed.ts";
 
 /** A pending file: its name, and its text as the migrations directory holds it */
-type File = { name: string; sql: string }
+type File = { name: string; sql: string };
 
-/* the scratch worker's config: one D1 binding, which Miniflare keeps in memory */
+// the scratch worker's config: one D1 binding, which Miniflare keeps in memory
 const CONFIG = {
-	compatibility_date: "2025-01-01",
-	d1_databases: [{ binding: "DB", database_id: "00000000-0000-0000-0000-000000000000", database_name: "proof" }],
-	name: "database-d1-proof",
-}
+  compatibility_date: "2025-01-01",
+  d1_databases: [{ binding: "DB", database_id: "00000000-0000-0000-0000-000000000000", database_name: "proof" }],
+  name: "database-d1-proof",
+};
 
-/* what wrangler's trimSqlQuery looks for: a file holding it has its first "BEGIN TRANSACTION;" and "COMMIT;" cut */
-const TRIMMED = "BEGIN TRANSACTION"
+// what wrangler's trimSqlQuery looks for: a file holding it has its first "BEGIN TRANSACTION;" and "COMMIT;" cut
+const TRIMMED = "BEGIN TRANSACTION";
 
-/* a literal, a quoted name or a comment, as SQLite reads each */
-const NOT_CODE = /'(?:[^']|'')*'|"(?:[^"]|"")*"|`(?:[^`]|``)*`|\[[^\]]*\]|--[^\n]*|\/\*[\s\S]*?(?:\*\/|$)/g
+// a literal, a quoted name or a comment, as SQLite reads each
+const NOT_CODE = /'(?:[^']|'')*'|"(?:[^"]|"")*"|`(?:[^`]|``)*`|\[[^\]]*\]|--[^\n]*|\/\*[\s\S]*?(?:\*\/|$)/g;
 
 /** The literal, quoted name or comment of `sql` that holds `at`, as the file writes it */
 function enclosing(sql: string, at: number): string {
-	for (const match of sql.matchAll(NOT_CODE))
-		if (match.index <= at && at < match.index + match[0].length) return match[0]
-	return "its text"
+  for (const match of sql.matchAll(NOT_CODE))
+    if (match.index <= at && at < match.index + match[0].length) return match[0];
+
+  return "its text";
 }
 
 /**
@@ -48,11 +50,12 @@ function enclosing(sql: string, at: number): string {
  * file SQLite cannot parse
  */
 function refuseRewritten({ name, sql }: File): void {
-	const at = sql.indexOf(TRIMMED)
-	if (at === -1) return
-	throw new Error(
-		`${name}: ${enclosing(sql, at)} holds "${TRIMMED}", and wrangler rewrites a file that does before a local apply runs it: it deletes the first "BEGIN TRANSACTION;" and the first "COMMIT;" wherever they are, literals and comments too, or refuses the file (its trimSqlQuery), so a local apply would store other data than check proves and a remote apply stores; split the words, as in 'BEGIN ' || 'TRANSACTION'`,
-	)
+  const at = sql.indexOf(TRIMMED);
+
+  if (at === -1) return;
+  throw new Error(
+    `${name}: ${enclosing(sql, at)} holds "${TRIMMED}", and wrangler rewrites a file that does before a local apply runs it: it deletes the first "BEGIN TRANSACTION;" and the first "COMMIT;" wherever they are, literals and comments too, or refuses the file (its trimSqlQuery), so a local apply would store other data than check proves and a remote apply stores; split the words, as in 'BEGIN ' || 'TRANSACTION'`,
+  );
 }
 
 /**
@@ -61,22 +64,23 @@ function refuseRewritten({ name, sql }: File): void {
  * appends to it; and the entry of the checked wrangler `bin`
  */
 async function proofInput(
-	live: readonly LiveObject[],
-	files: readonly File[],
-	{ bin, dir, table }: { bin: ProjectBin; dir: string; table: string },
+  live: readonly LiveObject[],
+  files: readonly File[],
+  { bin, dir, table }: { bin: ProjectBin; dir: string; table: string },
 ): Promise<ProofInput> {
-	const configPath = join(dir, "wrangler.json")
-	writeFileSync(configPath, JSON.stringify(CONFIG))
-	const history = `CREATE TABLE IF NOT EXISTS ${quote(table)} (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL)`
-	return {
-		configPath,
-		files: files.map(({ name, sql }) => ({
-			name,
-			query: `${sql}\nINSERT INTO ${quote(table)} (name)\nvalues ('${name.replaceAll("'", "''")}');`,
-		})),
-		seed: [...(await copyScript(live, files, table)), history],
-		wrangler: binEntry(bin),
-	}
+  const configPath = join(dir, "wrangler.json");
+  writeFileSync(configPath, JSON.stringify(CONFIG));
+  const history = `CREATE TABLE IF NOT EXISTS ${quote(table)} (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL)`;
+
+  return {
+    configPath,
+    files: files.map(({ name, sql }) => ({
+      name,
+      query: `${sql}\nINSERT INTO ${quote(table)} (name)\nvalues ('${name.replaceAll("'", "''")}');`,
+    })),
+    seed: [...(await copyScript(live, files, table)), history],
+    wrangler: binEntry(bin),
+  };
 }
 
 /**
@@ -86,31 +90,35 @@ async function proofInput(
  * each file D1's engine could not prove, as database's local D1 crashed on its probes, and why
  */
 async function proveOnD1(
-	live: readonly LiveObject[],
-	files: readonly File[],
-	{
-		bin,
-		exec = run,
-		moduleUrl = import.meta.url,
-		table,
-	}: { bin: ProjectBin; exec?: MigrateRun | undefined; moduleUrl?: string | undefined; table: string },
+  live: readonly LiveObject[],
+  files: readonly File[],
+  {
+    bin,
+    exec = run,
+    moduleUrl = import.meta.url,
+    table,
+  }: { bin: ProjectBin; exec?: MigrateRun | undefined; moduleUrl?: string | undefined; table: string },
 ): Promise<Array<{ name: string; why: string }>> {
-	/* the child is handed d1-engine-child.mjs by database's own URL, which `moduleUrl` is unless a test says otherwise */
-	refuseCompiled(
-		moduleUrl,
-		"check proves the pending files in a child on wrangler's runtime, which cannot read the modules a Bun single-file executable embeds: run database migrate with bun or node, not from a compiled executable",
-	)
-	for (const file of files) refuseRewritten(file)
-	const { refused, unproven = [] } = await runChild<ProofResult>(new URL("./d1-engine-child.mjs", import.meta.url), {
-		bin,
-		exec,
-		failed: (ran) =>
-			`check could not prove the pending files on D1's engine: the proof on ${bin.runtime} ${endedWith(ran)}`,
-		inputOf: (dir) => proofInput(live, files, { bin, dir, table }),
-		prefix: "database-d1-proof-",
-	})
-	if (refused !== undefined) throw new Error(refused)
-	return unproven
+  // the child is handed d1-engine-child.mjs by database's own URL, which `moduleUrl` is unless a test says otherwise
+  refuseCompiled(
+    moduleUrl,
+    "check proves the pending files in a child on wrangler's runtime, which cannot read the modules a Bun single-file executable embeds: run database migrate with bun or node, not from a compiled executable",
+  );
+
+  for (const file of files) refuseRewritten(file);
+
+  const { refused, unproven = [] } = await runChild<ProofResult>(new URL("./d1-engine-child.mjs", import.meta.url), {
+    bin,
+    exec,
+    failed: (ran) =>
+      `check could not prove the pending files on D1's engine: the proof on ${bin.runtime} ${endedWith(ran)}`,
+    inputOf: (dir) => proofInput(live, files, { bin, dir, table }),
+    prefix: "database-d1-proof-",
+  });
+
+  if (refused !== undefined) throw new Error(refused);
+
+  return unproven;
 }
 
-export { enclosing, proofInput, proveOnD1, refuseRewritten }
+export { enclosing, proofInput, proveOnD1, refuseRewritten };

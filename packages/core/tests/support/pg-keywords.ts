@@ -48,7 +48,7 @@ const PG_KEYWORDS: readonly string[] = `
 	xml xmlattributes xmlconcat xmlelement xmlexists xmlforest xmlnamespaces xmlparse xmlpi xmlroot
 	xmlserialize xmltable year yes zone
 `
-	.trim()
-	.split(/\s+/)
+  .trim()
+  .split(/\s+/);
 
-export { PG_KEYWORDS }
+export { PG_KEYWORDS };

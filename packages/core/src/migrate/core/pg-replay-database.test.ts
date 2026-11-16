@@ -1,153 +1,162 @@
-import { describe, expect, it } from "vitest"
-import { coded, fake } from "../__fixtures__/pg-admin.ts"
-import { claim, copyExtensions, makeDatabase, replayUrl } from "./pg-replay-database.ts"
+import { describe, expect, it } from "vitest";
+
+import { coded, fake } from "../__fixtures__/pg-admin.ts";
+import { claim, copyExtensions, makeDatabase, replayUrl } from "./pg-replay-database.ts";
 
 describe("claim", () => {
-	it.each([
-		[130000, { application_name: "database_replay 41_1793680844883080" }],
-		[140000, { application_name: "database_replay 41_1793680844883080", client_connection_check_interval: "1s" }],
-		[170000, { application_name: "database_replay 41_1793680844883080", client_connection_check_interval: "1s" }],
-	])(
-		"names the backend by its pid and its start, and on server_version_num %i tags it with %j",
-		async (version, settings) => {
-			const admin = fake((query) =>
-				query.startsWith("SELECT pid") ? [{ pid: 41, start: "1793680844883080", version }] : [],
-			)
-			expect(await claim(admin.sql)).toEqual({ owner: "41_1793680844883080", settings, version })
-			expect(admin.sent[0]).toMatch(
-				/current_setting\('server_version_num'\)::int AS version FROM pg_stat_activity WHERE pid = pg_backend_pid\(\)$/,
-			)
-			expect(admin.sent[1]).toBe(
-				`SELECT ${Object.keys(settings)
-					.map((_, i) => `set_config($${2 * i + 1}, $${2 * i + 2}, false)`)
-					.join(", ")}`,
-			)
-		},
-	)
-})
+  it.each([
+    [130000, { application_name: "database_replay 41_1793680844883080" }],
+    [140000, { application_name: "database_replay 41_1793680844883080", client_connection_check_interval: "1s" }],
+    [170000, { application_name: "database_replay 41_1793680844883080", client_connection_check_interval: "1s" }],
+  ])(
+    "names the backend by its pid and its start, and on server_version_num %i tags it with %j",
+    async (version, settings) => {
+      const admin = fake((query) =>
+        query.startsWith("SELECT pid") ? [{ pid: 41, start: "1793680844883080", version }] : [],
+      );
+
+      expect(await claim(admin.sql)).toEqual({ owner: "41_1793680844883080", settings, version });
+      expect(admin.sent[0]).toMatch(
+        /current_setting\('server_version_num'\)::int AS version FROM pg_stat_activity WHERE pid = pg_backend_pid\(\)$/,
+      );
+      expect(admin.sent[1]).toBe(
+        `SELECT ${Object.keys(settings)
+          .map((_, i) => `set_config($${2 * i + 1}, $${2 * i + 2}, false)`)
+          .join(", ")}`,
+      );
+    },
+  );
+});
 
 describe("makeDatabase", () => {
-	const LOCALE = "ENCODING 'UTF8' LC_COLLATE 'C' LC_CTYPE 'C' LOCALE_PROVIDER libc"
-	const refusals = {
-		denied: () => new Error("no CREATEDB"),
-		locale: LOCALE,
-		unmade: (error: unknown) => new Error(`unmade: ${String(error)}`),
-	}
+  const LOCALE = "ENCODING 'UTF8' LC_COLLATE 'C' LC_CTYPE 'C' LOCALE_PROVIDER libc";
 
-	it("makes a database named for the backend that owns it, from template0 at the locale given", async () => {
-		const admin = fake()
-		const name = await makeDatabase(admin.sql, "41_1234", refusals)
-		expect(name).toMatch(/^database_replay_41_1234_[0-9a-f]{8}$/)
-		expect(admin.sent).toEqual([`CREATE DATABASE ${name} TEMPLATE template0 ${LOCALE}`])
-	})
+  const refusals = {
+    denied: () => new Error("no CREATEDB"),
+    locale: LOCALE,
+    unmade: (error: unknown) => new Error(`unmade: ${String(error)}`),
+  };
 
-	it("refuses a role without CREATEDB as denied, and any other refusal, a locale the server lacks among them, as unmade", async () => {
-		const denied = fake(() => coded("42501"))
-		await expect(makeDatabase(denied.sql, "1_1", refusals)).rejects.toThrow("no CREATEDB")
-		const lacking = fake(() => coded("42809", 'invalid LC_COLLATE locale name: "xx_YY.utf8"'))
-		await expect(makeDatabase(lacking.sql, "1_1", refusals)).rejects.toThrow(
-			'unmade: Error: invalid LC_COLLATE locale name: "xx_YY.utf8"',
-		)
-	})
-})
+  it("makes a database named for the backend that owns it, from template0 at the locale given", async () => {
+    const admin = fake();
+    const name = await makeDatabase(admin.sql, "41_1234", refusals);
+    expect(name).toMatch(/^database_replay_41_1234_[0-9a-f]{8}$/);
+    expect(admin.sent).toEqual([`CREATE DATABASE ${name} TEMPLATE template0 ${LOCALE}`]);
+  });
+
+  it("refuses a role without CREATEDB as denied, and any other refusal, a locale the server lacks among them, as unmade", async () => {
+    const denied = fake(() => coded("42501"));
+    await expect(makeDatabase(denied.sql, "1_1", refusals)).rejects.toThrow("no CREATEDB");
+    const lacking = fake(() => coded("42809", 'invalid LC_COLLATE locale name: "xx_YY.utf8"'));
+    await expect(makeDatabase(lacking.sql, "1_1", refusals)).rejects.toThrow(
+      'unmade: Error: invalid LC_COLLATE locale name: "xx_YY.utf8"',
+    );
+  });
+});
 
 describe("copyExtensions", () => {
-	const held = [
-		{ name: "plpgsql", requires: [], schema: "pg_catalog", version: "1.0" },
-		{ name: "citext", requires: [], schema: "public", version: "1.6" },
-		{ name: "pg_trgm", requires: [], schema: "ext", version: "1'5" },
-	]
+  const held = [
+    { name: "plpgsql", requires: [], schema: "pg_catalog", version: "1.0" },
+    { name: "citext", requires: [], schema: "public", version: "1.6" },
+    { name: "pg_trgm", requires: [], schema: "ext", version: "1'5" },
+  ];
 
-	it("makes each extension in its schema at its version, making a schema of its own first", async () => {
-		const to = fake()
-		await copyExtensions(fake(() => held).sql, to.sql, { makes: new Set(), refused: () => new Error("refused") })
-		expect(to.sent).toEqual([
-			`CREATE EXTENSION IF NOT EXISTS "plpgsql" WITH SCHEMA "pg_catalog" VERSION '1.0'`,
-			`CREATE EXTENSION IF NOT EXISTS "citext" WITH SCHEMA "public" VERSION '1.6'`,
-			'CREATE SCHEMA IF NOT EXISTS "ext"',
-			`CREATE EXTENSION IF NOT EXISTS "pg_trgm" WITH SCHEMA "ext" VERSION '1''5'`,
-		])
-	})
+  it("makes each extension in its schema at its version, making a schema of its own first", async () => {
+    const to = fake();
+    await copyExtensions(fake(() => held).sql, to.sql, { makes: new Set(), refused: () => new Error("refused") });
+    expect(to.sent).toEqual([
+      `CREATE EXTENSION IF NOT EXISTS "plpgsql" WITH SCHEMA "pg_catalog" VERSION '1.0'`,
+      `CREATE EXTENSION IF NOT EXISTS "citext" WITH SCHEMA "public" VERSION '1.6'`,
+      'CREATE SCHEMA IF NOT EXISTS "ext"',
+      `CREATE EXTENSION IF NOT EXISTS "pg_trgm" WITH SCHEMA "ext" VERSION '1''5'`,
+    ]);
+  });
 
-	it("refuses an extension it cannot make, naming it", async () => {
-		const to = fake((query) => (query.includes("citext") ? coded("42501") : []))
-		await expect(
-			copyExtensions(fake(() => held).sql, to.sql, {
-				makes: new Set(),
-				refused: (name) => new Error(`cannot make ${name}`),
-			}),
-		).rejects.toThrow("cannot make citext")
-	})
+  it("refuses an extension it cannot make, naming it", async () => {
+    const to = fake((query) => (query.includes("citext") ? coded("42501") : []));
+    await expect(
+      copyExtensions(fake(() => held).sql, to.sql, {
+        makes: new Set(),
+        refused: (name) => new Error(`cannot make ${name}`),
+      }),
+    ).rejects.toThrow("cannot make citext");
+  });
 
-	/* P5 of r21 */
-	it("leaves an extension the history makes to the history", async () => {
-		const to = fake()
-		await copyExtensions(fake(() => held).sql, to.sql, { makes: new Set(["citext"]), refused: () => new Error("x") })
-		expect(to.sent.some((sent) => sent.includes("citext"))).toBe(false)
-		expect(to.sent).toHaveLength(3)
-	})
-})
+  // P5 of r21
+  it("leaves an extension the history makes to the history", async () => {
+    const to = fake();
+    await copyExtensions(fake(() => held).sql, to.sql, { makes: new Set(["citext"]), refused: () => new Error("x") });
+    expect(to.sent.some((sent) => sent.includes("citext"))).toBe(false);
+    expect(to.sent).toHaveLength(3);
+  });
+});
 
-/* PR1 of r22b: an extension that requires one the history makes waits for it, and chains wait in order */
+// PR1 of r22b: an extension that requires one the history makes waits for it, and chains wait in order
 describe("copyExtensions beside an extension the history makes", () => {
-	const chain = [
-		{ name: "cube", requires: [], schema: "public", version: "1.5" },
-		{ name: "earthdistance", requires: ["cube"], schema: "geo", version: "1.1" },
-		{ name: "far", requires: ["earthdistance", "plpgsql"], schema: "public", version: "1" },
-		{ name: "plpgsql", requires: [], schema: "pg_catalog", version: "1.0" },
-	]
+  const chain = [
+    { name: "cube", requires: [], schema: "public", version: "1.5" },
+    { name: "earthdistance", requires: ["cube"], schema: "geo", version: "1.1" },
+    { name: "far", requires: ["earthdistance", "plpgsql"], schema: "public", version: "1" },
+    { name: "plpgsql", requires: [], schema: "pg_catalog", version: "1.0" },
+  ];
 
-	it("makes one that waits on an extension the history makes only once `to` holds what it requires", async () => {
-		const to = fake()
-		const waits = await copyExtensions(fake(() => chain).sql, to.sql, {
-			makes: new Set(["cube"]),
-			refused: () => new Error("x"),
-		})
-		expect(to.sent).toEqual([`CREATE EXTENSION IF NOT EXISTS "plpgsql" WITH SCHEMA "pg_catalog" VERSION '1.0'`])
-		const before = fake((query) => (query.startsWith("SELECT extname") ? [{ extname: "plpgsql" }] : []))
-		await waits(before.sql)
-		expect(before.sent).toEqual(["SELECT extname FROM pg_extension"])
-		const after = fake((query) =>
-			query.startsWith("SELECT extname") ? [{ extname: "plpgsql" }, { extname: "cube" }] : [],
-		)
-		await waits(after.sql)
-		expect(after.sent).toEqual([
-			"SELECT extname FROM pg_extension",
-			'CREATE SCHEMA IF NOT EXISTS "geo"',
-			`CREATE EXTENSION IF NOT EXISTS "earthdistance" WITH SCHEMA "geo" VERSION '1.1'`,
-			`CREATE EXTENSION IF NOT EXISTS "far" WITH SCHEMA "public" VERSION '1'`,
-		])
-		const done = fake()
-		await waits(done.sql)
-		expect(done.sent).toEqual([])
-	})
+  it("makes one that waits on an extension the history makes only once `to` holds what it requires", async () => {
+    const to = fake();
 
-	it("refuses a waiting extension it cannot make, naming it", async () => {
-		const waits = await copyExtensions(fake(() => chain.slice(0, 2)).sql, fake().sql, {
-			makes: new Set(["cube"]),
-			refused: (name) => new Error(`cannot make ${name}`),
-		})
-		const to = fake((query) =>
-			query.startsWith("SELECT extname")
-				? [{ extname: "cube" }]
-				: query.includes("earthdistance")
-					? coded("42501")
-					: [],
-		)
-		await expect(waits(to.sql)).rejects.toThrow("cannot make earthdistance")
-	})
-})
+    const waits = await copyExtensions(fake(() => chain).sql, to.sql, {
+      makes: new Set(["cube"]),
+      refused: () => new Error("x"),
+    });
+
+    expect(to.sent).toEqual([`CREATE EXTENSION IF NOT EXISTS "plpgsql" WITH SCHEMA "pg_catalog" VERSION '1.0'`]);
+    const before = fake((query) => (query.startsWith("SELECT extname") ? [{ extname: "plpgsql" }] : []));
+    await waits(before.sql);
+    expect(before.sent).toEqual(["SELECT extname FROM pg_extension"]);
+
+    const after = fake((query) =>
+      query.startsWith("SELECT extname") ? [{ extname: "plpgsql" }, { extname: "cube" }] : [],
+    );
+
+    await waits(after.sql);
+    expect(after.sent).toEqual([
+      "SELECT extname FROM pg_extension",
+      'CREATE SCHEMA IF NOT EXISTS "geo"',
+      `CREATE EXTENSION IF NOT EXISTS "earthdistance" WITH SCHEMA "geo" VERSION '1.1'`,
+      `CREATE EXTENSION IF NOT EXISTS "far" WITH SCHEMA "public" VERSION '1'`,
+    ]);
+    const done = fake();
+    await waits(done.sql);
+    expect(done.sent).toEqual([]);
+  });
+
+  it("refuses a waiting extension it cannot make, naming it", async () => {
+    const waits = await copyExtensions(fake(() => chain.slice(0, 2)).sql, fake().sql, {
+      makes: new Set(["cube"]),
+      refused: (name) => new Error(`cannot make ${name}`),
+    });
+
+    const to = fake((query) =>
+      query.startsWith("SELECT extname")
+        ? [{ extname: "cube" }]
+        : query.includes("earthdistance")
+          ? coded("42501")
+          : [],
+    );
+
+    await expect(waits(to.sql)).rejects.toThrow("cannot make earthdistance");
+  });
+});
 
 /** A role's row as createRole reads it, with its comment */
 
 describe("replayUrl", () => {
-	it("names the replay's database in the path, drops a dbname key, and keeps the scheme, authority and query", () => {
-		expect(replayUrl("postgresql://u:p%40@db:5433/app?sslmode=disable", "database_replay_1")).toBe(
-			"postgresql://u:p%40@db:5433/database_replay_1?sslmode=disable",
-		)
-		expect(replayUrl("postgres://u@%2Fsock?dbname=app&a=1", "database_replay_1")).toBe(
-			"postgres://u@%2Fsock/database_replay_1?a=1",
-		)
-		expect(replayUrl("postgres://db", "database_replay_1")).toBe("postgres://db/database_replay_1")
-	})
-})
+  it("names the replay's database in the path, drops a dbname key, and keeps the scheme, authority and query", () => {
+    expect(replayUrl("postgresql://u:p%40@db:5433/app?sslmode=disable", "database_replay_1")).toBe(
+      "postgresql://u:p%40@db:5433/database_replay_1?sslmode=disable",
+    );
+    expect(replayUrl("postgres://u@%2Fsock?dbname=app&a=1", "database_replay_1")).toBe(
+      "postgres://u@%2Fsock/database_replay_1?a=1",
+    );
+    expect(replayUrl("postgres://db", "database_replay_1")).toBe("postgres://db/database_replay_1");
+  });
+});

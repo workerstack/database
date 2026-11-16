@@ -1,4 +1,4 @@
-import { formatTakes } from "./catalog.ts"
+import { formatTakes } from "./catalog.ts";
 
 /**
  * Whether `value` is a well-formed BCP 47 language tag, RFC 5646 §2.1's Language-Tag, exactly as
@@ -8,5 +8,5 @@ import { formatTakes } from "./catalog.ts"
  * string at runtime is refused, and this never throws.
  */
 export function isBcp47(value: string): boolean {
-	return typeof value === "string" && formatTakes("bcp47", value)
+  return typeof value === "string" && formatTakes("bcp47", value);
 }

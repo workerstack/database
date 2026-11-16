@@ -7,25 +7,28 @@
  * three suites failed on its source). Resolving from packages/core itself proves nothing: the package
  * resolves its own name to itself.
  */
-import { existsSync, realpathSync } from "node:fs"
-import { dirname, join } from "node:path"
-import { describe, expect, it } from "vitest"
+import { existsSync, realpathSync } from "node:fs";
+import { dirname, join } from "node:path";
 
-const CORE = realpathSync(join(import.meta.dirname, "../.."))
-const CHECKOUT = dirname(dirname(CORE))
+import { describe, expect, it } from "vitest";
+
+const CORE = realpathSync(join(import.meta.dirname, "../.."));
+const CHECKOUT = dirname(dirname(CORE));
 
 /** The database package a project in `dir` resolves: the nearest node_modules/@workerstack/database up from it */
 function databaseFrom(dir: string): string | undefined {
-	const link = join(dir, "node_modules", "@workerstack", "database")
-	if (existsSync(link)) return realpathSync(link)
-	return dirname(dir) === dir ? undefined : databaseFrom(dirname(dir))
+  const link = join(dir, "node_modules", "@workerstack", "database");
+
+  if (existsSync(link)) return realpathSync(link);
+
+  return dirname(dir) === dir ? undefined : databaseFrom(dirname(dir));
 }
 
 describe("the install this checkout tests", () => {
-	it("resolves @workerstack/database, from the checkout's root, to this checkout's packages/core", () => {
-		const resolved = databaseFrom(CHECKOUT)
-		expect(resolved, `@workerstack/database resolves to ${resolved}, not ${CORE}: run bun install in ${CHECKOUT}`).toBe(
-			CORE,
-		)
-	})
-})
+  it("resolves @workerstack/database, from the checkout's root, to this checkout's packages/core", () => {
+    const resolved = databaseFrom(CHECKOUT);
+    expect(resolved, `@workerstack/database resolves to ${resolved}, not ${CORE}: run bun install in ${CHECKOUT}`).toBe(
+      CORE,
+    );
+  });
+});

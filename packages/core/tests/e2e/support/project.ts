@@ -3,80 +3,88 @@
  * imports of database, drizzle and zod resolve as an installed app's would, and the `database` binary run
  * in it the way a user runs it (bun on src/bin.ts).
  */
-import { spawnSync } from "node:child_process"
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
-import { createRequire } from "node:module"
-import { dirname, join } from "node:path"
-import { afterAll } from "vitest"
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 
-const CORE = join(import.meta.dirname, "../../..")
-const BIN = join(CORE, "src/bin.ts")
-const WRANGLER = join(dirname(createRequire(import.meta.url).resolve("wrangler/package.json")), "bin/wrangler.js")
+import { afterAll } from "vitest";
 
-export type Run = { status: number; stderr: string; stdout: string }
+const CORE = join(import.meta.dirname, "../../..");
+const BIN = join(CORE, "src/bin.ts");
+const WRANGLER = join(dirname(createRequire(import.meta.url).resolve("wrangler/package.json")), "bin/wrangler.js");
+
+export type Run = { status: number; stderr: string; stdout: string };
 
 export type App = {
-	dir: string
-	/** `database <args>` in the app */
-	database(...args: string[]): Run
-	/** `wrangler <args>` in the app */
-	wrangler(...args: string[]): Run
-	write(files: Record<string, string>): void
-}
+  dir: string;
+  /** `database <args>` in the app */
+  database(...args: string[]): Run;
+  /** `wrangler <args>` in the app */
+  wrangler(...args: string[]): Run;
+  write(files: Record<string, string>): void;
+};
 
 /** An app this old outlived its run: a whole e2e run takes about 30 s, one test at most 240 s */
-export const STALE_MS = 60 * 60_000
+export const STALE_MS = 60 * 60_000;
 
 /** Remove the apps killed runs left behind; a live run's are younger than STALE_MS */
 export function sweep(): void {
-	for (const name of readdirSync(CORE)) {
-		const dir = join(CORE, name)
-		if (name.startsWith(".e2e-") && Date.now() - statSync(dir).mtimeMs > STALE_MS)
-			rmSync(dir, { force: true, recursive: true })
-	}
+  for (const name of readdirSync(CORE)) {
+    const dir = join(CORE, name);
+
+    if (name.startsWith(".e2e-") && Date.now() - statSync(dir).mtimeMs > STALE_MS)
+      rmSync(dir, { force: true, recursive: true });
+  }
 }
 
-sweep()
-const made: string[] = []
+sweep();
+
+const made: string[] = [];
+
 afterAll(() => {
-	for (const dir of made.splice(0)) rmSync(dir, { force: true, recursive: true })
-})
+  for (const dir of made.splice(0)) rmSync(dir, { force: true, recursive: true });
+});
 
 const result = (run: ReturnType<typeof spawnSync>): Run => ({
-	status: run.status ?? 1,
-	stderr: String(run.stderr),
-	stdout: String(run.stdout),
-})
+  status: run.status ?? 1,
+  stderr: String(run.stderr),
+  stdout: String(run.stdout),
+});
 
 /** A fresh app holding `files`, removed after the file's tests; `env` is set over the runner's for `database` */
 export function app(files: Record<string, string>, env: Readonly<Record<string, string>> = {}): App {
-	const dir = mkdtempSync(join(CORE, ".e2e-"))
-	made.push(dir)
-	const write = (more: Record<string, string>) => {
-		for (const [path, text] of Object.entries(more)) {
-			mkdirSync(dirname(join(dir, path)), { recursive: true })
-			writeFileSync(join(dir, path), text)
-		}
-	}
-	write({ "package.json": JSON.stringify({ name: "e2e-app", private: true, type: "module" }), ...files })
-	return {
-		database: (...args) =>
-			result(spawnSync("bun", [BIN, ...args], { cwd: dir, encoding: "utf8", env: { ...process.env, ...env } })),
-		dir,
-		wrangler: (...args) => result(spawnSync(process.execPath, [WRANGLER, ...args], { cwd: dir, encoding: "utf8" })),
-		write,
-	}
+  const dir = mkdtempSync(join(CORE, ".e2e-"));
+  made.push(dir);
+
+  const write = (more: Record<string, string>) => {
+    for (const [path, text] of Object.entries(more)) {
+      mkdirSync(dirname(join(dir, path)), { recursive: true });
+      writeFileSync(join(dir, path), text);
+    }
+  };
+
+  write({ "package.json": JSON.stringify({ name: "e2e-app", private: true, type: "module" }), ...files });
+
+  return {
+    database: (...args) =>
+      result(spawnSync("bun", [BIN, ...args], { cwd: dir, encoding: "utf8", env: { ...process.env, ...env } })),
+    dir,
+    wrangler: (...args) => result(spawnSync(process.execPath, [WRANGLER, ...args], { cwd: dir, encoding: "utf8" })),
+    write,
+  };
 }
 
 /** Throw with the command's output unless it exited 0 */
 export function ok(run: Run, what: string): Run {
-	if (run.status !== 0) throw new Error(`${what} exited ${run.status}\n${run.stdout}\n${run.stderr}`)
-	return run
+  if (run.status !== 0) throw new Error(`${what} exited ${run.status}\n${run.stdout}\n${run.stderr}`);
+
+  return run;
 }
 
 /** The tables, config and migrate config every SQLite e2e app starts from */
 export const BLOG = {
-	"database.config.ts": `import { defineCodegenConfig } from "@workerstack/database/codegen"
+  "database.config.ts": `import { defineCodegenConfig } from "@workerstack/database/codegen"
 
 export default defineCodegenConfig({
 	databases: {
@@ -84,5 +92,5 @@ export default defineCodegenConfig({
 	},
 })
 `,
-	"src/db/core.tables.ts": readFileSync(join(import.meta.dirname, "blog-tables.ts"), "utf8"),
-}
+  "src/db/core.tables.ts": readFileSync(join(import.meta.dirname, "blog-tables.ts"), "utf8"),
+};

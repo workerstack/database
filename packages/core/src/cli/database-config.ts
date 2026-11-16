@@ -1,21 +1,24 @@
 /** database.config.ts: the databases codegen and migrate diff read their tables and FTS from. */
-import fs from "node:fs"
-import path from "node:path"
-import { pathToFileURL } from "node:url"
-import * as z from "zod"
-import type { CodegenConfig, DatabaseCodegen } from "../codegen/config.ts"
-import type { FtsTableConfig } from "../codegen/generators/fts-sql.ts"
-import { codegenConfigSchema } from "../codegen/config-schema.ts"
-import { refuseNotFile } from "./file-path.ts"
-import { CliError, type CliIo } from "./output.ts"
+import fs from "node:fs";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 
-export type { CodegenConfig, DatabaseCodegen }
+import * as z from "zod";
+
+import { codegenConfigSchema } from "../codegen/config-schema.ts";
+import type { CodegenConfig, DatabaseCodegen } from "../codegen/config.ts";
+import type { FtsTableConfig } from "../codegen/generators/fts-sql.ts";
+import { refuseNotFile } from "./file-path.ts";
+import { CliError, type CliIo } from "./output.ts";
+
+export type { CodegenConfig, DatabaseCodegen };
 
 /** `exported`, the config file `file` exports, held to its schema; a CliError naming the file and each key that is wrong */
 function parsed(file: string, exported: unknown): CodegenConfig {
-	const result = codegenConfigSchema().safeParse(exported)
-	if (result.success) return result.data
-	throw new CliError(`${file} is not a valid database config:\n${z.prettifyError(result.error)}`)
+  const result = codegenConfigSchema().safeParse(exported);
+
+  if (result.success) return result.data;
+  throw new CliError(`${file} is not a valid database config:\n${z.prettifyError(result.error)}`);
 }
 
 /**
@@ -23,40 +26,45 @@ function parsed(file: string, exported: unknown): CodegenConfig {
  * `file`, the error as its cause, for database.config.ts and the drizzle config alike
  */
 export async function loadModule(file: string): Promise<{ default?: unknown }> {
-	try {
-		if (path.extname(file) === ".json") return { default: JSON.parse(fs.readFileSync(file, "utf8")) as unknown }
-		/* keyed by its mtime, so a process that runs codegen again after the config changed reads the change */
-		return (await import(`${pathToFileURL(file).href}?mtime=${fs.statSync(file).mtimeMs}`)) as { default?: unknown }
-	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error)
-		throw new CliError(`${file} failed to load: ${message}`, 1, { cause: error })
-	}
+  try {
+    if (path.extname(file) === ".json") return { default: JSON.parse(fs.readFileSync(file, "utf8")) };
+
+    // keyed by its mtime, so a process that runs codegen again after the config changed reads the change
+    return (await import(`${pathToFileURL(file).href}?mtime=${fs.statSync(file).mtimeMs}`)) as { default?: unknown };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new CliError(`${file} failed to load: ${message}`, 1, { cause: error });
+  }
 }
 
 /** The project's database.config.ts (or .js), or undefined when it has none */
 export async function findDatabaseConfig(cwd: string): Promise<CodegenConfig | undefined> {
-	for (const name of ["database.config.ts", "database.config.js"]) {
-		const fp = path.resolve(cwd, name)
-		if (fs.existsSync(fp)) {
-			const mod = await loadModule(fp)
-			return parsed(fp, mod.default ?? { ...mod })
-		}
-	}
-	return undefined
+  for (const name of ["database.config.ts", "database.config.js"]) {
+    const fp = path.resolve(cwd, name);
+
+    if (fs.existsSync(fp)) {
+      const mod = await loadModule(fp);
+
+      return parsed(fp, mod.default ?? { ...mod });
+    }
+  }
+
+  return undefined;
 }
 
 export async function loadDatabaseConfig(cwd: string): Promise<CodegenConfig> {
-	const config = await findDatabaseConfig(cwd)
-	if (config) return config
-	throw new CliError("No database.config.ts found. Create one or use --tables <path> for direct mode.")
+  const config = await findDatabaseConfig(cwd);
+
+  if (config) return config;
+  throw new CliError("No database.config.ts found. Create one or use --tables <path> for direct mode.");
 }
 
 /** The database `name` declares, or a CliError naming the ones it does, and `hint` when the caller has one */
 export function databaseIn(config: CodegenConfig, name: string, hint?: string): DatabaseCodegen {
-	if (Object.hasOwn(config.databases, name)) return config.databases[name] as DatabaseCodegen
-	throw new CliError(
-		`database.config.ts declares no database "${name}". Available: ${Object.keys(config.databases).join(", ")}${hint === undefined ? "" : `. ${hint}`}`,
-	)
+  if (Object.hasOwn(config.databases, name)) return config.databases[name] as DatabaseCodegen;
+  throw new CliError(
+    `database.config.ts declares no database "${name}". Available: ${Object.keys(config.databases).join(", ")}${hint === undefined ? "" : `. ${hint}`}`,
+  );
 }
 
 /**
@@ -64,14 +72,16 @@ export function databaseIn(config: CodegenConfig, name: string, hint?: string): 
  * database.config.ts `tables`); a CliError when it is missing or not a file
  */
 export function tablesFile(cwd: string, tables: string, what: "--tables" | "tables"): string {
-	const resolved = path.resolve(cwd, tables)
-	if (!fs.existsSync(resolved)) throw new CliError(`Tables file not found: ${resolved}`)
-	refuseNotFile(resolved, what, "point it at the module that exports the tables")
-	return resolved
+  const resolved = path.resolve(cwd, tables);
+
+  if (!fs.existsSync(resolved)) throw new CliError(`Tables file not found: ${resolved}`);
+  refuseNotFile(resolved, what, "point it at the module that exports the tables");
+
+  return resolved;
 }
 
 /** A database that database.config.ts declares FTS on: its tables file and the FTS of each table */
-export type DeclaredFts = { fts: Record<string, FtsTableConfig>; tables: string }
+export type DeclaredFts = { fts: Record<string, FtsTableConfig>; tables: string };
 
 /**
  * The FTS the database `name` declares in database.config.ts, which a SQLite diff builds from its tables
@@ -79,19 +89,22 @@ export type DeclaredFts = { fts: Record<string, FtsTableConfig>; tables: string 
  * the config lacks is refused with `hint`.
  */
 export async function declaredFts(
-	cwd: string,
-	{ hint, name }: { hint?: string | undefined; name: string | undefined },
+  cwd: string,
+  { hint, name }: { hint?: string | undefined; name: string | undefined },
 ): Promise<DeclaredFts | undefined> {
-	const config = await findDatabaseConfig(cwd)
-	if (!config || name === undefined) return undefined
-	const { fts, tables } = databaseIn(config, name, hint)
-	return fts === undefined || Object.keys(fts).length === 0 ? undefined : { fts, tables }
+  const config = await findDatabaseConfig(cwd);
+
+  if (!config || name === undefined) return undefined;
+  const { fts, tables } = databaseIn(config, name, hint);
+
+  return fts === undefined || Object.keys(fts).length === 0 ? undefined : { fts, tables };
 }
 
 /** The FTS5 DDL `declared` asks for, for the migration diff to keep apart from what Atlas sees */
 export async function ftsSql(cwd: string, declared: DeclaredFts, io: CliIo): Promise<string> {
-	const resolvedTables = tablesFile(cwd, declared.tables, "tables")
-	const { analyze } = await import("../codegen/analyzer.ts")
-	const { generateFtsSql } = await import("../codegen/generators/fts-sql.ts")
-	return generateFtsSql((await analyze(resolvedTables, { cwd })).tables, declared.fts, io.err)
+  const resolvedTables = tablesFile(cwd, declared.tables, "tables");
+  const { analyze } = await import("../codegen/analyzer.ts");
+  const { generateFtsSql } = await import("../codegen/generators/fts-sql.ts");
+
+  return generateFtsSql((await analyze(resolvedTables, { cwd })).tables, declared.fts, io.err);
 }

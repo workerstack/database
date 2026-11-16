@@ -1,0 +1,3 @@
+[
+  "packages/core/tests/integration/postgres/scratch-sweep.test.ts > a test run leaves no scratch database behind (sibling: P4's stale-replay sweep) > withScratchDb drops its database when vitest times its test out > holds a scratch database past the test's bound"
+]

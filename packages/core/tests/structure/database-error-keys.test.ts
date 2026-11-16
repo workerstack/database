@@ -3,28 +3,32 @@
  * no more and no fewer, read from the modules that classify: each SQLite and Postgres module, D1's
  * error handler, and the value errors they share.
  */
-import { readdirSync, readFileSync } from "node:fs"
-import { join } from "node:path"
-import { describe, expect, it } from "vitest"
-import { databaseDriverErrorKeys, databaseErrorKeys } from "../../src/types.ts"
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
-const SRC = join(import.meta.dirname, "../../src")
+import { describe, expect, it } from "vitest";
+
+import { databaseDriverErrorKeys, databaseErrorKeys } from "../../src/types.ts";
+
+const SRC = join(import.meta.dirname, "../../src");
+
 const CLASSIFYING = [
-	...readdirSync(join(SRC, "sqlite")).map((name) => `sqlite/${name}`),
-	...readdirSync(join(SRC, "pg")).map((name) => `pg/${name}`),
-	"sqlite/d1/error-handler.ts",
-	"value-error.ts",
-].filter((file) => file.endsWith(".ts") && !file.endsWith(".test.ts"))
+  ...readdirSync(join(SRC, "sqlite")).map((name) => `sqlite/${name}`),
+  ...readdirSync(join(SRC, "pg")).map((name) => `pg/${name}`),
+  "sqlite/d1/error-handler.ts",
+  "value-error.ts",
+].filter((file) => file.endsWith(".ts") && !file.endsWith(".test.ts"));
 
 describe("databaseDriverErrorKeys", () => {
-	it("is every key the database classifiers answer with, and no other", () => {
-		const used = new Set(
-			CLASSIFYING.flatMap((file) =>
-				[...readFileSync(join(SRC, file), "utf8").matchAll(/databaseErrorKeys\.([A-Z_]+)/g)].map(
-					(match) => databaseErrorKeys[match[1] as keyof typeof databaseErrorKeys],
-				),
-			),
-		)
-		expect([...databaseDriverErrorKeys].toSorted()).toEqual([...used].toSorted())
-	})
-})
+  it("is every key the database classifiers answer with, and no other", () => {
+    const used = new Set(
+      CLASSIFYING.flatMap((file) =>
+        [...readFileSync(join(SRC, file), "utf8").matchAll(/databaseErrorKeys\.([A-Z_]+)/g)].map(
+          (match) => databaseErrorKeys[match[1] as keyof typeof databaseErrorKeys],
+        ),
+      ),
+    );
+
+    expect([...databaseDriverErrorKeys].toSorted()).toEqual([...used].toSorted());
+  });
+});

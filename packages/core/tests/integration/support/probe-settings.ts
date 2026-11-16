@@ -5,25 +5,29 @@
  * setup resets each one left once the run's lock is held (pg-run-lock.ts, then pg-sweeps.ts), when no other run's
  * Postgres suites are running. Each statement is logged.
  */
-import type pg from "pg"
+import type pg from "pg";
 
 /** Reset every `database_t.*` setting for every role in every database on `admin`'s server, each logged */
 export async function resetProbeSettings(
-	admin: pg.Client,
-	{ log = (line: string) => void process.stderr.write(`${line}\n`) }: { log?: (line: string) => void } = {},
+  admin: pg.Client,
+  { log = (line: string) => void process.stderr.write(`${line}\n`) }: { log?: (line: string) => void } = {},
 ): Promise<{ reset: string[] }> {
-	const { rows } = await admin.query<{ name: string }>(
-		`SELECT DISTINCT split_part(c, '=', 1) AS name FROM pg_db_role_setting, unnest(setconfig) AS c
+  const { rows } = await admin.query<{ name: string }>(
+    `SELECT DISTINCT split_part(c, '=', 1) AS name FROM pg_db_role_setting, unnest(setconfig) AS c
 		WHERE setrole = 0 AND setdatabase = 0 AND c LIKE 'database\\_t.%' ORDER BY 1`,
-	)
-	const reset = rows.map(({ name }) => name)
-	for (const name of reset) {
-		const statement = `ALTER ROLE ALL RESET ${name
-			.split(".")
-			.map((part) => admin.escapeIdentifier(part))
-			.join(".")}`
-		log(`[database] probe settings: ${statement}, which a killed run left`)
-		await admin.query(statement)
-	}
-	return { reset }
+  );
+
+  const reset = rows.map(({ name }) => name);
+
+  for (const name of reset) {
+    const statement = `ALTER ROLE ALL RESET ${name
+      .split(".")
+      .map((part) => admin.escapeIdentifier(part))
+      .join(".")}`;
+
+    log(`[database] probe settings: ${statement}, which a killed run left`);
+    await admin.query(statement);
+  }
+
+  return { reset };
 }

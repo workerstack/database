@@ -5,11 +5,11 @@
  * directly against the analyzer's view of a table, rather than by grepping
  * generated text. See docs/meta-contract.md.
  */
-import type { EntityMetaInput } from "../meta.ts"
-import { isReference } from "./analyze-field.ts"
-import type { FieldMeta, PartialUniqueIndexMeta, TableMeta, UniqueIndexMeta } from "./analyzer-types.ts"
-import { qualifiedName } from "./utils/table-name.ts"
-import { namesColumn } from "./utils/sql-name.ts"
+import type { EntityMetaInput } from "../meta.ts";
+import { isReference } from "./analyze-field.ts";
+import type { FieldMeta, PartialUniqueIndexMeta, TableMeta, UniqueIndexMeta } from "./analyzer-types.ts";
+import { namesColumn } from "./utils/sql-name.ts";
+import { qualifiedName } from "./utils/table-name.ts";
 
 /**
  * Whether a body sets `field` once, at creation, and never updates it: a key, as a composite key's
@@ -18,14 +18,14 @@ import { namesColumn } from "./utils/sql-name.ts"
  * tenant
  */
 const isSetOnce = (field: FieldMeta): boolean =>
-	field.isPrimaryKey ||
-	field.inCompositeKey ||
-	field.constraints.nomutate ||
-	field.constraints.tenant ||
-	(isReference(field) && !field.constraints.mutable)
+  field.isPrimaryKey ||
+  field.inCompositeKey ||
+  field.constraints.nomutate ||
+  field.constraints.tenant ||
+  (isReference(field) && !field.constraints.mutable);
 
 /** Which write bodies take a field */
-type Writes = { create: boolean; update: boolean }
+type Writes = { create: boolean; update: boolean };
 
 /**
  * Which write bodies take `field`: what database or the database fills neither, what a body sets once
@@ -34,13 +34,14 @@ type Writes = { create: boolean; update: boolean }
  * another contradicts (meta-contract §8.2)
  */
 function writesOf(field: FieldMeta): Writes {
-	const filled = isGenerated(field)
-	return { create: !filled, update: !filled && !isSetOnce(field) }
+  const filled = isGenerated(field);
+
+  return { create: !filled, update: !filled && !isSetOnce(field) };
 }
 
 /** Whether a field is absent from the generated update body, by writesOf */
 function isExcludedFromUpdate(field: FieldMeta): boolean {
-	return !writesOf(field).update
+  return !writesOf(field).update;
 }
 
 /**
@@ -57,9 +58,11 @@ function isExcludedFromUpdate(field: FieldMeta): boolean {
  * null rather than a coin flip; validateTables reports it.
  */
 function tenantColumnOf(table: TableMeta): string | null {
-	const declared = table.fields.filter((f) => f.constraints.tenant)
-	if (declared.length !== 1) return null
-	return declared[0]!.name
+  const declared = table.fields.filter((f) => f.constraints.tenant);
+
+  if (declared.length !== 1) return null;
+
+  return declared[0]!.name;
 }
 
 /**
@@ -72,15 +75,16 @@ function tenantColumnOf(table: TableMeta): string | null {
  * See docs/state-machines.md §5.
  */
 function statesOf(table: TableMeta): EntityMetaInput["states"] {
-	const field = table.fields.find((f) => f.states !== null && f.enumValues !== null && !f.constraints.private)
-	if (!field?.states || !field.enumValues) return null
+  const field = table.fields.find((f) => f.states !== null && f.enumValues !== null && !f.constraints.private);
 
-	return {
-		column: field.name,
-		initial: field.states.initial,
-		terminal: field.states.terminal ?? [],
-		values: field.enumValues,
-	}
+  if (!field?.states || !field.enumValues) return null;
+
+  return {
+    column: field.name,
+    initial: field.states.initial,
+    terminal: field.states.terminal ?? [],
+    values: field.enumValues,
+  };
 }
 
 /**
@@ -89,16 +93,17 @@ function statesOf(table: TableMeta): EntityMetaInput["states"] {
  */
 /** A column's own `.unique()` as an index: under the name it gives, else drizzle's `<table>_<column>_unique` */
 const columnUnique = (field: FieldMeta): UniqueIndexMeta | null =>
-	field.unique === null ? null : { columns: [field.name], name: field.unique }
+  field.unique === null ? null : { columns: [field.name], name: field.unique };
 
 /** The names of `table`'s private columns, which never reach the document */
 const hiddenOf = (table: TableMeta): Set<string> =>
-	new Set(table.fields.filter((f) => f.constraints.private).flatMap((f) => [f.name, f.sqlName]))
+  new Set(table.fields.filter((f) => f.constraints.private).flatMap((f) => [f.name, f.sqlName]));
 
 function publishedUniqueIndexes(table: TableMeta): TableMeta["uniqueIndexes"] {
-	const hidden = hiddenOf(table)
-	const columns = table.fields.flatMap((field) => columnUnique(field) ?? [])
-	return [...table.uniqueIndexes, ...columns].filter((index) => !index.columns.some((column) => hidden.has(column)))
+  const hidden = hiddenOf(table);
+  const columns = table.fields.flatMap((field) => columnUnique(field) ?? []);
+
+  return [...table.uniqueIndexes, ...columns].filter((index) => !index.columns.some((column) => hidden.has(column)));
 }
 
 /**
@@ -106,13 +111,14 @@ function publishedUniqueIndexes(table: TableMeta): TableMeta["uniqueIndexes"] {
  * SQL database rendered, names one by its quoted SQL name
  */
 function publishedPartialUniqueIndexes(table: TableMeta): PartialUniqueIndexMeta[] {
-	const hidden = hiddenOf(table)
-	const privateSql = table.fields.filter((f) => f.constraints.private).map((f) => f.sqlName)
-	return table.partialUniqueIndexes.filter(
-		(index) =>
-			!index.columns.some((column) => hidden.has(column)) &&
-			!privateSql.some((sqlName) => namesColumn(index.where, sqlName)),
-	)
+  const hidden = hiddenOf(table);
+  const privateSql = table.fields.filter((f) => f.constraints.private).map((f) => f.sqlName);
+
+  return table.partialUniqueIndexes.filter(
+    (index) =>
+      !index.columns.some((column) => hidden.has(column)) &&
+      !privateSql.some((sqlName) => namesColumn(index.where, sqlName)),
+  );
 }
 
 /**
@@ -121,10 +127,12 @@ function publishedPartialUniqueIndexes(table: TableMeta): PartialUniqueIndexMeta
  * caller supplies is not generated
  */
 function isGenerated(field: FieldMeta): boolean {
-	if (field.constraints.autogenerate || field.generated || field.identity) return true
-	const filledKey =
-		field.databaseKind === "id" || field.databaseKind === "serialId" || field.autoIncrement || field.hasDefault
-	return field.isPrimaryKey && filledKey
+  if (field.constraints.autogenerate || field.generated || field.identity) return true;
+
+  const filledKey =
+    field.databaseKind === "id" || field.databaseKind === "serialId" || field.autoIncrement || field.hasDefault;
+
+  return field.isPrimaryKey && filledKey;
 }
 
 /**
@@ -135,31 +143,32 @@ function isGenerated(field: FieldMeta): boolean {
  * anyway. Omitting is the honest outcome; see docs §6.4.
  */
 function deriveEntityMeta(table: TableMeta): EntityMetaInput | null {
-	if (table.hasCompositePrimaryKey) return null
+  if (table.hasCompositePrimaryKey) return null;
 
-	const primaryKey = table.fields.find((f) => f.isPrimaryKey)
-	if (!primaryKey) return null
+  const primaryKey = table.fields.find((f) => f.isPrimaryKey);
 
-	/* a private column is absent from every published list (docs/meta-contract.md §8) */
-	const published = table.fields.filter((f) => !f.constraints.private)
-	const generated = published.filter((f) => !writesOf(f).create).map((f) => f.name)
-	const immutable = published.filter((f) => !writesOf(f).update).map((f) => f.name)
+  if (!primaryKey) return null;
 
-	return {
-		generated,
-		identity: primaryKey.name,
-		immutable,
-		kind: "entity",
-		name: qualifiedName(table),
-		partialUniqueIndexes: publishedPartialUniqueIndexes(table),
-		/* a private name never reaches the document (docs/meta-contract.md §8) */
-		softDelete: published.some((f) => f.name === table.timestamps.names.deletedAt)
-			? table.timestamps.names.deletedAt
-			: null,
-		states: statesOf(table),
-		tenantColumn: tenantColumnOf(table),
-		uniqueIndexes: publishedUniqueIndexes(table),
-	}
+  // a private column is absent from every published list (docs/meta-contract.md §8)
+  const published = table.fields.filter((f) => !f.constraints.private);
+  const generated = published.filter((f) => !writesOf(f).create).map((f) => f.name);
+  const immutable = published.filter((f) => !writesOf(f).update).map((f) => f.name);
+
+  return {
+    generated,
+    identity: primaryKey.name,
+    immutable,
+    kind: "entity",
+    name: qualifiedName(table),
+    partialUniqueIndexes: publishedPartialUniqueIndexes(table),
+    // a private name never reaches the document (docs/meta-contract.md §8)
+    softDelete: published.some((f) => f.name === table.timestamps.names.deletedAt)
+      ? table.timestamps.names.deletedAt
+      : null,
+    states: statesOf(table),
+    tenantColumn: tenantColumnOf(table),
+    uniqueIndexes: publishedUniqueIndexes(table),
+  };
 }
 
-export { deriveEntityMeta, isExcludedFromUpdate, publishedPartialUniqueIndexes, publishedUniqueIndexes, writesOf }
+export { deriveEntityMeta, isExcludedFromUpdate, publishedPartialUniqueIndexes, publishedUniqueIndexes, writesOf };

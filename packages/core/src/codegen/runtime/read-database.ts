@@ -1,39 +1,47 @@
 /** What the runtime reader reads of a c helper's own record: its constraints, a column schema and an enum's state machine, as JSON */
-import * as z from "zod"
-import type { ColumnMeta } from "../../meta/column.ts"
-import type { ModuleExport, SnapshotDatabase } from "./snapshot-types.ts"
+import * as z from "zod";
+
+import type { ColumnMeta } from "../../meta/column.ts";
+import type { ModuleExport, SnapshotDatabase } from "./snapshot-types.ts";
 
 const STRING_LIST = (value: unknown): value is string[] =>
-	Array.isArray(value) && value.every((item) => typeof item === "string")
+  Array.isArray(value) && value.every((item) => typeof item === "string");
 
 /** A c helper's constraints as JSON, every value a primitive; an error naming the column otherwise */
 function constraintsOf(raw: unknown, at: string): Record<string, boolean | number | string> {
-	const constraints: Record<string, boolean | number | string> = {}
-	for (const [key, value] of Object.entries((raw ?? {}) as Record<string, unknown>)) {
-		if (value === undefined) continue
-		if (typeof value !== "boolean" && typeof value !== "number" && typeof value !== "string")
-			throw new Error(
-				`${at}: the constraint ${key} is a ${typeof value}; database reads a boolean, a number or a string`,
-			)
-		/* JSON carries no NaN or Infinity: the snapshot would hold null, and the bound would drop without a word */
-		if (typeof value === "number" && !Number.isFinite(value))
-			throw new Error(
-				`${at}: the constraint ${key} is ${value}, no finite number; a bound read from the environment is NaN in codegen's child, which has none of it`,
-			)
-		constraints[key] = value
-	}
-	return constraints
+  const constraints: Record<string, boolean | number | string> = {};
+
+  for (const [key, value] of Object.entries((raw ?? {}) as Record<string, unknown>)) {
+    if (value === undefined) continue;
+
+    if (typeof value !== "boolean" && typeof value !== "number" && typeof value !== "string") {
+      throw new Error(
+        `${at}: the constraint ${key} is a ${typeof value}; database reads a boolean, a number or a string`,
+      );
+    }
+
+    // JSON carries no NaN or Infinity: the snapshot would hold null, and the bound would drop without a word
+    if (typeof value === "number" && !Number.isFinite(value)) {
+      throw new Error(
+        `${at}: the constraint ${key} is ${value}, no finite number; a bound read from the environment is NaN in codegen's child, which has none of it`,
+      );
+    }
+
+    constraints[key] = value;
+  }
+
+  return constraints;
 }
 
 /** The packages a schema found nowhere might have been in, as its error names them; empty when every module loaded */
 const skipped = (unloaded: readonly string[]): string =>
-	unloaded.length === 0 ? "" : ` (${unloaded.join(", ")} would not load on their own)`
+  unloaded.length === 0 ? "" : ` (${unloaded.join(", ")} would not load on their own)`;
 
-/* the helpers whose `schema` key names a zod schema the generated DTOs pipe the value into; on any other the key stays a constraint, which the constraint check refuses by name */
+// the helpers whose `schema` key names a zod schema the generated DTOs pipe the value into; on any other the key stays a constraint, which the constraint check refuses by name
 // lookup-table: the c helpers that take a column schema
-const SCHEMA_KINDS: ReadonlySet<string> = /* @__PURE__ */ new Set(["integer", "real", "text"])
+const SCHEMA_KINDS: ReadonlySet<string> = /* @__PURE__ */ new Set(["integer", "real", "text"]);
 
-const DEFS = "#/$defs/"
+const DEFS = "#/$defs/";
 
 /**
  * `node` with each `$ref` replaced by the entry of `defs` it points at, its sibling keywords kept:
@@ -42,28 +50,34 @@ const DEFS = "#/$defs/"
  * `cycles: "throw"` leaves no reference back to the root
  */
 function inlined(node: unknown, defs: Readonly<Record<string, unknown>>): unknown {
-	if (Array.isArray(node)) return node.map((each) => inlined(each, defs))
-	if (typeof node !== "object" || node === null) return node
-	const { $ref, ...rest } = node as Record<string, unknown>
-	const own = Object.fromEntries(Object.entries(rest).map(([key, value]) => [key, inlined(value, defs)]))
-	if ($ref === undefined) return own
-	const name = ($ref as string).slice(DEFS.length).replaceAll("~1", "/").replaceAll("~0", "~")
-	return { ...(inlined(defs[name], defs) as object), ...own }
+  if (Array.isArray(node)) return node.map((each) => inlined(each, defs));
+
+  if (typeof node !== "object" || node === null) return node;
+  const { $ref, ...rest } = node as Record<string, unknown>;
+  const own = Object.fromEntries(Object.entries(rest).map(([key, value]) => [key, inlined(value, defs)]));
+
+  if ($ref === undefined) return own;
+  const name = ($ref as string).slice(DEFS.length).replaceAll("~1", "/").replaceAll("~0", "~");
+
+  return { ...(inlined(defs[name], defs) as object), ...own };
 }
 
 /** The input JSON Schema of a zod schema as a self-contained literal, `$schema` dropped; an error naming the column when zod has none */
 function inputJsonOf(schema: z.ZodType, at: string): Readonly<Record<string, unknown>> {
-	let json: Record<string, unknown>
-	try {
-		json = z.toJSONSchema(schema, { cycles: "throw", io: "input" }) as Record<string, unknown>
-	} catch (error) {
-		throw new Error(
-			`${at}: the schema its schema key is given has no JSON Schema form (zod: ${(error as Error).message}); database publishes every DTO rule`,
-			{ cause: error },
-		)
-	}
-	const { $defs, $schema: _dropped, ...root } = json
-	return inlined(root, ($defs ?? {}) as Record<string, unknown>) as Record<string, unknown>
+  let json: Record<string, unknown>;
+
+  try {
+    json = z.toJSONSchema(schema, { cycles: "throw", io: "input" });
+  } catch (error) {
+    throw new Error(
+      `${at}: the schema its schema key is given has no JSON Schema form (zod: ${(error as Error).message}); database publishes every DTO rule`,
+      { cause: error },
+    );
+  }
+
+  const { $defs, $schema: _dropped, ...root } = json;
+
+  return inlined(root, ($defs ?? {}) as Record<string, unknown>) as Record<string, unknown>;
 }
 
 /**
@@ -73,31 +87,39 @@ function inputJsonOf(schema: z.ZodType, at: string): Readonly<Record<string, unk
  * for one no module exports, naming the modules that would not load (`unloaded`)
  */
 function columnSchemaOf(
-	meta: ColumnMeta,
-	at: string,
-	{ locate, unloaded }: { locate: (value: unknown) => ModuleExport | null; unloaded: readonly string[] },
+  meta: ColumnMeta,
+  at: string,
+  { locate, unloaded }: { locate: (value: unknown) => ModuleExport | null; unloaded: readonly string[] },
 ): Pick<SnapshotDatabase, "schema" | "schemaJson"> & { constraints: Record<string, unknown> } {
-	const { schema: declared, ...constraints } = (meta.constraints ?? {}) as Record<string, unknown>
-	if (declared === undefined) return { constraints, schema: null, schemaJson: null }
-	if (!SCHEMA_KINDS.has(meta.kind))
-		return { constraints: { ...constraints, schema: true }, schema: null, schemaJson: null }
-	if (typeof declared !== "object" || declared === null || !("_zod" in declared))
-		throw new Error(
-			`${at}: the constraint schema is no zod schema; database's DTOs are zod 4, so the schema must be one`,
-		)
-	const schema = locate(declared)
-	if (schema === null)
-		throw new Error(
-			`${at}: no module of the project exports the schema its schema key is given${skipped(unloaded)}; export it, above the table that names it, so the generated DTOs can import it`,
-		)
-	return { constraints, schema, schemaJson: inputJsonOf(declared as z.ZodType, at) }
+  const { schema: declared, ...constraints } = (meta.constraints ?? {}) as Record<string, unknown>;
+
+  if (declared === undefined) return { constraints, schema: null, schemaJson: null };
+
+  if (!SCHEMA_KINDS.has(meta.kind))
+    return { constraints: { ...constraints, schema: true }, schema: null, schemaJson: null };
+
+  if (typeof declared !== "object" || declared === null || !("_zod" in declared)) {
+    throw new Error(
+      `${at}: the constraint schema is no zod schema; database's DTOs are zod 4, so the schema must be one`,
+    );
+  }
+
+  const schema = locate(declared);
+
+  if (schema === null) {
+    throw new Error(
+      `${at}: no module of the project exports the schema its schema key is given${skipped(unloaded)}; export it, above the table that names it, so the generated DTOs can import it`,
+    );
+  }
+
+  return { constraints, schema, schemaJson: inputJsonOf(declared as z.ZodType, at) };
 }
 
-/* the keys a c.enum's state machine has; values, which docs/state-machines.md §4 holds in the same const, read from c.enum's second argument */
-const STATE_KEYS = ["initial", "terminal", "transitions", "values"]
+// the keys a c.enum's state machine has; values, which docs/state-machines.md §4 holds in the same const, read from c.enum's second argument
+const STATE_KEYS = ["initial", "terminal", "transitions", "values"];
 
 /** What fills a column a write leaves out: a value or SQL default, a default function, an update function */
-type Fill = { default?: unknown; defaultFn?: unknown; notNull?: boolean | undefined; onUpdateFn?: unknown }
+type Fill = { default?: unknown; defaultFn?: unknown; notNull?: boolean | undefined; onUpdateFn?: unknown };
 
 /**
  * A state column's fill is its machine's `initial`, the value a row starts at: a
@@ -106,20 +128,26 @@ type Fill = { default?: unknown; defaultFn?: unknown; notNull?: boolean | undefi
  * state; a machine that declares no `initial` starts anywhere
  */
 function refuseOtherStart(initial: string | null, fill: Fill, at: string): void {
-	if (initial === null) return
-	const literal = fill.defaultFn === undefined && fill.onUpdateFn === undefined && typeof fill.default !== "object"
-	if (!literal)
-		throw new Error(
-			`${at}: its default is no literal value, so database cannot hold it to its state machine's initial "${initial}"; write .default("${initial}")`,
-		)
-	if (fill.default !== undefined && fill.default !== initial)
-		throw new Error(
-			`${at}: its default ${JSON.stringify(fill.default)} is not its state machine's initial "${initial}"; a row starts at initial`,
-		)
-	if (fill.default === undefined && fill.notNull === false)
-		throw new Error(
-			`${at}: a create that leaves it out stores null, a row in no state of its machine; write .default("${initial}"), or .notNull() so a create sends "${initial}"`,
-		)
+  if (initial === null) return;
+  const literal = fill.defaultFn === undefined && fill.onUpdateFn === undefined && typeof fill.default !== "object";
+
+  if (!literal) {
+    throw new Error(
+      `${at}: its default is no literal value, so database cannot hold it to its state machine's initial "${initial}"; write .default("${initial}")`,
+    );
+  }
+
+  if (fill.default !== undefined && fill.default !== initial) {
+    throw new Error(
+      `${at}: its default ${JSON.stringify(fill.default)} is not its state machine's initial "${initial}"; a row starts at initial`,
+    );
+  }
+
+  if (fill.default === undefined && fill.notNull === false) {
+    throw new Error(
+      `${at}: a create that leaves it out stores null, a row in no state of its machine; write .default("${initial}"), or .notNull() so a create sends "${initial}"`,
+    );
+  }
 }
 
 /**
@@ -127,84 +155,99 @@ function refuseOtherStart(initial: string | null, fill: Fill, at: string): void 
  * for a fill other than its `initial`
  */
 function statesOf(raw: unknown, at: string, fill: Fill = {}): SnapshotDatabase["states"] {
-	if (raw === undefined) return null
-	/* a misspelt key would leave its part of the machine unread */
-	const unknown = Object.keys(raw as object).find((key) => !STATE_KEYS.includes(key))
-	if (unknown !== undefined)
-		throw new Error(
-			`${at}: its state machine has ${unknown}, which is none of initial, terminal, transitions and values`,
-		)
-	const { initial, terminal, transitions } = raw as Record<string, unknown>
-	/* an entry set to undefined is the key left out, as canTransition reads it */
-	const map =
-		transitions === undefined
-			? undefined
-			: Object.fromEntries(Object.entries(transitions as object).filter(([, to]) => to !== undefined))
-	const valid =
-		(initial === undefined || typeof initial === "string") &&
-		(terminal === undefined || STRING_LIST(terminal)) &&
-		(map === undefined || Object.values(map).every(STRING_LIST))
-	if (!valid) throw new Error(`${at}: its state machine is not { initial?, terminal?, transitions? } of state names`)
-	refuseOtherStart((initial as string | undefined) ?? null, fill, at)
-	return {
-		initial: (initial as string | undefined) ?? null,
-		terminal: (terminal as string[] | undefined) ?? null,
-		transitions: (map as Record<string, string[]> | undefined) ?? null,
-	}
+  if (raw === undefined) return null;
+  // a misspelt key would leave its part of the machine unread
+  const unknown = Object.keys(raw as object).find((key) => !STATE_KEYS.includes(key));
+
+  if (unknown !== undefined) {
+    throw new Error(
+      `${at}: its state machine has ${unknown}, which is none of initial, terminal, transitions and values`,
+    );
+  }
+
+  const { initial, terminal, transitions } = raw as Record<string, unknown>;
+
+  // an entry set to undefined is the key left out, as canTransition reads it
+  const map =
+    transitions === undefined
+      ? undefined
+      : Object.fromEntries(Object.entries(transitions as object).filter(([, to]) => to !== undefined));
+
+  const valid =
+    (initial === undefined || typeof initial === "string") &&
+    (terminal === undefined || STRING_LIST(terminal)) &&
+    (map === undefined || Object.values(map).every(STRING_LIST));
+
+  if (!valid) throw new Error(`${at}: its state machine is not { initial?, terminal?, transitions? } of state names`);
+  refuseOtherStart(initial ?? null, fill, at);
+
+  return {
+    initial: initial ?? null,
+    terminal: terminal ?? null,
+    transitions: map ?? null,
+  };
 }
 
 /** A zod schema as its public definition reads: a kind, and the schemas it holds among its other entries; a check has none */
-type ZodNode = { def: Record<string, unknown> & { type: string } }
+type ZodNode = { def: Record<string, unknown> & { type: string } };
 
 const isZodNode = (value: unknown): value is ZodNode =>
-	typeof value === "object" && value !== null && typeof (value as Partial<ZodNode>).def?.type === "string"
+  typeof value === "object" && value !== null && typeof (value as Partial<ZodNode>).def?.type === "string";
 
 /** The values a definition entry holds: an array's items, a shape's fields, or the entry itself */
 const heldBy = (entry: unknown): unknown[] => {
-	if (Array.isArray(entry)) return entry
-	if (typeof entry === "object" && entry !== null && Object.getPrototypeOf(entry) === Object.prototype)
-		return Object.values(entry)
-	return [entry]
-}
+  if (Array.isArray(entry)) return entry;
+
+  if (typeof entry === "object" && entry !== null && Object.getPrototypeOf(entry) === Object.prototype)
+    return Object.values(entry);
+
+  return [entry];
+};
 
 /** What JSON stores a part of each kind as, where that is no value of the kind: a document holding one fails every read */
 const UNSTORED: Readonly<Record<string, string>> = {
-	// lookup-table: a zod kind's def.type, and what JSON makes of its output
-	bigint: "JSON cannot store a BigInt: store its digits as a string",
-	date: "JSON stores a Date as a string, which the read DTO refuses: store an ISO string, z.iso.datetime()",
-	file: "JSON cannot store a File: store its URL or key as a string",
-	function: "JSON cannot store a function",
-	map: "JSON stores a Map as {}, losing its entries: store a z.record()",
-	nan: "JSON stores NaN as null, which the read DTO refuses",
-	promise: "JSON cannot store a Promise",
-	set: "JSON stores a Set as {}, losing its members: store a z.array()",
-	symbol: "JSON cannot store a Symbol",
-}
+  // lookup-table: a zod kind's def.type, and what JSON makes of its output
+  bigint: "JSON cannot store a BigInt: store its digits as a string",
+  date: "JSON stores a Date as a string, which the read DTO refuses: store an ISO string, z.iso.datetime()",
+  file: "JSON cannot store a File: store its URL or key as a string",
+  function: "JSON cannot store a function",
+  map: "JSON stores a Map as {}, losing its entries: store a z.record()",
+  nan: "JSON stores NaN as null, which the read DTO refuses",
+  promise: "JSON cannot store a Promise",
+  set: "JSON stores a Set as {}, losing its members: store a z.array()",
+  symbol: "JSON cannot store a Symbol",
+};
 
 const TRANSFORMED =
-	"its transform's output is what gets stored, and the read DTO could not parse it. Move the transform to the request body's schema."
-const IN_ARRAY = "JSON stores undefined in an array as null, which the read DTO refuses: make the element .nullable()"
+  "its transform's output is what gets stored, and the read DTO could not parse it. Move the transform to the request body's schema.";
+
+const IN_ARRAY = "JSON stores undefined in an array as null, which the read DTO refuses: make the element .nullable()";
+
 const IN_FIELD =
-	"JSON leaves out a key whose value is undefined, which the read DTO refuses: make the field .optional()"
+  "JSON leaves out a key whose value is undefined, which the read DTO refuses: make the field .optional()";
 
 /** Where a part sits: an array's element, which JSON writes as null when undefined, or an object's field, which it leaves out */
-type Slot = "element" | "field" | undefined
+type Slot = "element" | "field" | undefined;
 
 /** Whether `node`, in an array, outputs undefined where JSON writes null and the part refuses null */
 function nullInArray(node: unknown): boolean {
-	const schema = node as { safeParse(value: unknown): { data?: unknown; success: boolean } }
-	const left = schema.safeParse(undefined)
-	return left.success && left.data === undefined && !schema.safeParse(null).success
+  const schema = node as { safeParse(value: unknown): { data?: unknown; success: boolean } };
+  const left = schema.safeParse(undefined);
+
+  return left.success && left.data === undefined && !schema.safeParse(null).success;
 }
 
 /** The parts `def` holds, each with its slot */
 function partsOf(def: ZodNode["def"]): Array<[unknown, Slot]> {
-	if (def.type === "array") return [[def["element"], "element"]]
-	if (def.type === "tuple") return [...heldBy(def["items"]), ...heldBy(def["rest"])].map((part) => [part, "element"])
-	if (def.type === "object") return heldBy(def["shape"]).map((part) => [part, "field"])
-	/* a lazy holds its schema behind a function, called once, as a recursive schema meets itself again */
-	const lazy = def.type === "lazy" ? [(def as unknown as { getter: () => unknown }).getter()] : []
-	return [...lazy, ...Object.values(def).flatMap(heldBy)].map((part) => [part, undefined])
+  if (def.type === "array") return [[def["element"], "element"]];
+
+  if (def.type === "tuple") return [...heldBy(def["items"]), ...heldBy(def["rest"])].map((part) => [part, "element"]);
+
+  if (def.type === "object") return heldBy(def["shape"]).map((part) => [part, "field"]);
+  // a lazy holds its schema behind a function, called once, as a recursive schema meets itself again
+  const lazy = def.type === "lazy" ? [(def as unknown as { getter: () => unknown }).getter()] : [];
+
+  return [...lazy, ...Object.values(def).flatMap(heldBy)].map((part) => [part, undefined]);
 }
 
 /**
@@ -214,20 +257,27 @@ function partsOf(def: ZodNode["def"]): Array<[unknown, Slot]> {
  * out. An overwrite (`.trim()`, `.toLowerCase()`), a default and a coerce to a JSON value parse again
  */
 function unstoredBy(schema: unknown): string | undefined {
-	const seen = new Set<unknown>()
-	const pending: Array<[unknown, Slot]> = [[schema, undefined]]
-	while (pending.length > 0) {
-		const [node, slot] = pending.pop() as [unknown, Slot]
-		if (!isZodNode(node) || seen.has(node)) continue
-		seen.add(node)
-		const { def } = node
-		if (def.type === "pipe" || def.type === "transform") return TRANSFORMED
-		if (Object.hasOwn(UNSTORED, def.type)) return UNSTORED[def.type]
-		if (slot === "element" && nullInArray(node)) return IN_ARRAY
-		if (slot === "field" && (def.type === "undefined" || def.type === "void")) return IN_FIELD
-		pending.push(...partsOf(def))
-	}
-	return undefined
+  const seen = new Set<unknown>();
+  const pending: Array<[unknown, Slot]> = [[schema, undefined]];
+
+  while (pending.length > 0) {
+    const [node, slot] = pending.pop() as [unknown, Slot];
+
+    if (!isZodNode(node) || seen.has(node)) continue;
+    seen.add(node);
+    const { def } = node;
+
+    if (def.type === "pipe" || def.type === "transform") return TRANSFORMED;
+
+    if (Object.hasOwn(UNSTORED, def.type)) return UNSTORED[def.type];
+
+    if (slot === "element" && nullInArray(node)) return IN_ARRAY;
+
+    if (slot === "field" && (def.type === "undefined" || def.type === "void")) return IN_FIELD;
+    pending.push(...partsOf(def));
+  }
+
+  return undefined;
 }
 
 /**
@@ -240,25 +290,32 @@ function unstoredBy(schema: unknown): string | undefined {
  * the column's own NOT NULL; `filled` says a default fills the column
  */
 function refuseJsonDocument(
-	schema: unknown,
-	at: string,
-	{ filled, notNull }: { filled: boolean; notNull: boolean },
+  schema: unknown,
+  at: string,
+  { filled, notNull }: { filled: boolean; notNull: boolean },
 ): void {
-	const unstored = unstoredBy(schema)
-	if (unstored !== undefined)
-		throw new Error(
-			`${at}: a c.json schema is the stored document${unstored === TRANSFORMED ? ";" : ", and"} ${unstored}`,
-		)
-	const takes = (value: unknown) =>
-		(schema as { safeParse(value: unknown): { success: boolean } }).safeParse(value).success
-	if (notNull && takes(null))
-		throw new Error(
-			`${at}: its schema takes null and the column is NOT NULL: make the column nullable, or pass the schema's non-null form`,
-		)
-	if (notNull && !filled && takes(undefined))
-		throw new Error(
-			`${at}: its schema takes undefined (an .optional(), a .default() or a union with undefined) and the column is NOT NULL with no default: make the schema refuse undefined, or give the column a default`,
-		)
+  const unstored = unstoredBy(schema);
+
+  if (unstored !== undefined) {
+    throw new Error(
+      `${at}: a c.json schema is the stored document${unstored === TRANSFORMED ? ";" : ", and"} ${unstored}`,
+    );
+  }
+
+  const takes = (value: unknown) =>
+    (schema as { safeParse(value: unknown): { success: boolean } }).safeParse(value).success;
+
+  if (notNull && takes(null)) {
+    throw new Error(
+      `${at}: its schema takes null and the column is NOT NULL: make the column nullable, or pass the schema's non-null form`,
+    );
+  }
+
+  if (notNull && !filled && takes(undefined)) {
+    throw new Error(
+      `${at}: its schema takes undefined (an .optional(), a .default() or a union with undefined) and the column is NOT NULL with no default: make the schema refuse undefined, or give the column a default`,
+    );
+  }
 }
 
-export { columnSchemaOf, constraintsOf, refuseJsonDocument, skipped, statesOf, STRING_LIST }
+export { columnSchemaOf, constraintsOf, refuseJsonDocument, skipped, statesOf, STRING_LIST };

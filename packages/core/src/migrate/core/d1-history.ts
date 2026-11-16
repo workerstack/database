@@ -1,3 +1,6 @@
+import { absentDatabase } from "../drivers/absent.ts";
+import { lockedOut } from "../drivers/d1-lock.ts";
+import { executeAll } from "../drivers/d1.ts";
 /**
  * D1 migrations through wrangler. `wrangler d1 migrations apply` runs each file with its row in
  * the binding's `migrations_table` (`d1_migrations` by default) as one batch, so that table is the
@@ -8,48 +11,45 @@
  * That table records names only, so database records each applied file's hash in its own table, and
  * refuses a file applied, then edited, as it does on its other engines.
  */
-import type { ParsedMigration } from "../migration-types.ts"
-import type { Approval } from "./approval.ts"
-import { absentDatabase } from "../drivers/absent.ts"
-import { executeAll } from "../drivers/d1.ts"
-import { lockedOut } from "../drivers/d1-lock.ts"
-import { assertLocalExists, type D1Target, localMissing, type ReadConfig, resolveBinding } from "./d1-binding.ts"
-import { d1Files, refuseSwallowing } from "./d1-files.ts"
-import { refuseUnlike } from "./d1-wrangler-error.ts"
-import { D1_HASH_INTENT_TABLE, D1_HASH_TABLE, DRIZZLE_HISTORY_TABLE } from "./d1-history-tables.ts"
+import type { ParsedMigration } from "../migration-types.ts";
+import type { Approval } from "./approval.ts";
+import { assertLocalExists, type D1Target, localMissing, type ReadConfig, resolveBinding } from "./d1-binding.ts";
+import { proveOnD1 } from "./d1-engine.ts";
+import { d1Files, refuseSwallowing } from "./d1-files.ts";
 import {
-	type Hashed,
-	hashStatements,
-	historyTable,
-	intentStatements,
-	literal,
-	moveIntents,
-	namesOf,
-	quoteName,
-	readHistory,
-	type Recorded,
-	type Rows,
-	settled,
-	settleStatements,
-	vouched,
-} from "./d1-history-rows.ts"
-import { orphanMessage } from "./history-match.ts"
-import { generateMigrationHash, migrationHashes } from "./parse.ts"
-import { proveOnD1 } from "./d1-engine.ts"
-import { planApply } from "./plan-apply.ts"
-import { type RunResult, runPeer } from "./process.ts"
-import { Refused } from "./refused.ts"
-import { whileStoppable } from "./stopped.ts"
+  type Hashed,
+  hashStatements,
+  historyTable,
+  intentStatements,
+  literal,
+  moveIntents,
+  namesOf,
+  quoteName,
+  readHistory,
+  type Recorded,
+  type Rows,
+  settled,
+  settleStatements,
+  vouched,
+} from "./d1-history-rows.ts";
+import { D1_HASH_INTENT_TABLE, D1_HASH_TABLE, DRIZZLE_HISTORY_TABLE } from "./d1-history-tables.ts";
+import { refuseUnlike } from "./d1-wrangler-error.ts";
+import { orphanMessage } from "./history-match.ts";
+import { generateMigrationHash, migrationHashes } from "./parse.ts";
+import { planApply } from "./plan-apply.ts";
+import { type RunResult, runPeer } from "./process.ts";
+import { Refused } from "./refused.ts";
+import { whileStoppable } from "./stopped.ts";
 
 /** The files `__drizzle_migrations` records that the migrations table does not */
 function recordedByDrizzle(
-	files: ReturnType<typeof d1Files>,
-	hashes: ReadonlySet<string>,
-	applied: ReadonlySet<string>,
+  files: ReturnType<typeof d1Files>,
+  hashes: ReadonlySet<string>,
+  applied: ReadonlySet<string>,
 ): string[] {
-	return files
-		.filter(({ name, sql }) => !applied.has(name) && migrationHashes(sql).some(({ hash }) => hashes.has(hash)))
-		.map(({ name }) => name)
+  return files
+    .filter(({ name, sql }) => !applied.has(name) && migrationHashes(sql).some(({ hash }) => hashes.has(hash)))
+    .map(({ name }) => name);
 }
 
 /**
@@ -59,51 +59,59 @@ function recordedByDrizzle(
  * unless the command `writes`, which reads it as empty
  */
 async function history(
-	read: ReadConfig,
-	target: D1Target,
-	{ status = false, writes }: { status?: boolean | undefined; writes: boolean },
+  read: ReadConfig,
+  target: D1Target,
+  { status = false, writes }: { status?: boolean | undefined; writes: boolean },
 ): Promise<{
-	applied: Set<string>
-	hasIntents: boolean
-	marks: boolean
-	orphans: string
-	settle: Hashed
-	table: string
-	unhashed: string[]
+  applied: Set<string>;
+  hasIntents: boolean;
+  marks: boolean;
+  orphans: string;
+  settle: Hashed;
+  table: string;
+  unhashed: string[];
 }> {
-	const table = resolveBinding(read, target)
-	if (!writes) assertLocalExists(read, target)
-	const rows = await readHistory(read, target, table)
-	const { applied, drizzle: hashes, marks, recorded } = rows
-	const files = d1Files(target.migrationsDir)
-	const copied = hashes === undefined ? [] : recordedByDrizzle(files, hashes, applied)
-	if (copied.length > 0) {
-		throw new Error(
-			`${target.name} records ${copied.join(", ")} in ${DRIZZLE_HISTORY_TABLE}, database's history before 0.8, but not in ${table}, wrangler's; run database migrate baseline once to copy the record`,
-		)
-	}
-	const edited = files.find(
-		({ name, sql }) => applied.has(name) && recorded.has(name) && !vouched(sql, recorded.get(name) as Recorded, hashes),
-	)
-	if (edited !== undefined) {
-		throw new Error(
-			`${edited.name} was applied, then edited: its hash is not the one database recorded; restore the file, or put the change in a new one`,
-		)
-	}
-	const { hasIntents, settle } = settled(files, rows)
-	const hashed = new Set([...recorded.keys(), ...settle.map(({ name }) => name)])
-	const unhashed = files.filter(({ name }) => applied.has(name) && !hashed.has(name)).map(({ name }) => name)
-	const named = new Set(files.map(({ name }) => name))
-	const gone = [...applied].filter((name) => !named.has(name))
-	const orphans =
-		gone.length === 0
-			? ""
-			: orphanMessage(
-					gone.map((name) => ({ hash: "", name })),
-					target.migrationsDir,
-				)
-	if (orphans !== "" && !status) throw new Error(orphans)
-	return { applied, hasIntents, marks, orphans, settle, table, unhashed }
+  const table = resolveBinding(read, target);
+
+  if (!writes) assertLocalExists(read, target);
+  const rows = await readHistory(read, target, table);
+  const { applied, drizzle: hashes, marks, recorded } = rows;
+  const files = d1Files(target.migrationsDir);
+  const copied = hashes === undefined ? [] : recordedByDrizzle(files, hashes, applied);
+
+  if (copied.length > 0) {
+    throw new Error(
+      `${target.name} records ${copied.join(", ")} in ${DRIZZLE_HISTORY_TABLE}, database's history before 0.8, but not in ${table}, wrangler's; run database migrate baseline once to copy the record`,
+    );
+  }
+
+  const edited = files.find(
+    ({ name, sql }) => applied.has(name) && recorded.has(name) && !vouched(sql, recorded.get(name) as Recorded, hashes),
+  );
+
+  if (edited !== undefined) {
+    throw new Error(
+      `${edited.name} was applied, then edited: its hash is not the one database recorded; restore the file, or put the change in a new one`,
+    );
+  }
+
+  const { hasIntents, settle } = settled(files, rows);
+  const hashed = new Set([...recorded.keys(), ...settle.map(({ name }) => name)]);
+  const unhashed = files.filter(({ name }) => applied.has(name) && !hashed.has(name)).map(({ name }) => name);
+  const named = new Set(files.map(({ name }) => name));
+  const gone = [...applied].filter((name) => !named.has(name));
+
+  const orphans =
+    gone.length === 0
+      ? ""
+      : orphanMessage(
+          gone.map((name) => ({ hash: "", name })),
+          target.migrationsDir,
+        );
+
+  if (orphans !== "" && !status) throw new Error(orphans);
+
+  return { applied, hasIntents, marks, orphans, settle, table, unhashed };
 }
 
 /**
@@ -112,103 +120,121 @@ async function history(
  * `names` committed is then unknown, its `unknown`, and status reads it
  */
 async function appliedAfter(
-	target: D1Target,
-	read: ReadConfig,
-	{ names, ok, table }: { names: string[]; ok: boolean; table: string },
+  target: D1Target,
+  read: ReadConfig,
+  { names, ok, table }: { names: string[]; ok: boolean; table: string },
 ): Promise<Set<string>> {
-	try {
-		return ok
-			? new Set(
-					((await executeAll(target.exec, target, [namesOf(table)]))[0] as Rows).map((row) => String(row["name"])),
-				)
-			: (await readHistory(read, target, table)).applied
-	} catch (error) {
-		throw new Refused(
-			`wrangler d1 migrations apply ${ok ? "ran" : "failed"}, then reading back what it recorded in ${table} failed: ${(error as Error).message}; database migrate status says which of the files it applied`,
-			{ pending: [], unknown: names },
-		)
-	}
+  try {
+    return ok
+      ? new Set(
+          ((await executeAll(target.exec, target, [namesOf(table)]))[0] as Rows).map((row) => String(row["name"])),
+        )
+      : (await readHistory(read, target, table)).applied;
+  } catch (error) {
+    throw new Refused(
+      `wrangler d1 migrations apply ${ok ? "ran" : "failed"}, then reading back what it recorded in ${table} failed: ${(error as Error).message}; database migrate status says which of the files it applied`,
+      { pending: [], unknown: names },
+    );
+  }
 }
 
 type D1Apply = {
-	approve(migration: ParsedMigration): Promise<Approval>
-	/** only check: apply nothing */
-	checkOnly?: boolean | undefined
-	print(line: string): void
-	read: ReadConfig
-}
+  approve(migration: ParsedMigration): Promise<Approval>;
+  /** only check: apply nothing */
+  checkOnly?: boolean | undefined;
+  print(line: string): void;
+  read: ReadConfig;
+};
 
 /**
  * wrangler's apply of `names`, each announced first. A stop signal ends its run, and the table then
  * says which of them it recorded (stopped.ts)
  */
 async function wranglerApply(
-	target: D1Target,
-	{ print, read }: D1Apply,
-	{ names, table }: { names: string[]; table: string },
+  target: D1Target,
+  { print, read }: D1Apply,
+  { names, table }: { names: string[]; table: string },
 ): Promise<RunResult> {
-	for (const name of names) print(`Apply: ${name}`)
-	const found = async () => {
-		const recorded = await appliedAfter(target, read, { names, ok: false, table })
-		return { applied: names.filter((name) => recorded.has(name)), pending: names.filter((name) => !recorded.has(name)) }
-	}
-	return whileStoppable({ names, print, read: found }, () =>
-		runPeer(target.exec, target.wrangler)(["d1", "migrations", "apply", target.name, ...target.flags], { input: "" }),
-	)
+  for (const name of names) print(`Apply: ${name}`);
+
+  const found = async () => {
+    const recorded = await appliedAfter(target, read, { names, ok: false, table });
+
+    return {
+      applied: names.filter((name) => recorded.has(name)),
+      pending: names.filter((name) => !recorded.has(name)),
+    };
+  };
+
+  return whileStoppable({ names, print, read: found }, () =>
+    runPeer(target.exec, target.wrangler)(["d1", "migrations", "apply", target.name, ...target.flags], { input: "" }),
+  );
 }
 
 /** Check the pending migrations and, unless only checking, apply them through wrangler; returns them */
 async function applyD1(target: D1Target, options: D1Apply): Promise<string[]> {
-	const { applied, hasIntents, marks, settle, table } = await history(options.read, target, {
-		writes: options.checkOnly !== true,
-	})
-	const listed = d1Files(target.migrationsDir)
-	refuseSwallowing(listed.filter(({ name }) => !applied.has(name)))
-	const files = listed.map(({ name }) => name)
-	/* a local database wrangler keeps nowhere yet is checked as the empty one it is, and made by wrangler's apply */
-	const conn = localMissing(options.read, target)
-		? await absentDatabase(target.name, target.conn.ownedPrefix)
-		: target.conn
-	const pending = await planApply({
-		applied: (name) => applied.has(name),
-		approve: options.approve,
-		conn,
-		dir: target.migrationsDir,
-		exec: target.exec,
-		files,
-		engine: (proving, live) => proveOnD1(live, proving, { bin: target.wrangler, exec: target.exec, table }),
-		kind: "d1",
-		/* the binding's own history table, and database's records of hashes and intents */
-		historyTables: [table, D1_HASH_TABLE, D1_HASH_INTENT_TABLE],
-		print: options.print,
-	})
-	const names = pending.map(({ name }) => name)
-	if (options.checkOnly === true) return names
-	/* what a lost move left is recorded now, and with nothing to apply, that is all */
-	if (names.length === 0) {
-		if (hasIntents) await target.conn.batch(settleStatements(settle, true, marks))
-		return names
-	}
-	/* the intents go first: a lost record then fails before wrangler applies anything */
-	const hashed = pending.map(({ migration, name }) => ({ hash: migration.hash, marked: true, name }))
-	await target.conn.batch([...settleStatements(settle, hasIntents, marks), ...intentStatements(hashed)])
-	const ran = await wranglerApply(target, options, { names, table })
-	/* asked before anything else runs, while the lock that failed the apply is most likely still held */
-	const locked = ran.code !== 0 && target.flags.includes("--local") && (await lockedOut(ran, target.held))
-	const after = await appliedAfter(target, options.read, { names, ok: ran.code === 0, table })
-	const moved = await moveIntents(
-		target.conn,
-		hashed.filter(({ name }) => after.has(name)),
-		marks || settle.length > 0 /* that batch gave database's table hash_v */,
-	)
-	refuseUnlike(ran, { added: [...after].filter((name) => !applied.has(name)), locked, names, table })
-	if (moved !== undefined) {
-		throw new Refused(
-			`wrangler applied ${names.join(", ")}, then recording their hashes failed: ${moved}; database migrate status reads them as recorded, and the next apply or baseline records them`,
-			{ applied: names, pending: [] },
-		)
-	}
-	return names
+  const { applied, hasIntents, marks, settle, table } = await history(options.read, target, {
+    writes: options.checkOnly !== true,
+  });
+
+  const listed = d1Files(target.migrationsDir);
+  refuseSwallowing(listed.filter(({ name }) => !applied.has(name)));
+  const files = listed.map(({ name }) => name);
+
+  // a local database wrangler keeps nowhere yet is checked as the empty one it is, and made by wrangler's apply
+  const conn = localMissing(options.read, target)
+    ? await absentDatabase(target.name, target.conn.ownedPrefix)
+    : target.conn;
+
+  const pending = await planApply({
+    applied: (name) => applied.has(name),
+    approve: options.approve,
+    conn,
+    dir: target.migrationsDir,
+    exec: target.exec,
+    files,
+    engine: (proving, live) => proveOnD1(live, proving, { bin: target.wrangler, exec: target.exec, table }),
+    kind: "d1",
+    // the binding's own history table, and database's records of hashes and intents
+    historyTables: [table, D1_HASH_TABLE, D1_HASH_INTENT_TABLE],
+    print: options.print,
+  });
+
+  const names = pending.map(({ name }) => name);
+
+  if (options.checkOnly === true) return names;
+
+  // what a lost move left is recorded now, and with nothing to apply, that is all
+  if (names.length === 0) {
+    if (hasIntents) await target.conn.batch(settleStatements(settle, true, marks));
+
+    return names;
+  }
+
+  // the intents go first: a lost record then fails before wrangler applies anything
+  const hashed = pending.map(({ migration, name }) => ({ hash: migration.hash, marked: true, name }));
+  await target.conn.batch([...settleStatements(settle, hasIntents, marks), ...intentStatements(hashed)]);
+  const ran = await wranglerApply(target, options, { names, table });
+  // asked before anything else runs, while the lock that failed the apply is most likely still held
+  const locked = ran.code !== 0 && target.flags.includes("--local") && (await lockedOut(ran, target.held));
+  const after = await appliedAfter(target, options.read, { names, ok: ran.code === 0, table });
+
+  const moved = await moveIntents(
+    target.conn,
+    hashed.filter(({ name }) => after.has(name)),
+    marks || settle.length > 0 /* that batch gave database's table hash_v */,
+  );
+
+  refuseUnlike(ran, { added: [...after].filter((name) => !applied.has(name)), locked, names, table });
+
+  if (moved !== undefined) {
+    throw new Refused(
+      `wrangler applied ${names.join(", ")}, then recording their hashes failed: ${moved}; database migrate status reads them as recorded, and the next apply or baseline records them`,
+      { applied: names, pending: [] },
+    );
+  }
+
+  return names;
 }
 
 /**
@@ -219,42 +245,51 @@ async function applyD1(target: D1Target, options: D1Apply): Promise<string[]> {
  * whose hash alone was recorded.
  */
 async function baselineD1(
-	target: D1Target,
-	read: ReadConfig,
-	print: (line: string) => void,
+  target: D1Target,
+  read: ReadConfig,
+  print: (line: string) => void,
 ): Promise<{ hashed: string[]; marked: string[] }> {
-	const table = resolveBinding(read, target)
-	const { applied, drizzle: hashes, marks, recorded } = await readHistory(read, target, table)
-	if (hashes === undefined) {
-		throw new Error(
-			`${target.name} has no ${DRIZZLE_HISTORY_TABLE} to copy from; baseline records only what a history shows was applied`,
-		)
-	}
-	const files = d1Files(target.migrationsDir)
-	/* the files __drizzle_migrations vouches for, each with the hash it holds */
-	const drizzled = files.flatMap(({ name, sql }) => {
-		const held = migrationHashes(sql).find(({ hash }) => hashes.has(hash))
-		return held === undefined ? [] : [{ hash: held.hash, marked: held.marked, name }]
-	})
-	const marked = drizzled.filter(({ name }) => !applied.has(name)).map(({ name }) => name)
-	const hashed = drizzled.filter(({ name }) => applied.has(name) && !recorded.has(name)).map(({ name }) => name)
-	const copied = drizzled.filter(({ name }) => !applied.has(name) || !recorded.has(name))
-	if (copied.length > 0) {
-		/* the hashes first, then wrangler's rows: whichever --command a split batch loses, a name is
-		   never in wrangler's table without its hash, and the rerun copies what is missing. Each is the
-		   hash the record holds, marked only when it is the file's exact one, as the record vouches */
-		await target.conn.batch([
-			...hashStatements(copied, marks),
-			{ sql: historyTable(table) },
-			...marked.map((name) => ({ sql: `INSERT OR IGNORE INTO ${quoteName(table)} (name) VALUES (${literal(name)})` })),
-		])
-	}
-	for (const name of marked) print(`Marked applied: ${name}`)
-	for (const name of hashed) print(`Hash recorded: ${name}`)
-	for (const { name } of files.filter((file) => !applied.has(file.name) && !marked.includes(file.name))) {
-		print(`Not marked: ${name} (${DRIZZLE_HISTORY_TABLE} has no record of it; database migrate apply runs it)`)
-	}
-	return { hashed, marked }
+  const table = resolveBinding(read, target);
+  const { applied, drizzle: hashes, marks, recorded } = await readHistory(read, target, table);
+
+  if (hashes === undefined) {
+    throw new Error(
+      `${target.name} has no ${DRIZZLE_HISTORY_TABLE} to copy from; baseline records only what a history shows was applied`,
+    );
+  }
+
+  const files = d1Files(target.migrationsDir);
+
+  // the files __drizzle_migrations vouches for, each with the hash it holds
+  const drizzled = files.flatMap(({ name, sql }) => {
+    const held = migrationHashes(sql).find(({ hash }) => hashes.has(hash));
+
+    return held === undefined ? [] : [{ hash: held.hash, marked: held.marked, name }];
+  });
+
+  const marked = drizzled.filter(({ name }) => !applied.has(name)).map(({ name }) => name);
+  const hashed = drizzled.filter(({ name }) => applied.has(name) && !recorded.has(name)).map(({ name }) => name);
+  const copied = drizzled.filter(({ name }) => !applied.has(name) || !recorded.has(name));
+
+  if (copied.length > 0) {
+    // the hashes first, then wrangler's rows: whichever --command a split batch loses, a name is
+    // never in wrangler's table without its hash, and the rerun copies what is missing. Each is the
+    // hash the record holds, marked only when it is the file's exact one, as the record vouches
+    await target.conn.batch([
+      ...hashStatements(copied, marks),
+      { sql: historyTable(table) },
+      ...marked.map((name) => ({ sql: `INSERT OR IGNORE INTO ${quoteName(table)} (name) VALUES (${literal(name)})` })),
+    ]);
+  }
+
+  for (const name of marked) print(`Marked applied: ${name}`);
+
+  for (const name of hashed) print(`Hash recorded: ${name}`);
+
+  for (const { name } of files.filter((file) => !applied.has(file.name) && !marked.includes(file.name)))
+    print(`Not marked: ${name} (${DRIZZLE_HISTORY_TABLE} has no record of it; database migrate apply runs it)`);
+
+  return { hashed, marked };
 }
 
 /**
@@ -265,33 +300,40 @@ async function baselineD1(
  * left is recorded with them.
  */
 async function adoptHashesD1(target: D1Target, read: ReadConfig, print: (line: string) => void): Promise<string[]> {
-	const { hasIntents, marks, settle, unhashed } = await history(read, target, { writes: true })
-	const files = d1Files(target.migrationsDir).filter(({ name }) => unhashed.includes(name))
-	const exact = files.map(({ name, sql }) => ({ hash: generateMigrationHash(sql), marked: true, name }))
-	const hashed = [...settle, ...exact]
-	if (hashed.length > 0 || hasIntents) await target.conn.batch(settleStatements(hashed, hasIntents, marks))
-	for (const { name } of files) print(`Hash recorded: ${name}`)
-	return unhashed
+  const { hasIntents, marks, settle, unhashed } = await history(read, target, { writes: true });
+  const files = d1Files(target.migrationsDir).filter(({ name }) => unhashed.includes(name));
+  const exact = files.map(({ name, sql }) => ({ hash: generateMigrationHash(sql), marked: true, name }));
+  const hashed = [...settle, ...exact];
+
+  if (hashed.length > 0 || hasIntents) await target.conn.batch(settleStatements(hashed, hasIntents, marks));
+
+  for (const { name } of files) print(`Hash recorded: ${name}`);
+
+  return unhashed;
 }
 
 /** Print what wrangler's table records as applied, and what is pending, in wrangler's order; returns both */
 async function statusD1(
-	target: D1Target,
-	read: ReadConfig,
-	print: (line: string) => void,
+  target: D1Target,
+  read: ReadConfig,
+  print: (line: string) => void,
 ): Promise<{ applied: string[]; pending: string[] }> {
-	const { applied: recorded, orphans, unhashed } = await history(read, target, { status: true, writes: false })
-	if (orphans !== "") print(orphans)
-	const files = d1Files(target.migrationsDir).map(({ name }) => name)
-	const applied = files.filter((name) => recorded.has(name))
-	const pending = files.filter((name) => !recorded.has(name))
-	print(`Applied: ${applied.join(", ") || "none"}`)
-	print(`Pending: ${pending.join(", ") || "none"}`)
-	if (unhashed.length > 0)
-		print(
-			`No hash recorded for ${unhashed.join(", ")}, applied before database recorded them: database cannot tell whether ${unhashed.length === 1 ? "it was" : "they were"} edited since`,
-		)
-	return { applied, pending }
+  const { applied: recorded, orphans, unhashed } = await history(read, target, { status: true, writes: false });
+
+  if (orphans !== "") print(orphans);
+  const files = d1Files(target.migrationsDir).map(({ name }) => name);
+  const applied = files.filter((name) => recorded.has(name));
+  const pending = files.filter((name) => !recorded.has(name));
+  print(`Applied: ${applied.join(", ") || "none"}`);
+  print(`Pending: ${pending.join(", ") || "none"}`);
+
+  if (unhashed.length > 0) {
+    print(
+      `No hash recorded for ${unhashed.join(", ")}, applied before database recorded them: database cannot tell whether ${unhashed.length === 1 ? "it was" : "they were"} edited since`,
+    );
+  }
+
+  return { applied, pending };
 }
 
-export { adoptHashesD1, applyD1, baselineD1, statusD1 }
+export { adoptHashesD1, applyD1, baselineD1, statusD1 };

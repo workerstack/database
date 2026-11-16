@@ -1,25 +1,26 @@
+import { EMPTY_OBJ } from "../empty.ts";
+import { FILTER_GRAMMAR, type DatabaseMetaStamp, type QueryMeta, databaseMeta } from "../meta.ts";
+import { CURSOR_TIEBREAK_COLUMN } from "./cursor.ts";
+import { OPERATORS_BY_TYPE } from "./filter.ts";
 /**
  * The query facts a list query schema publishes on `x-database`. Every value comes from the config
  * that parses the request, so the published facts cannot drift from behavior (docs §6).
  */
-import { refuseUnspelledTiebreak } from "./list-names.ts"
-import { FILTER_GRAMMAR, type DatabaseMetaStamp, type QueryMeta, databaseMeta } from "../meta.ts"
-import { EMPTY_OBJ } from "../empty.ts"
-import { CURSOR_TIEBREAK_COLUMN } from "./cursor.ts"
-import { OPERATORS_BY_TYPE } from "./filter.ts"
-import { MAX_QUERY_BYTES, PAGINATION_DEFAULTS, REQUEST_BYTES } from "./schema-limits.ts"
-import type { FieldsConfig, ListQueryConfig, ListQueryLimits } from "./schema-types.ts"
-import type { FieldType } from "./types.ts"
+import { refuseUnspelledTiebreak } from "./list-names.ts";
+import { MAX_QUERY_BYTES, PAGINATION_DEFAULTS, REQUEST_BYTES } from "./schema-limits.ts";
+import type { FieldsConfig, ListQueryConfig, ListQueryLimits } from "./schema-types.ts";
+import type { FieldType } from "./types.ts";
 
-type PublishedConfig = Pick<ListQueryConfig, "fields" | "filter" | "pagination" | "search" | "sort" | "tiebreak">
+type PublishedConfig = Pick<ListQueryConfig, "fields" | "filter" | "pagination" | "search" | "sort" | "tiebreak">;
 
 /**
  * The order applied when a request names none. Mirrors the transform:
  * first declared sort field, descending.
  */
 function buildDefaultOrder(sortConfig: readonly string[]): string {
-	const first = sortConfig[0]
-	return first ? `${first}.desc` : ""
+  const first = sortConfig[0];
+
+  return first ? `${first}.desc` : "";
 }
 
 /**
@@ -31,49 +32,51 @@ function buildDefaultOrder(sortConfig: readonly string[]): string {
  * the 400 as a finding.
  */
 function selectableFrom(fieldsConfig: FieldsConfig | undefined): string[] {
-	return fieldsConfig ? [...fieldsConfig.scalars] : []
+  return fieldsConfig ? [...fieldsConfig.scalars] : [];
 }
 
 /** The tiebreak the list publishes: the config's, or `id` without one; an empty one names no column, and one no order can spell is refused */
 function tiebreakOf(tiebreak: string | undefined): string {
-	if (tiebreak === undefined) return CURSOR_TIEBREAK_COLUMN
-	if (tiebreak !== "") return refuseUnspelledTiebreak(tiebreak)
-	throw new TypeError(`createListQuerySchema: tiebreak must name the column the list breaks ties on; got ""`)
+  if (tiebreak === undefined) return CURSOR_TIEBREAK_COLUMN;
+
+  if (tiebreak !== "") return refuseUnspelledTiebreak(tiebreak);
+  throw new TypeError(`createListQuerySchema: tiebreak must name the column the list breaks ties on; got ""`);
 }
 
 /** The `x-database` stamp of a list query schema built from `config` under `limits` */
 function listQueryStamp(config: PublishedConfig, limits: ListQueryLimits): DatabaseMetaStamp<QueryMeta> {
-	const filterConfig: Record<string, FieldType> = config.filter ?? EMPTY_OBJ
-	return databaseMeta({
-		defaultOrder: buildDefaultOrder(config.sort),
-		filterFields: Object.entries(filterConfig).map(([field, type]) => ({
-			field,
-			ops: [...OPERATORS_BY_TYPE[type]],
-			type,
-		})),
-		filterable: Object.keys(filterConfig),
-		grammar: FILTER_GRAMMAR,
-		kind: "query",
-		maxFilterConditions: limits.maxConditions,
-		maxFilterDepth: limits.maxDepth,
-		maxFilterValues: limits.maxValues,
-		maxInValues: limits.maxInValues,
-		maxPatternBytes: limits.maxPatternBytes,
-		maxLimit: config.pagination?.maxLimit ?? PAGINATION_DEFAULTS.maxLimit,
-		maxPage: config.pagination?.maxPage ?? PAGINATION_DEFAULTS.maxPage,
-		maxFilterBytes: REQUEST_BYTES.filter,
-		maxQueryBytes: MAX_QUERY_BYTES,
-		maxSearchBytes: REQUEST_BYTES.q,
-		maxSearchTerms: limits.maxSearchTerms,
-		maxSortKeys: limits.maxSortKeys,
-		nulls: ["first", "last"],
-		/* Declared, and enforced at buildListQuery: a `q` with no resolver
-		   throws there instead of being ignored. See docs §6.1. */
-		searchable: config.search ? [...config.search] : [],
-		selectable: selectableFrom(config.fields),
-		sortable: [...config.sort],
-		stableTiebreak: tiebreakOf(config.tiebreak),
-	})
+  const filterConfig: Record<string, FieldType> = config.filter ?? EMPTY_OBJ;
+
+  return databaseMeta({
+    defaultOrder: buildDefaultOrder(config.sort),
+    filterFields: Object.entries(filterConfig).map(([field, type]) => ({
+      field,
+      ops: [...OPERATORS_BY_TYPE[type]],
+      type,
+    })),
+    filterable: Object.keys(filterConfig),
+    grammar: FILTER_GRAMMAR,
+    kind: "query",
+    maxFilterConditions: limits.maxConditions,
+    maxFilterDepth: limits.maxDepth,
+    maxFilterValues: limits.maxValues,
+    maxInValues: limits.maxInValues,
+    maxPatternBytes: limits.maxPatternBytes,
+    maxLimit: config.pagination?.maxLimit ?? PAGINATION_DEFAULTS.maxLimit,
+    maxPage: config.pagination?.maxPage ?? PAGINATION_DEFAULTS.maxPage,
+    maxFilterBytes: REQUEST_BYTES.filter,
+    maxQueryBytes: MAX_QUERY_BYTES,
+    maxSearchBytes: REQUEST_BYTES.q,
+    maxSearchTerms: limits.maxSearchTerms,
+    maxSortKeys: limits.maxSortKeys,
+    nulls: ["first", "last"],
+    // Declared, and enforced at buildListQuery: a `q` with no resolver
+    // throws there instead of being ignored. See docs §6.1.
+    searchable: config.search ? [...config.search] : [],
+    selectable: selectableFrom(config.fields),
+    sortable: [...config.sort],
+    stableTiebreak: tiebreakOf(config.tiebreak),
+  });
 }
 
-export { buildDefaultOrder, listQueryStamp, selectableFrom, tiebreakOf }
+export { buildDefaultOrder, listQueryStamp, selectableFrom, tiebreakOf };

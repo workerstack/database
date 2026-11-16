@@ -3,14 +3,16 @@
  * virtual table and its triggers beside Atlas's diff, `migrate apply` puts both on a libsql file,
  * and the generated index answers a prefix search for rows inserted after it.
  */
-import { join } from "node:path"
-import { createClient } from "@libsql/client"
-import { sql } from "drizzle-orm"
-import { drizzle } from "drizzle-orm/libsql"
-import { sqliteTable, text } from "drizzle-orm/sqlite-core"
-import { beforeAll, describe, expect, it } from "vitest"
-import { buildFtsWhere } from "../../src/query/sqlite/search.ts"
-import { app, BLOG, ok, type App } from "./support/project.ts"
+import { join } from "node:path";
+
+import { createClient } from "@libsql/client";
+import { sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/libsql";
+import { sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { beforeAll, describe, expect, it } from "vitest";
+
+import { buildFtsWhere } from "../../src/query/sqlite/search.ts";
+import { app, BLOG, ok, type App } from "./support/project.ts";
 
 const CONFIG = `import { defineCodegenConfig } from "@workerstack/database/codegen"
 
@@ -25,7 +27,7 @@ export default defineCodegenConfig({
 		},
 	},
 })
-`
+`;
 
 const MIGRATE_CONFIG = `import { defineConfig } from "@workerstack/database/migrate"
 
@@ -37,29 +39,30 @@ export default defineConfig({
 		},
 	},
 })
-`
+`;
 
-let search: App
+let search: App;
 
 beforeAll(() => {
-	search = app({ ...BLOG, "database.config.ts": CONFIG, "database.migrate.config.ts": MIGRATE_CONFIG })
-	ok(search.database("codegen", "core"), "codegen")
-	ok(search.database("migrate", "init"), "migrate init")
-	ok(search.database("migrate", "diff", "core", "init"), "migrate diff")
-	ok(search.database("migrate", "apply", "core", "-e", "local"), "migrate apply")
-}, 180_000)
+  search = app({ ...BLOG, "database.config.ts": CONFIG, "database.migrate.config.ts": MIGRATE_CONFIG });
+  ok(search.database("codegen", "core"), "codegen");
+  ok(search.database("migrate", "init"), "migrate init");
+  ok(search.database("migrate", "diff", "core", "init"), "migrate diff");
+  ok(search.database("migrate", "apply", "core", "-e", "local"), "migrate apply");
+}, 180_000);
 
 describe("database with FTS5, from config to a search", () => {
-	it("indexes rows through the migrated triggers and finds them by prefix", async () => {
-		const client = createClient({ url: `file:${join(search.dir, "local.db")}` })
-		const db = drizzle({ client })
-		try {
-			await client.execute("INSERT INTO post (id, title) VALUES ('pst_1', 'Postgres tuning'), ('pst_2', 'Gardening')")
-			const where = buildFtsWhere({ ftsTable: "post_fts", table: sqliteTable("post", { id: text("id") }) }, "postg")
-			const rows = await db.all<{ id: string }>(sql`SELECT id FROM post WHERE ${where}`)
-			expect(rows).toEqual([{ id: "pst_1" }])
-		} finally {
-			client.close()
-		}
-	}, 120_000)
-})
+  it("indexes rows through the migrated triggers and finds them by prefix", async () => {
+    const client = createClient({ url: `file:${join(search.dir, "local.db")}` });
+    const db = drizzle({ client });
+
+    try {
+      await client.execute("INSERT INTO post (id, title) VALUES ('pst_1', 'Postgres tuning'), ('pst_2', 'Gardening')");
+      const where = buildFtsWhere({ ftsTable: "post_fts", table: sqliteTable("post", { id: text("id") }) }, "postg");
+      const rows = await db.all<{ id: string }>(sql`SELECT id FROM post WHERE ${where}`);
+      expect(rows).toEqual([{ id: "pst_1" }]);
+    } finally {
+      client.close();
+    }
+  }, 120_000);
+});

@@ -1,87 +1,100 @@
-import { readdirSync, readFileSync } from "node:fs"
-import { join } from "node:path/posix"
-import { parseSync } from "oxc-parser"
-import { moduleOf, scopeOf } from "./generic-scope.js"
-import { srcPath } from "./scope.js"
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path/posix";
 
-/* database reads an optional key set to undefined as the key left out. A declaration that refuses
- * undefined says otherwise, so a consumer under exactOptionalPropertyTypes forwarding a maybe-unset
- * value got TS2379 for a value database takes (KT8 of r22b). One rule: every optional property says it.
- * What database hands back keeps a key absent or set, never undefined, so a consumer passes it on as it
- * is: that is Partial<…>, in a return type or in an alias only return types reach (AD2 of the area D
- * review), a callback's parameter being one database hands out. A Partial<…> a parameter or a config
- * property reaches is an input bag, and refuses undefined the same way: it is declared
- * `{ [K in …]?: T | undefined }`. A parameter typed by what database itself built and hands back looks
- * the same as one typed by a consumer's input database returns parsed (loadDatabaseConfig's CodegenConfig),
- * so each such output database takes back is named in TAKEN_BACK with why it stays Partial<…>. */
+import { parseSync } from "oxc-parser";
+
+import { moduleOf, scopeOf } from "./generic-scope.js";
+import { srcPath } from "./scope.js";
+
+// database reads an optional key set to undefined as the key left out. A declaration that refuses
+// undefined says otherwise, so a consumer under exactOptionalPropertyTypes forwarding a maybe-unset
+// value got TS2379 for a value database takes (KT8 of r22b). One rule: every optional property says it.
+// What database hands back keeps a key absent or set, never undefined, so a consumer passes it on as it
+// is: that is Partial<…>, in a return type or in an alias only return types reach (AD2 of the area D
+// review), a callback's parameter being one database hands out. A Partial<…> a parameter or a config
+// property reaches is an input bag, and refuses undefined the same way: it is declared
+// `{ [K in …]?: T | undefined }`. A parameter typed by what database itself built and hands back looks
+// the same as one typed by a consumer's input database returns parsed (loadDatabaseConfig's CodegenConfig),
+// so each such output database takes back is named in TAKEN_BACK with why it stays Partial<…>.
 const MESSAGE =
-	"an optional property takes undefined, which database reads as the key left out: declare it `name?: T | undefined`, a method as `name?: ((…) => R) | undefined`"
+  "an optional property takes undefined, which database reads as the key left out: declare it `name?: T | undefined`, a method as `name?: ((…) => R) | undefined`";
+
 const MAPPED =
-	"an optional mapped key takes undefined, which database reads as the key left out: declare it `{ [K in …]?: T | undefined }`"
+  "an optional mapped key takes undefined, which database reads as the key left out: declare it `{ [K in …]?: T | undefined }`";
+
 const TUPLE =
-	"an optional tuple element takes undefined, which database reads as the element left out: declare it `[name?: T | undefined]`, an unnamed one `[(T | undefined)?]`"
+  "an optional tuple element takes undefined, which database reads as the element left out: declare it `[name?: T | undefined]`, an unnamed one `[(T | undefined)?]`";
+
 const PARTIAL =
-	"a Partial<…> that database reads refuses undefined, which database reads as the key left out: declare the input `{ [K in …]?: T | undefined }`; Partial<…> is for what database hands back, in a return type or an alias only return types reach"
+  "a Partial<…> that database reads refuses undefined, which database reads as the key left out: declare the input `{ [K in …]?: T | undefined }`; Partial<…> is for what database hands back, in a return type or an alias only return types reach";
 
 /** The outputs database takes back as it built them, each kept Partial<…> for the reason given */
 export const TAKEN_BACK = new Map([
-	[
-		"ListExtras",
-		"buildListQuery's extras, which applyListQuery takes back in the built list; a consumer spreads them into drizzle's select, whose fields refuse undefined",
-	],
-])
+  [
+    "ListExtras",
+    "buildListQuery's extras, which applyListQuery takes back in the built list; a consumer spreads them into drizzle's select, whose fields refuse undefined",
+  ],
+]);
 
-/* the types that already admit undefined: undefined itself, unknown, any, and a union holding undefined, in parentheses or not */
-const ADMITS = new Set(["TSAnyKeyword", "TSUndefinedKeyword", "TSUnknownKeyword"])
+// the types that already admit undefined: undefined itself, unknown, any, and a union holding undefined, in parentheses or not
+const ADMITS = new Set(["TSAnyKeyword", "TSUndefinedKeyword", "TSUnknownKeyword"]);
+
 const admitsUndefined = (type) =>
-	ADMITS.has(type.type) ||
-	(type.type === "TSParenthesizedType" && admitsUndefined(type.typeAnnotation)) ||
-	(type.type === "TSUnionType" && type.types.some((member) => admitsUndefined(member)))
+  ADMITS.has(type.type) ||
+  (type.type === "TSParenthesizedType" && admitsUndefined(type.typeAnnotation)) ||
+  (type.type === "TSUnionType" && type.types.some((member) => admitsUndefined(member)));
 
-/* a private or #-named class field or method is database's own, which no caller sets (D2-6 of the area D round-two review, D4-3 of round four) */
-const ownField = (node) => node.accessibility === "private" || node.key.type === "PrivateIdentifier"
+// a private or #-named class field or method is database's own, which no caller sets (D2-6 of the area D round-two review, D4-3 of round four)
+const ownField = (node) => node.accessibility === "private" || node.key.type === "PrivateIdentifier";
 
-/* a class field a caller or a subclass sets, an abstract one included (D3-3 of the area D round-three review) */
-const FIELDS = new Set(["PropertyDefinition", "TSAbstractPropertyDefinition"])
-const callerField = (node) => FIELDS.has(node.type) && !ownField(node)
+// a class field a caller or a subclass sets, an abstract one included (D3-3 of the area D round-three review)
+const FIELDS = new Set(["PropertyDefinition", "TSAbstractPropertyDefinition"]);
+const callerField = (node) => FIELDS.has(node.type) && !ownField(node);
 
-/* an optional method's type is a function, which never admits undefined: a class's too (D4-3 of the area D round-four review) */
-const METHODS = new Set(["MethodDefinition", "TSAbstractMethodDefinition", "TSMethodSignature"])
-/* the class members a private or # name makes database's own */
-const MEMBERS = new Set(["MethodDefinition", "PropertyDefinition"])
+// an optional method's type is a function, which never admits undefined: a class's too (D4-3 of the area D round-four review)
+const METHODS = new Set(["MethodDefinition", "TSAbstractMethodDefinition", "TSMethodSignature"]);
 
-/* what a reference names: a type reference's type, or the type an interface extends or a class
- * implements, a namespace's member as `A.Name`, and an import type's as `import("./file.ts").Name` */
-const HERITAGE = new Set(["TSClassImplements", "TSInterfaceHeritage"])
+// the class members a private or # name makes database's own
+const MEMBERS = new Set(["MethodDefinition", "PropertyDefinition"]);
+
+// what a reference names: a type reference's type, or the type an interface extends or a class
+// implements, a namespace's member as `A.Name`, and an import type's as `import("./file.ts").Name`
+const HERITAGE = new Set(["TSClassImplements", "TSInterfaceHeritage"]);
+
 const nameOf = (name) =>
-	name?.type === "Identifier"
-		? name.name
-		: name?.type === "TSQualifiedName" && name.left.type === "Identifier"
-			? `${name.left.name}.${name.right.name}`
-			: null
+  name?.type === "Identifier"
+    ? name.name
+    : name?.type === "TSQualifiedName" && name.left.type === "Identifier"
+      ? `${name.left.name}.${name.right.name}`
+      : null;
+
 const importedBy = (node) => {
-	const name = nameOf(node.qualifier)
-	return name === null ? null : `import(${JSON.stringify(node.source.value)}).${name}`
-}
+  const name = nameOf(node.qualifier);
+
+  return name === null ? null : `import(${JSON.stringify(node.source.value)}).${name}`;
+};
+
 const namedBy = (node) =>
-	node.type === "TSImportType"
-		? importedBy(node)
-		: nameOf(node.type === "TSTypeReference" ? node.typeName : HERITAGE.has(node.type) ? node.expression : null)
+  node.type === "TSImportType"
+    ? importedBy(node)
+    : nameOf(node.type === "TSTypeReference" ? node.typeName : HERITAGE.has(node.type) ? node.expression : null);
 
 /** Calls `found` with every node under `node` and the path to it, `node` itself first */
 function walk(node, path, found) {
-	found(node, path)
-	for (const [key, value] of Object.entries(node)) {
-		if (key === "parent") continue
-		for (const child of Array.isArray(value) ? value : [value]) {
-			if (typeof child === "object" && child !== null && typeof child.type === "string")
-				walk(child, [...path, { key, node: child }], found)
-		}
-	}
+  found(node, path);
+
+  for (const [key, value] of Object.entries(node)) {
+    if (key === "parent") continue;
+
+    for (const child of Array.isArray(value) ? value : [value]) {
+      if (typeof child === "object" && child !== null && typeof child.type === "string")
+        walk(child, [...path, { key, node: child }], found);
+    }
+  }
 }
 
-/* the declarations a type in them flows as, by name */
-const ALIASES = new Set(["TSInterfaceDeclaration", "TSTypeAliasDeclaration"])
+// the declarations a type in them flows as, by name
+const ALIASES = new Set(["TSInterfaceDeclaration", "TSTypeAliasDeclaration"]);
 
 /**
  * How type argument `index` of `owner` flows inside the generic alias or interface of src it
@@ -91,20 +104,23 @@ const ALIASES = new Set(["TSInterfaceDeclaration", "TSTypeAliasDeclaration"])
  * declares one (`scopes`), and holds in `seen` those already followed, so a cycle adds nothing.
  */
 function argumentFlow(owner, index, scope) {
-	const { lookup, scopes, seen } = scope
-	const name = namedBy(owner)
-	const found = name === null ? undefined : lookup(name)
-	const alias = found?.declared
-	const parameter = alias?.typeParameters.params[index]
-	if (parameter === undefined || seen.has(alias)) return false
-	const flips = new Set()
-	walk(alias, [{ key: null, node: alias }], (node, path) => {
-		if (namedBy(node) !== parameter.name.name || node.type !== "TSTypeReference") return
-		const place = placeOf(path, { lookup: scopes(found.file), scopes, seen: new Set([...seen, alias]) })
-		if (place === "input") flips.add(true).add(false)
-		else flips.add(place.flip)
-	})
-	return flips.size === 2 ? "both" : flips.has(true)
+  const { lookup, scopes, seen } = scope;
+  const name = namedBy(owner);
+  const found = name === null ? undefined : lookup(name);
+  const alias = found?.declared;
+  const parameter = alias?.typeParameters.params[index];
+
+  if (parameter === undefined || seen.has(alias)) return false;
+  const flips = new Set();
+  walk(alias, [{ key: null, node: alias }], (node, path) => {
+    if (namedBy(node) !== parameter.name.name || node.type !== "TSTypeReference") return;
+    const place = placeOf(path, { lookup: scopes(found.file), scopes, seen: new Set([...seen, alias]) });
+
+    if (place === "input") flips.add(true).add(false);
+    else flips.add(place.flip);
+  });
+
+  return flips.size === 2 ? "both" : flips.has(true);
 }
 
 /**
@@ -117,61 +133,80 @@ function argumentFlow(owner, index, scope) {
  * type argument starts from (`at === 1`; D5-3 of the area D round-five review).
  */
 function placeOf(path, scope) {
-	let flip = false
-	for (let at = path.length - 1; at > 0; at--) {
-		const { key, node } = path[at]
-		const parent = path[at - 1].node
-		if (key === "typeParameters" || callerField(parent)) return "input"
-		/* a type argument list hangs its types by `params` too; only a function's parameters flip */
-		if (key === "params" && parent.type === "TSTypeParameterInstantiation") {
-			const flow = argumentFlow(path[at - 2].node, parent.params.indexOf(node), scope)
-			if (flow === "both") return "input"
-			if (flow) flip = !flip
-		} else if (key === "params") flip = !flip
-		if (ALIASES.has(parent.type) || (at === 1 && parent.type === "ClassDeclaration"))
-			return { alias: parent.id?.name, flip }
-	}
-	return flip ? "input" : "output"
+  let flip = false;
+
+  for (let at = path.length - 1; at > 0; at--) {
+    const { key, node } = path[at];
+    const parent = path[at - 1].node;
+
+    if (key === "typeParameters" || callerField(parent)) return "input";
+
+    // a type argument list hangs its types by `params` too; only a function's parameters flip
+    if (key === "params" && parent.type === "TSTypeParameterInstantiation") {
+      const flow = argumentFlow(path[at - 2].node, parent.params.indexOf(node), scope);
+
+      if (flow === "both") return "input";
+
+      if (flow) flip = !flip;
+    } else if (key === "params") {
+      flip = !flip;
+    }
+
+    if (ALIASES.has(parent.type) || (at === 1 && parent.type === "ClassDeclaration"))
+      return { alias: parent.id?.name, flip };
+  }
+
+  return flip ? "input" : "output";
 }
 
 /** Every named type reference in `program`, by name, with where each sits; `lookup` and `scopes` find the generics it names */
 function referencesIn(program, lookup, scopes) {
-	const found = []
-	walk(program, [{ key: null, node: program }], (node, path) => {
-		const name = namedBy(node)
-		if (name !== null) found.push({ name, node, place: placeOf(path, { lookup, scopes, seen: new Set() }) })
-	})
-	return found
+  const found = [];
+  walk(program, [{ key: null, node: program }], (node, path) => {
+    const name = namedBy(node);
+
+    if (name !== null) found.push({ name, node, place: placeOf(path, { lookup, scopes, seen: new Set() }) });
+  });
+
+  return found;
 }
 
-/* every source file under a src root, as a module, each file's lookup, and each file's references, read from disk once per lint run */
-const roots = new Map()
+// every source file under a src root, as a module, each file's lookup, and each file's references, read from disk once per lint run
+const roots = new Map();
+
 function diskReferences(root) {
-	const cached = roots.get(root)
-	if (cached) return cached
-	let files = []
-	try {
-		files = readdirSync(root, { encoding: "utf8", recursive: true })
-	} catch {
-		/* a root with no source on disk, as the in-process rule harness's fixtures have, holds none */
-		files = []
-	}
-	const programs = files
-		.filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))
-		.map((file) => join(root, file.replaceAll("\\", "/")))
-		.map((path) => [path, parseSync(path, readFileSync(path, "utf8")).program])
-	const modules = new Map(programs.map(([path, program]) => [path, moduleOf(program, path)]))
-	const lookups = new Map([...modules].map(([path, module]) => [path, scopeOf(module, modules)]))
-	const scopes = (file) => lookups.get(file)
-	const byFile = new Map(
-		programs.map(([path, program]) => [
-			path,
-			referencesIn(program, scopes(path), scopes).map(({ name, place }) => ({ name, place })),
-		]),
-	)
-	const disk = { byFile, modules, scopes }
-	roots.set(root, disk)
-	return disk
+  const cached = roots.get(root);
+
+  if (cached) return cached;
+  let files = [];
+
+  try {
+    files = readdirSync(root, { encoding: "utf8", recursive: true });
+  } catch {
+    // a root with no source on disk, as the in-process rule harness's fixtures have, holds none
+    files = [];
+  }
+
+  const programs = files
+    .filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))
+    .map((file) => join(root, file.replaceAll("\\", "/")))
+    .map((path) => [path, parseSync(path, readFileSync(path, "utf8")).program]);
+
+  const modules = new Map(programs.map(([path, program]) => [path, moduleOf(program, path)]));
+  const lookups = new Map([...modules].map(([path, module]) => [path, scopeOf(module, modules)]));
+  const scopes = (file) => lookups.get(file);
+
+  const byFile = new Map(
+    programs.map(([path, program]) => [
+      path,
+      referencesIn(program, scopes(path), scopes).map(({ name, place }) => ({ name, place })),
+    ]),
+  );
+
+  const disk = { byFile, modules, scopes };
+  roots.set(root, disk);
+
+  return disk;
 }
 
 /**
@@ -179,76 +214,94 @@ function diskReferences(root) {
  * fills, so an input. `path` holds the aliases already followed, so a cycle adds nothing.
  */
 function flowsOf(name, places, path = new Set()) {
-	const where = places.get(name)
-	if (where === undefined) return new Set(["input"])
-	if (path.has(name)) return new Set()
-	const flows = new Set()
-	for (const place of where) {
-		if (typeof place === "string") flows.add(place)
-		else for (const flow of flowsOf(place.alias, places, new Set([...path, name]))) flows.add(flipped(flow, place.flip))
-	}
-	return flows
+  const where = places.get(name);
+
+  if (where === undefined) return new Set(["input"]);
+
+  if (path.has(name)) return new Set();
+  const flows = new Set();
+
+  for (const place of where) {
+    if (typeof place === "string") flows.add(place);
+    else
+      for (const flow of flowsOf(place.alias, places, new Set([...path, name]))) flows.add(flipped(flow, place.flip));
+  }
+
+  return flows;
 }
 
-const flipped = (flow, flip) => (flip === (flow === "output") ? "input" : "output")
+const flipped = (flow, flip) => (flip === (flow === "output") ? "input" : "output");
 
 export const rule = {
-	create(context) {
-		const file = srcPath(context.filename)
-		if (file === null) return {}
-		const filename = String(context.filename).replaceAll("\\", "/")
-		const root = filename.slice(0, filename.length - file.length)
-		/** Reports an optional member whose declared type refuses undefined; one with no type is any */
-		const check = (node) => {
-			if (node.optional !== true || (MEMBERS.has(node.type) && ownField(node))) return
-			if (METHODS.has(node.type) || (node.typeAnnotation && !admitsUndefined(node.typeAnnotation.typeAnnotation)))
-				context.report({ message: MESSAGE, node })
-		}
-		/** Reports an optional mapped key whose type refuses undefined; `-?` makes it required */
-		const mapped = (node) => {
-			const optional = node.optional === true || node.optional === "+"
-			if (optional && node.typeAnnotation && !admitsUndefined(node.typeAnnotation))
-				context.report({ message: MAPPED, node })
-		}
-		/** Reports an optional tuple element whose type refuses undefined, `[name?: T]` or `[T?]` */
-		const tuple = (node) => {
-			const type =
-				node.type === "TSOptionalType" ? node.typeAnnotation : node.optional === true ? node.elementType : null
-			if (type !== null && !admitsUndefined(type)) context.report({ message: TUPLE, node })
-		}
-		/** Reports a Partial<…> an input reaches: this file's references read afresh, every other file's from disk */
-		const partials = (program) => {
-			const disk = diskReferences(root)
-			/* this file's own generics as it reads now, every other file's as on disk */
-			const lookup = scopeOf(moduleOf(program, filename), disk.modules)
-			const here = referencesIn(program, lookup, (other) => (other === filename ? lookup : disk.scopes(other)))
-			const places = new Map()
-			const add = (name, place) => places.set(name, [...(places.get(name) ?? []), place])
-			for (const [path, references] of disk.byFile) {
-				if (path !== filename) for (const { name, place } of references) add(name, place)
-			}
-			for (const { name, place } of here) add(name, place)
-			for (const { name, node, place } of here) {
-				if (name !== "Partial" || place === "output") continue
-				if (place !== "input" && TAKEN_BACK.has(place.alias)) continue
-				if (
-					place === "input" ||
-					[...flowsOf(place.alias, places)].some((flow) => flipped(flow, place.flip) === "input")
-				)
-					context.report({ message: PARTIAL, node })
-			}
-		}
-		return {
-			Program: partials,
-			MethodDefinition: check,
-			PropertyDefinition: check,
-			TSAbstractMethodDefinition: check,
-			TSAbstractPropertyDefinition: check,
-			TSMappedType: mapped,
-			TSMethodSignature: check,
-			TSNamedTupleMember: tuple,
-			TSOptionalType: tuple,
-			TSPropertySignature: check,
-		}
-	},
-}
+  create(context) {
+    const file = srcPath(context.filename);
+
+    if (file === null) return {};
+    const filename = String(context.filename).replaceAll("\\", "/");
+    const root = filename.slice(0, filename.length - file.length);
+
+    /** Reports an optional member whose declared type refuses undefined; one with no type is any */
+    const check = (node) => {
+      if (node.optional !== true || (MEMBERS.has(node.type) && ownField(node))) return;
+
+      if (METHODS.has(node.type) || (node.typeAnnotation && !admitsUndefined(node.typeAnnotation.typeAnnotation)))
+        context.report({ message: MESSAGE, node });
+    };
+
+    /** Reports an optional mapped key whose type refuses undefined; `-?` makes it required */
+    const mapped = (node) => {
+      const optional = node.optional === true || node.optional === "+";
+
+      if (optional && node.typeAnnotation && !admitsUndefined(node.typeAnnotation))
+        context.report({ message: MAPPED, node });
+    };
+
+    /** Reports an optional tuple element whose type refuses undefined, `[name?: T]` or `[T?]` */
+    const tuple = (node) => {
+      const type =
+        node.type === "TSOptionalType" ? node.typeAnnotation : node.optional === true ? node.elementType : null;
+
+      if (type !== null && !admitsUndefined(type)) context.report({ message: TUPLE, node });
+    };
+
+    /** Reports a Partial<…> an input reaches: this file's references read afresh, every other file's from disk */
+    const partials = (program) => {
+      const disk = diskReferences(root);
+      // this file's own generics as it reads now, every other file's as on disk
+      const lookup = scopeOf(moduleOf(program, filename), disk.modules);
+      const here = referencesIn(program, lookup, (other) => (other === filename ? lookup : disk.scopes(other)));
+      const places = new Map();
+      const add = (name, place) => places.set(name, [...(places.get(name) ?? []), place]);
+
+      for (const [path, references] of disk.byFile)
+        if (path !== filename) for (const { name, place } of references) add(name, place);
+
+      for (const { name, place } of here) add(name, place);
+
+      for (const { name, node, place } of here) {
+        if (name !== "Partial" || place === "output") continue;
+
+        if (place !== "input" && TAKEN_BACK.has(place.alias)) continue;
+
+        if (
+          place === "input" ||
+          [...flowsOf(place.alias, places)].some((flow) => flipped(flow, place.flip) === "input")
+        )
+          context.report({ message: PARTIAL, node });
+      }
+    };
+
+    return {
+      MethodDefinition: check,
+      Program: partials,
+      PropertyDefinition: check,
+      TSAbstractMethodDefinition: check,
+      TSAbstractPropertyDefinition: check,
+      TSMappedType: mapped,
+      TSMethodSignature: check,
+      TSNamedTupleMember: tuple,
+      TSOptionalType: tuple,
+      TSPropertySignature: check,
+    };
+  },
+};

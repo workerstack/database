@@ -4,239 +4,263 @@
  * Objects a generated file must import, a c.json schema or a text or number column's schema, are
  * located by identity among the exports of the project modules the tables module loads.
  */
-import { Column, getTableColumns, is, type SQL, type Table } from "drizzle-orm"
-import { ExtraConfigColumn, getTableConfig as pgConfig, IndexedColumn, PgDialect, PgTable } from "drizzle-orm/pg-core"
-import { getTableConfig as sqliteConfig, SQLiteDialect, SQLiteTable } from "drizzle-orm/sqlite-core"
-import { byCodeUnit } from "../utils/order.ts"
-import { columnMeta, type ColumnMeta } from "../../meta/column.ts"
-import { dimensionsOf, filledByDefault, type ReadColumn, unnamedUnique } from "./read-column.ts"
-import { columnSchemaOf, constraintsOf, refuseJsonDocument, skipped, statesOf, STRING_LIST } from "./read-database.ts"
-import type { ElementNulls } from "./element-types.ts"
-import type {
-	ModuleExport,
-	Snapshot,
-	SnapshotColumn,
-	SnapshotDatabase,
-	SnapshotIndex,
-	SnapshotTable,
-} from "./snapshot-types.ts"
+import { Column, getTableColumns, is, type SQL, type Table } from "drizzle-orm";
+import { ExtraConfigColumn, getTableConfig as pgConfig, IndexedColumn, PgDialect, PgTable } from "drizzle-orm/pg-core";
+import { getTableConfig as sqliteConfig, SQLiteDialect, SQLiteTable } from "drizzle-orm/sqlite-core";
 
-type Namespace = Record<string, unknown>
-type Loaded = { external: boolean; module: string; namespace: Namespace }
+import { columnMeta, type ColumnMeta } from "../../meta/column.ts";
+import { byCodeUnit } from "../utils/order.ts";
+import type { ElementNulls } from "./element-types.ts";
+import { dimensionsOf, filledByDefault, type ReadColumn, unnamedUnique } from "./read-column.ts";
+import { columnSchemaOf, constraintsOf, refuseJsonDocument, skipped, statesOf, STRING_LIST } from "./read-database.ts";
+import type {
+  ModuleExport,
+  Snapshot,
+  SnapshotColumn,
+  SnapshotDatabase,
+  SnapshotIndex,
+  SnapshotTable,
+} from "./snapshot-types.ts";
+
+type Namespace = Record<string, unknown>;
+
+type Loaded = { external: boolean; module: string; namespace: Namespace };
 
 /** The exports holding `value`, ordered: a module other than the tables file first, then the shorter path, then by name */
 function exportsHolding(value: unknown, loaded: readonly Loaded[], tablesPath: string): ModuleExport[] {
-	const found = loaded.flatMap(({ external, module, namespace }) =>
-		Object.entries(namespace)
-			.filter(([, held]) => held === value)
-			.map(([name]) => ({ external, module, name })),
-	)
-	const rank = (at: ModuleExport) => (at.module === tablesPath ? 1 : 0)
-	return found.sort(
-		(a, b) =>
-			rank(a) - rank(b) ||
-			a.module.length - b.module.length ||
-			byCodeUnit(a.module, b.module) ||
-			byCodeUnit(a.name, b.name),
-	)
+  const found = loaded.flatMap(({ external, module, namespace }) =>
+    Object.entries(namespace)
+      .filter(([, held]) => held === value)
+      .map(([name]) => ({ external, module, name })),
+  );
+
+  const rank = (at: ModuleExport) => (at.module === tablesPath ? 1 : 0);
+
+  return found.sort(
+    (a, b) =>
+      rank(a) - rank(b) ||
+      a.module.length - b.module.length ||
+      byCodeUnit(a.module, b.module) ||
+      byCodeUnit(a.name, b.name),
+  );
 }
 
 /** What the whole read shares: the loaded modules, the tables file, and each table it exports by its name */
 type Context = {
-	/** what an array column's element takes, as its drizzle type declares it */
-	elementNulls: ElementNulls
-	loaded: readonly Loaded[]
-	tables: ReadonlyMap<Table, string>
-	tablesPath: string
-	/** the packages that would not load on their own, which no schema can be found in */
-	unloaded: readonly string[]
-}
+  /** what an array column's element takes, as its drizzle type declares it */
+  elementNulls: ElementNulls;
+  loaded: readonly Loaded[];
+  tables: ReadonlyMap<Table, string>;
+  tablesPath: string;
+  /** the packages that would not load on their own, which no schema can be found in */
+  unloaded: readonly string[];
+};
 
 /** Where `value` is exported, the first of `exportsHolding`; null when nowhere, or when nothing was given */
 const locate = (value: unknown, context: Context): ModuleExport | null =>
-	value === undefined ? null : (exportsHolding(value, context.loaded, context.tablesPath)[0] ?? null)
+  value === undefined ? null : (exportsHolding(value, context.loaded, context.tablesPath)[0] ?? null);
 
 /** Where a c.json column's schema is exported; an error naming the column when nowhere, or for a schema that is no stored document */
 function jsonSchemaOf(
-	meta: ColumnMeta,
-	column: ReadColumn,
-	{ at, context }: { at: string; context: Context },
+  meta: ColumnMeta,
+  column: ReadColumn,
+  { at, context }: { at: string; context: Context },
 ): ModuleExport | null {
-	if (meta.kind !== "json") return null
-	const schema = locate(meta.schema, context)
-	if (schema === null)
-		throw new Error(
-			`${at}: no module of the project exports the schema its c.json is given${skipped(context.unloaded)}; export it, so the generated DTOs can import it`,
-		)
-	refuseJsonDocument(meta.schema, at, {
-		filled: filledByDefault(column),
-		notNull: column.notNull && !column.dimensions,
-	})
-	return schema
+  if (meta.kind !== "json") return null;
+  const schema = locate(meta.schema, context);
+
+  if (schema === null) {
+    throw new Error(
+      `${at}: no module of the project exports the schema its c.json is given${skipped(context.unloaded)}; export it, so the generated DTOs can import it`,
+    );
+  }
+
+  refuseJsonDocument(meta.schema, at, {
+    filled: filledByDefault(column),
+    notNull: column.notNull && !column.dimensions,
+  });
+
+  return schema;
 }
 
 function databaseMetaOf(column: ReadColumn, at: string, context: Context): SnapshotDatabase | null {
-	const meta = columnMeta(column)
-	if (meta === undefined) return null
-	if (meta.values !== undefined && !STRING_LIST(meta.values)) throw new Error(`${at}: c.enum takes an array of strings`)
-	const own = columnSchemaOf(meta, at, { locate: (value) => locate(value, context), unloaded: context.unloaded })
-	const schema = own.schema ?? jsonSchemaOf(meta, column, { at, context })
-	return {
-		constraints: constraintsOf(own.constraints, at),
-		kind: meta.kind,
-		prefix: meta.prefix ?? null,
-		schema,
-		schemaJson: own.schemaJson,
-		states: statesOf(meta.states, at, column),
-		values: meta.values === undefined ? null : [...meta.values],
-	}
+  const meta = columnMeta(column);
+
+  if (meta === undefined) return null;
+
+  if (meta.values !== undefined && !STRING_LIST(meta.values))
+    throw new Error(`${at}: c.enum takes an array of strings`);
+  const own = columnSchemaOf(meta, at, { locate: (value) => locate(value, context), unloaded: context.unloaded });
+  const schema = own.schema ?? jsonSchemaOf(meta, column, { at, context });
+
+  return {
+    constraints: constraintsOf(own.constraints, at),
+    kind: meta.kind,
+    prefix: meta.prefix ?? null,
+    schema,
+    schemaJson: own.schemaJson,
+    states: statesOf(meta.states, at, column),
+    values: meta.values === undefined ? null : [...meta.values],
+  };
 }
 
 function columnOf([key, column]: [string, ReadColumn], table: string, context: Context): SnapshotColumn {
-	const at = `${table}.${key}`
-	const dimensions = dimensionsOf(column, at)
-	return {
-		autoIncrement: column.autoIncrement === true,
-		database: databaseMetaOf(column, at, context),
-		columnType: column.columnType,
-		dataType: column.dataType,
-		dimensions,
-		enumValues: column.enumValues === undefined ? null : [...column.enumValues],
-		foreignKey: null,
-		generated: column.generated !== undefined,
-		hasDefault: filledByDefault(column),
-		identity: column.generatedIdentity !== undefined,
-		intervalPrecision:
-			column.columnType === "PgInterval" && typeof column.precision === "number" ? column.precision : null,
-		key,
-		length: typeof column.length === "number" ? column.length : null,
-		notNull: column.notNull,
-		nullElements: dimensions > 0 && context.elementNulls(table, key, dimensions),
-		onUpdate: column.onUpdateFn !== undefined,
-		primary: column.primary,
-		sqlName: column.name,
-		sqlType: column.getSQLType(),
-		unique: column.isUnique === true ? (column.uniqueName ?? unnamedUnique(column)) : null,
-	}
+  const at = `${table}.${key}`;
+  const dimensions = dimensionsOf(column, at);
+
+  return {
+    autoIncrement: column.autoIncrement === true,
+    columnType: column.columnType,
+    dataType: column.dataType,
+    database: databaseMetaOf(column, at, context),
+    dimensions,
+    enumValues: column.enumValues === undefined ? null : [...column.enumValues],
+    foreignKey: null,
+    generated: column.generated !== undefined,
+    hasDefault: filledByDefault(column),
+    identity: column.generatedIdentity !== undefined,
+    intervalPrecision:
+      column.columnType === "PgInterval" && typeof column.precision === "number" ? column.precision : null,
+    key,
+    length: typeof column.length === "number" ? column.length : null,
+    notNull: column.notNull,
+    nullElements: dimensions > 0 && context.elementNulls(table, key, dimensions),
+    onUpdate: column.onUpdateFn !== undefined,
+    primary: column.primary,
+    sqlName: column.name,
+    sqlType: column.getSQLType(),
+    unique: column.isUnique ? (column.uniqueName ?? unnamedUnique(column)) : null,
+  };
 }
 
-type Config = ReturnType<typeof sqliteConfig> & { schema?: string | undefined }
+type Config = ReturnType<typeof sqliteConfig> & { schema?: string | undefined };
 
 type Dialect = {
-	config: (table: Table) => Config
-	name: "postgres" | "sqlite"
-	render: (chunk: SQL) => string
-}
+  config: (table: Table) => Config;
+  name: "postgres" | "sqlite";
+  render: (chunk: SQL) => string;
+};
 
 function dialectOf(table: Table): Dialect {
-	const sqlite = is(table, SQLiteTable)
-	const dialect = sqlite ? new SQLiteDialect() : new PgDialect()
-	/* "indexes" renders a column by its own name, as DDL and the constraint map name it */
-	const render = (chunk: SQL) => (dialect as SQLiteDialect).sqlToQuery(chunk.inlineParams(), "indexes").sql
-	return {
-		config: (sqlite ? sqliteConfig : pgConfig) as unknown as (table: Table) => Config,
-		name: sqlite ? "sqlite" : "postgres",
-		render,
-	}
+  const sqlite = is(table, SQLiteTable);
+  const dialect = sqlite ? new SQLiteDialect() : new PgDialect();
+  // "indexes" renders a column by its own name, as DDL and the constraint map name it
+  const render = (chunk: SQL) => (dialect as SQLiteDialect).sqlToQuery(chunk.inlineParams(), "indexes").sql;
+
+  return {
+    config: (sqlite ? sqliteConfig : pgConfig) as unknown as (table: Table) => Config,
+    name: sqlite ? "sqlite" : "postgres",
+    render,
+  };
 }
 
-type IndexConfig = { columns: unknown[]; name: string; unique: boolean; where?: SQL | undefined }
+type IndexConfig = { columns: unknown[]; name: string; unique: boolean; where?: SQL | undefined };
 
 function indexOf(config: IndexConfig, keyOf: (column: unknown) => string | undefined, dialect: Dialect): SnapshotIndex {
-	const keys = config.columns.map(keyOf)
-	const expression = config.columns
-		.map((part) => (keyOf(part) === undefined ? dialect.render(part as SQL) : `"${(part as Column).name}"`))
-		.join(", ")
-	return {
-		columns: keys.every((key) => key !== undefined) ? (keys as string[]) : null,
-		expression,
-		name: config.name,
-		unique: config.unique,
-		where: config.where === undefined ? null : dialect.render(config.where),
-	}
+  const keys = config.columns.map(keyOf);
+
+  const expression = config.columns
+    .map((part) => (keyOf(part) === undefined ? dialect.render(part as SQL) : `"${(part as Column).name}"`))
+    .join(", ");
+
+  return {
+    columns: keys.every((key) => key !== undefined) ? keys : null,
+    expression,
+    name: config.name,
+    unique: config.unique,
+    where: config.where === undefined ? null : dialect.render(config.where),
+  };
 }
 
 /** What a foreign key references; an error naming its table when its callback cannot be followed */
 function referenceOf(fk: Config["foreignKeys"][number], table: string): ReturnType<typeof fk.reference> {
-	try {
-		return fk.reference()
-	} catch (error) {
-		throw new Error(`${table}: a foreign key's target cannot be read: ${(error as Error).message}`, { cause: error })
-	}
+  try {
+    return fk.reference();
+  } catch (error) {
+    throw new Error(`${table}: a foreign key's target cannot be read: ${(error as Error).message}`, { cause: error });
+  }
 }
 
 /** The table's export name in the tables module, or an error naming the column that references it */
 function targetName(target: Table, at: string, context: Context): string {
-	const name = context.tables.get(target)
-	if (name !== undefined) return name
-	const sqlName = getTableConfig(target).name
-	const elsewhere = exportsHolding(target, context.loaded, context.tablesPath)[0]
-	throw new Error(
-		elsewhere === undefined
-			? `${at} references the table ${sqlName}, which no module of the project exports`
-			: `${at} references the table ${sqlName} (${elsewhere.name} in ${elsewhere.module}), which the tables file does not export; export it there`,
-	)
+  const name = context.tables.get(target);
+
+  if (name !== undefined) return name;
+  const sqlName = getTableConfig(target).name;
+  const elsewhere = exportsHolding(target, context.loaded, context.tablesPath)[0];
+  throw new Error(
+    elsewhere === undefined
+      ? `${at} references the table ${sqlName}, which no module of the project exports`
+      : `${at} references the table ${sqlName} (${elsewhere.name} in ${elsewhere.module}), which the tables file does not export; export it there`,
+  );
 }
 
 function getTableConfig(table: Table): Config {
-	return dialectOf(table).config(table)
+  return dialectOf(table).config(table);
 }
 
 function tableOf([table, exportName]: [Table, string], context: Context): SnapshotTable {
-	const dialect = dialectOf(table)
-	const config = dialect.config(table)
-	const entries = Object.entries(getTableColumns(table)) as Array<[string, ReadColumn]>
-	/*
-	 * A column a third argument names, by its key: sqlite-core passes the table's own column, pg-core
-	 * a stand-in (an ExtraConfigColumn, or an index's IndexedColumn) matched by its SQL name.
-	 * SQL is no column (undefined); any other column, one of another table, is refused naming this one.
-	 */
-	const keyOf = (column: unknown): string | undefined => {
-		const own = entries.find(([, each]) => each === column)?.[0]
-		if (own !== undefined || !(is(column, Column) || is(column, IndexedColumn))) return own
-		const standIn = is(column, ExtraConfigColumn) || is(column, IndexedColumn)
-		const named = standIn ? entries.find(([, each]) => each.name === column.name)?.[0] : undefined
-		if (named !== undefined) return named
-		throw new Error(
-			`${exportName}: its third argument names the column ${column.name}, which is no column of ${config.name}`,
-		)
-	}
-	const columns = entries.map((entry) => columnOf(entry, exportName, context))
-	for (const fk of config.foreignKeys) {
-		const reference = referenceOf(fk, exportName)
-		const target = reference.foreignTable as Table
-		const targetColumns = Object.entries(getTableColumns(target))
-		const own = reference.columns.map((column) => keyOf(column) as string)
-		const refs = reference.foreignColumns.map(
-			(column) => targetColumns.find(([, each]) => each === column)?.[0] as string,
-		)
-		/* every column of the key references its own target column, the key whole beside it */
-		const key = own.length > 1 ? { columns: own, refColumns: refs } : null
-		const targetExport = targetName(target, `${exportName}.${own[0]}`, context)
-		for (const [i, name] of own.entries()) {
-			;(columns.find((column) => column.key === name) as SnapshotColumn).foreignKey = {
-				column: refs[i] as string,
-				key,
-				onDelete: fk.onDelete ?? null,
-				onUpdate: fk.onUpdate ?? null,
-				table: targetExport,
-			}
-		}
-	}
-	return {
-		checks: config.checks.map((check) => ({ expression: dialect.render(check.value), name: check.name })),
-		columns,
-		compositeKey: config.primaryKeys.flatMap((key) => key.columns.map((column) => keyOf(column) as string)),
-		dialect: dialect.name,
-		exportName,
-		indexes: config.indexes.map((index) => indexOf(index.config as IndexConfig, keyOf, dialect)),
-		schema: config.schema ?? null,
-		sqlName: config.name,
-		uniques: config.uniqueConstraints.map((unique) => ({
-			columns: unique.columns.map((column) => keyOf(column) as string),
-			name: unique.name as string,
-		})),
-	}
+  const dialect = dialectOf(table);
+  const config = dialect.config(table);
+  const entries = Object.entries(getTableColumns(table)) as Array<[string, ReadColumn]>;
+
+  // A column a third argument names, by its key: sqlite-core passes the table's own column, pg-core
+  // a stand-in (an ExtraConfigColumn, or an index's IndexedColumn) matched by its SQL name.
+  // SQL is no column (undefined); any other column, one of another table, is refused naming this one.
+  const keyOf = (column: unknown): string | undefined => {
+    const own = entries.find(([, each]) => each === column)?.[0];
+
+    if (own !== undefined || !(is(column, Column) || is(column, IndexedColumn))) return own;
+    const standIn = is(column, ExtraConfigColumn) || is(column, IndexedColumn);
+    const named = standIn ? entries.find(([, each]) => each.name === column.name)?.[0] : undefined;
+
+    if (named !== undefined) return named;
+    throw new Error(
+      `${exportName}: its third argument names the column ${column.name}, which is no column of ${config.name}`,
+    );
+  };
+
+  const columns = entries.map((entry) => columnOf(entry, exportName, context));
+
+  for (const fk of config.foreignKeys) {
+    const reference = referenceOf(fk, exportName);
+    const target = reference.foreignTable as Table;
+    const targetColumns = Object.entries(getTableColumns(target));
+    const own = reference.columns.map((column) => keyOf(column) as string);
+
+    const refs = reference.foreignColumns.map(
+      (column) => targetColumns.find(([, each]) => each === column)?.[0] as string,
+    );
+
+    // every column of the key references its own target column, the key whole beside it
+    const key = own.length > 1 ? { columns: own, refColumns: refs } : null;
+    const targetExport = targetName(target, `${exportName}.${own[0]}`, context);
+
+    for (const [i, name] of own.entries()) {
+      (columns.find((column) => column.key === name) as SnapshotColumn).foreignKey = {
+        column: refs[i] as string,
+        key,
+        onDelete: fk.onDelete ?? null,
+        onUpdate: fk.onUpdate ?? null,
+        table: targetExport,
+      };
+    }
+  }
+
+  return {
+    checks: config.checks.map((check) => ({ expression: dialect.render(check.value), name: check.name })),
+    columns,
+    compositeKey: config.primaryKeys.flatMap((key) => key.columns.map((column) => keyOf(column) as string)),
+    dialect: dialect.name,
+    exportName,
+    indexes: config.indexes.map((index) => indexOf(index.config as IndexConfig, keyOf, dialect)),
+    schema: config.schema ?? null,
+    sqlName: config.name,
+    uniques: config.uniqueConstraints.map((unique) => ({
+      columns: unique.columns.map((column) => keyOf(column) as string),
+      name: unique.name,
+    })),
+  };
 }
 
 /**
@@ -244,20 +268,27 @@ function tableOf([table, exportName]: [Table, string], context: Context): Snapsh
  * `elementNulls`. A table exported under two names is read once, under the first by name.
  */
 function snapshotOf(loaded: readonly Loaded[], elementNulls: ElementNulls, unloaded: readonly string[] = []): Snapshot {
-	const first = loaded[0] as Loaded
-	const tables = new Map<Table, string>()
-	for (const name of Object.keys(first.namespace).sort()) {
-		const value = first.namespace[name]
-		if (isTable(value) && !tables.has(value)) tables.set(value, name)
-		/* drizzle assigns each column onto its table, so one named __proto__ replaces the table's
-		 * prototype: what is left keeps drizzle's table name but is no table */
-		else if (!isTable(value) && hasTableName(value))
-			throw new Error(
-				`${name}: a column named __proto__ replaced this table's prototype, so drizzle cannot use it; rename the column`,
-			)
-	}
-	const context: Context = { elementNulls, loaded, tables, tablesPath: first.module, unloaded }
-	return { tables: [...tables].map((entry) => readTable(entry, context)) }
+  const first = loaded[0] as Loaded;
+  const tables = new Map<Table, string>();
+
+  for (const name of Object.keys(first.namespace).sort()) {
+    const value = first.namespace[name];
+
+    if (isTable(value) && !tables.has(value)) {
+      tables.set(value, name);
+    }
+    // drizzle assigns each column onto its table, so one named __proto__ replaces the table's
+    // prototype: what is left keeps drizzle's table name but is no table
+    else if (!isTable(value) && hasTableName(value)) {
+      throw new Error(
+        `${name}: a column named __proto__ replaced this table's prototype, so drizzle cannot use it; rename the column`,
+      );
+    }
+  }
+
+  const context: Context = { elementNulls, loaded, tables, tablesPath: first.module, unloaded };
+
+  return { tables: [...tables].map((entry) => readTable(entry, context)) };
 }
 
 /**
@@ -265,18 +296,18 @@ function snapshotOf(loaded: readonly Loaded[], elementNulls: ElementNulls, unloa
  * own diagnostics throw, names the table and says the reader failed, never the module
  */
 function readTable(entry: [Table, string], context: Context): SnapshotTable {
-	try {
-		return tableOf(entry, context)
-	} catch (error) {
-		if (!(error instanceof Error) || error.constructor === Error) throw error
-		throw new Error(`database could not read table ${entry[1]}: ${error.message}`, { cause: error })
-	}
+  try {
+    return tableOf(entry, context);
+  } catch (error) {
+    if (!(error instanceof Error) || error.constructor === Error) throw error;
+    throw new Error(`database could not read table ${entry[1]}: ${error.message}`, { cause: error });
+  }
 }
 
 /** Whether `value` carries drizzle's table name, as every table drizzle builds does */
 const hasTableName = (value: unknown): boolean =>
-	typeof value === "object" && value !== null && Object.hasOwn(value, Symbol.for("drizzle:Name"))
+  typeof value === "object" && value !== null && Object.hasOwn(value, Symbol.for("drizzle:Name"));
 
-const isTable = (value: unknown): value is Table => is(value, SQLiteTable) || is(value, PgTable)
+const isTable = (value: unknown): value is Table => is(value, SQLiteTable) || is(value, PgTable);
 
-export { exportsHolding, snapshotOf, type Loaded, type Namespace }
+export { exportsHolding, snapshotOf, type Loaded, type Namespace };

@@ -1,119 +1,139 @@
-import { type SpawnSyncReturns, spawnSync } from "node:child_process"
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
-import { createRequire } from "node:module"
-import { tmpdir } from "node:os"
-import { dirname, join } from "node:path"
-import { parseSync } from "oxc-parser"
+import { type SpawnSyncReturns, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+
+import { parseSync } from "oxc-parser";
 
 /** Repo-relative path → source. A rule decides by path, so a fixture mirrors the real layout. */
-export type Fixture = Record<string, string>
+export type Fixture = Record<string, string>;
 
 /** One finding: the fixture path it is in and the rule's message. */
-export type Report = { file: string; message: string }
+export type Report = { file: string; message: string };
 
-type Comment = { end: number; start: number; type: string; value: string }
-type Node = { end: number; parent?: Node | null; start: number; type: string }
+type Comment = { end: number; start: number; type: string; value: string };
+
+type Node = { end: number; parent?: Node | null; start: number; type: string };
+
 type Context = {
-	filename: string
-	options: unknown[]
-	report(descriptor: { message: string; node: unknown }): void
-	sourceCode: {
-		getAllComments(): Comment[]
-		getCommentsAfter(node: Node): Comment[]
-		getCommentsBefore(node: Node): Comment[]
-		getText(): string
-	}
-}
-type Visitors = Record<string, ((node: never) => void) | undefined>
-type Rule = { create(context: Context): Visitors }
+  filename: string;
+  options: unknown[];
+  report(descriptor: { message: string; node: unknown }): void;
+  sourceCode: {
+    getAllComments(): Comment[];
+    getCommentsAfter(node: Node): Comment[];
+    getCommentsBefore(node: Node): Comment[];
+    getText(): string;
+  };
+};
 
-const PLUGIN = join(import.meta.dirname, "index.js")
-const REPO_CONFIG = join(import.meta.dirname, "../../../.oxlintrc.json")
-const OXLINT = join(dirname(createRequire(import.meta.url).resolve("oxlint/package.json")), "bin", "oxlint")
+type Visitors = Record<string, ((node: never) => void) | undefined>;
 
-/* the comments that touch `node` with only whitespace between, as ESLint's SourceCode reports them */
+type Rule = { create(context: Context): Visitors };
+
+const PLUGIN = join(import.meta.dirname, "index.js");
+const REPO_CONFIG = join(import.meta.dirname, "../../../.oxlintrc.jsonc");
+const OXLINT = join(dirname(createRequire(import.meta.url).resolve("oxlint/package.json")), "bin", "oxlint");
+
+// the comments that touch `node` with only whitespace between, as ESLint's SourceCode reports them
 function commentsBefore(code: string, comments: Comment[], node: Node): Comment[] {
-	const out: Comment[] = []
-	let edge = node.start
-	for (const comment of comments.toReversed()) {
-		if (comment.end > edge) continue
-		if (code.slice(comment.end, edge).trim() !== "") break
-		out.unshift(comment)
-		edge = comment.start
-	}
-	return out
+  const out: Comment[] = [];
+  let edge = node.start;
+
+  for (const comment of comments.toReversed()) {
+    if (comment.end > edge) continue;
+
+    if (code.slice(comment.end, edge).trim() !== "") break;
+    out.unshift(comment);
+    edge = comment.start;
+  }
+
+  return out;
 }
 
 function commentsAfter(code: string, comments: Comment[], node: Node): Comment[] {
-	const out: Comment[] = []
-	let edge = node.end
-	for (const comment of comments) {
-		if (comment.start < edge) continue
-		if (code.slice(edge, comment.start).trim() !== "") break
-		out.push(comment)
-		edge = comment.end
-	}
-	return out
+  const out: Comment[] = [];
+  let edge = node.end;
+
+  for (const comment of comments) {
+    if (comment.start < edge) continue;
+
+    if (code.slice(edge, comment.start).trim() !== "") break;
+    out.push(comment);
+    edge = comment.end;
+  }
+
+  return out;
 }
 
 function walk(node: unknown, parent: Node | null, visitors: Visitors): void {
-	if (typeof node !== "object" || node === null || !("type" in node)) return
-	const record = node as Node
-	record.parent = parent
-	visitors[record.type]?.(record as never)
-	for (const [key, value] of Object.entries(record)) {
-		if (key === "parent") continue
-		for (const child of Array.isArray(value) ? value : [value]) walk(child, record, visitors)
-	}
+  if (typeof node !== "object" || node === null || !("type" in node)) return;
+  const record = node as Node;
+  record.parent = parent;
+  visitors[record.type]?.(record as never);
+
+  for (const [key, value] of Object.entries(record)) {
+    if (key === "parent") continue;
+
+    for (const child of Array.isArray(value) ? value : [value]) walk(child, record, visitors);
+  }
 }
 
 /** How a rule runs: the options its config gives it, and the folder the fixture's paths are relative to. */
-export type RunAs = { options?: unknown[] | undefined; repo?: string | undefined }
+export type RunAs = { options?: unknown[] | undefined; repo?: string | undefined };
 
 /** Runs `rule` in process over every fixture file, the way oxlint hands it each file, as if `repo` held them. */
 export function reportsOf(rule: Rule, fixture: Fixture, { options = [], repo = "/repo" }: RunAs = {}): Report[] {
-	const reports: Report[] = []
-	for (const [file, code] of Object.entries(fixture)) {
-		const filename = `${repo}/${file}`
-		const parsed = parseSync(filename, code)
-		const comments = parsed.comments as Comment[]
-		const visitors = rule.create({
-			filename,
-			options,
-			report: ({ message }) => reports.push({ file, message }),
-			sourceCode: {
-				getAllComments: () => comments,
-				getCommentsAfter: (node) => commentsAfter(code, comments, node),
-				getCommentsBefore: (node) => commentsBefore(code, comments, node),
-				getText: () => code,
-			},
-		})
-		walk(parsed.program, null, visitors)
-	}
-	return reports
+  const reports: Report[] = [];
+
+  for (const [file, code] of Object.entries(fixture)) {
+    const filename = `${repo}/${file}`;
+    const parsed = parseSync(filename, code);
+    const comments = parsed.comments as Comment[];
+
+    const visitors = rule.create({
+      filename,
+      options,
+      report: ({ message }) => reports.push({ file, message }),
+      sourceCode: {
+        getAllComments: () => comments,
+        getCommentsAfter: (node) => commentsAfter(code, comments, node),
+        getCommentsBefore: (node) => commentsBefore(code, comments, node),
+        getText: () => code,
+      },
+    });
+
+    walk(parsed.program, null, visitors);
+  }
+
+  return reports;
 }
 
 /** Writes the fixture to a temp repo and runs `rule` over it in process, so a rule that reads other files from disk finds them */
 export function reportsOnDisk(rule: Rule, fixture: Fixture, options: unknown[] = []): Report[] {
-	const repo = mkdtempSync(join(tmpdir(), "database-rule-"))
-	try {
-		for (const [file, code] of Object.entries(fixture)) {
-			mkdirSync(dirname(join(repo, file)), { recursive: true })
-			writeFileSync(join(repo, file), code)
-		}
-		return reportsOf(rule, fixture, { options, repo })
-	} finally {
-		rmSync(repo, { force: true, recursive: true })
-	}
+  const repo = mkdtempSync(join(tmpdir(), "database-rule-"));
+
+  try {
+    for (const [file, code] of Object.entries(fixture)) {
+      mkdirSync(dirname(join(repo, file)), { recursive: true });
+      writeFileSync(join(repo, file), code);
+    }
+
+    return reportsOf(rule, fixture, { options, repo });
+  } finally {
+    rmSync(repo, { force: true, recursive: true });
+  }
 }
 
 function insideGitCheckout(dir: string): boolean {
-	for (let at = dir; at !== dirname(at); at = dirname(at)) if (existsSync(join(at, ".git"))) return true
-	return false
+  for (let at = dir; at !== dirname(at); at = dirname(at)) if (existsSync(join(at, ".git"))) return true;
+
+  return false;
 }
 
 /** What `oxlint --format json` prints */
-type OxlintReport = { diagnostics: Array<{ filename: string; message: string }> }
+type OxlintReport = { diagnostics: Array<{ filename: string; message: string }> };
 
 /**
  * The report a finished oxlint run printed. A child that printed none, killed by a signal (a
@@ -121,66 +141,95 @@ type OxlintReport = { diagnostics: Array<{ filename: string; message: string }> 
  * an error, fails naming its exit, signal, spawn error and stderr, so the next one names itself.
  */
 export function oxlintJson(
-	proc: Pick<SpawnSyncReturns<string>, "error" | "signal" | "status" | "stderr" | "stdout">,
+  proc: Pick<SpawnSyncReturns<string>, "error" | "signal" | "status" | "stderr" | "stdout">,
 ): OxlintReport {
-	try {
-		return JSON.parse(proc.stdout) as OxlintReport
-	} catch {
-		const spawn = proc.error === undefined ? "" : `, ${proc.error.message}`
-		const stderr = proc.stderr?.trim() || "no stderr"
-		throw new Error(
-			`oxlint printed no JSON report (exit ${proc.status}, signal ${proc.signal ?? "none"}${spawn}): ${stderr}`,
-		)
-	}
+  try {
+    return JSON.parse(proc.stdout) as OxlintReport;
+  } catch {
+    const spawn = proc.error === undefined ? "" : `, ${proc.error.message}`;
+    const stderr = proc.stderr?.trim() || "no stderr";
+    throw new Error(
+      `oxlint printed no JSON report (exit ${proc.status}, signal ${proc.signal ?? "none"}${spawn}): ${stderr}`,
+    );
+  }
 }
 
 /** One finding of a run under the repo's config: the fixture path, its line, and the message with the help a rule's config gives it. */
-export type LineReport = { file: string; line: number; message: string }
+export type LineReport = { file: string; line: number; message: string };
 
-type Diagnostic = { filename: string; help?: string; labels: Array<{ span: { line: number } }>; message: string }
+type Diagnostic = { filename: string; help?: string; labels: Array<{ span: { line: number } }>; message: string };
 
-/* the fixture written to a temp folder outside any checkout, oxlint run there under `config` over every file of it */
+// the fixture written to a temp folder outside any checkout, oxlint run there under `config` over every file of it
 function lintInTemp(fixture: Fixture, config: object): { diagnostics: Diagnostic[]; dir: string } {
-	const dir = mkdtempSync(join(tmpdir(), "database-lint-"))
-	try {
-		/* oxlint applies a checkout's .gitignore even with --no-ignore, so a fixture inside one lints nothing */
-		if (insideGitCheckout(dir)) throw new Error(`TMPDIR ${tmpdir()} is inside a git checkout; set it outside one`)
-		writeFileSync(join(dir, ".oxlintrc.json"), JSON.stringify(config))
-		for (const [file, code] of Object.entries(fixture)) {
-			mkdirSync(dirname(join(dir, file)), { recursive: true })
-			writeFileSync(join(dir, file), code)
-		}
-		const files = Object.keys(fixture).map((file) => join(dir, file))
-		const args = ["--config", join(dir, ".oxlintrc.json"), "--format", "json", "--no-ignore", ...files]
-		const { diagnostics } = oxlintJson(spawnSync(OXLINT, args, { encoding: "utf8" })) as { diagnostics: Diagnostic[] }
-		return { diagnostics, dir }
-	} finally {
-		rmSync(dir, { force: true, recursive: true })
-	}
+  const dir = mkdtempSync(join(tmpdir(), "database-lint-"));
+
+  try {
+    // oxlint applies a checkout's .gitignore even with --no-ignore, so a fixture inside one lints nothing
+    if (insideGitCheckout(dir)) throw new Error(`TMPDIR ${tmpdir()} is inside a git checkout; set it outside one`);
+    writeFileSync(join(dir, ".oxlintrc.json"), JSON.stringify(config));
+
+    for (const [file, code] of Object.entries(fixture)) {
+      mkdirSync(dirname(join(dir, file)), { recursive: true });
+      writeFileSync(join(dir, file), code);
+    }
+
+    const files = Object.keys(fixture).map((file) => join(dir, file));
+    const args = ["--config", join(dir, ".oxlintrc.json"), "--format", "json", "--no-ignore", ...files];
+    const { diagnostics } = oxlintJson(spawnSync(OXLINT, args, { encoding: "utf8" })) as { diagnostics: Diagnostic[] };
+
+    return { diagnostics, dir };
+  } finally {
+    rmSync(dir, { force: true, recursive: true });
+  }
 }
 
 /** Runs the real oxlint binary with the database plugin and only `database/<name>` on, with `options`, over the fixture. */
 export function oxlintReports(name: string, fixture: Fixture, options: unknown[] = []): Report[] {
-	const config = {
-		categories: { correctness: "off", suspicious: "off" },
-		jsPlugins: [{ name: "database", specifier: PLUGIN }],
-		plugins: [],
-		rules: { [`database/${name}`]: ["error", ...options] },
-	}
-	const { diagnostics, dir } = lintInTemp(fixture, config)
-	return diagnostics
-		.map((d) => ({ file: d.filename.slice(dir.length + 1), message: d.message }))
-		.sort((a, b) => a.file.localeCompare(b.file))
+  const config = {
+    categories: { correctness: "off", suspicious: "off" },
+    jsPlugins: [{ name: "database", specifier: PLUGIN }],
+    plugins: [],
+    rules: { [`database/${name}`]: ["error", ...options] },
+  };
+
+  const { diagnostics, dir } = lintInTemp(fixture, config);
+
+  return diagnostics
+    .map((d) => ({ file: d.filename.slice(dir.length + 1), message: d.message }))
+    .sort((a, b) => a.file.localeCompare(b.file));
 }
 
-/** Runs the real oxlint binary under the repo's own .oxlintrc.json over the fixture, laid out as the repo is, sorted by file and line. */
+type Override = { files: string[]; rules: Record<string, unknown> };
+
+/** The database plugin's rules in `repo sync`'s .oxlintrc.jsonc: each override of them (repo.config.ts's lint.rules and
+ * lint.skip), with the other rules of that override left out */
+export function databaseOverrides(jsonc: string): Override[] {
+  const config = JSON.parse(jsonc.replace(/^\/\/.*\n/, "")) as { overrides: Override[] };
+
+  return config.overrides.flatMap(({ files, rules }) => {
+    const own = Object.entries(rules).filter(([key]) => key.startsWith("database/"));
+
+    return own.length === 0 ? [] : [{ files, rules: Object.fromEntries(own) }];
+  });
+}
+
+/** Runs the real oxlint binary with the database plugin's rules as the repo's .oxlintrc.jsonc scopes them over the
+ * fixture, laid out as the repo is, sorted by file and line. */
 export function repoReports(fixture: Fixture): LineReport[] {
-	const { diagnostics, dir } = lintInTemp(fixture, { extends: [REPO_CONFIG] })
-	return diagnostics
-		.map((d) => ({
-			file: d.filename.slice(dir.length + 1),
-			line: Math.min(...d.labels.map((label) => label.span.line)),
-			message: d.help === undefined ? d.message : `${d.message} ${d.help}`,
-		}))
-		.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.message.localeCompare(b.message))
+  const config = {
+    categories: { correctness: "off", suspicious: "off" },
+    jsPlugins: [{ name: "database", specifier: PLUGIN }],
+    overrides: databaseOverrides(readFileSync(REPO_CONFIG, "utf8")),
+    plugins: [],
+  };
+
+  const { diagnostics, dir } = lintInTemp(fixture, config);
+
+  return diagnostics
+    .map((d) => ({
+      file: d.filename.slice(dir.length + 1),
+      line: Math.min(...d.labels.map((label) => label.span.line)),
+      message: d.help === undefined ? d.message : `${d.message} ${d.help}`,
+    }))
+    .sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.message.localeCompare(b.message));
 }

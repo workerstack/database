@@ -1,192 +1,196 @@
-import { describe, expect, it } from "vitest"
-import * as z from "zod"
-import { INTEGER_FORMATS, TEXT_FORMATS } from "../../../formats/catalog.ts"
-import * as database from "../../../index.ts"
-import { fieldOf, parseField } from "../../__fixtures__/runtime.ts"
-import type { FieldMeta, ImportsMeta } from "../../analyzer-types.ts"
-import { generateExampleMeta, SHARED_META_KEYS, SHARED_META_VALUES } from "./example-meta.ts"
-import { generateFieldSchema } from "./field-schema.ts"
+import { describe, expect, it } from "vitest";
+import * as z from "zod";
+
+import { INTEGER_FORMATS, TEXT_FORMATS } from "../../../formats/catalog.ts";
+import * as database from "../../../index.ts";
+import { fieldOf, parseField } from "../../__fixtures__/runtime.ts";
+import type { FieldMeta, ImportsMeta } from "../../analyzer-types.ts";
+import { generateExampleMeta, SHARED_META_KEYS, SHARED_META_VALUES } from "./example-meta.ts";
+import { generateFieldSchema } from "./field-schema.ts";
 
 const field = (raw: string, overrides: Partial<FieldMeta> = {}): FieldMeta => ({
-	...parseField("f", raw),
-	...overrides,
-})
+  ...parseField("f", raw),
+  ...overrides,
+});
+
 const code = (raw: string, overrides: Partial<FieldMeta> = {}) =>
-	generateExampleMeta(field(raw, overrides))?.code ?? null
+  generateExampleMeta(field(raw, overrides))?.code ?? null;
 
 describe("generateExampleMeta", () => {
-	/* database's own timestamp columns take timestampSchema, whose meta carries the example */
-	it("gives private, password, reference, JSON and database-filled timestamp columns no example", () => {
-		for (const raw of [
-			'c.text("f", { private: true })',
-			'c.text("f", { password: true })',
-			'c.ref("f")',
-			'c.json("f", schema)',
-			'c.createdAt("created_at")',
-		]) {
-			expect(code(raw)).toBeNull()
-		}
-		expect(code('text("f")', { foreignKey: { column: "f", refColumn: "id", refTable: "t" } })).toBeNull()
-	})
+  // database's own timestamp columns take timestampSchema, whose meta carries the example
+  it("gives private, password, reference, JSON and database-filled timestamp columns no example", () => {
+    for (const raw of [
+      'c.text("f", { private: true })',
+      'c.text("f", { password: true })',
+      'c.ref("f")',
+      'c.json("f", schema)',
+      'c.createdAt("created_at")',
+    ])
+      expect(code(raw)).toBeNull();
 
-	it("uses the shared examples for email, url, serial ids, booleans and plain text", () => {
-		expect(generateExampleMeta(field('c.text("f", { email: true })'))).toEqual({
-			code: ".meta(_m.email)",
-			needsSharedMeta: true,
-		})
-		expect(code('c.text("f", { url: true })')).toBe(".meta(_m.url)")
-		expect(code("c.serialId()")).toBe(".meta(_m.serialId)")
-		expect(code('c.boolean("f")')).toBe(".meta(_m.boolean)")
-		expect(code('c.text("f")')).toBe(".meta(_m.string)")
-	})
+    expect(code('text("f")', { foreignKey: { column: "f", refColumn: "id", refTable: "t" } })).toBeNull();
+  });
 
-	it("writes per-field examples inline: the id prefix, the first enum value, exact lengths", () => {
-		expect(generateExampleMeta(field('c.id("usr")'))).toEqual({
-			code: '.meta({ examples: ["usr_01h5a3g8k9m2n4p6q8r0t2v4x6"] })',
-			needsSharedMeta: false,
-		})
-		expect(code("c.id(undefined)")).toBe('.meta({ examples: ["id_01h5a3g8k9m2n4p6q8r0t2v4x6"] })')
-		expect(code('c.enum("f", ["a", "b"])', { enumValues: ["a", "b"] })).toBe('.meta({ examples: ["a"] })')
-		expect(code('c.text("f", { min: 4, max: 4 })')).toBe('.meta({ examples: ["a1b2"] })')
-	})
+  it("uses the shared examples for email, url, serial ids, booleans and plain text", () => {
+    expect(generateExampleMeta(field('c.text("f", { email: true })'))).toEqual({
+      code: ".meta(_m.email)",
+      needsSharedMeta: true,
+    });
+    expect(code('c.text("f", { url: true })')).toBe(".meta(_m.url)");
+    expect(code("c.serialId()")).toBe(".meta(_m.serialId)");
+    expect(code('c.boolean("f")')).toBe(".meta(_m.boolean)");
+    expect(code('c.text("f")')).toBe(".meta(_m.string)");
+  });
 
-	it("takes the shared example when its bounds accept it, else their midpoint or the bound it misses (F18)", () => {
-		expect(code('c.integer("f", { min: 0, max: 10 })')).toBe(".meta({ examples: [5] })")
-		expect(code('c.integer("f", { min: 0, max: 84 })')).toBe(".meta(_m.integer)")
-		expect(code('c.integer("f")')).toBe(".meta(_m.integer)")
-		expect(code('c.integer("f", { min: 100 })')).toBe(".meta({ examples: [100] })")
-		expect(code('c.integer("f", { max: 7 })')).toBe(".meta({ examples: [7] })")
-		/* F8 of the 0.14.1 review: an integer example is an integer within fractional bounds */
-		expect(code('c.integer("f", { min: 1.2, max: 2.1 })')).toBe(".meta({ examples: [2] })")
-		expect(code('c.integer("f", { min: 100.5 })')).toBe(".meta({ examples: [101] })")
-		expect(code('c.integer("f", { max: -7.5 })')).toBe(".meta({ examples: [-8] })")
-		expect(code('c.real("f", { min: 1, max: 3 })')).toBe(".meta({ examples: [2] })")
-		expect(code('c.real("f", { min: 0, max: 3 })')).toBe(".meta(_m.real)")
-		expect(code('c.real("f", { min: 0, max: 1 })')).toBe(".meta(_m.real)")
-		expect(code('c.real("f")')).toBe(".meta(_m.real)")
-	})
+  it("writes per-field examples inline: the id prefix, the first enum value, exact lengths", () => {
+    expect(generateExampleMeta(field('c.id("usr")'))).toEqual({
+      code: '.meta({ examples: ["usr_01h5a3g8k9m2n4p6q8r0t2v4x6"] })',
+      needsSharedMeta: false,
+    });
+    expect(code("c.id(undefined)")).toBe('.meta({ examples: ["id_01h5a3g8k9m2n4p6q8r0t2v4x6"] })');
+    expect(code('c.enum("f", ["a", "b"])', { enumValues: ["a", "b"] })).toBe('.meta({ examples: ["a"] })');
+    expect(code('c.text("f", { min: 4, max: 4 })')).toBe('.meta({ examples: ["a1b2"] })');
+  });
 
-	it("gives an unknown column no example", () => {
-		expect(code('integer("f")')).toBeNull()
-	})
+  it("takes the shared example when its bounds accept it, else their midpoint or the bound it misses (F18)", () => {
+    expect(code('c.integer("f", { min: 0, max: 10 })')).toBe(".meta({ examples: [5] })");
+    expect(code('c.integer("f", { min: 0, max: 84 })')).toBe(".meta(_m.integer)");
+    expect(code('c.integer("f")')).toBe(".meta(_m.integer)");
+    expect(code('c.integer("f", { min: 100 })')).toBe(".meta({ examples: [100] })");
+    expect(code('c.integer("f", { max: 7 })')).toBe(".meta({ examples: [7] })");
+    // F8 of the 0.14.1 review: an integer example is an integer within fractional bounds
+    expect(code('c.integer("f", { min: 1.2, max: 2.1 })')).toBe(".meta({ examples: [2] })");
+    expect(code('c.integer("f", { min: 100.5 })')).toBe(".meta({ examples: [101] })");
+    expect(code('c.integer("f", { max: -7.5 })')).toBe(".meta({ examples: [-8] })");
+    expect(code('c.real("f", { min: 1, max: 3 })')).toBe(".meta({ examples: [2] })");
+    expect(code('c.real("f", { min: 0, max: 3 })')).toBe(".meta(_m.real)");
+    expect(code('c.real("f", { min: 0, max: 1 })')).toBe(".meta(_m.real)");
+    expect(code('c.real("f")')).toBe(".meta(_m.real)");
+  });
 
-	it("declares a shared value for every shared key", () => {
-		expect(Object.keys(SHARED_META_VALUES).sort()).toEqual([...SHARED_META_KEYS].sort())
-	})
-})
+  it("gives an unknown column no example", () => {
+    expect(code('integer("f")')).toBeNull();
+  });
+
+  it("declares a shared value for every shared key", () => {
+    expect(Object.keys(SHARED_META_VALUES).sort()).toEqual([...SHARED_META_KEYS].sort());
+  });
+});
 
 describe("generateExampleMeta: a real in narrow bounds", () => {
-	/* C13 of r17: a float's example is the shortest decimal inside its bounds, with no floating-point noise */
-	it("takes the shortest decimal inside a real's narrow bounds", () => {
-		expect(code('c.real("f", { min: 0.1, max: 0.2 })')).toBe(".meta({ examples: [0.15] })")
-		expect(code('c.real("f", { min: 1e-9, max: 2e-9 })')).toBe(".meta({ examples: [1.5e-9] })")
-		expect(code('c.real("f", { min: 0.11, max: 0.13 })')).toBe(".meta({ examples: [0.12] })")
-		expect(code('c.real("f", { min: 0.1, max: 0.1 })')).toBe(".meta({ examples: [0.1] })")
-		/* bounds one double apart hold no shorter decimal between them: the midpoint itself */
-		expect(code('c.real("f", { min: 1, max: 1.0000000000000002 })')).toBe(".meta({ examples: [1] })")
-	})
-})
+  // C13 of r17: a float's example is the shortest decimal inside its bounds, with no floating-point noise
+  it("takes the shortest decimal inside a real's narrow bounds", () => {
+    expect(code('c.real("f", { min: 0.1, max: 0.2 })')).toBe(".meta({ examples: [0.15] })");
+    expect(code('c.real("f", { min: 1e-9, max: 2e-9 })')).toBe(".meta({ examples: [1.5e-9] })");
+    expect(code('c.real("f", { min: 0.11, max: 0.13 })')).toBe(".meta({ examples: [0.12] })");
+    expect(code('c.real("f", { min: 0.1, max: 0.1 })')).toBe(".meta({ examples: [0.1] })");
+    // bounds one double apart hold no shorter decimal between them: the midpoint itself
+    expect(code('c.real("f", { min: 1, max: 1.0000000000000002 })')).toBe(".meta({ examples: [1] })");
+  });
+});
 
-/* a c.timestamp has its own range since F11, so no shared schema brings its example */
+// a c.timestamp has its own range since F11, so no shared schema brings its example
 describe("generateExampleMeta: a c.timestamp's range (F11)", () => {
-	it("gives the shared timestamp example its bounds accept, else a value inside them", () => {
-		expect(code('c.timestamp("f")')).toBe(".meta(_m.timestamp)")
-		expect(code('c.timestamp("f", { min: 0 })')).toBe(".meta(_m.timestamp)")
-		expect(code('c.timestamp("f", { max: 0 })')).toBe(".meta({ examples: [0] })")
-		expect(code('c.timestamp("f", { min: -100, max: 100 })')).toBe(".meta({ examples: [0] })")
-	})
-})
+  it("gives the shared timestamp example its bounds accept, else a value inside them", () => {
+    expect(code('c.timestamp("f")')).toBe(".meta(_m.timestamp)");
+    expect(code('c.timestamp("f", { min: 0 })')).toBe(".meta(_m.timestamp)");
+    expect(code('c.timestamp("f", { max: 0 })')).toBe(".meta({ examples: [0] })");
+    expect(code('c.timestamp("f", { min: -100, max: 100 })')).toBe(".meta({ examples: [0] })");
+  });
+});
 
 describe("generateExampleMeta: an email, URL or image URI its own bounds and rules accept (F31)", () => {
-	it("gives each kind its own example, and none where the column is shorter than the example", () => {
-		expect(generateExampleMeta(parseField("m", 'c.text("m", { email: true })'))?.code).toBe(".meta(_m.email)")
-		expect(generateExampleMeta(parseField("m", 'c.text("m", { email: true, max: 10 })'))).toBeNull()
-		expect(generateExampleMeta(parseField("u", 'c.text("u", { url: true, max: 12 })'))).toBeNull()
-		expect(generateExampleMeta(parseField("i", 'c.text("i", { imageUri: true })'))?.code).toBe(
-			'.meta({ examples: ["https://example.com/a.png"] })',
-		)
-		expect(generateExampleMeta(parseField("i", 'c.text("i", 20)'))?.code).toBe(".meta(_m.string)")
-		expect(generateExampleMeta(parseField("i", 'c.text("i", { imageUri: true, max: 20 })'))).toBeNull()
-	})
-})
+  it("gives each kind its own example, and none where the column is shorter than the example", () => {
+    expect(generateExampleMeta(parseField("m", 'c.text("m", { email: true })'))?.code).toBe(".meta(_m.email)");
+    expect(generateExampleMeta(parseField("m", 'c.text("m", { email: true, max: 10 })'))).toBeNull();
+    expect(generateExampleMeta(parseField("u", 'c.text("u", { url: true, max: 12 })'))).toBeNull();
+    expect(generateExampleMeta(parseField("i", 'c.text("i", { imageUri: true })'))?.code).toBe(
+      '.meta({ examples: ["https://example.com/a.png"] })',
+    );
+    expect(generateExampleMeta(parseField("i", 'c.text("i", 20)'))?.code).toBe(".meta(_m.string)");
+    expect(generateExampleMeta(parseField("i", 'c.text("i", { imageUri: true, max: 20 })'))).toBeNull();
+  });
+});
 
-/* the 0.12 review's F30: a kind's example was checked against max alone */
+// the 0.12 review's F30: a kind's example was checked against max alone
 describe("generateExampleMeta: an example shorter than the column's min (F30)", () => {
-	it("is left out, as one longer than its max is", () => {
-		expect(generateExampleMeta(parseField("m", 'c.text("m", { email: true, min: 20, max: 100 })'))).toBeNull()
-		expect(generateExampleMeta(parseField("m", 'c.text("m", { email: true, min: 5 })'))?.code).toBe(".meta(_m.email)")
-	})
-})
+  it("is left out, as one longer than its max is", () => {
+    expect(generateExampleMeta(parseField("m", 'c.text("m", { email: true, min: 20, max: 100 })'))).toBeNull();
+    expect(generateExampleMeta(parseField("m", 'c.text("m", { email: true, min: 5 })'))?.code).toBe(".meta(_m.email)");
+  });
+});
 
-/* F49 of the 0.13.0 round: an array's example would be its element's, of the wrong shape */
+// F49 of the 0.13.0 round: an array's example would be its element's, of the wrong shape
 describe("generateExampleMeta: a Postgres array column (F49)", () => {
-	it("gives an array no example, and a column a FieldMeta without dimensions its own", () => {
-		expect(code('c.text("f")', { dimensions: 1 })).toBeNull()
-		expect(code('c.text("f")', { dimensions: undefined })).toBe(code('c.text("f")'))
-		expect(code('c.text("f")')).not.toBeNull()
-	})
-})
+  it("gives an array no example, and a column a FieldMeta without dimensions its own", () => {
+    expect(code('c.text("f")', { dimensions: 1 })).toBeNull();
+    expect(code('c.text("f")', { dimensions: undefined })).toBe(code('c.text("f")'));
+    expect(code('c.text("f")')).not.toBeNull();
+  });
+});
 
-const dateOrder = z.enum(["iso", "dmy", "mdy"])
-const evenMinutes = z.int().refine((value) => value % 2 === 0, { error: "Must be even" })
+const dateOrder = z.enum(["iso", "dmy", "mdy"]);
+const evenMinutes = z.int().refine((value) => value % 2 === 0, { error: "Must be even" });
 
 /** The written field `raw` declares, as its create DTO's generated code builds it, with the example it publishes */
 function createdOf(raw: string): { examples: unknown; schema: z.ZodType } {
-	const imports: ImportsMeta = { enumImports: new Map(), identifiers: new Map(), jsonSchemaImports: new Set() }
-	const generated = generateFieldSchema(fieldOf("f", raw), "create", { imports }) as string
-	const schema = new Function("z", "database", "_m", `return ${generated}`)(z, database, {}) as z.ZodType
-	const published = z.toJSONSchema(schema, { io: "input" }) as {
-		anyOf?: Array<{ examples?: unknown }>
-		examples?: unknown
-	}
-	return { examples: published.examples ?? published.anyOf?.[0]?.examples, schema }
+  const imports: ImportsMeta = { enumImports: new Map(), identifiers: new Map(), jsonSchemaImports: new Set() };
+  const generated = generateFieldSchema(fieldOf("f", raw), "create", { imports }) as string;
+  const schema = new Function("z", "database", "_m", `return ${generated}`)(z, database, {}) as z.ZodType;
+
+  const published = z.toJSONSchema(schema, { io: "input" }) as {
+    anyOf?: Array<{ examples?: unknown }>;
+    examples?: unknown;
+  };
+
+  return { examples: published.examples ?? published.anyOf?.[0]?.examples, schema };
 }
 
-/* plan 24: a generated example passes the field's own published rule, so a format field's is its standard's */
+// plan 24: a generated example passes the field's own published rule, so a format field's is its standard's
 describe("generateExampleMeta: a format column's example", () => {
-	it("is the text format's own example, written in the standard's form", () => {
-		expect(generateExampleMeta(parseField("f", 'c.text("f", { format: "iso4217" })'))).toEqual({
-			code: '.meta({ examples: ["EUR"] })',
-			needsSharedMeta: false,
-		})
-	})
+  it("is the text format's own example, written in the standard's form", () => {
+    expect(generateExampleMeta(parseField("f", 'c.text("f", { format: "iso4217" })'))).toEqual({
+      code: '.meta({ examples: ["EUR"] })',
+      needsSharedMeta: false,
+    });
+  });
 
-	it("is left out where the column's own bounds refuse the format's example", () => {
-		expect(generateExampleMeta(parseField("f", 'c.text("f", { format: "bcp47", max: 5 })'))).toBeNull()
-		expect(generateExampleMeta(parseField("f", 'c.text("f", { format: "bcp47", min: 11 })'))).toBeNull()
-	})
+  it("is left out where the column's own bounds refuse the format's example", () => {
+    expect(generateExampleMeta(parseField("f", 'c.text("f", { format: "bcp47", max: 5 })'))).toBeNull();
+    expect(generateExampleMeta(parseField("f", 'c.text("f", { format: "bcp47", min: 11 })'))).toBeNull();
+  });
 
-	it("lies in an integer format's range, joined with the declared bounds", () => {
-		expect(code('c.integer("f", { format: "iso8601-weekday" })')).toBe(".meta({ examples: [4] })")
-		expect(code('c.integer("f", { format: "iso8601-weekday", max: 3 })')).toBe(".meta({ examples: [2] })")
-		expect(code('c.integer("f", { format: "iso8601-month", min: 9 })')).toBe(".meta({ examples: [10] })")
-	})
+  it("lies in an integer format's range, joined with the declared bounds", () => {
+    expect(code('c.integer("f", { format: "iso8601-weekday" })')).toBe(".meta({ examples: [4] })");
+    expect(code('c.integer("f", { format: "iso8601-weekday", max: 3 })')).toBe(".meta({ examples: [2] })");
+    expect(code('c.integer("f", { format: "iso8601-month", min: 9 })')).toBe(".meta({ examples: [10] })");
+  });
 
-	it("is published on a nullable format field's member, and its DTO takes it", () => {
-		const { examples, schema } = createdOf('c.text("f", { format: "iso4217" })')
-		expect(examples).toEqual(["EUR"])
-		expect(schema.parse("EUR")).toBe("EUR")
-	})
+  it("is published on a nullable format field's member, and its DTO takes it", () => {
+    const { examples, schema } = createdOf('c.text("f", { format: "iso4217" })');
+    expect(examples).toEqual(["EUR"]);
+    expect(schema.parse("EUR")).toBe("EUR");
+  });
 
-	it.each([
-		...TEXT_FORMATS.map((format) => `c.text("f", { format: ${JSON.stringify(format)} }).notNull()`),
-		...INTEGER_FORMATS.map((format) => `c.integer("f", { format: ${JSON.stringify(format)} }).notNull()`),
-	])("passes the field's own DTO: %s", (raw) => {
-		const { examples, schema } = createdOf(raw)
-		expect(Array.isArray(examples) && examples.length === 1, JSON.stringify(examples)).toBe(true)
-		expect(schema.safeParse((examples as unknown[])[0]).success).toBe(true)
-	})
-})
+  it.each([
+    ...TEXT_FORMATS.map((format) => `c.text("f", { format: ${JSON.stringify(format)} }).notNull()`),
+    ...INTEGER_FORMATS.map((format) => `c.integer("f", { format: ${JSON.stringify(format)} }).notNull()`),
+  ])("passes the field's own DTO: %s", (raw) => {
+    const { examples, schema } = createdOf(raw);
+    expect(Array.isArray(examples) && examples.length === 1, JSON.stringify(examples)).toBe(true);
+    expect(schema.safeParse((examples as unknown[])[0]).success).toBe(true);
+  });
+});
 
-/* plan 24: a column schema's rule may be a refine its published JSON Schema does not state, so database knows no value it takes */
+// plan 24: a column schema's rule may be a refine its published JSON Schema does not state, so database knows no value it takes
 describe("generateExampleMeta: a schema'd column", () => {
-	it("gets no example of database's", () => {
-		for (const raw of [
-			'c.text("f", { schema: dateOrder })',
-			'c.text("f", { format: "iso4217", schema: dateOrder })',
-			'c.integer("f", { schema: evenMinutes })',
-			'c.real("f", { schema: evenMinutes })',
-		])
-			expect(generateExampleMeta(fieldOf("f", raw, { scope: { dateOrder, evenMinutes } })), raw).toBeNull()
-	})
-})
+  it("gets no example of database's", () => {
+    for (const raw of [
+      'c.text("f", { schema: dateOrder })',
+      'c.text("f", { format: "iso4217", schema: dateOrder })',
+      'c.integer("f", { schema: evenMinutes })',
+      'c.real("f", { schema: evenMinutes })',
+    ])
+      expect(generateExampleMeta(fieldOf("f", raw, { scope: { dateOrder, evenMinutes } })), raw).toBeNull();
+  });
+});

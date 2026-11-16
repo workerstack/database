@@ -1,3 +1,4 @@
+import { codeOf } from "../../sql-lexer.ts";
 /**
  * The destructive-change gate. Each statement's code (codeOf in sql-lexer.ts) is read per action,
  * so a drop after an `ADD` in one `ALTER TABLE` counts, and a name may be quoted or schema-qualified.
@@ -14,98 +15,105 @@
  * runs outside one, and one it refuses outside a block is refused in a file that does, but within
  * the file's own BEGIN.
  */
-import type { ExtractedSchema, MigrationClassification } from "../migration-types.ts"
-import type { MigrateDialect } from "../types.ts"
-import { alterTableFindings, type Finding } from "./classify-alter.ts"
-import { createdOf, ftsCommandFindings, refuseHeader, reindexedOf, type Replayed } from "./classify-file.ts"
-import type { TargetKind } from "./classify-target.ts"
-import { classificationOf, type Read } from "./classify-verdict.ts"
-import { ftsTriggersOf, grammarFindings } from "./classify-grammar.ts"
-import { sqliteWriteFindings } from "./classify-sqlite-write.ts"
-import { type RebuildContext, rebuildFinding } from "./classify-rebuild.ts"
-import { runtimeFindings } from "./classify-runtime.ts"
-import { followAdds, type Fresh, freshStart } from "./classify-write.ts"
-import { type Facts, historyFacts } from "./pg-history.ts"
-import type { Placing } from "./pg-storage-types.ts"
-import { scopeReader } from "./pg-scope.ts"
-import { partitionedRecipe } from "./pg-partitioned.ts"
-import { pgTreeFindings } from "./pg-tree.ts"
-import type { Temps } from "./pg-temps.ts"
-import type { Prepared } from "./pg-execute.ts"
-import { type Held, heldStart, measured } from "./pg-held.ts"
-import { extractSchema } from "./schema.ts"
-import { type Rebuilds, rebuildsOf } from "./rebuild-copy.ts"
-import { outsideTransaction } from "./atlas-header.ts"
-import { noGuards, readGuards } from "./guard-read.ts"
-import { codeOf } from "../../sql-lexer.ts"
-import { nameKey, namingOf, QNAME, splitTopLevel, unquote } from "./sql-code.ts"
-import { type PgRead, pgRead } from "./pg-split.ts"
-import { splitSqlStatements } from "./sql-scan.ts"
-import { takenOptions } from "./classify-options.ts"
+import type { ExtractedSchema, MigrationClassification } from "../migration-types.ts";
+import type { MigrateDialect } from "../types.ts";
+import { outsideTransaction } from "./atlas-header.ts";
+import { alterTableFindings, type Finding } from "./classify-alter.ts";
+import { createdOf, ftsCommandFindings, refuseHeader, reindexedOf, type Replayed } from "./classify-file.ts";
+import { ftsTriggersOf, grammarFindings } from "./classify-grammar.ts";
+import { takenOptions } from "./classify-options.ts";
+import { type RebuildContext, rebuildFinding } from "./classify-rebuild.ts";
+import { runtimeFindings } from "./classify-runtime.ts";
+import { sqliteWriteFindings } from "./classify-sqlite-write.ts";
+import type { TargetKind } from "./classify-target.ts";
+import { classificationOf, type Read } from "./classify-verdict.ts";
+import { followAdds, type Fresh, freshStart } from "./classify-write.ts";
+import { noGuards, readGuards } from "./guard-read.ts";
+import type { Prepared } from "./pg-execute.ts";
+import { type Held, heldStart, measured } from "./pg-held.ts";
+import { type Facts, historyFacts } from "./pg-history.ts";
+import { partitionedRecipe } from "./pg-partitioned.ts";
+import { scopeReader } from "./pg-scope.ts";
+import { type PgRead, pgRead } from "./pg-split.ts";
+import type { Placing } from "./pg-storage-types.ts";
+import type { Temps } from "./pg-temps.ts";
+import { pgTreeFindings } from "./pg-tree.ts";
+import { type Rebuilds, rebuildsOf } from "./rebuild-copy.ts";
+import { extractSchema } from "./schema.ts";
+import { nameKey, namingOf, QNAME, splitTopLevel, unquote } from "./sql-code.ts";
+import { splitSqlStatements } from "./sql-scan.ts";
 
 /** How `parseMigration`, `classifyMigration` and `extractDropStatements` read a migration file */
 type ClassifyOptions = {
-	/** the schema the earlier migrations leave, which tells a lossless SQLite table rebuild from a drop */
-	before?: ExtractedSchema | undefined
-	/** where a SQLite file applies, whose own rule of what it runs the file is held to; default `local` */
-	kind?: TargetKind | undefined
-	/** how the file is read; default SQLite, as the CLI's */
-	dialect?: MigrateDialect | undefined
-	/** the Postgres schema the URLs' search_path names, where an unqualified name resolves; default `public` */
-	schema?: string | undefined
-}
+  /** the schema the earlier migrations leave, which tells a lossless SQLite table rebuild from a drop */
+  before?: ExtractedSchema | undefined;
+  /** where a SQLite file applies, whose own rule of what it runs the file is held to; default `local` */
+  kind?: TargetKind | undefined;
+  /** how the file is read; default SQLite, as the CLI's */
+  dialect?: MigrateDialect | undefined;
+  /** the Postgres schema the URLs' search_path names, where an unqualified name resolves; default `public` */
+  schema?: string | undefined;
+};
 
 /** What the statements of one file show, read once before the rules run */
 type FileContext = RebuildContext & {
-	/** the columns the file has added so far and nothing has written since: a backfill may fill them */
-	fresh: Fresh
-	created: Set<string>
-	/** what the Postgres history and the file so far attached to their tables (pg-history.ts) */
-	facts: Facts
-	/** on Postgres, the tables the open transaction holds locked since its NOT VALID ADDs (pg-validate.ts) */
-	held: Held
-	/** the schema the history and the file so far leave, statement by statement */
-	schema: ExtractedSchema
-	/** external-content FTS5 tables the file creates again and rebuilds from their content: a drop of one loses nothing */
-	reindexed: Set<string>
-	/** on Postgres, the file's prepared statements so far (pg-execute.ts) */
-	preparing: Prepared
-	/** on Postgres, the temp relations the file made so far (pg-temps.ts) */
-	temps: Temps
-}
+  /** the columns the file has added so far and nothing has written since: a backfill may fill them */
+  fresh: Fresh;
+  created: Set<string>;
+  /** what the Postgres history and the file so far attached to their tables (pg-history.ts) */
+  facts: Facts;
+  /** on Postgres, the tables the open transaction holds locked since its NOT VALID ADDs (pg-validate.ts) */
+  held: Held;
+  /** the schema the history and the file so far leave, statement by statement */
+  schema: ExtractedSchema;
+  /** external-content FTS5 tables the file creates again and rebuilds from their content: a drop of one loses nothing */
+  reindexed: Set<string>;
+  /** on Postgres, the file's prepared statements so far (pg-execute.ts) */
+  preparing: Prepared;
+  /** on Postgres, the temp relations the file made so far (pg-temps.ts) */
+  temps: Temps;
+};
 
 const UNSAFE_DROP =
-	/^DROP (?:TABLE|SCHEMA|SEQUENCE|MATERIALIZED VIEW|EXTENSION|DOMAIN|DATABASE|TYPE|ROLE|USER|GROUP|OWNED|FOREIGN TABLE)\b/i
+  /^DROP (?:TABLE|SCHEMA|SEQUENCE|MATERIALIZED VIEW|EXTENSION|DOMAIN|DATABASE|TYPE|ROLE|USER|GROUP|OWNED|FOREIGN TABLE)\b/i;
+
 // per-process-constant: a pattern composed from the name grammar, compiled once
 const DROP_LIST = /* @__PURE__ */ new RegExp(
-	`^DROP (TABLE|INDEX) (?:CONCURRENTLY )?(?:IF EXISTS )?(${QNAME}(?:\\s*,\\s*${QNAME})*)`,
-	"i",
-)
+  `^DROP (TABLE|INDEX) (?:CONCURRENTLY )?(?:IF EXISTS )?(${QNAME}(?:\\s*,\\s*${QNAME})*)`,
+  "i",
+);
+
 // per-process-constant: a pattern composed from the name grammar, compiled once
 const CAUTIOUS = /* @__PURE__ */ new RegExp(
-	`^(?:DROP|GRANT|REVOKE|CALL|CREATE OR REPLACE|REPLACE|INSERT OR REPLACE|ALTER SEQUENCE (?:IF EXISTS )?${QNAME} RESTART|ALTER (?:INDEX|POLICY|FUNCTION|PROCEDURE|TRIGGER|SEQUENCE)\\b.*\\bRENAME)\\b`,
-	"i",
-)
-/* on Postgres, what CAUTIOUS names but the parse tree does not rate: drops and renames and restarts are pg-ddl.ts's */
+  `^(?:DROP|GRANT|REVOKE|CALL|CREATE OR REPLACE|REPLACE|INSERT OR REPLACE|ALTER SEQUENCE (?:IF EXISTS )?${QNAME} RESTART|ALTER (?:INDEX|POLICY|FUNCTION|PROCEDURE|TRIGGER|SEQUENCE)\\b.*\\bRENAME)\\b`,
+  "i",
+);
+
+// on Postgres, what CAUTIOUS names but the parse tree does not rate: drops and renames and restarts are pg-ddl.ts's
 // per-process-constant: a pattern composed from the name grammar, compiled once
-const PG_CAUTIOUS = /* @__PURE__ */ new RegExp(`^(?:GRANT|REVOKE|CALL|CREATE OR REPLACE)\\b`, "i")
+const PG_CAUTIOUS = /* @__PURE__ */ new RegExp(`^(?:GRANT|REVOKE|CALL|CREATE OR REPLACE)\\b`, "i");
+
 // per-process-constant: a pattern composed from the name grammar, compiled once
 const RENAMES_NAMED = /* @__PURE__ */ new RegExp(
-	`^ALTER (?:TYPE|SCHEMA|VIEW|MATERIALIZED VIEW) (?:IF EXISTS )?${QNAME} (?:RENAME|SET SCHEMA|DROP ATTRIBUTE)\\b`,
-	"i",
-)
-const EXPLAIN = /^EXPLAIN (?:\([^)]*\) )?(?:(?:ANALYZE|ANALYSE|VERBOSE) )*/i
+  `^ALTER (?:TYPE|SCHEMA|VIEW|MATERIALIZED VIEW) (?:IF EXISTS )?${QNAME} (?:RENAME|SET SCHEMA|DROP ATTRIBUTE)\\b`,
+  "i",
+);
+
+const EXPLAIN = /^EXPLAIN (?:\([^)]*\) )?(?:(?:ANALYZE|ANALYSE|VERBOSE) )*/i;
+
 // per-process-constant: a pattern composed from the name grammar, compiled once
 const INDEX_ON = /* @__PURE__ */ new RegExp(
-	`^CREATE (?:UNIQUE )?INDEX (?!CONCURRENTLY)(?:IF NOT EXISTS )?(?:${QNAME} )?ON (ONLY )?(${QNAME})`,
-	"i",
-)
+  `^CREATE (?:UNIQUE )?INDEX (?!CONCURRENTLY)(?:IF NOT EXISTS )?(?:${QNAME} )?ON (ONLY )?(${QNAME})`,
+  "i",
+);
 
 /** The drops a DROP TABLE or DROP INDEX names, one per listed name */
 function dropNames(code: string): string[] {
-	const [, kind, list] = DROP_LIST.exec(code) ?? []
-	if (kind === undefined || list === undefined) return []
-	return splitTopLevel(list).map((name) => `DROP ${kind.toUpperCase()} ${unquote(name)}`)
+  const [, kind, list] = DROP_LIST.exec(code) ?? [];
+
+  if (kind === undefined || list === undefined) return [];
+
+  return splitTopLevel(list).map((name) => `DROP ${kind.toUpperCase()} ${unquote(name)}`);
 }
 
 /**
@@ -114,69 +122,87 @@ function dropNames(code: string): string[] {
  * partition's index built concurrently and attached to it
  */
 function indexWarning(code: string, ctx: FileContext): Finding | undefined {
-	const [, only, table] = INDEX_ON.exec(code) ?? []
-	if (table === undefined || ctx.created.has(nameKey(table, ctx.naming))) return undefined
-	const name = unquote(table)
-	if (!ctx.facts.partitioned.has(nameKey(table, ctx.naming)))
-		return {
-			level: "lock",
-			note: `blocks writes to ${name} while it builds; use CREATE INDEX CONCURRENTLY in its own -- atlas:txmode none file`,
-		}
-	if (only !== undefined) return undefined
-	return {
-		level: "lock",
-		note: `blocks writes to ${name} and its partitions while it builds; ${partitionedRecipe(name)}`,
-	}
+  const [, only, table] = INDEX_ON.exec(code) ?? [];
+
+  if (table === undefined || ctx.created.has(nameKey(table, ctx.naming))) return undefined;
+  const name = unquote(table);
+
+  if (!ctx.facts.partitioned.has(nameKey(table, ctx.naming))) {
+    return {
+      level: "lock",
+      note: `blocks writes to ${name} while it builds; use CREATE INDEX CONCURRENTLY in its own -- atlas:txmode none file`,
+    };
+  }
+
+  if (only !== undefined) return undefined;
+
+  return {
+    level: "lock",
+    note: `blocks writes to ${name} and its partitions while it builds; ${partitionedRecipe(name)}`,
+  };
 }
 
 /** Whether `code` drops only external-content FTS5 indexes the file creates again and rebuilds */
 function dropsRebuiltIndex(code: string, ctx: FileContext): boolean {
-	const dropped = DROP_LIST.exec(code)
-	return (
-		dropped?.[1]?.toUpperCase() === "TABLE" &&
-		splitTopLevel(dropped[2] as string).every((t) => {
-			const key = nameKey(t, ctx.naming)
-			/* only a table whose text lives elsewhere is an index: a stored-content FTS5 table holds the only copy */
-			return ctx.reindexed.has(key) && ctx.before?.externalFts.includes(key) === true
-		})
-	)
+  const dropped = DROP_LIST.exec(code);
+
+  return (
+    dropped?.[1]?.toUpperCase() === "TABLE" &&
+    splitTopLevel(dropped[2] as string).every((t) => {
+      const key = nameKey(t, ctx.naming);
+
+      // only a table whose text lives elsewhere is an index: a stored-content FTS5 table holds the only copy
+      return ctx.reindexed.has(key) && ctx.before?.externalFts.includes(key) === true;
+    })
+  );
 }
 
 /** A SQLite statement's drop, rename or other destructive shape, read from its code */
 function sqliteDropFindings(code: string): Finding[] {
-	if (UNSAFE_DROP.test(code) || /^TRUNCATE\b/i.test(code) || RENAMES_NAMED.test(code))
-		return [{ drops: dropNames(code), level: "unsafe" }]
-	return CAUTIOUS.test(code) ? [{ drops: dropNames(code), level: "cautious" }] : []
+  if (UNSAFE_DROP.test(code) || /^TRUNCATE\b/i.test(code) || RENAMES_NAMED.test(code))
+    return [{ drops: dropNames(code), level: "unsafe" }];
+
+  return CAUTIOUS.test(code) ? [{ drops: dropNames(code), level: "cautious" }] : [];
 }
 
 /** What the parse tree leaves to a Postgres statement's code: a TRUNCATE, and the grants, calls and replacements */
 function pgTextFindings(code: string): Finding[] {
-	if (/^TRUNCATE\b/i.test(code)) return [{ level: "unsafe" }]
-	return PG_CAUTIOUS.test(code) ? [{ level: "cautious" }] : []
+  if (/^TRUNCATE\b/i.test(code)) return [{ level: "unsafe" }];
+
+  return PG_CAUTIOUS.test(code) ? [{ level: "cautious" }] : [];
 }
 
 /** The findings of one statement's code that are not ALTER TABLE actions */
 function statementFindings(code: string, ctx: FileContext): Finding[] {
-	const rebuild = rebuildFinding(DROP_LIST.exec(code)?.[2], ctx)
-	if (rebuild !== undefined) return [rebuild]
-	if (dropsRebuiltIndex(code, ctx))
-		return [{ level: "cautious", note: "an FTS index database rebuilds from its content table" }]
-	const findings: Finding[] = ctx.dialect === "postgres" ? pgTextFindings(code) : sqliteDropFindings(code)
-	if (/\bCASCADE\b/i.test(code.replace(/\bON (?:DELETE|UPDATE) CASCADE\b/gi, ""))) findings.push({ level: "unsafe" })
-	findings.push(...runtimeFindings(code))
-	if (ctx.dialect === "postgres") {
-		const index = indexWarning(code, ctx)
-		if (index !== undefined) findings.push(index)
-	}
-	return findings
+  const rebuild = rebuildFinding(DROP_LIST.exec(code)?.[2], ctx);
+
+  if (rebuild !== undefined) return [rebuild];
+
+  if (dropsRebuiltIndex(code, ctx))
+    return [{ level: "cautious", note: "an FTS index database rebuilds from its content table" }];
+  const findings: Finding[] = ctx.dialect === "postgres" ? pgTextFindings(code) : sqliteDropFindings(code);
+
+  if (/\bCASCADE\b/i.test(code.replaceAll(/\bON (?:DELETE|UPDATE) CASCADE\b/gi, "")))
+    findings.push({ level: "unsafe" });
+  findings.push(...runtimeFindings(code));
+
+  if (ctx.dialect === "postgres") {
+    const index = indexWarning(code, ctx);
+
+    if (index !== undefined) findings.push(index);
+  }
+
+  return findings;
 }
 
 /** The findings of one statement's code; an EXPLAIN as the statement it explains (ANALYZE runs it) */
 function findingsOf(code: string, ctx: FileContext): Finding[] {
-	if (EXPLAIN.test(code)) return findingsOf(code.replace(EXPLAIN, ""), ctx)
-	if (!/^ALTER TABLE\b/i.test(code)) return statementFindings(code, ctx)
-	/* on Postgres an ALTER TABLE is rated from its parse tree, command by command (pg-ddl.ts) */
-	return ctx.dialect === "postgres" ? [] : alterTableFindings(code, ctx)
+  if (EXPLAIN.test(code)) return findingsOf(code.replace(EXPLAIN, ""), ctx);
+
+  if (!/^ALTER TABLE\b/i.test(code)) return statementFindings(code, ctx);
+
+  // on Postgres an ALTER TABLE is rated from its parse tree, command by command (pg-ddl.ts)
+  return ctx.dialect === "postgres" ? [] : alterTableFindings(code, ctx);
 }
 
 /**
@@ -184,82 +210,94 @@ function findingsOf(code: string, ctx: FileContext): Finding[] {
  * statement makes, and the grammar's, which a whole-statement tree rating stands in for
  */
 function statementReadings(
-	{ code, stmt, tree }: { code: string; stmt: string; tree: unknown },
-	ctx: FileContext,
-	ftsTriggers: ReadonlySet<string>,
+  { code, stmt, tree }: { code: string; stmt: string; tree: unknown },
+  ctx: FileContext,
+  ftsTriggers: ReadonlySet<string>,
 ): Finding[] {
-	const rules = findingsOf(code, ctx)
-	if (ctx.dialect === "sqlite") {
-		const writes = [...ftsCommandFindings(stmt), ...sqliteWriteFindings(code, ctx)]
-		return [...rules, ...grammarFindings(code, { ...ctx, ftsTriggers }), ...writes]
-	}
-	const read = pgTreeFindings(stmt, ctx, tree)
-	return [...rules, ...grammarFindings(code, { ...ctx, ftsTriggers, ...read.grammar }), ...read.findings]
+  const rules = findingsOf(code, ctx);
+
+  if (ctx.dialect === "sqlite") {
+    const writes = [...ftsCommandFindings(stmt), ...sqliteWriteFindings(code, ctx)];
+
+    return [...rules, ...grammarFindings(code, { ...ctx, ftsTriggers }), ...writes];
+  }
+
+  const read = pgTreeFindings(stmt, ctx, tree);
+
+  return [...rules, ...grammarFindings(code, { ...ctx, ftsTriggers, ...read.grammar }), ...read.findings];
 }
 
 /** What a caller holds of a Postgres file besides its text: its parse, its replay, where its relations are */
-type Given = { placing?: Placing | undefined; read?: PgRead | undefined; replayed?: Replayed | undefined }
+type Given = { placing?: Placing | undefined; read?: PgRead | undefined; replayed?: Replayed | undefined };
 
 /**
  * The file read as `dialect` reads it, against `before`, a Postgres name keyed under `schema`; on a
  * check that `replayed` it on devUrl, with what Postgres held at each statement it measured
  */
 function readFile(
-	sql: string,
-	{ before, dialect, schema }: { before: ExtractedSchema | undefined; dialect: MigrateDialect; schema: string },
-	{ placing, read, replayed }: Given,
+  sql: string,
+  { before, dialect, schema }: { before: ExtractedSchema | undefined; dialect: MigrateDialect; schema: string },
+  { placing, read, replayed }: Given,
 ): Read[] {
-	refuseHeader(sql, dialect)
-	const naming = namingOf(dialect, schema)
-	/* on Postgres, the statements Postgres runs: Atlas's chunks read by its parser, each tree kept */
-	/* on Postgres, each as Atlas sends it, its chunk's lead left off: a lead never reaches a rating */
-	const statements = read === undefined ? splitSqlStatements(sql) : read.statements.map(({ sent }) => sent)
-	const codes = statements.map((stmt) => codeOf(stmt, dialect))
-	const created = createdOf(codes, naming)
-	const guards = dialect === "sqlite" ? readGuards(statements, codes, before) : noGuards()
-	const rebuilds: Rebuilds = dialect === "sqlite" ? rebuildsOf(statements, codes, guards.guarded) : new Map()
-	const reindexed = dialect === "sqlite" ? reindexedOf(statements) : new Set<string>()
-	const ftsTriggers = ftsTriggersOf(statements, before, naming)
-	const ctx: FileContext = {
-		after: dialect === "sqlite" ? extractSchema(sql, before) : undefined,
-		before,
-		created,
-		dialect,
-		facts: historyFacts(dialect === "postgres" ? before : undefined, schema, placing),
-		held: heldStart(),
-		preparing: { queries: new Map(), removed: new Map() },
-		temps: new Map(),
-		naming,
-		schema: before ?? extractSchema("", undefined, { dialect, schema }),
-		fresh: freshStart(before),
-		txmodeNone: dialect === "sqlite" && outsideTransaction(sql),
-		drops: new Map(),
-		fired: guards.fired,
-		rebuilds,
-		reindexed,
-		kept: guards.kept,
-		renumbered: guards.renumbered,
-		unguarded: guards.unguarded,
-	}
-	const scoped = scopeReader(outsideTransaction(sql), ctx, replayed !== undefined)
-	return statements.map((stmt, i) => {
-		const tree = read?.statements[i]?.tree
-		const scope = tree === undefined ? {} : scoped(tree)
-		const held = replayed?.held.get(i)
-		if (held !== undefined) measured(ctx.held, held)
-		/* database's own guard around a rebuild, exactly as database writes it, empties and refills; it loses nothing */
-		/* every other statement is rated by the rules, and only as a shape the grammar recognizes */
-		const findings = guards.guarded.has(i)
-			? []
-			: statementReadings({ code: codes[i] as string, stmt, tree }, ctx, ftsTriggers)
-		/* on Postgres what a statement makes new is followed from its parse tree (pg-ddl.ts) */
-		if (dialect === "sqlite") {
-			followAdds(codes[i] as string, ctx.fresh)
-			ctx.schema = extractSchema(stmt, ctx.schema)
-		}
-		const line = read?.statements[i]?.line
-		return { code: codes[i] as string, ...scope, dialect, findings, line, stmt, tree }
-	})
+  refuseHeader(sql, dialect);
+  const naming = namingOf(dialect, schema);
+  // on Postgres, the statements Postgres runs: Atlas's chunks read by its parser, each tree kept
+  // on Postgres, each as Atlas sends it, its chunk's lead left off: a lead never reaches a rating
+  const statements = read === undefined ? splitSqlStatements(sql) : read.statements.map(({ sent }) => sent);
+  const codes = statements.map((stmt) => codeOf(stmt, dialect));
+  const created = createdOf(codes, naming);
+  const guards = dialect === "sqlite" ? readGuards(statements, codes, before) : noGuards();
+  const rebuilds: Rebuilds = dialect === "sqlite" ? rebuildsOf(statements, codes, guards.guarded) : new Map();
+  const reindexed = dialect === "sqlite" ? reindexedOf(statements) : new Set<string>();
+  const ftsTriggers = ftsTriggersOf(statements, before, naming);
+
+  const ctx: FileContext = {
+    after: dialect === "sqlite" ? extractSchema(sql, before) : undefined,
+    before,
+    created,
+    dialect,
+    drops: new Map(),
+    facts: historyFacts(dialect === "postgres" ? before : undefined, schema, placing),
+    fired: guards.fired,
+    fresh: freshStart(before),
+    held: heldStart(),
+    kept: guards.kept,
+    naming,
+    preparing: { queries: new Map(), removed: new Map() },
+    rebuilds,
+    reindexed,
+    renumbered: guards.renumbered,
+    schema: before ?? extractSchema("", undefined, { dialect, schema }),
+    temps: new Map(),
+    txmodeNone: dialect === "sqlite" && outsideTransaction(sql),
+    unguarded: guards.unguarded,
+  };
+
+  const scoped = scopeReader(outsideTransaction(sql), ctx, replayed !== undefined);
+
+  return statements.map((stmt, i) => {
+    const tree = read?.statements[i]?.tree;
+    const scope = tree === undefined ? {} : scoped(tree);
+    const held = replayed?.held.get(i);
+
+    if (held !== undefined) measured(ctx.held, held);
+
+    // database's own guard around a rebuild, exactly as database writes it, empties and refills; it loses nothing
+    // every other statement is rated by the rules, and only as a shape the grammar recognizes
+    const findings = guards.guarded.has(i)
+      ? []
+      : statementReadings({ code: codes[i] as string, stmt, tree }, ctx, ftsTriggers);
+
+    // on Postgres what a statement makes new is followed from its parse tree (pg-ddl.ts)
+    if (dialect === "sqlite") {
+      followAdds(codes[i] as string, ctx.fresh);
+      ctx.schema = extractSchema(stmt, ctx.schema);
+    }
+
+    const line = read?.statements[i]?.line;
+
+    return { code: codes[i] as string, ...scope, dialect, findings, line, stmt, tree };
+  });
 }
 
 /**
@@ -269,30 +307,31 @@ function readFile(
  * `placing` says its relations are
  */
 const readings = (
-	sql: string,
-	{ before, dialect, schema }: ClassifyOptions,
-	{ placing, read, replayed }: Given = {},
+  sql: string,
+  { before, dialect, schema }: ClassifyOptions,
+  { placing, read, replayed }: Given = {},
 ): Read[] =>
-	readFile(
-		sql,
-		{ before, dialect: dialect ?? "sqlite", schema: schema ?? "public" },
-		{ placing, read: dialect === "postgres" ? (read ?? pgRead(sql)) : undefined, replayed },
-	)
+  readFile(
+    sql,
+    { before, dialect: dialect ?? "sqlite", schema: schema ?? "public" },
+    { placing, read: dialect === "postgres" ? (read ?? pgRead(sql)) : undefined, replayed },
+  );
 
 /** The table, column and index drops a migration makes, as `DROP TABLE t`, `DROP COLUMN t.c`, `DROP INDEX i` */
 function extractDropStatements(sql: string, options: ClassifyOptions = {}): string[] {
-	return dropsOf(readings(sql, takenOptions("extractDropStatements", options)))
+  return dropsOf(readings(sql, takenOptions("extractDropStatements", options)));
 }
 
 /** The drops the readings of a file find */
 const dropsOf = (reads: readonly Read[]): string[] => [
-	...new Set(reads.flatMap(({ findings }) => findings.flatMap((f) => f.drops ?? []))),
-]
+  ...new Set(reads.flatMap(({ findings }) => findings.flatMap((f) => f.drops ?? []))),
+];
 
 /** How destructive a migration is, which statements make it so, and which block a Postgres table */
 function classifyMigration(sql: string, options: ClassifyOptions = {}): MigrationClassification {
-	const taken = takenOptions("classifyMigration", options)
-	return classificationOf(readings(sql, taken), sql, taken)
+  const taken = takenOptions("classifyMigration", options);
+
+  return classificationOf(readings(sql, taken), sql, taken);
 }
 
-export { classifyMigration, type ClassifyOptions, dropsOf, extractDropStatements, readings }
+export { classifyMigration, type ClassifyOptions, dropsOf, extractDropStatements, readings };

@@ -13,54 +13,61 @@
  * server; a pending file's CREATE ROLE of one stops apply, though, so check reads the target's
  * roles for those first, on a docker:// devUrl too.
  */
-import { readFileSync } from "node:fs"
-import { join } from "node:path"
-import { sqlFiles } from "./atlas-dir.ts"
-import type { PgTarget } from "./atlas-target.ts"
-import { type Connect, failureOf, loadPostgres } from "./pg-live-objects.ts"
-import { nodeOf } from "./pg-outside-transaction.ts"
-import { type HistoryFile, onDev } from "./pg-replay.ts"
-import type { Replayed } from "./classify-file.ts"
-import type { Locked } from "./pg-held-types.ts"
-import { heldRoles } from "./pg-replay-roles.ts"
-import { pgRead } from "./pg-split.ts"
-import { postgresOptionsOf } from "./pg-url.ts"
-import { ReplayFailed } from "./replay-failed.ts"
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
-/* why database loads postgres.js here */
-const REPLAYS = "replay the history and the pending files on devUrl in a check"
+import { sqlFiles } from "./atlas-dir.ts";
+import type { PgTarget } from "./atlas-target.ts";
+import type { Replayed } from "./classify-file.ts";
+import type { Locked } from "./pg-held-types.ts";
+import { type Connect, failureOf, loadPostgres } from "./pg-live-objects.ts";
+import { nodeOf } from "./pg-outside-transaction.ts";
+import { heldRoles } from "./pg-replay-roles.ts";
+import { type HistoryFile, onDev } from "./pg-replay.ts";
+import { pgRead } from "./pg-split.ts";
+import { postgresOptionsOf } from "./pg-url.ts";
+import { ReplayFailed } from "./replay-failed.ts";
 
-/* the line check prints when it replays nothing, and why */
-const NOT_REPLAYED = "Check did not replay the pending files on devUrl"
+// why database loads postgres.js here
+const REPLAYS = "replay the history and the pending files on devUrl in a check";
 
-/* what a refusal of check's stops */
-const STOPS = "check applies nothing"
+// the line check prints when it replays nothing, and why
+const NOT_REPLAYED = "Check did not replay the pending files on devUrl";
 
-/* why check replays nothing on a docker:// devUrl */
+// what a refusal of check's stops
+const STOPS = "check applies nothing";
+
+// why check replays nothing on a docker:// devUrl
 const DOCKER = (devUrl: string): string =>
-	`${devUrl} is Atlas's own container, which database cannot reach, so a statement Postgres refuses on every database is found only when it applies; set devUrl to a postgres:// scratch database that database can connect to`
+  `${devUrl} is Atlas's own container, which database cannot reach, so a statement Postgres refuses on every database is found only when it applies; set devUrl to a postgres:// scratch database that database can connect to`;
 
 /**
  * Each role the `pending` files make, by CREATE ROLE or a rename to it, with the file that makes it
  * first; a role a file drops before that is left out, as apply makes it anew
  */
 function rolesMade(pending: readonly HistoryFile[]): Map<string, string> {
-	const made = new Map<string, string>()
-	const dropped = new Set<string>()
-	for (const { name, sql } of pending)
-		for (const { tree } of pgRead(sql).statements) {
-			const [type, node] = tree === undefined ? ["", {}] : nodeOf(tree)
-			if (type === "DropRoleStmt")
-				for (const role of node["roles"] as { RoleSpec: { rolename: string } }[]) dropped.add(role.RoleSpec.rolename)
-			const role =
-				type === "CreateRoleStmt"
-					? String(node["role"])
-					: type === "RenameStmt" && node["renameType"] === "OBJECT_ROLE"
-						? String(node["newname"])
-						: undefined
-			if (role !== undefined && !dropped.has(role) && !made.has(role)) made.set(role, name)
-		}
-	return made
+  const made = new Map<string, string>();
+  const dropped = new Set<string>();
+
+  for (const { name, sql } of pending) {
+    for (const { tree } of pgRead(sql).statements) {
+      const [type, node] = tree === undefined ? ["", {}] : nodeOf(tree);
+
+      if (type === "DropRoleStmt")
+        for (const role of node["roles"] as { RoleSpec: { rolename: string } }[]) dropped.add(role.RoleSpec.rolename);
+
+      const role =
+        type === "CreateRoleStmt"
+          ? String(node["role"])
+          : type === "RenameStmt" && node["renameType"] === "OBJECT_ROLE"
+            ? String(node["newname"])
+            : undefined;
+
+      if (role !== undefined && !dropped.has(role) && !made.has(role)) made.set(role, name);
+    }
+  }
+
+  return made;
 }
 
 /**
@@ -68,29 +75,32 @@ function rolesMade(pending: readonly HistoryFile[]): Map<string, string> {
  * of its roles, a replay's own left out, which another check on the server holds only while it runs
  */
 async function refuseHeldRoles(connect: Connect, target: PgTarget, pending: readonly HistoryFile[]): Promise<void> {
-	const made = rolesMade(pending)
-	if (made.size === 0) return
-	const sql = connect({ ...postgresOptionsOf(target.url, "url"), max: 1 })
-	let held: Set<string>
-	try {
-		held = await heldRoles(sql, [...made.keys()])
-	} catch (error) {
-		const failed = { field: "url", url: target.url, urls: [target.url, target.devUrl] } as const
-		throw new ReplayFailed(
-			`database could not read the roles url's server holds: ${failureOf(error, failed)}; ${STOPS}`,
-			{
-				cause: error,
-			},
-		)
-	} finally {
-		await sql.end()
-	}
-	for (const [role, file] of made)
-		if (held.has(role)) throw new ReplayFailed(`role "${role}" already exists; apply would stop at ${file}`)
+  const made = rolesMade(pending);
+
+  if (made.size === 0) return;
+  const sql = connect({ ...postgresOptionsOf(target.url, "url"), max: 1 });
+  let held: Set<string>;
+
+  try {
+    held = await heldRoles(sql, [...made.keys()]);
+  } catch (error) {
+    const failed = { field: "url", url: target.url, urls: [target.url, target.devUrl] } as const;
+    throw new ReplayFailed(
+      `database could not read the roles url's server holds: ${failureOf(error, failed)}; ${STOPS}`,
+      {
+        cause: error,
+      },
+    );
+  } finally {
+    await sql.end();
+  }
+
+  for (const [role, file] of made)
+    if (held.has(role)) throw new ReplayFailed(`role "${role}" already exists; apply would stop at ${file}`);
 }
 
 /** What check's replay read of each pending file it replayed, by the file's name (pg-replay-held.ts) */
-type Measured = ReadonlyMap<string, Replayed>
+type Measured = ReadonlyMap<string, Replayed>;
 
 /**
  * The history and the pending `files`, in order, replayed on `target`'s dev server as Atlas applies
@@ -99,63 +109,71 @@ type Measured = ReadonlyMap<string, Replayed>
  * VALIDATE in it, or undefined when the replay did not run
  */
 async function replayPending(
-	{ print, target }: { print(line: string): void; target: PgTarget },
-	{ files, pending }: { files: readonly HistoryFile[]; pending: readonly string[] },
-	load: () => Promise<Connect> = () => loadPostgres(REPLAYS),
+  { print, target }: { print(line: string): void; target: PgTarget },
+  { files, pending }: { files: readonly HistoryFile[]; pending: readonly string[] },
+  load: () => Promise<Connect> = () => loadPostgres(REPLAYS),
 ): Promise<Measured | undefined> {
-	const docker = target.devUrl.startsWith("docker:")
-	let connect: Connect
-	try {
-		connect = await load()
-	} catch (error) {
-		// reason: the postgres package is an optional peer; without it check rates the files alone, and says so
-		print(`${NOT_REPLAYED}: ${docker ? DOCKER(target.devUrl) : (error as Error).message}`)
-		return undefined
-	}
-	const waiting = new Set(pending)
-	await refuseHeldRoles(
-		connect,
-		target,
-		files.filter((file) => waiting.has(file.name)),
-	)
-	if (docker) {
-		print(`${NOT_REPLAYED}: ${DOCKER(target.devUrl)}`)
-		return undefined
-	}
-	const measured = new Map(pending.map((name) => [name, { held: new Map<number, Locked>() }]))
-	await onDev(target, files, {
-		adopted: (file, role) =>
-			print(
-				`Check adopted role ${role}, which ${file} made inside a statement the replay cannot leave out, as one it made: NOLOGIN NOSUPERUSER NOREPLICATION NOBYPASSRLS with no password on devUrl, dropped after it; apply makes it as the file says`,
-			),
-		after: async () => undefined,
-		print,
-		doing: "check replayed the history and the pending files there",
-		held: { at: (file, statement, locked) => measured.get(file)?.held.set(statement, locked), schema: target.schema },
-		leftOut: (file, sent, what) =>
-			print(
-				`Check left ${JSON.stringify(sent)} in ${file} out of its replay on devUrl: ${what} reaches past the database the replay runs in, so apply alone runs it`,
-			),
-		load: async () => connect,
-		madeBare: (file, sent) =>
-			print(
-				`Check made the role of ${JSON.stringify(sent)} in ${file} NOLOGIN NOSUPERUSER NOREPLICATION NOBYPASSRLS, in no role the replay did not make, on devUrl: the replay needs only its name, so apply alone gives it the rest`,
-			),
-		movedTo: (file, sent, names) =>
-			print(
-				`Check ran ${JSON.stringify(sent)} in ${file} in pg_default on devUrl, not in ${names.map((name) => `tablespace ${name}`).join(" or ")}, as the replay left out the CREATE of that: where a relation lives changes nothing check reads, so apply alone runs it as written`,
-			),
-		stops: STOPS,
-	})
-	return measured
+  const docker = target.devUrl.startsWith("docker:");
+  let connect: Connect;
+
+  try {
+    connect = await load();
+  } catch (error) {
+    // reason: the postgres package is an optional peer; without it check rates the files alone, and says so
+    print(`${NOT_REPLAYED}: ${docker ? DOCKER(target.devUrl) : (error as Error).message}`);
+
+    return undefined;
+  }
+
+  const waiting = new Set(pending);
+  await refuseHeldRoles(
+    connect,
+    target,
+    files.filter((file) => waiting.has(file.name)),
+  );
+
+  if (docker) {
+    print(`${NOT_REPLAYED}: ${DOCKER(target.devUrl)}`);
+
+    return undefined;
+  }
+
+  const measured = new Map(pending.map((name) => [name, { held: new Map<number, Locked>() }]));
+  await onDev(target, files, {
+    adopted: (file, role) =>
+      print(
+        `Check adopted role ${role}, which ${file} made inside a statement the replay cannot leave out, as one it made: NOLOGIN NOSUPERUSER NOREPLICATION NOBYPASSRLS with no password on devUrl, dropped after it; apply makes it as the file says`,
+      ),
+    after: async () => {},
+    doing: "check replayed the history and the pending files there",
+    held: { at: (file, statement, locked) => measured.get(file)?.held.set(statement, locked), schema: target.schema },
+    leftOut: (file, sent, what) =>
+      print(
+        `Check left ${JSON.stringify(sent)} in ${file} out of its replay on devUrl: ${what} reaches past the database the replay runs in, so apply alone runs it`,
+      ),
+    load: async () => connect,
+    madeBare: (file, sent) =>
+      print(
+        `Check made the role of ${JSON.stringify(sent)} in ${file} NOLOGIN NOSUPERUSER NOREPLICATION NOBYPASSRLS, in no role the replay did not make, on devUrl: the replay needs only its name, so apply alone gives it the rest`,
+      ),
+    movedTo: (file, sent, names) =>
+      print(
+        `Check ran ${JSON.stringify(sent)} in ${file} in pg_default on devUrl, not in ${names.map((name) => `tablespace ${name}`).join(" or ")}, as the replay left out the CREATE of that: where a relation lives changes nothing check reads, so apply alone runs it as written`,
+      ),
+    print,
+    stops: STOPS,
+  });
+
+  return measured;
 }
 
 /** The snapshot `copy`'s files through the last of `pending`, in order, as check replays them */
 function throughPending(copy: string, pending: readonly string[]): HistoryFile[] {
-	const names = sqlFiles(copy)
-	return names
-		.slice(0, names.indexOf(pending.at(-1) as string) + 1)
-		.map((name) => ({ name, sql: readFileSync(join(copy, name), "utf8") }))
+  const names = sqlFiles(copy);
+
+  return names
+    .slice(0, names.indexOf(pending.at(-1) as string) + 1)
+    .map((name) => ({ name, sql: readFileSync(join(copy, name), "utf8") }));
 }
 
-export { type Measured, replayPending, throughPending }
+export { type Measured, replayPending, throughPending };

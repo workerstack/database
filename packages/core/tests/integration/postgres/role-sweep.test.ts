@@ -5,46 +5,49 @@
  * every database_t_* role with no pg_shdepend row and no session; any other is kept, and said why.
  * Sibling: the scratch database sweep (scratch-sweep.test.ts).
  */
-import pg from "pg"
-import { afterAll, describe, expect, it } from "vitest"
-import { asRole, dropRoles, query, unique } from "../support/pg-roles.ts"
-import { pgUrl } from "../support/pg.ts"
-import { sweepTestRoles } from "../support/role-sweep.ts"
+import pg from "pg";
+import { afterAll, describe, expect, it } from "vitest";
 
-/* the roles this file plants, each under a prefix of its own so the sweep it runs reaches no other file's */
-const prefix = unique("database_t_sweep")
-const [free, held, busy] = ["free", "held", "busy"].map((what) => `${prefix}_${what}`) as [string, string, string]
+import { asRole, dropRoles, query, unique } from "../support/pg-roles.ts";
+import { pgUrl } from "../support/pg.ts";
+import { sweepTestRoles } from "../support/role-sweep.ts";
+
+// the roles this file plants, each under a prefix of its own so the sweep it runs reaches no other file's
+const prefix = unique("database_t_sweep");
+const [free, held, busy] = ["free", "held", "busy"].map((what) => `${prefix}_${what}`) as [string, string, string];
+
 afterAll(async () => {
-	/* the grant that keeps the sweep off `held` keeps dropRoles off it too */
-	if ((await query(pgUrl(), `SELECT 1 FROM pg_roles WHERE rolname = '${held}'`)).length > 0)
-		await query(pgUrl(), `REVOKE CONNECT ON DATABASE postgres FROM ${held}`)
-	await dropRoles(free, held, busy)
-})
+  // the grant that keeps the sweep off `held` keeps dropRoles off it too
+  if ((await query(pgUrl(), `SELECT 1 FROM pg_roles WHERE rolname = '${held}'`)).length > 0)
+    await query(pgUrl(), `REVOKE CONNECT ON DATABASE postgres FROM ${held}`);
+  await dropRoles(free, held, busy);
+});
 
 describe("a test run leaves no test role behind (sibling: the scratch database sweep)", () => {
-	it("drops a database_t_ role with no dependency and no session, and keeps one with either, saying why", async () => {
-		await query(pgUrl(), `CREATE ROLE ${free}`)
-		await query(pgUrl(), `CREATE ROLE ${held}`)
-		await query(pgUrl(), `GRANT CONNECT ON DATABASE postgres TO ${held}`)
-		const session = new pg.Client({ connectionString: await asRole(pgUrl(), busy, "") })
-		await session.connect()
-		const admin = new pg.Client({ connectionString: pgUrl() })
-		await admin.connect()
-		try {
-			const lines: string[] = []
-			const swept = await sweepTestRoles(admin, { like: `${prefix}\\_%`, log: (line) => lines.push(line) })
-			/* with the sweep's lines, so a role it kept says why */
-			expect({ dropped: swept.dropped, lines }).toMatchObject({ dropped: [free] })
-			const left = await query(pgUrl(), `SELECT rolname FROM pg_roles WHERE rolname LIKE '${prefix}\\_%' ORDER BY 1`)
-			expect(left.map(({ rolname }) => rolname)).toEqual([busy, held])
-			expect(lines).toEqual([
-				`[database] role sweep keeps ${busy}: a session runs as it`,
-				`[database] role sweep dropped ${free}, which a killed run left`,
-				`[database] role sweep keeps ${held}: 1 object depends on it (pg_shdepend)`,
-			])
-		} finally {
-			await admin.end()
-			await session.end()
-		}
-	})
-})
+  it("drops a database_t_ role with no dependency and no session, and keeps one with either, saying why", async () => {
+    await query(pgUrl(), `CREATE ROLE ${free}`);
+    await query(pgUrl(), `CREATE ROLE ${held}`);
+    await query(pgUrl(), `GRANT CONNECT ON DATABASE postgres TO ${held}`);
+    const session = new pg.Client({ connectionString: await asRole(pgUrl(), busy, "") });
+    await session.connect();
+    const admin = new pg.Client({ connectionString: pgUrl() });
+    await admin.connect();
+
+    try {
+      const lines: string[] = [];
+      const swept = await sweepTestRoles(admin, { like: `${prefix}\\_%`, log: (line) => lines.push(line) });
+      // with the sweep's lines, so a role it kept says why
+      expect({ dropped: swept.dropped, lines }).toMatchObject({ dropped: [free] });
+      const left = await query(pgUrl(), `SELECT rolname FROM pg_roles WHERE rolname LIKE '${prefix}\\_%' ORDER BY 1`);
+      expect(left.map(({ rolname }) => rolname)).toEqual([busy, held]);
+      expect(lines).toEqual([
+        `[database] role sweep keeps ${busy}: a session runs as it`,
+        `[database] role sweep dropped ${free}, which a killed run left`,
+        `[database] role sweep keeps ${held}: 1 object depends on it (pg_shdepend)`,
+      ]);
+    } finally {
+      await admin.end();
+      await session.end();
+    }
+  });
+});

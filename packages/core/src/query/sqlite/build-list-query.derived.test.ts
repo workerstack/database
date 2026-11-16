@@ -3,299 +3,306 @@
  * are supplied rather than read off a table. Its cursor arm handles NULL sort
  * values explicitly, which is the part most easily got wrong.
  */
-import { type SQL, sql as drizzleSql } from "drizzle-orm"
-import { integer, SQLiteDialect, sqliteTable, text } from "drizzle-orm/sqlite-core"
-import { describe, expect, it } from "vitest"
-import { DatabaseError } from "../../error.ts"
-import { createCursor } from "../cursor-mint.ts"
-import { createListQuerySchema } from "../list-schema.ts"
-import type { SortField } from "../types.ts"
-import { buildDerivedListQuery } from "./build-list-query.ts"
-import { SEALED } from "../__fixtures__/cursor-secret.ts"
+import { type SQL, sql as drizzleSql } from "drizzle-orm";
+import { integer, SQLiteDialect, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { describe, expect, it } from "vitest";
+
+import { DatabaseError } from "../../error.ts";
+import { SEALED } from "../__fixtures__/cursor-secret.ts";
+import { createCursor } from "../cursor-mint.ts";
+import { createListQuerySchema } from "../list-schema.ts";
+import type { SortField } from "../types.ts";
+import { buildDerivedListQuery } from "./build-list-query.ts";
 
 const derived = sqliteTable("derived", {
-	id: text("id").primaryKey(),
-	published_at: integer("published_at"),
-	title: text("title"),
-})
+  id: text("id").primaryKey(),
+  published_at: integer("published_at"),
+  title: text("title"),
+});
 
 const dialect = new (SQLiteDialect as unknown as new () => {
-	sqlToQuery: (sql: SQL) => { params: unknown[]; sql: string }
-})()
-const compile = (built: SQL) => dialect.sqlToQuery(built)
+  sqlToQuery: (sql: SQL) => { params: unknown[]; sql: string };
+})();
 
-/* Small helper so the tests read as clauses rather than template noise */
-const compileSql = (fragment: string): SQL => drizzleSql.raw(fragment)
+const compile = (built: SQL) => dialect.sqlToQuery(built);
+
+// Small helper so the tests read as clauses rather than template noise
+const compileSql = (fragment: string): SQL => drizzleSql.raw(fragment);
 
 const base = {
-	idColumn: derived.id,
-	sortColumns: { published_at: derived.published_at, title: derived.title },
-}
+  idColumn: derived.id,
+  sortColumns: { published_at: derived.published_at, title: derived.title },
+};
 
 const parsed = (over: Record<string, unknown> = {}) => ({
-	limit: 20,
-	parsedSort: [{ direction: "desc" as const, field: "published_at" as const }],
-	...over,
-})
+  limit: 20,
+  parsedSort: [{ direction: "desc" as const, field: "published_at" as const }],
+  ...over,
+});
 
 describe("buildDerivedListQuery — pagination mode", () => {
-	it("uses offset pagination when no cursor is given", () => {
-		const result = buildDerivedListQuery({ ...SEALED, ...base, parsed: parsed({ page: 3 }) })
+  it("uses offset pagination when no cursor is given", () => {
+    const result = buildDerivedListQuery({ ...SEALED, ...base, parsed: parsed({ page: 3 }) });
 
-		expect(result.meta.type).toBe("offset")
-		expect(result.meta.page).toBe(3)
-		expect(result.offset).toBe(40)
-		/* one extra row so the caller can detect a next page */
-		expect(result.limit).toBe(21)
-	})
+    expect(result.meta.type).toBe("offset");
+    expect(result.meta.page).toBe(3);
+    expect(result.offset).toBe(40);
+    // one extra row so the caller can detect a next page
+    expect(result.limit).toBe(21);
+  });
 
-	it("defaults to page 1 when none is given", () => {
-		const result = buildDerivedListQuery({ ...SEALED, ...base, parsed: parsed() })
-		expect(result.offset).toBe(0)
-		expect(result.meta.page).toBe(1)
-	})
+  it("defaults to page 1 when none is given", () => {
+    const result = buildDerivedListQuery({ ...SEALED, ...base, parsed: parsed() });
+    expect(result.offset).toBe(0);
+    expect(result.meta.page).toBe(1);
+  });
 
-	it("switches to cursor mode when a cursor resolves against the sort column", () => {
-		const cursor = createCursor({ id: "d_9", published_at: 1700000000000 }, parsed().parsedSort, SEALED)
-		const result = buildDerivedListQuery({ ...SEALED, ...base, parsed: parsed({ cursor }) })
+  it("switches to cursor mode when a cursor resolves against the sort column", () => {
+    const cursor = createCursor({ id: "d_9", published_at: 1700000000000 }, parsed().parsedSort, SEALED);
+    const result = buildDerivedListQuery({ ...SEALED, ...base, parsed: parsed({ cursor }) });
 
-		expect(result.meta.type).toBe("cursor")
-		expect(result.meta.page).toBe(1)
-		expect(result.offset).toBe(0)
-	})
+    expect(result.meta.type).toBe("cursor");
+    expect(result.meta.page).toBe(1);
+    expect(result.offset).toBe(0);
+  });
 
-	it("refuses a cursor when a sort field has no supplied column", () => {
-		const sort: SortField[] = [{ direction: "desc", field: "unmapped" }]
-		const cursor = createCursor({ id: "d_9", unmapped: 1 }, sort, SEALED)
-		expect(() =>
-			buildDerivedListQuery({ ...SEALED, ...base, parsed: { cursor, limit: 20, parsedSort: sort } }),
-		).toThrow(DatabaseError)
-	})
+  it("refuses a cursor when a sort field has no supplied column", () => {
+    const sort: SortField[] = [{ direction: "desc", field: "unmapped" }];
+    const cursor = createCursor({ id: "d_9", unmapped: 1 }, sort, SEALED);
+    expect(() =>
+      buildDerivedListQuery({ ...SEALED, ...base, parsed: { cursor, limit: 20, parsedSort: sort } }),
+    ).toThrow(DatabaseError);
+  });
 
-	it("trims the search term and reports null when it is empty", () => {
-		expect(buildDerivedListQuery({ ...SEALED, ...base, parsed: parsed({ q: "  hi  " }) }).search).toBe("hi")
-		expect(buildDerivedListQuery({ ...SEALED, ...base, parsed: parsed() }).search).toBeNull()
-	})
-})
+  it("trims the search term and reports null when it is empty", () => {
+    expect(buildDerivedListQuery({ ...SEALED, ...base, parsed: parsed({ q: "  hi  " }) }).search).toBe("hi");
+    expect(buildDerivedListQuery({ ...SEALED, ...base, parsed: parsed() }).search).toBeNull();
+  });
+});
 
 describe("buildDerivedListQuery — ordering", () => {
-	it("places NULLs last ascending and first descending, then breaks ties on id", () => {
-		const asc = buildDerivedListQuery({
-			...SEALED,
-			...base,
-			parsed: parsed({ parsedSort: [{ direction: "asc", field: "published_at" }] }),
-		})
-		expect(compile(asc.orderBy[0]!).sql).toContain("ASC NULLS LAST")
+  it("places NULLs last ascending and first descending, then breaks ties on id", () => {
+    const asc = buildDerivedListQuery({
+      ...SEALED,
+      ...base,
+      parsed: parsed({ parsedSort: [{ direction: "asc", field: "published_at" }] }),
+    });
 
-		const desc = buildDerivedListQuery({ ...SEALED, ...base, parsed: parsed() })
-		expect(compile(desc.orderBy[0]!).sql).toContain("DESC NULLS FIRST")
+    expect(compile(asc.orderBy[0]!).sql).toContain("ASC NULLS LAST");
 
-		/* the id tiebreak is always appended, matching the primary direction */
-		expect(desc.orderBy).toHaveLength(2)
-		expect(compile(desc.orderBy[1]!).sql.toLowerCase()).toContain("desc")
-	})
+    const desc = buildDerivedListQuery({ ...SEALED, ...base, parsed: parsed() });
+    expect(compile(desc.orderBy[0]!).sql).toContain("DESC NULLS FIRST");
 
-	it("orders by id alone when no sort was requested", () => {
-		const result = buildDerivedListQuery({ ...SEALED, ...base, parsed: parsed({ parsedSort: [] }) })
-		expect(result.orderBy).toHaveLength(1)
-		expect(compile(result.orderBy[0]!).sql.toLowerCase()).toContain("desc")
-	})
+    // the id tiebreak is always appended, matching the primary direction
+    expect(desc.orderBy).toHaveLength(2);
+    expect(compile(desc.orderBy[1]!).sql.toLowerCase()).toContain("desc");
+  });
 
-	it("throws sort_not_wired for a sort field with no supplied column, own or inherited, as buildListQuery does", () => {
-		const ghost = parsed({ parsedSort: [{ direction: "asc", field: "ghost" }] })
-		expect(() => buildDerivedListQuery({ ...SEALED, ...base, parsed: ghost })).toThrow(
-			expect.objectContaining({ errorKey: "sort_not_wired" }),
-		)
-		const inherited = Object.create({ ghost: base.idColumn }) as typeof base.sortColumns
-		expect(() => buildDerivedListQuery({ ...SEALED, ...base, parsed: ghost, sortColumns: inherited })).toThrow(
-			expect.objectContaining({ errorKey: "sort_not_wired" }),
-		)
-	})
-})
+  it("orders by id alone when no sort was requested", () => {
+    const result = buildDerivedListQuery({ ...SEALED, ...base, parsed: parsed({ parsedSort: [] }) });
+    expect(result.orderBy).toHaveLength(1);
+    expect(compile(result.orderBy[0]!).sql.toLowerCase()).toContain("desc");
+  });
+
+  it("throws sort_not_wired for a sort field with no supplied column, own or inherited, as buildListQuery does", () => {
+    const ghost = parsed({ parsedSort: [{ direction: "asc", field: "ghost" }] });
+    expect(() => buildDerivedListQuery({ ...SEALED, ...base, parsed: ghost })).toThrow(
+      expect.objectContaining({ errorKey: "sort_not_wired" }),
+    );
+    const inherited = Object.create({ ghost: base.idColumn }) as typeof base.sortColumns;
+    expect(() => buildDerivedListQuery({ ...SEALED, ...base, parsed: ghost, sortColumns: inherited })).toThrow(
+      expect.objectContaining({ errorKey: "sort_not_wired" }),
+    );
+  });
+});
 
 /** A cursor positioned at row d_9 with the given published_at, sorted in one direction */
 const cursorFor = (value: unknown, direction: "asc" | "desc") =>
-	createCursor({ id: "d_9", published_at: value }, [{ direction, field: "published_at" }], SEALED)
+  createCursor({ id: "d_9", published_at: value }, [{ direction, field: "published_at" }], SEALED);
 
 describe("buildDerivedListQuery — cursor predicates across NULLs", () => {
-	it("descending, non-null: walks strictly backwards with an id tiebreak", () => {
-		const result = buildDerivedListQuery({
-			...SEALED,
-			...base,
-			parsed: parsed({ cursor: cursorFor(1700000000000, "desc") }),
-		})
-		const { params, sql } = compile(result.where!)
-		expect(sql).toContain("<")
-		expect(params).toContain("d_9")
-	})
+  it("descending, non-null: walks strictly backwards with an id tiebreak", () => {
+    const result = buildDerivedListQuery({
+      ...SEALED,
+      ...base,
+      parsed: parsed({ cursor: cursorFor(1700000000000, "desc") }),
+    });
 
-	it("descending, null cursor: stays in the NULL zone or crosses into non-NULLs", () => {
-		const result = buildDerivedListQuery({ ...SEALED, ...base, parsed: parsed({ cursor: cursorFor(null, "desc") }) })
-		const { sql } = compile(result.where!)
-		/* NULLS FIRST means the null zone leads; advancing leaves it via IS NOT NULL */
-		expect(sql.toLowerCase()).toContain("is null")
-		expect(sql.toLowerCase()).toContain("is not null")
-	})
+    const { params, sql } = compile(result.where!);
+    expect(sql).toContain("<");
+    expect(params).toContain("d_9");
+  });
 
-	it("ascending, null cursor: only advances within the trailing NULL zone", () => {
-		const result = buildDerivedListQuery({
-			...SEALED,
-			...base,
-			parsed: parsed({ cursor: cursorFor(null, "asc"), parsedSort: [{ direction: "asc", field: "published_at" }] }),
-		})
-		const { sql } = compile(result.where!)
-		expect(sql.toLowerCase()).toContain("is null")
-		/* NULLS LAST means there is nothing after the null zone to cross into */
-		expect(sql.toLowerCase()).not.toContain("is not null")
-	})
+  it("descending, null cursor: stays in the NULL zone or crosses into non-NULLs", () => {
+    const result = buildDerivedListQuery({ ...SEALED, ...base, parsed: parsed({ cursor: cursorFor(null, "desc") }) });
+    const { sql } = compile(result.where!);
+    // NULLS FIRST means the null zone leads; advancing leaves it via IS NOT NULL
+    expect(sql.toLowerCase()).toContain("is null");
+    expect(sql.toLowerCase()).toContain("is not null");
+  });
 
-	it("ascending, non-null: walks forwards and admits the trailing NULLs", () => {
-		const result = buildDerivedListQuery({
-			...SEALED,
-			...base,
-			parsed: parsed({ cursor: cursorFor(5, "asc"), parsedSort: [{ direction: "asc", field: "published_at" }] }),
-		})
-		const { sql } = compile(result.where!)
-		expect(sql).toContain(">")
-		expect(sql.toLowerCase()).toContain("is null")
-	})
+  it("ascending, null cursor: only advances within the trailing NULL zone", () => {
+    const result = buildDerivedListQuery({
+      ...SEALED,
+      ...base,
+      parsed: parsed({ cursor: cursorFor(null, "asc"), parsedSort: [{ direction: "asc", field: "published_at" }] }),
+    });
 
-	it("rejects a cursor encoded for the opposite direction", () => {
-		/* encoded asc, queried desc — re-serving page one would duplicate rows */
-		expect(() =>
-			buildDerivedListQuery({ ...SEALED, ...base, parsed: parsed({ cursor: cursorFor(5, "asc") }) }),
-		).toThrow(DatabaseError)
-	})
-})
+    const { sql } = compile(result.where!);
+    expect(sql.toLowerCase()).toContain("is null");
+    // NULLS LAST means there is nothing after the null zone to cross into
+    expect(sql.toLowerCase()).not.toContain("is not null");
+  });
+
+  it("ascending, non-null: walks forwards and admits the trailing NULLs", () => {
+    const result = buildDerivedListQuery({
+      ...SEALED,
+      ...base,
+      parsed: parsed({ cursor: cursorFor(5, "asc"), parsedSort: [{ direction: "asc", field: "published_at" }] }),
+    });
+
+    const { sql } = compile(result.where!);
+    expect(sql).toContain(">");
+    expect(sql.toLowerCase()).toContain("is null");
+  });
+
+  it("rejects a cursor encoded for the opposite direction", () => {
+    // encoded asc, queried desc — re-serving page one would duplicate rows
+    expect(() =>
+      buildDerivedListQuery({ ...SEALED, ...base, parsed: parsed({ cursor: cursorFor(5, "asc") }) }),
+    ).toThrow(DatabaseError);
+  });
+});
 
 describe("buildDerivedListQuery — clause combination", () => {
-	it("returns undefined when there is nothing to filter on", () => {
-		expect(buildDerivedListQuery({ ...SEALED, ...base, parsed: parsed() }).where).toBeUndefined()
-	})
+  it("returns undefined when there is nothing to filter on", () => {
+    expect(buildDerivedListQuery({ ...SEALED, ...base, parsed: parsed() }).where).toBeUndefined();
+  });
 
-	it("passes a single clause through unwrapped", () => {
-		const filterWhere = compileSql("published_at > 1")
-		const result = buildDerivedListQuery({ ...SEALED, ...base, filterWhere, parsed: parsed() })
-		expect(compile(result.where!).sql).not.toContain(" and ")
-	})
+  it("passes a single clause through unwrapped", () => {
+    const filterWhere = compileSql("published_at > 1");
+    const result = buildDerivedListQuery({ ...SEALED, ...base, filterWhere, parsed: parsed() });
+    expect(compile(result.where!).sql).not.toContain(" and ");
+  });
 
-	it("ands the base, filter and search clauses together", () => {
-		const result = buildDerivedListQuery({
-			...SEALED,
-			...base,
-			baseWhere: compileSql("deleted_at is null"),
-			filterWhere: compileSql("published_at > 1"),
-			parsed: parsed(),
-			searchWhere: compileSql("title like '%a%'"),
-		})
-		expect(compile(result.where!).sql.toLowerCase()).toContain(" and ")
-	})
+  it("ands the base, filter and search clauses together", () => {
+    const result = buildDerivedListQuery({
+      ...SEALED,
+      ...base,
+      baseWhere: compileSql("deleted_at is null"),
+      filterWhere: compileSql("published_at > 1"),
+      parsed: parsed(),
+      searchWhere: compileSql("title like '%a%'"),
+    });
 
-	it("accepts a baseWhere supplied as a callback", () => {
-		const result = buildDerivedListQuery({
-			...SEALED,
-			...base,
-			baseWhere: (tag) => tag`deleted_at is null`,
-			parsed: parsed(),
-		})
-		expect(result.where).toBeDefined()
-	})
-})
+    expect(compile(result.where!).sql.toLowerCase()).toContain(" and ");
+  });
+
+  it("accepts a baseWhere supplied as a callback", () => {
+    const result = buildDerivedListQuery({
+      ...SEALED,
+      ...base,
+      baseWhere: (tag) => tag`deleted_at is null`,
+      parsed: parsed(),
+    });
+
+    expect(result.where).toBeDefined();
+  });
+});
 
 describe("buildDerivedListQuery — a sort key declared as time (Q4)", () => {
-	const latest = compileSql("max(published_at)")
-	const sort: Array<SortField<"latest">> = [{ direction: "desc", field: "latest" }]
-	const timed = { idColumn: derived.id, sortColumns: { latest: { sql: latest, type: "date" as const } } }
+  const latest = compileSql("max(published_at)");
+  const sort: Array<SortField<"latest">> = [{ direction: "desc", field: "latest" }];
+  const timed = { idColumn: derived.id, sortColumns: { latest: { sql: latest, type: "date" as const } } };
 
-	it("takes the Date a row minted and binds it as epoch milliseconds", () => {
-		const cursor = createCursor({ id: "d_9", latest: new Date(1700000000000) }, sort, SEALED)
-		const built = buildDerivedListQuery({ ...SEALED, ...timed, parsed: { cursor, limit: 20, parsedSort: sort } })
-		const { params, sql } = compile(built.where as SQL)
-		expect(sql).toContain("max(published_at)")
-		expect(params).toContain(1700000000000)
-	})
+  it("takes the Date a row minted and binds it as epoch milliseconds", () => {
+    const cursor = createCursor({ id: "d_9", latest: new Date(1700000000000) }, sort, SEALED);
+    const built = buildDerivedListQuery({ ...SEALED, ...timed, parsed: { cursor, limit: 20, parsedSort: sort } });
+    const { params, sql } = compile(built.where as SQL);
+    expect(sql).toContain("max(published_at)");
+    expect(params).toContain(1700000000000);
+  });
 
-	it("takes the epoch milliseconds a row selected as sql<number> where the key declared a Date (R3)", () => {
-		const cursor = createCursor({ id: "d_9", latest: 1700000000000 }, sort, SEALED)
-		expect(() =>
-			buildDerivedListQuery({ ...SEALED, ...timed, parsed: { cursor, limit: 20, parsedSort: sort } }),
-		).not.toThrow()
-	})
+  it("takes the epoch milliseconds a row selected as sql<number> where the key declared a Date (R3)", () => {
+    const cursor = createCursor({ id: "d_9", latest: 1700000000000 }, sort, SEALED);
+    expect(() =>
+      buildDerivedListQuery({ ...SEALED, ...timed, parsed: { cursor, limit: 20, parsedSort: sort } }),
+    ).not.toThrow();
+  });
 
-	it("refuses a string where the key declared a Date", () => {
-		const cursor = createCursor({ id: "d_9", latest: "2024-01-01" }, sort, SEALED)
-		expect(() =>
-			buildDerivedListQuery({ ...SEALED, ...timed, parsed: { cursor, limit: 20, parsedSort: sort } }),
-		).toThrow(expect.objectContaining({ errorKey: "invalid_cursor" }))
-	})
-})
+  it("refuses a string where the key declared a Date", () => {
+    const cursor = createCursor({ id: "d_9", latest: "2024-01-01" }, sort, SEALED);
+    expect(() =>
+      buildDerivedListQuery({ ...SEALED, ...timed, parsed: { cursor, limit: 20, parsedSort: sort } }),
+    ).toThrow(expect.objectContaining({ errorKey: "invalid_cursor" }));
+  });
+});
 
-/*
- * AB6 of area B: the list schema publishes its tiebreak as stableTiebreak, `id` without one, and the
- * builder takes its parsed output, so a tiebreak that names another column than idColumn is a wiring
- * mistake the build can see: the published fact would be wrong silently
- */
-const keyed = sqliteTable("keyed", { title: text("title"), uid: text("uid").primaryKey() })
+// AB6 of area B: the list schema publishes its tiebreak as stableTiebreak, `id` without one, and the
+// builder takes its parsed output, so a tiebreak that names another column than idColumn is a wiring
+// mistake the build can see: the published fact would be wrong silently
+const keyed = sqliteTable("keyed", { title: text("title"), uid: text("uid").primaryKey() });
 
 /** The list schema's output over `keyed`, sorted by title, with `tiebreak` when given */
 const parseKeyed = (tiebreak?: string) =>
-	createListQuerySchema({
-		sort: ["title"] as const,
-		...(tiebreak === undefined ? {} : { tiebreak }),
-	}).parse({ order: "title.asc" })
+  createListQuerySchema({
+    sort: ["title"] as const,
+    ...(tiebreak === undefined ? {} : { tiebreak }),
+  }).parse({ order: "title.asc" });
 
 /** The derived list `query` builds over `keyed`, broken by `idColumn` */
 const buildKeyed = (query: ReturnType<typeof parseKeyed>, idColumn: typeof keyed.uid | typeof derived.id) =>
-	buildDerivedListQuery({ ...SEALED, idColumn, parsed: query, sortColumns: { title: keyed.title } })
+  buildDerivedListQuery({ ...SEALED, idColumn, parsed: query, sortColumns: { title: keyed.title } });
 
 describe("buildDerivedListQuery holds idColumn to the schema's tiebreak (AB6 of area B; sibling: QL10)", () => {
-	it("refuses an idColumn the schema's tiebreak does not name, naming both", () => {
-		expect(() => buildKeyed(parseKeyed(), keyed.uid)).toThrow(
-			new TypeError(
-				`buildDerivedListQuery: idColumn "uid" is not the column the list schema breaks ties on, "id": set the schema's tiebreak to "uid"`,
-			),
-		)
-		expect(() => buildKeyed(parseKeyed("uid"), derived.id)).toThrow(
-			/idColumn "id" is not the column the list schema breaks ties on, "uid"/,
-		)
-		const anchor = { idColumn: keyed.uid, table: keyed }
-		expect(() =>
-			buildDerivedListQuery({ ...SEALED, anchor, parsed: parseKeyed(), sortColumns: { title: keyed.title } }),
-		).toThrow(TypeError)
-	})
+  it("refuses an idColumn the schema's tiebreak does not name, naming both", () => {
+    expect(() => buildKeyed(parseKeyed(), keyed.uid)).toThrow(
+      new TypeError(
+        `buildDerivedListQuery: idColumn "uid" is not the column the list schema breaks ties on, "id": set the schema's tiebreak to "uid"`,
+      ),
+    );
+    expect(() => buildKeyed(parseKeyed("uid"), derived.id)).toThrow(
+      /idColumn "id" is not the column the list schema breaks ties on, "uid"/,
+    );
+    const anchor = { idColumn: keyed.uid, table: keyed };
+    expect(() =>
+      buildDerivedListQuery({ ...SEALED, anchor, parsed: parseKeyed(), sortColumns: { title: keyed.title } }),
+    ).toThrow(TypeError);
+  });
 
-	it("builds where they agree, and where the query names no tiebreak", () => {
-		expect(parseKeyed("uid").tiebreak).toBe("uid")
-		expect(parseKeyed().tiebreak).toBe("id")
-		expect(() => buildKeyed(parseKeyed("uid"), keyed.uid)).not.toThrow()
-		expect(() => buildKeyed(parseKeyed(), derived.id)).not.toThrow()
-		const { tiebreak: _, ...unstated } = parseKeyed()
-		expect(() => buildKeyed(unstated as ReturnType<typeof parseKeyed>, keyed.uid)).not.toThrow()
-	})
+  it("builds where they agree, and where the query names no tiebreak", () => {
+    expect(parseKeyed("uid").tiebreak).toBe("uid");
+    expect(parseKeyed().tiebreak).toBe("id");
+    expect(() => buildKeyed(parseKeyed("uid"), keyed.uid)).not.toThrow();
+    expect(() => buildKeyed(parseKeyed(), derived.id)).not.toThrow();
+    const { tiebreak: _, ...unstated } = parseKeyed();
+    expect(() => buildKeyed(unstated as ReturnType<typeof parseKeyed>, keyed.uid)).not.toThrow();
+  });
 
-	/* QL4 of r23: the schema's tiebreak is a property key, as buildListQuery reads it, not the column's SQL name */
-	const renamed = sqliteTable("renamed", { id: text("post_id").primaryKey(), title: text("title") })
-	const buildRenamed = (query: ReturnType<typeof parseKeyed>) =>
-		buildDerivedListQuery({ ...SEALED, idColumn: renamed.id, parsed: query, sortColumns: { title: renamed.title } })
+  // QL4 of r23: the schema's tiebreak is a property key, as buildListQuery reads it, not the column's SQL name
+  const renamed = sqliteTable("renamed", { id: text("post_id").primaryKey(), title: text("title") });
 
-	it("builds an idColumn whose property key the tiebreak names, though its SQL name differs, and breaks ties on it", () => {
-		const built = compile(buildRenamed(parseKeyed()).orderBy.at(-1) as SQL)
-		expect(built.sql).toBe('"renamed"."post_id" ASC NULLS LAST')
-		expect(() =>
-			buildDerivedListQuery({
-				...SEALED,
-				anchor: { idColumn: renamed.id, table: renamed },
-				parsed: parseKeyed(),
-				sortColumns: { title: renamed.title },
-			}),
-		).not.toThrow()
-	})
+  const buildRenamed = (query: ReturnType<typeof parseKeyed>) =>
+    buildDerivedListQuery({ ...SEALED, idColumn: renamed.id, parsed: query, sortColumns: { title: renamed.title } });
 
-	it("refuses a tiebreak that names the SQL name rather than the key, naming the key", () => {
-		expect(() => buildRenamed(parseKeyed("post_id"))).toThrow(
-			new TypeError(
-				`buildDerivedListQuery: idColumn "id" is not the column the list schema breaks ties on, "post_id": set the schema's tiebreak to "id"`,
-			),
-		)
-	})
-})
+  it("builds an idColumn whose property key the tiebreak names, though its SQL name differs, and breaks ties on it", () => {
+    const built = compile(buildRenamed(parseKeyed()).orderBy.at(-1) as SQL);
+    expect(built.sql).toBe('"renamed"."post_id" ASC NULLS LAST');
+    expect(() =>
+      buildDerivedListQuery({
+        ...SEALED,
+        anchor: { idColumn: renamed.id, table: renamed },
+        parsed: parseKeyed(),
+        sortColumns: { title: renamed.title },
+      }),
+    ).not.toThrow();
+  });
+
+  it("refuses a tiebreak that names the SQL name rather than the key, naming the key", () => {
+    expect(() => buildRenamed(parseKeyed("post_id"))).toThrow(
+      new TypeError(
+        `buildDerivedListQuery: idColumn "id" is not the column the list schema breaks ties on, "post_id": set the schema's tiebreak to "id"`,
+      ),
+    );
+  });
+});

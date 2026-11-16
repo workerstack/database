@@ -1,33 +1,37 @@
 // Oxlint registers one plugin name; this entry publishes every database rule.
-import { rule as boundaries } from "./boundaries.js"
-import { rule as exportName } from "./export-name.js"
-import { rule as noConsole } from "./no-console.js"
-import { rule as noLocaleCompare } from "./no-locale-compare.js"
-import { rule as noModuleSideEffects } from "./no-module-side-effects.js"
-import { rule as noModuleState } from "./no-module-state.js"
-import { rule as noReviewLabel } from "./no-review-label.js"
-import { rule as noSilentCatch } from "./no-silent-catch.js"
-import { rule as noSpawnedKill } from "./no-spawned-kill.js"
-import { rule as noV8Ignore } from "./no-v8-ignore.js"
-import { rule as optionalUndefined } from "./optional-undefined.js"
-import { rule as publicJsdoc } from "./public-jsdoc.js"
-import { rule as rawSqlAllowlist } from "./raw-sql-allowlist.js"
+import { rule as boundaries } from "./boundaries.js";
+import { rule as exportName } from "./export-name.js";
+import { rule as noCleanupProbe } from "./no-cleanup-probe.js";
+import { rule as noConsole } from "./no-console.js";
+import { rule as noLocaleCompare } from "./no-locale-compare.js";
+import { rule as noModuleSideEffects } from "./no-module-side-effects.js";
+import { rule as noModuleState } from "./no-module-state.js";
+import { rule as noProcessKill } from "./no-process-kill.js";
+import { rule as noReviewLabel } from "./no-review-label.js";
+import { rule as noSilentCatch } from "./no-silent-catch.js";
+import { rule as noSpawnedKill } from "./no-spawned-kill.js";
+import { rule as noV8Ignore } from "./no-v8-ignore.js";
+import { rule as optionalUndefined } from "./optional-undefined.js";
+import { rule as publicJsdoc } from "./public-jsdoc.js";
+import { rule as rawSqlAllowlist } from "./raw-sql-allowlist.js";
 
 export default {
-	meta: { name: "database" },
-	rules: {
-		boundaries,
-		"export-name": exportName,
-		"no-console": noConsole,
-		"no-locale-compare": noLocaleCompare,
-		"no-module-side-effects": noModuleSideEffects,
-		"no-module-state": noModuleState,
-		"no-review-label": noReviewLabel,
-		"no-silent-catch": noSilentCatch,
-		"no-spawned-kill": noSpawnedKill,
-		"no-v8-ignore": noV8Ignore,
-		"optional-undefined": optionalUndefined,
-		"public-jsdoc": publicJsdoc,
-		"raw-sql-allowlist": rawSqlAllowlist,
-	},
-}
+  meta: { name: "database" },
+  rules: {
+    boundaries,
+    "export-name": exportName,
+    "no-cleanup-probe": noCleanupProbe,
+    "no-console": noConsole,
+    "no-locale-compare": noLocaleCompare,
+    "no-module-side-effects": noModuleSideEffects,
+    "no-module-state": noModuleState,
+    "no-process-kill": noProcessKill,
+    "no-review-label": noReviewLabel,
+    "no-silent-catch": noSilentCatch,
+    "no-spawned-kill": noSpawnedKill,
+    "no-v8-ignore": noV8Ignore,
+    "optional-undefined": optionalUndefined,
+    "public-jsdoc": publicJsdoc,
+    "raw-sql-allowlist": rawSqlAllowlist,
+  },
+};

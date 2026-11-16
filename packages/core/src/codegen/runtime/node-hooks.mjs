@@ -1,3 +1,4 @@
+import fs from "node:fs";
 /**
  * The module hooks codegen's child runs under node, which loads no TypeScript of its own on the
  * versions database supports: a TypeScript file is transpiled with the TypeScript ts-morph bundles,
@@ -6,13 +7,14 @@
  * consumer's tsconfig resolves it. Plain JavaScript, as node loads hooks before any TypeScript.
  * Bun loads TypeScript itself and runs none of this.
  */
-import nodeModule from "node:module"
-import { fileURLToPath, pathToFileURL } from "node:url"
-import { ts } from "ts-morph"
-import fs from "node:fs"
-import { compilerOptionsFor, runsAsCommonJs, transpiled } from "./ts-options.mjs"
+import nodeModule from "node:module";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-const TYPESCRIPT = /\.(?:ts|tsx|mts|cts)$/
+import { ts } from "ts-morph";
+
+import { compilerOptionsFor, runsAsCommonJs, transpiled } from "./ts-options.mjs";
+
+const TYPESCRIPT = /\.(?:ts|tsx|mts|cts)$/;
 
 /**
  * The URL a specifier names from a TypeScript parent, as the consumer's tsconfig resolves it;
@@ -22,12 +24,15 @@ const TYPESCRIPT = /\.(?:ts|tsx|mts|cts)$/
  * @returns {string | undefined}
  */
 function tsResolved(specifier, parentURL) {
-	if (parentURL === undefined || !parentURL.startsWith("file:")) return undefined
-	const parent = fileURLToPath(parentURL)
-	if (!TYPESCRIPT.test(parent)) return undefined
-	const resolved = ts.resolveModuleName(specifier, parent, compilerOptionsFor(parent), ts.sys).resolvedModule
-	if (resolved === undefined || resolved.isExternalLibraryImport === true) return undefined
-	return pathToFileURL(resolved.resolvedFileName).href
+  if (parentURL === undefined || !parentURL.startsWith("file:")) return;
+  const parent = fileURLToPath(parentURL);
+
+  if (!TYPESCRIPT.test(parent)) return;
+  const resolved = ts.resolveModuleName(specifier, parent, compilerOptionsFor(parent), ts.sys).resolvedModule;
+
+  if (resolved === undefined || resolved.isExternalLibraryImport === true) return;
+
+  return pathToFileURL(resolved.resolvedFileName).href;
 }
 
 /**
@@ -37,14 +42,16 @@ function tsResolved(specifier, parentURL) {
  * @param {(specifier: string, context: unknown) => { url: string }} nextResolve
  */
 export function resolveSync(specifier, context, nextResolve) {
-	try {
-		return nextResolve(specifier, context)
-	} catch (error) {
-		// reason: node's error stands unless the tsconfig names the file, and is rethrown below when it does not
-		const url = tsResolved(specifier, context.parentURL)
-		if (url === undefined) throw error
-		return { shortCircuit: true, url }
-	}
+  try {
+    return nextResolve(specifier, context);
+  } catch (error) {
+    // reason: node's error stands unless the tsconfig names the file, and is rethrown below when it does not
+    const url = tsResolved(specifier, context.parentURL);
+
+    if (url === undefined) throw error;
+
+    return { shortCircuit: true, url };
+  }
 }
 
 /**
@@ -55,12 +62,14 @@ export function resolveSync(specifier, context, nextResolve) {
  * @param {(url: string, context: unknown) => unknown} nextLoad
  */
 export function loadSync(url, context, nextLoad) {
-	/* by its path: database imports database.config.ts with a ?mtime= query */
-	if (!url.startsWith("file:") || !TYPESCRIPT.test(new URL(url).pathname)) return nextLoad(url, context)
-	const file = fileURLToPath(url)
-	if (!runsAsCommonJs(file, fs.readFileSync(file, "utf8")))
-		return { format: "module", shortCircuit: true, source: transpiled(file) }
-	return { format: "commonjs", shortCircuit: true, source: transpiled(file, ts.ModuleKind.CommonJS) }
+  // by its path: database imports database.config.ts with a ?mtime= query
+  if (!url.startsWith("file:") || !TYPESCRIPT.test(new URL(url).pathname)) return nextLoad(url, context);
+  const file = fileURLToPath(url);
+
+  if (!runsAsCommonJs(file, fs.readFileSync(file, "utf8")))
+    return { format: "module", shortCircuit: true, source: transpiled(file) };
+
+  return { format: "commonjs", shortCircuit: true, source: transpiled(file, ts.ModuleKind.CommonJS) };
 }
 
 /**
@@ -70,14 +79,16 @@ export function loadSync(url, context, nextLoad) {
  * @param {(specifier: string, context: unknown) => Promise<{ url: string }>} nextResolve
  */
 export async function resolve(specifier, context, nextResolve) {
-	try {
-		return await nextResolve(specifier, context)
-	} catch (error) {
-		// reason: node's error stands unless the tsconfig names the file, and is rethrown below when it does not
-		const url = tsResolved(specifier, context.parentURL)
-		if (url === undefined) throw error
-		return { shortCircuit: true, url }
-	}
+  try {
+    return await nextResolve(specifier, context);
+  } catch (error) {
+    // reason: node's error stands unless the tsconfig names the file, and is rethrown below when it does not
+    const url = tsResolved(specifier, context.parentURL);
+
+    if (url === undefined) throw error;
+
+    return { shortCircuit: true, url };
+  }
 }
 
 /**
@@ -86,7 +97,7 @@ export async function resolve(specifier, context, nextResolve) {
  * @param {(url: string, context: unknown) => Promise<unknown>} nextLoad
  */
 export async function load(url, context, nextLoad) {
-	return loadSync(url, context, nextLoad)
+  return loadSync(url, context, nextLoad);
 }
 
 /**
@@ -96,7 +107,8 @@ export async function load(url, context, nextLoad) {
  * @returns {{ deregister?: () => void } | undefined}
  */
 export function install(api = nodeModule) {
-	if (typeof api.registerHooks === "function") return api.registerHooks({ load: loadSync, resolve: resolveSync })
-	api.register(import.meta.url)
-	return undefined
+  if (typeof api.registerHooks === "function") return api.registerHooks({ load: loadSync, resolve: resolveSync });
+  api.register(import.meta.url);
+
+  return;
 }

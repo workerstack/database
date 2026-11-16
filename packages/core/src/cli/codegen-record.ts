@@ -2,62 +2,64 @@
  * What a codegen run commits: every database's staged files at once, the record of what each wrote,
  * and the files a database's last run wrote that this one did not, removed when database wrote them.
  */
-import fs from "node:fs"
-import path from "node:path"
-import { commitStaged, isGeneratedContent, type Staged, writeGenJsonFile } from "../codegen/utils/fs.ts"
-import { byCodeUnit } from "../codegen/utils/order.ts"
-import { CliError, type CliIo } from "./output.ts"
+import fs from "node:fs";
+import path from "node:path";
 
-/*
- * What each database's last run wrote, in one record beside database.config.ts (beside the tables file in
- * direct mode), keyed by database name, its paths relative to the record: a run after filePrefix or
- * output.default moved still finds the last run's files, wherever they were. Its name keeps the `.gen.`
- * every formatter config already ignores, so no format pass rewrites what codegen writes.
- */
-const RECORD = ".database.codegen.gen.json"
+import { commitStaged, isGeneratedContent, type Staged, writeGenJsonFile } from "../codegen/utils/fs.ts";
+import { byCodeUnit } from "../codegen/utils/order.ts";
+import { CliError, type CliIo } from "./output.ts";
 
-type RunRecord = { databases: Record<string, string[]> }
+// What each database's last run wrote, in one record beside database.config.ts (beside the tables file in
+// direct mode), keyed by database name, its paths relative to the record: a run after filePrefix or
+// output.default moved still finds the last run's files, wherever they were. Its name keeps the `.gen.`
+// every formatter config already ignores, so no format pass rewrites what codegen writes.
+const RECORD = ".database.codegen.gen.json";
+
+type RunRecord = { databases: Record<string, string[]> };
 
 /** A record's JSON; an error naming it, by its path from `recordDir`, when it is no JSON */
 function parsed<T>(file: string, recordDir: string): T {
-	try {
-		return JSON.parse(fs.readFileSync(file, "utf8")) as T
-	} catch (error) {
-		throw new CliError(
-			`${path.relative(recordDir, file)} is not JSON (a merge conflict?): delete it, and the next run removes nothing stale; ${(error as Error).message}`,
-		)
-	}
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8")) as T;
+  } catch (error) {
+    throw new CliError(
+      `${path.relative(recordDir, file)} is not JSON (a merge conflict?): delete it, and the next run removes nothing stale; ${(error as Error).message}`,
+    );
+  }
 }
 
 function readRecord(recordPath: string): RunRecord {
-	if (!fs.existsSync(recordPath)) return { databases: {} }
-	return parsed<RunRecord>(recordPath, path.dirname(recordPath))
+  if (!fs.existsSync(recordPath)) return { databases: {} };
+
+  return parsed<RunRecord>(recordPath, path.dirname(recordPath));
 }
 
-/* 0.9's record, one per output root and file prefix: read once, so the first run after an upgrade still removes its files */
-const legacyRecord = (root: string, prefix: string): string => path.join(root, `.${prefix}.codegen.json`)
+// 0.9's record, one per output root and file prefix: read once, so the first run after an upgrade still removes its files
+const legacyRecord = (root: string, prefix: string): string => path.join(root, `.${prefix}.codegen.json`);
 
 /** The absolute paths 0.9's record at `root` lists; none when there is no such record */
 function legacyFiles(root: string, prefix: string, recordDir: string): string[] {
-	const file = legacyRecord(root, prefix)
-	if (!fs.existsSync(file)) return []
-	return parsed<{ files: string[] }>(file, recordDir).files.map((each) => path.resolve(root, each))
+  const file = legacyRecord(root, prefix);
+
+  if (!fs.existsSync(file)) return [];
+
+  return parsed<{ files: string[] }>(file, recordDir).files.map((each) => path.resolve(root, each));
 }
 
 /** Remove `dir` and its parents while they are empty, up to `root` */
 function pruneEmpty(dir: string, root: string): void {
-	for (let at = dir; at.startsWith(root) && at !== root && fs.readdirSync(at).length === 0; at = path.dirname(at))
-		fs.rmdirSync(at)
+  for (let at = dir; at.startsWith(root) && at !== root && fs.readdirSync(at).length === 0; at = path.dirname(at))
+    fs.rmdirSync(at);
 }
 
 /** One database's staged run: its name, where its files go, and which of the staged files it wrote */
-export type Run = { name: string; partial: boolean; prefix: string; root: string; wrote: string[] }
+export type Run = { name: string; partial: boolean; prefix: string; root: string; wrote: string[] };
 
 /** Delete `file` when database wrote it, and the directories it leaves empty, up to `top` */
 function removeStale(file: string, top: string): void {
-	if (!fs.existsSync(file) || !isGeneratedContent(fs.readFileSync(file, "utf8"))) return
-	fs.unlinkSync(file)
-	pruneEmpty(path.dirname(file), top)
+  if (!fs.existsSync(file) || !isGeneratedContent(fs.readFileSync(file, "utf8"))) return;
+  fs.unlinkSync(file);
+  pruneEmpty(path.dirname(file), top);
 }
 
 /**
@@ -70,63 +72,75 @@ function removeStale(file: string, top: string): void {
  * would overwrite each other, so that fails before anything is written.
  */
 export function commitRuns(
-	staged: Staged,
-	runs: readonly Run[],
-	{ declared, recordDir }: { declared?: readonly string[] | undefined; recordDir: string },
+  staged: Staged,
+  runs: readonly Run[],
+  { declared, recordDir }: { declared?: readonly string[] | undefined; recordDir: string },
 ): void {
-	const recordPath = path.join(recordDir, RECORD)
-	const record = readRecord(recordPath)
-	refuseShared(runs, { record, recordDir })
-	const before: string[] = []
-	const now = new Set<string>()
-	for (const run of runs) {
-		const last = [
-			...(record.databases[run.name] ?? []).map((file) => path.resolve(recordDir, file)),
-			...legacyFiles(run.root, run.prefix, recordDir),
-		]
-		const kept = new Set([...run.wrote, ...(run.partial ? last : [])])
-		record.databases[run.name] = [...kept].map((file) => path.relative(recordDir, file)).sort()
-		before.push(...last)
-		for (const file of kept) now.add(file)
-	}
-	const gone = Object.entries(record.databases).filter(([each]) => declared !== undefined && !declared.includes(each))
-	for (const [name, files] of gone) {
-		before.push(...files.map((file) => path.resolve(recordDir, file)))
-		delete record.databases[name]
-	}
-	/* by name, so the databases in any order write the same bytes */
-	record.databases = Object.fromEntries(Object.entries(record.databases).sort(([a], [b]) => byCodeUnit(a, b)))
-	/* a file another database's entry lists is that database's, whatever this one's last run wrote */
-	const others = new Set(
-		Object.entries(record.databases)
-			.filter(([name]) => !runs.some((each) => each.name === name))
-			.flatMap(([, files]) => files.map((file) => path.resolve(recordDir, file))),
-	)
-	/* deleted before anything is written: one that will not go fails the run with the record as it was,
-	 * so the next run deletes it */
-	for (const file of before.filter((each) => !now.has(each) && !others.has(each))) removeStale(file, recordDir)
-	writeGenJsonFile(recordPath, record, { generator: "database", staged })
-	commitStaged(staged)
-	for (const run of runs) fs.rmSync(legacyRecord(run.root, run.prefix), { force: true })
+  const recordPath = path.join(recordDir, RECORD);
+  const record = readRecord(recordPath);
+  refuseShared(runs, { record, recordDir });
+  const before: string[] = [];
+  const now = new Set<string>();
+
+  for (const run of runs) {
+    const last = [
+      ...(record.databases[run.name] ?? []).map((file) => path.resolve(recordDir, file)),
+      ...legacyFiles(run.root, run.prefix, recordDir),
+    ];
+
+    const kept = new Set([...run.wrote, ...(run.partial ? last : [])]);
+    record.databases[run.name] = [...kept].map((file) => path.relative(recordDir, file)).sort();
+    before.push(...last);
+
+    for (const file of kept) now.add(file);
+  }
+
+  const gone = Object.entries(record.databases).filter(([each]) => declared !== undefined && !declared.includes(each));
+
+  for (const [name, files] of gone) {
+    before.push(...files.map((file) => path.resolve(recordDir, file)));
+    delete record.databases[name];
+  }
+
+  // by name, so the databases in any order write the same bytes
+  record.databases = Object.fromEntries(Object.entries(record.databases).sort(([a], [b]) => byCodeUnit(a, b)));
+
+  // a file another database's entry lists is that database's, whatever this one's last run wrote
+  const others = new Set(
+    Object.entries(record.databases)
+      .filter(([name]) => !runs.some((each) => each.name === name))
+      .flatMap(([, files]) => files.map((file) => path.resolve(recordDir, file))),
+  );
+
+  // deleted before anything is written: one that will not go fails the run with the record as it was,
+  // so the next run deletes it
+  for (const file of before.filter((each) => !now.has(each) && !others.has(each))) removeStale(file, recordDir);
+  writeGenJsonFile(recordPath, record, { generator: "database", staged });
+  commitStaged(staged);
+
+  for (const run of runs) fs.rmSync(legacyRecord(run.root, run.prefix), { force: true });
 }
 
-type Claim = { cwd: string; generator: string; last: Staged; run: string; staged: Staged }
+type Claim = { cwd: string; generator: string; last: Staged; run: string; staged: Staged };
 
 /**
  * Record the generated files `generator` staged as its own; one another generator of the database
  * staged is configured onto one path, and the second would replace the first
  */
 export function claim(owners: Map<string, string>, { cwd, generator, last, run, staged }: Claim): void {
-	for (const [file, content] of staged) {
-		if (last.get(file) === content || !isGeneratedContent(content)) continue
-		const first = owners.get(file)
-		/* each generator runs once, so a path already claimed is another generator's */
-		if (first !== undefined)
-			throw new Error(
-				`generators ${first} and ${generator} of ${run} both write ${path.relative(cwd, file)}; give each its own output`,
-			)
-		owners.set(file, generator)
-	}
+  for (const [file, content] of staged) {
+    if (last.get(file) === content || !isGeneratedContent(content)) continue;
+    const first = owners.get(file);
+
+    // each generator runs once, so a path already claimed is another generator's
+    if (first !== undefined) {
+      throw new Error(
+        `generators ${first} and ${generator} of ${run} both write ${path.relative(cwd, file)}; give each its own output`,
+      );
+    }
+
+    owners.set(file, generator);
+  }
 }
 
 /**
@@ -135,26 +149,31 @@ export function claim(owners: Map<string, string>, { cwd, generator, last, run, 
  * which a run that names only some databases would otherwise overwrite
  */
 function refuseShared(runs: readonly Run[], { record, recordDir }: { record: RunRecord; recordDir: string }): void {
-	const owner = new Map<string, string>()
-	for (const [name, files] of Object.entries(record.databases)) {
-		if (runs.some((each) => each.name === name)) continue
-		for (const file of files) owner.set(path.resolve(recordDir, file), name)
-	}
-	for (const run of runs) {
-		for (const file of run.wrote) {
-			const first = owner.get(file)
-			if (first !== undefined && first !== run.name) {
-				throw new Error(
-					`databases ${first} and ${run.name} both write ${path.relative(recordDir, file)}; give each its own filePrefix or output`,
-				)
-			}
-			owner.set(file, run.name)
-		}
-	}
+  const owner = new Map<string, string>();
+
+  for (const [name, files] of Object.entries(record.databases)) {
+    if (runs.some((each) => each.name === name)) continue;
+
+    for (const file of files) owner.set(path.resolve(recordDir, file), name);
+  }
+
+  for (const run of runs) {
+    for (const file of run.wrote) {
+      const first = owner.get(file);
+
+      if (first !== undefined && first !== run.name) {
+        throw new Error(
+          `databases ${first} and ${run.name} both write ${path.relative(recordDir, file)}; give each its own filePrefix or output`,
+        );
+      }
+
+      owner.set(file, run.name);
+    }
+  }
 }
 
 /** A held line: an err line, an out line, or a context line, said on out whether or not the files are written */
-type Stream = "context" | "err" | "out"
+type Stream = "context" | "err" | "out";
 
 /**
  * An io that holds its out and err lines in the order said, so each database's warnings follow its
@@ -163,35 +182,40 @@ type Stream = "context" | "err" | "out"
  * failed before its write wrote nothing, then fails with its error
  */
 type Held = {
-	commit: (write: () => void) => void
-	context: (line: string) => void
-	failed: (error: unknown) => never
-	held: CliIo
-}
+  commit: (write: () => void) => void;
+  context: (line: string) => void;
+  failed: (error: unknown) => never;
+  held: CliIo;
+};
 
 /**
  * Hold `io`'s lines until the files are written. When they are not, only the err and context lines
  * are said, since a warning and the database it is about stay true and what a run generated does not
  */
 export function holdLines(io: CliIo): Held {
-	const lines: Array<readonly [Stream, string]> = []
-	const hold = (stream: Stream) => (line: string) => void lines.push([stream, line])
-	const flush = (written: boolean) => {
-		for (const [stream, line] of lines) if (written || stream !== "out") io[stream === "err" ? "err" : "out"](line)
-	}
-	const failed = (error: unknown): never => {
-		flush(false)
-		io.err("Nothing was written: codegen writes every database's files once all of them succeed")
-		throw error
-	}
-	const commit = (write: () => void) => {
-		try {
-			write()
-		} catch (error) {
-			flush(false)
-			throw error
-		}
-		flush(true)
-	}
-	return { commit, context: hold("context"), failed, held: { ...io, err: hold("err"), out: hold("out") } }
+  const lines: Array<readonly [Stream, string]> = [];
+  const hold = (stream: Stream) => (line: string) => void lines.push([stream, line]);
+
+  const flush = (written: boolean) => {
+    for (const [stream, line] of lines) if (written || stream !== "out") io[stream === "err" ? "err" : "out"](line);
+  };
+
+  const failed = (error: unknown): never => {
+    flush(false);
+    io.err("Nothing was written: codegen writes every database's files once all of them succeed");
+    throw error;
+  };
+
+  const commit = (write: () => void) => {
+    try {
+      write();
+    } catch (error) {
+      flush(false);
+      throw error;
+    }
+
+    flush(true);
+  };
+
+  return { commit, context: hold("context"), failed, held: { ...io, err: hold("err"), out: hold("out") } };
 }

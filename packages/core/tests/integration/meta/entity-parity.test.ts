@@ -1,4 +1,3 @@
-import { fixtureRoot } from "../../../src/codegen/__fixtures__/temp.ts"
 /**
  * The published entity facts must match the analyzer's view of the table, and
  * the DTOs generated from that same view.
@@ -7,68 +6,75 @@ import { fixtureRoot } from "../../../src/codegen/__fixtures__/temp.ts"
  * the fields actually absent from the generated update schema, not against a
  * restatement of the rule.
  */
-import fs from "node:fs"
-import path from "node:path"
-import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest"
-import { analyze } from "../../../src/codegen/analyzer.ts"
-import { deriveEntityMeta } from "../../../src/codegen/entity-meta.ts"
-import { generateDtos } from "../../../src/codegen/generators/dtos/index.ts"
-import { validateTables } from "../../../src/codegen/utils/validate.ts"
-import { testContext } from "../../../src/codegen/generators/__fixtures__/context.ts"
-import { cleanGeneratedDtos } from "../support/dtos.ts"
-import { disagreements, entityChannels } from "../support/entity-channels.ts"
+import fs from "node:fs";
+import path from "node:path";
+
+import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { fixtureRoot } from "../../../src/codegen/__fixtures__/temp.ts";
+import { analyze } from "../../../src/codegen/analyzer.ts";
+import { deriveEntityMeta } from "../../../src/codegen/entity-meta.ts";
+import { testContext } from "../../../src/codegen/generators/__fixtures__/context.ts";
+import { generateDtos } from "../../../src/codegen/generators/dtos/index.ts";
+import { validateTables } from "../../../src/codegen/utils/validate.ts";
+import { cleanGeneratedDtos } from "../support/dtos.ts";
+import { disagreements, entityChannels } from "../support/entity-channels.ts";
 
 const PRELUDE = `
 import { sqliteTable as createTable, text, integer, primaryKey, uniqueIndex } from "drizzle-orm/sqlite-core"
 import { c } from "@workerstack/database/sqlite/columns"
-`
+`;
 
-let tmpDir: string
+let tmpDir: string;
 
 beforeEach(() => {
-	tmpDir = fs.mkdtempSync(path.join(fixtureRoot(), "database-meta-entity-"))
-})
+  tmpDir = fs.mkdtempSync(path.join(fixtureRoot(), "database-meta-entity-"));
+});
 
 afterEach(() => {
-	fs.rmSync(tmpDir, { force: true, recursive: true })
-})
+  fs.rmSync(tmpDir, { force: true, recursive: true });
+});
 
 function writeSource(source: string): string {
-	const fp = path.join(tmpDir, "db.test.tables.ts")
-	fs.writeFileSync(fp, PRELUDE + source)
-	return fp
+  const fp = path.join(tmpDir, "db.test.tables.ts");
+  fs.writeFileSync(fp, PRELUDE + source);
+
+  return fp;
 }
 
 async function analyzeSource(source: string) {
-	const fp = writeSource(source)
-	return { analysis: await analyze(fp), tablesPath: fp }
+  const fp = writeSource(source);
+
+  return { analysis: await analyze(fp), tablesPath: fp };
 }
 
 async function validateSource(source: string) {
-	return validateTables(await analyze(writeSource(source)))
+  return validateTables(await analyze(writeSource(source)));
 }
 
 async function metaFor(body: string) {
-	const { analysis } = await analyzeSource(body)
-	return deriveEntityMeta(analysis.tables.find((t) => t.sqlName === "post")!)
+  const { analysis } = await analyzeSource(body);
+
+  return deriveEntityMeta(analysis.tables.find((t) => t.sqlName === "post")!);
 }
 
-type GenerateOptions = { importFrom?: string }
+type GenerateOptions = { importFrom?: string };
 
 /** Generate DTOs for an analysis and return one entity's generated file. */
 function generatedFile(
-	{ analysis, tablesPath }: Awaited<ReturnType<typeof analyzeSource>>,
-	entity: string,
-	options: GenerateOptions = {},
+  { analysis, tablesPath }: Awaited<ReturnType<typeof analyzeSource>>,
+  entity: string,
+  options: GenerateOptions = {},
 ): string {
-	const outDir = path.join(tmpDir, "dtos")
-	generateDtos(testContext(analysis, { cwd: tmpDir, tablesPath }), { ...options, output: outDir })
-	return fs.readFileSync(path.join(outDir, entity, "index.gen.ts"), "utf-8")
+  const outDir = path.join(tmpDir, "dtos");
+  generateDtos(testContext(analysis, { cwd: tmpDir, tablesPath }), { ...options, output: outDir });
+
+  return fs.readFileSync(path.join(outDir, entity, "index.gen.ts"), "utf-8");
 }
 
 /** The generator's array literal for a list of strings. */
 function list(values: string[]): string {
-	return `[${values.map((v) => JSON.stringify(v)).join(", ")}]`
+  return `[${values.map((v) => JSON.stringify(v)).join(", ")}]`;
 }
 
 const fullTable = `
@@ -81,217 +87,228 @@ export const post = createTable("post", {
 	updated_at: c.updatedAt("updated_at"),
 	deleted_at: c.deletedAt("deleted_at"),
 })
-`
+`;
 
 const compositeTable = `
 export const post_tag = createTable("post_tag", {
 	post_id: c.ref("post_id"),
 	tag_id: c.ref("tag_id"),
 }, (t) => [primaryKey({ columns: [t.post_id, t.tag_id] })])
-`
+`;
 
 describe("entity meta matches the analyzer", () => {
-	it("names the entity by its SQL table name, not the variable", async () => {
-		const { analysis } = await analyzeSource(`
+  it("names the entity by its SQL table name, not the variable", async () => {
+    const { analysis } = await analyzeSource(`
 export const blogPost = createTable("blog_post", { id: c.id("bp") })
-`)
-		expect(deriveEntityMeta(analysis.tables[0]!)?.name).toBe("blog_post")
-	})
+`);
 
-	it("takes identity from the primary key the analyzer found", async () => {
-		const { analysis } = await analyzeSource(fullTable)
-		const table = analysis.tables[0]!
-		const meta = deriveEntityMeta(table)!
+    expect(deriveEntityMeta(analysis.tables[0]!)?.name).toBe("blog_post");
+  });
 
-		expect(meta.identity).toBe(table.fields.find((f) => f.isPrimaryKey)!.name)
-		expect(meta.identity).toBe("id")
-	})
+  it("takes identity from the primary key the analyzer found", async () => {
+    const { analysis } = await analyzeSource(fullTable);
+    const table = analysis.tables[0]!;
+    const meta = deriveEntityMeta(table)!;
 
-	it("reports the tombstone column only when the table has one", async () => {
-		const { analysis: withSoft } = await analyzeSource(fullTable)
-		expect(deriveEntityMeta(withSoft.tables[0]!)?.softDelete).toBe("deleted_at")
+    expect(meta.identity).toBe(table.fields.find((f) => f.isPrimaryKey)!.name);
+    expect(meta.identity).toBe("id");
+  });
 
-		const { analysis: hard } = await analyzeSource(`
+  it("reports the tombstone column only when the table has one", async () => {
+    const { analysis: withSoft } = await analyzeSource(fullTable);
+    expect(deriveEntityMeta(withSoft.tables[0]!)?.softDelete).toBe("deleted_at");
+
+    const { analysis: hard } = await analyzeSource(`
 export const tag = createTable("tag", { id: c.id("tag"), name: c.text("name") })
-`)
-		expect(deriveEntityMeta(hard.tables[0]!)?.softDelete).toBeNull()
-	})
+`);
 
-	it("lists every autogenerate field as generated, plus the identity", async () => {
-		const { analysis } = await analyzeSource(fullTable)
-		const table = analysis.tables[0]!
-		const meta = deriveEntityMeta(table)!
-		const autogenerated = table.fields.filter((f) => f.constraints.autogenerate).map((f) => f.name)
+    expect(deriveEntityMeta(hard.tables[0]!)?.softDelete).toBeNull();
+  });
 
-		/* the fixture must hold autogenerate fields, or the containment below proves nothing */
-		expect(autogenerated.length).toBeGreaterThan(0)
-		expect(meta.generated).toEqual(expect.arrayContaining(autogenerated))
-		expect(meta.generated).toContain("id")
-	})
+  it("lists every autogenerate field as generated, plus the identity", async () => {
+    const { analysis } = await analyzeSource(fullTable);
+    const table = analysis.tables[0]!;
+    const meta = deriveEntityMeta(table)!;
+    const autogenerated = table.fields.filter((f) => f.constraints.autogenerate).map((f) => f.name);
 
-	it("omits the stamp entirely for a composite primary key", async () => {
-		const { analysis } = await analyzeSource(compositeTable)
-		/* No single identity to publish, and picking one would be a guess. */
-		expect(deriveEntityMeta(analysis.tables[0]!)).toBeNull()
-	})
-})
+    // the fixture must hold autogenerate fields, or the containment below proves nothing
+    expect(autogenerated.length).toBeGreaterThan(0);
+    expect(meta.generated).toEqual(expect.arrayContaining(autogenerated));
+    expect(meta.generated).toContain("id");
+  });
+
+  it("omits the stamp entirely for a composite primary key", async () => {
+    const { analysis } = await analyzeSource(compositeTable);
+    // No single identity to publish, and picking one would be a guess.
+    expect(deriveEntityMeta(analysis.tables[0]!)).toBeNull();
+  });
+});
 
 describe("entity meta matches the generated DTOs", () => {
-	it("declares immutable exactly as the fields absent from the update DTO", async () => {
-		const analyzed = await analyzeSource(fullTable)
-		const generated = generatedFile(analyzed, "post")
-		const updateBlock = generated.match(/postDtoUpdateSchema = z\.object\(\{([\s\S]*?)\n\}\)/)?.[1] ?? ""
-		const inUpdate = new Set([...updateBlock.matchAll(/^\t(\w+):/gm)].map((m) => m[1]!))
+  it("declares immutable exactly as the fields absent from the update DTO", async () => {
+    const analyzed = await analyzeSource(fullTable);
+    const generated = generatedFile(analyzed, "post");
+    const updateBlock = generated.match(/postDtoUpdateSchema = z\.object\(\{([\s\S]*?)\n\}\)/)?.[1] ?? "";
+    const inUpdate = new Set([...updateBlock.matchAll(/^\t(\w+):/gm)].map((m) => m[1]!));
 
-		const table = analyzed.analysis.tables[0]!
-		const meta = deriveEntityMeta(table)!
-		const absent = table.fields.map((f) => f.name).filter((name) => !inUpdate.has(name))
+    const table = analyzed.analysis.tables[0]!;
+    const meta = deriveEntityMeta(table)!;
+    const absent = table.fields.map((f) => f.name).filter((name) => !inUpdate.has(name));
 
-		/* the update block must be read, or both directions below hold trivially */
-		expect(inUpdate.size).toBeGreaterThan(0)
-		/* Every published-immutable field is missing from the update body … */
-		expect(meta.immutable.filter((field) => inUpdate.has(field))).toEqual([])
-		/* … and every field missing from the update body is published immutable.
-		   Both directions, so neither list can quietly grow past the other. */
-		expect(meta.immutable).toEqual(expect.arrayContaining(absent))
-	})
+    // the update block must be read, or both directions below hold trivially
+    expect(inUpdate.size).toBeGreaterThan(0);
+    // Every published-immutable field is missing from the update body …
+    expect(meta.immutable.filter((field) => inUpdate.has(field))).toEqual([]);
+    // … and every field missing from the update body is published immutable.
+    // Both directions, so neither list can quietly grow past the other.
+    expect(meta.immutable).toEqual(expect.arrayContaining(absent));
+  });
 
-	it("stamps the read schema and only the read schema", async () => {
-		const generated = generatedFile(await analyzeSource(fullTable), "post")
-		expect(generated).toContain(`import { databaseMeta } from "@workerstack/database/meta"`)
-		expect(generated.match(/databaseMeta\(\{/g)).toHaveLength(1)
-		expect(generated).toMatch(/postDtoReadSchema = z\.object\(\{[\s\S]*?\}\)\.meta\(databaseMeta\(\{/)
-	})
+  it("stamps the read schema and only the read schema", async () => {
+    const generated = generatedFile(await analyzeSource(fullTable), "post");
+    expect(generated).toContain(`import { databaseMeta } from "@workerstack/database/meta"`);
+    expect(generated.match(/databaseMeta\(\{/g)).toHaveLength(1);
+    expect(generated).toMatch(/postDtoReadSchema = z\.object\(\{[\s\S]*?\}\)\.meta\(databaseMeta\(\{/);
+  });
 
-	it("emits no stamp and no import when no table has a single identity", async () => {
-		expect(generatedFile(await analyzeSource(compositeTable), "post-tag")).not.toContain("databaseMeta")
-	})
+  it("emits no stamp and no import when no table has a single identity", async () => {
+    expect(generatedFile(await analyzeSource(compositeTable), "post-tag")).not.toContain("databaseMeta");
+  });
 
-	it("honours a custom importFrom, as the entities generator does", async () => {
-		const generated = generatedFile(await analyzeSource(fullTable), "post", { importFrom: "@acme/db" })
-		expect(generated).toContain(`import { databaseMeta } from "@acme/db/meta"`)
-	})
+  it("honours a custom importFrom, as the entities generator does", async () => {
+    const generated = generatedFile(await analyzeSource(fullTable), "post", { importFrom: "@acme/db" });
+    expect(generated).toContain(`import { databaseMeta } from "@acme/db/meta"`);
+  });
 
-	it("regenerates byte-identically, so the checksum header does not churn", async () => {
-		const analyzed = await analyzeSource(fullTable)
-		const first = generatedFile(analyzed, "post")
-		const second = generatedFile(analyzed, "post")
+  it("regenerates byte-identically, so the checksum header does not churn", async () => {
+    const analyzed = await analyzeSource(fullTable);
+    const first = generatedFile(analyzed, "post");
+    const second = generatedFile(analyzed, "post");
 
-		expect(second).toBe(first)
-	})
-})
+    expect(second).toBe(first);
+  });
+});
 
 describe("a mismatch fails loudly", () => {
-	it("warns, but does not block codegen, when the primary key is not the tiebreak column", async () => {
-		/* Plenty of tables are never listed — join tables, lookup maps, database's own
-		   shard_map. Blocking codegen for those would force a rename of a column
-		   that is named correctly. The exact guarantee lives in buildListQuery. */
-		const result = await validateSource(`
+  it("warns, but does not block codegen, when the primary key is not the tiebreak column", async () => {
+    // Plenty of tables are never listed — join tables, lookup maps, database's own
+    // shard_map. Blocking codegen for those would force a rename of a column
+    // that is named correctly. The exact guarantee lives in buildListQuery.
+    const result = await validateSource(`
 export const post = createTable("post", {
 	pk: c.id("pst"),
 	title: c.text("title"),
 })
-`)
-		expect(result.errors).toEqual([])
-		expect(result.warnings.join("\n")).toMatch(/primary key is declared as "pk"/)
-		expect(result.warnings.join("\n")).toContain("cannot be")
-	})
+`);
 
-	it("accepts the conventional shape without complaint", async () => {
-		const result = await validateSource(`
+    expect(result.errors).toEqual([]);
+    expect(result.warnings.join("\n")).toMatch(/primary key is declared as "pk"/);
+    expect(result.warnings.join("\n")).toContain("cannot be");
+  });
+
+  it("accepts the conventional shape without complaint", async () => {
+    const result = await validateSource(`
 export const post = createTable("post", {
 	id: c.id("pst"),
 	title: c.text("title"),
 })
-`)
-		expect(result.errors).toEqual([])
-	})
+`);
 
-	it("does not apply the rule to a composite primary key", async () => {
-		const result = await validateSource(`
+    expect(result.errors).toEqual([]);
+  });
+
+  it("does not apply the rule to a composite primary key", async () => {
+    const result = await validateSource(`
 export const post_tag = createTable("post_tag", {
 	post_id: c.ref("post_id"),
 	tag_id: c.ref("tag_id"),
 }, (t) => [primaryKey({ columns: [t.post_id, t.tag_id] })])
-`)
-		expect(result.errors).toEqual([])
-	})
-})
+`);
+
+    expect(result.errors).toEqual([]);
+  });
+});
 
 describe("tenantColumn is declared, never inferred", () => {
-	it("reports the column a table declares", async () => {
-		const meta = await metaFor(`
+  it("reports the column a table declares", async () => {
+    const meta = await metaFor(`
 export const post = createTable("post", {
 	id: c.id("pst"),
 	org_id: c.ref("org_id", { tenant: true }).notNull(),
 	title: c.text("title"),
 })
-`)
-		expect(meta?.tenantColumn).toBe("org_id")
-	})
+`);
 
-	it("stays null for a foreign key that merely looks tenant-ish", async () => {
-		/* org_id is a plain FK here. Guessing from the name would reproduce a
-		   consumer's own fallback heuristic and dress it up as a declaration. */
-		const meta = await metaFor(`
+    expect(meta?.tenantColumn).toBe("org_id");
+  });
+
+  it("stays null for a foreign key that merely looks tenant-ish", async () => {
+    // org_id is a plain FK here. Guessing from the name would reproduce a
+    // consumer's own fallback heuristic and dress it up as a declaration.
+    const meta = await metaFor(`
 export const org = createTable("org", { id: c.id("org") })
 export const post = createTable("post", {
 	id: c.id("pst"),
 	org_id: c.ref("org_id").references(() => org.id),
 })
-`)
-		expect(meta?.tenantColumn).toBeNull()
-	})
+`);
 
-	it("stays null when nothing is declared", async () => {
-		expect((await metaFor(`export const post = createTable("post", { id: c.id("pst") })`))?.tenantColumn).toBeNull()
-	})
+    expect(meta?.tenantColumn).toBeNull();
+  });
 
-	it("drops the fact rather than choosing when two columns declare it", async () => {
-		const meta = await metaFor(`
+  it("stays null when nothing is declared", async () => {
+    expect((await metaFor(`export const post = createTable("post", { id: c.id("pst") })`))?.tenantColumn).toBeNull();
+  });
+
+  it("drops the fact rather than choosing when two columns declare it", async () => {
+    const meta = await metaFor(`
 export const post = createTable("post", {
 	id: c.id("pst"),
 	org_id: c.ref("org_id", { tenant: true }).notNull(),
 	workspace_id: c.ref("workspace_id", { tenant: true }).notNull(),
 })
-`)
-		expect(meta?.tenantColumn).toBeNull()
-	})
-})
+`);
+
+    expect(meta?.tenantColumn).toBeNull();
+  });
+});
 
 describe("tenantColumn is declared, never inferred: validation and DTOs", () => {
-	it("is rejected by validateTables when declared twice", async () => {
-		const result = await validateSource(`
+  it("is rejected by validateTables when declared twice", async () => {
+    const result = await validateSource(`
 export const post = createTable("post", {
 	id: c.id("pst"),
 	org_id: c.ref("org_id", { tenant: true }).notNull(),
 	workspace_id: c.ref("workspace_id", { tenant: true }).notNull(),
 })
-`)
-		expect(result.errors.join("\n")).toMatch(/2 columns declare \{ tenant: true \}/)
-		expect(result.errors.join("\n")).toContain("org_id, workspace_id")
-	})
+`);
 
-	it("accepts a single declaration without complaint", async () => {
-		const result = await validateSource(
-			`export const post = createTable("post", { id: c.id("pst"), org_id: c.ref("org_id", { tenant: true }).notNull() })`,
-		)
-		expect(result.errors).toEqual([])
-	})
+    expect(result.errors.join("\n")).toMatch(/2 columns declare \{ tenant: true \}/);
+    expect(result.errors.join("\n")).toContain("org_id, workspace_id");
+  });
 
-	it("reaches the generated read schema", async () => {
-		const generated = generatedFile(
-			await analyzeSource(
-				`export const post = createTable("post", { id: c.id("pst"), org_id: c.ref("org_id", { tenant: true }).notNull(), title: c.text("title") })`,
-			),
-			"post",
-		)
-		expect(generated).toContain(`tenantColumn: "org_id"`)
-	})
-})
+  it("accepts a single declaration without complaint", async () => {
+    const result = await validateSource(
+      `export const post = createTable("post", { id: c.id("pst"), org_id: c.ref("org_id", { tenant: true }).notNull() })`,
+    );
+
+    expect(result.errors).toEqual([]);
+  });
+
+  it("reaches the generated read schema", async () => {
+    const generated = generatedFile(
+      await analyzeSource(
+        `export const post = createTable("post", { id: c.id("pst"), org_id: c.ref("org_id", { tenant: true }).notNull(), title: c.text("title") })`,
+      ),
+      "post",
+    );
+
+    expect(generated).toContain(`tenantColumn: "org_id"`);
+  });
+});
 
 describe("states is declared on c.enum, published without transitions", () => {
-	const machine = `
+  const machine = `
 export const delivery = createTable("delivery", {
 	id: c.id("dlv"),
 	status: c.enum("status", ["queued", "sending", "sent"], {
@@ -300,51 +317,53 @@ export const delivery = createTable("delivery", {
 		transitions: { queued: ["sending"], sending: ["sent"] },
 	}).notNull(),
 })
-`
+`;
 
-	it("publishes column, values, initial and terminal — not transitions", async () => {
-		const { analysis } = await analyzeSource(machine)
-		expect(deriveEntityMeta(analysis.tables[0]!)?.states).toEqual({
-			column: "status",
-			initial: "queued",
-			terminal: ["sent"],
-			values: ["queued", "sending", "sent"],
-		})
-	})
+  it("publishes column, values, initial and terminal — not transitions", async () => {
+    const { analysis } = await analyzeSource(machine);
+    expect(deriveEntityMeta(analysis.tables[0]!)?.states).toEqual({
+      column: "status",
+      initial: "queued",
+      terminal: ["sent"],
+      values: ["queued", "sending", "sent"],
+    });
+  });
 
-	it("stays null when no machine is declared", async () => {
-		const { analysis } = await analyzeSource(`
+  it("stays null when no machine is declared", async () => {
+    const { analysis } = await analyzeSource(`
 export const delivery = createTable("delivery", {
 	id: c.id("dlv"),
 	status: c.enum("status", ["queued", "sent"]),
 })
-`)
-		expect(deriveEntityMeta(analysis.tables[0]!)?.states).toBeNull()
-	})
+`);
 
-	it("takes only the first declaring column", async () => {
-		const { analysis } = await analyzeSource(`
+    expect(deriveEntityMeta(analysis.tables[0]!)?.states).toBeNull();
+  });
+
+  it("takes only the first declaring column", async () => {
+    const { analysis } = await analyzeSource(`
 export const delivery = createTable("delivery", {
 	id: c.id("dlv"),
 	status: c.enum("status", ["a", "b"], { terminal: ["b"] }),
 	phase: c.enum("phase", ["x", "y"], { terminal: ["y"] }),
 })
-`)
-		expect(deriveEntityMeta(analysis.tables[0]!)?.states?.column).toBe("status")
-	})
+`);
 
-	it("reaches the generated read schema without the graph", async () => {
-		const generated = generatedFile(await analyzeSource(machine), "delivery")
-		expect(generated).toContain(`column: "status"`)
-		expect(generated).toContain(`initial: "queued"`)
-		expect(generated).toContain(`terminal: ["sent"]`)
-		expect(generated).toContain(`values: ["queued", "sending", "sent"]`)
-		expect(generated).not.toMatch(/transitions/)
-	})
-})
+    expect(deriveEntityMeta(analysis.tables[0]!)?.states?.column).toBe("status");
+  });
+
+  it("reaches the generated read schema without the graph", async () => {
+    const generated = generatedFile(await analyzeSource(machine), "delivery");
+    expect(generated).toContain(`column: "status"`);
+    expect(generated).toContain(`initial: "queued"`);
+    expect(generated).toContain(`terminal: ["sent"]`);
+    expect(generated).toContain(`values: ["queued", "sending", "sent"]`);
+    expect(generated).not.toMatch(/transitions/);
+  });
+});
 
 describe("uniqueIndexes is copied from the analyzer, never inferred", () => {
-	const twoIndexes = `
+  const twoIndexes = `
 export const post = createTable("post", {
 	id: c.id("pst"),
 	email: c.text("email"),
@@ -354,115 +373,119 @@ export const post = createTable("post", {
 	uniqueIndex("idx_post_email").on(t.email),
 	uniqueIndex("idx_post_org_slug").on(t.org_id, t.slug),
 ])
-`
+`;
 
-	it("equals the analyzer's uniqueIndexes in both directions", async () => {
-		const { analysis } = await analyzeSource(twoIndexes)
-		const table = analysis.tables[0]!
-		const meta = deriveEntityMeta(table)!
+  it("equals the analyzer's uniqueIndexes in both directions", async () => {
+    const { analysis } = await analyzeSource(twoIndexes);
+    const table = analysis.tables[0]!;
+    const meta = deriveEntityMeta(table)!;
 
-		expect(meta.uniqueIndexes).toEqual(table.uniqueIndexes)
-		expect(meta.uniqueIndexes, "stamp omitted an analyzer index").toEqual(expect.arrayContaining(table.uniqueIndexes))
-		expect(table.uniqueIndexes, "stamp invented an index").toEqual(expect.arrayContaining(meta.uniqueIndexes))
-	})
+    expect(meta.uniqueIndexes).toEqual(table.uniqueIndexes);
+    expect(meta.uniqueIndexes, "stamp omitted an analyzer index").toEqual(expect.arrayContaining(table.uniqueIndexes));
+    expect(table.uniqueIndexes, "stamp invented an index").toEqual(expect.arrayContaining(meta.uniqueIndexes));
+  });
 
-	it("is [] when the table declares none — not inferred from a PK or column name", async () => {
-		const { analysis } = await analyzeSource(`
+  it("is [] when the table declares none — not inferred from a PK or column name", async () => {
+    const { analysis } = await analyzeSource(`
 export const post = createTable("post", {
 	id: c.id("pst"),
 	email: c.text("email"),
 	slug: c.text("slug"),
 })
-`)
-		const table = analysis.tables[0]!
-		expect(table.uniqueIndexes).toEqual([])
-		expect(deriveEntityMeta(table)?.uniqueIndexes).toEqual([])
-	})
+`);
 
-	it("reaches the generated read schema from deriveEntityMeta; create/update stay unstamped", async () => {
-		const analyzed = await analyzeSource(twoIndexes)
-		const generated = generatedFile(analyzed, "post")
-		const table = analyzed.analysis.tables[0]!
-		const meta = deriveEntityMeta(table)!
-		const rendered = `[${meta.uniqueIndexes.map((idx) => `{ columns: ${list(idx.columns)}, name: ${JSON.stringify(idx.name)} }`).join(", ")}]`
+    const table = analysis.tables[0]!;
+    expect(table.uniqueIndexes).toEqual([]);
+    expect(deriveEntityMeta(table)?.uniqueIndexes).toEqual([]);
+  });
 
-		expect(generated).toMatch(/postDtoReadSchema = z\.object\(\{[\s\S]*?\}\)\.meta\(databaseMeta\(\{/)
-		expect(generated).toContain(`uniqueIndexes: ${rendered}`)
-		expect(meta.uniqueIndexes).toEqual(table.uniqueIndexes)
+  it("reaches the generated read schema from deriveEntityMeta; create/update stay unstamped", async () => {
+    const analyzed = await analyzeSource(twoIndexes);
+    const generated = generatedFile(analyzed, "post");
+    const table = analyzed.analysis.tables[0]!;
+    const meta = deriveEntityMeta(table)!;
+    const rendered = `[${meta.uniqueIndexes.map((idx) => `{ columns: ${list(idx.columns)}, name: ${JSON.stringify(idx.name)} }`).join(", ")}]`;
 
-		expect(generated.match(/databaseMeta\(\{/g)).toHaveLength(1)
-		expect(generated).not.toMatch(/postDtoCreateSchema[\s\S]*?\.meta\(databaseMeta/)
-		expect(generated).not.toMatch(/postDtoUpdateSchema[\s\S]*?\.meta\(databaseMeta/)
-	})
-})
+    expect(generated).toMatch(/postDtoReadSchema = z\.object\(\{[\s\S]*?\}\)\.meta\(databaseMeta\(\{/);
+    expect(generated).toContain(`uniqueIndexes: ${rendered}`);
+    expect(meta.uniqueIndexes).toEqual(table.uniqueIndexes);
 
-/* CD1 of r22b: §6.2 keeps an ownership key out of update so a body cannot move a row to another
-   tenant, and §6.3 calls the tenant column the contract's highest-value field */
+    expect(generated.match(/databaseMeta\(\{/g)).toHaveLength(1);
+    expect(generated).not.toMatch(/postDtoCreateSchema[\s\S]*?\.meta\(databaseMeta/);
+    expect(generated).not.toMatch(/postDtoUpdateSchema[\s\S]*?\.meta\(databaseMeta/);
+  });
+});
+
+// CD1 of r22b: §6.2 keeps an ownership key out of update so a body cannot move a row to another
+// tenant, and §6.3 calls the tenant column the contract's highest-value field
 describe("a tenant column is set once (CD1; sibling: `mutable` with `nomutate`)", () => {
-	afterAll(() => cleanGeneratedDtos())
+  afterAll(() => cleanGeneratedDtos());
 
-	const TABLES = {
-		postgres: (column: string) => `export const org = pgTable("org", { id: c.id("org") })
+  const TABLES = {
+    postgres: (column: string) => `export const org = pgTable("org", { id: c.id("org") })
 export const post = pgTable("post", { id: c.id("pst"), orgId: ${column}, title: c.text("title") })`,
-		sqlite: (column: string) => `export const org = sqliteTable("org", { id: c.id("org") })
+    sqlite: (column: string) => `export const org = sqliteTable("org", { id: c.id("org") })
 export const post = sqliteTable("post", { id: c.id("pst"), orgId: ${column}, title: c.text("title") })`,
-	}
+  };
 
-	const SHAPES = {
-		"c.integer": 'c.integer("org_id", { tenant: true }).notNull()',
-		"c.ref, no reference": 'c.ref("org_id", { tenant: true }).notNull()',
-		"c.ref to org": 'c.ref("org_id", { tenant: true }).notNull().references(() => org.id)',
-		"c.text": 'c.text("org_id", { tenant: true }).notNull()',
-	}
+  const SHAPES = {
+    "c.integer": 'c.integer("org_id", { tenant: true }).notNull()',
+    "c.ref to org": 'c.ref("org_id", { tenant: true }).notNull().references(() => org.id)',
+    "c.ref, no reference": 'c.ref("org_id", { tenant: true }).notNull()',
+    "c.text": 'c.text("org_id", { tenant: true }).notNull()',
+  };
 
-	for (const dialect of ["postgres", "sqlite"] as const)
-		for (const [shape, column] of Object.entries(SHAPES))
-			it(`keeps a ${shape} tenant out of update, immutable in the stamp and the manifest, on ${dialect}`, async () => {
-				const channels = await entityChannels(
-					`cd1-${dialect}-${shape.replaceAll(/\W/g, "")}`,
-					TABLES[dialect](column),
-					{ dialect, entity: "post" },
-				)
-				expect(channels.stamp?.tenantColumn).toBe("orgId")
-				expect(channels.create).toContain("orgId")
-				expect(channels.update).not.toContain("orgId")
-				expect(channels.stamp?.immutable).toContain("orgId")
-				expect(channels.manifest["orgId"]?.immutable).toBe(true)
-				expect(disagreements(channels)).toEqual([])
-			})
+  for (const dialect of ["postgres", "sqlite"] as const) {
+    for (const [shape, column] of Object.entries(SHAPES)) {
+      it(`keeps a ${shape} tenant out of update, immutable in the stamp and the manifest, on ${dialect}`, async () => {
+        const channels = await entityChannels(
+          `cd1-${dialect}-${shape.replaceAll(/\W/g, "")}`,
+          TABLES[dialect](column),
+          { dialect, entity: "post" },
+        );
 
-	it.each(["postgres", "sqlite"] as const)(
-		"refuses tenant with mutable at codegen, naming the column, on %s",
-		async (dialect) => {
-			await expect(
-				entityChannels(
-					`cd1-mutable-${dialect}`,
-					TABLES[dialect]('c.ref("org_id", { mutable: true, tenant: true }).notNull().references(() => org.id)'),
-					{ dialect, entity: "post" },
-				),
-			).rejects.toThrow(/orgId.*a tenant column is set once; a row does not move between tenants/s)
-		},
-	)
+        expect(channels.stamp?.tenantColumn).toBe("orgId");
+        expect(channels.create).toContain("orgId");
+        expect(channels.update).not.toContain("orgId");
+        expect(channels.stamp?.immutable).toContain("orgId");
+        expect(channels.manifest["orgId"]?.immutable).toBe(true);
+        expect(disagreements(channels)).toEqual([]);
+      });
+    }
+  }
 
-	it("sibling: still refuses mutable with nomutate", async () => {
-		await expect(
-			entityChannels(
-				"cd1-nomutate",
-				TABLES.sqlite('c.ref("org_id", { mutable: true, nomutate: true }).references(() => org.id)'),
-				{ dialect: "sqlite", entity: "post" },
-			),
-		).rejects.toThrow(/mutable and nomutate contradict/)
-	})
-})
+  it.each(["postgres", "sqlite"] as const)(
+    "refuses tenant with mutable at codegen, naming the column, on %s",
+    async (dialect) => {
+      await expect(
+        entityChannels(
+          `cd1-mutable-${dialect}`,
+          TABLES[dialect]('c.ref("org_id", { mutable: true, tenant: true }).notNull().references(() => org.id)'),
+          { dialect, entity: "post" },
+        ),
+      ).rejects.toThrow(/orgId.*a tenant column is set once; a row does not move between tenants/s);
+    },
+  );
 
-/* CD7, CS4 and CS6 of r22b: three predicates decided whether the database fills a column, so a
-   non-key identity was out of both bodies yet not `generated`, and the manifest's flags, read off
-   the predicate, contradicted the stamp, read off the emitted update body, and left a private
-   column's flags false whatever the bodies did */
+  it("sibling: still refuses mutable with nomutate", async () => {
+    await expect(
+      entityChannels(
+        "cd1-nomutate",
+        TABLES.sqlite('c.ref("org_id", { mutable: true, nomutate: true }).references(() => org.id)'),
+        { dialect: "sqlite", entity: "post" },
+      ),
+    ).rejects.toThrow(/mutable and nomutate contradict/);
+  });
+});
+
+// CD7, CS4 and CS6 of r22b: three predicates decided whether the database fills a column, so a
+// non-key identity was out of both bodies yet not `generated`, and the manifest's flags, read off
+// the predicate, contradicted the stamp, read off the emitted update body, and left a private
+// column's flags false whatever the bodies did
 describe("the stamp and the manifest state what the bodies take (CD7, CS4, CS6; sibling: the tenant, 8.12)", () => {
-	afterAll(() => cleanGeneratedDtos())
+  afterAll(() => cleanGeneratedDtos());
 
-	const PG = `import { integer, primaryKey, serial, text } from "drizzle-orm/pg-core"
+  const PG = `import { integer, primaryKey, serial, text } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 export const owner = pgTable("owner", { id: c.id("own") })
 export const ticket = pgTable("ticket", {
@@ -475,21 +498,21 @@ export const ticket = pgTable("ticket", {
 	_token: c.text("token", { autogenerate: true }),
 	title: c.text("title"),
 })
-export const member = pgTable("member", { orgId: text("org_id").notNull(), userId: text("user_id").notNull(), seq: integer("seq").generatedAlwaysAsIdentity(), role: c.text("role") }, (t) => [primaryKey({ columns: [t.orgId, t.userId] })])`
+export const member = pgTable("member", { orgId: text("org_id").notNull(), userId: text("user_id").notNull(), seq: integer("seq").generatedAlwaysAsIdentity(), role: c.text("role") }, (t) => [primaryKey({ columns: [t.orgId, t.userId] })])`;
 
-	it("on an identity of both kinds, a generated column, a serial and private columns, field by field", async () => {
-		const channels = await entityChannels("cs4-ticket", PG, { dialect: "postgres", entity: "ticket" })
-		expect(channels.create.toSorted()).toEqual(["_ownerId", "ser", "title"])
-		expect(channels.stamp?.generated.toSorted()).toEqual(["byDefault", "id", "seq", "total"])
-		expect(channels.manifest["_ownerId"]).toMatchObject({ generated: false, immutable: true, private: true })
-		expect(channels.manifest["_token"]).toMatchObject({ generated: true, immutable: true, private: true })
-		expect(disagreements(channels)).toEqual([])
-	})
+  it("on an identity of both kinds, a generated column, a serial and private columns, field by field", async () => {
+    const channels = await entityChannels("cs4-ticket", PG, { dialect: "postgres", entity: "ticket" });
+    expect(channels.create.toSorted()).toEqual(["_ownerId", "ser", "title"]);
+    expect(channels.stamp?.generated.toSorted()).toEqual(["byDefault", "id", "seq", "total"]);
+    expect(channels.manifest["_ownerId"]).toMatchObject({ generated: false, immutable: true, private: true });
+    expect(channels.manifest["_token"]).toMatchObject({ generated: true, immutable: true, private: true });
+    expect(disagreements(channels)).toEqual([]);
+  });
 
-	it("on a composite key, which publishes no stamp, the manifest against the bodies", async () => {
-		const channels = await entityChannels("cs4-member", PG, { dialect: "postgres", entity: "member" })
-		expect(channels.stamp).toBeNull()
-		expect(channels.manifest["seq"]).toMatchObject({ generated: true, immutable: true })
-		expect(disagreements(channels)).toEqual([])
-	})
-})
+  it("on a composite key, which publishes no stamp, the manifest against the bodies", async () => {
+    const channels = await entityChannels("cs4-member", PG, { dialect: "postgres", entity: "member" });
+    expect(channels.stamp).toBeNull();
+    expect(channels.manifest["seq"]).toMatchObject({ generated: true, immutable: true });
+    expect(disagreements(channels)).toEqual([]);
+  });
+});

@@ -5,59 +5,62 @@
  * for every key, or pagination skips and repeats rows. Both are derived here
  * from the same `SortKey[]`, so they cannot disagree.
  */
-import { and, eq, gt, isNotNull, isNull, lt, or, type SQL, type SQLWrapper, sql } from "drizzle-orm"
+import { and, eq, gt, isNotNull, isNull, lt, or, type SQL, type SQLWrapper, sql } from "drizzle-orm";
 
-import { effectiveNulls } from "../cursor.ts"
-import type { SortDirection, SortNulls } from "../types.ts"
+import { effectiveNulls } from "../cursor.ts";
+import type { SortDirection, SortNulls } from "../types.ts";
 
 /** One key of a list's order */
 type SortKey = {
-	/** the column or expression sorted on */
-	column: SQLWrapper
-	/** its direction */
-	direction: SortDirection
-	/** where its nulls sort; left out, last ascending and first descending */
-	nulls?: SortNulls | undefined
-}
+  /** the column or expression sorted on */
+  column: SQLWrapper;
+  /** its direction */
+  direction: SortDirection;
+  /** where its nulls sort; left out, last ascending and first descending */
+  nulls?: SortNulls | undefined;
+};
 
 /** The unique column that breaks ties after every sort key, so the order is total */
 type KeysetTiebreak = {
-	/** the column; unique and never null, or a page repeats or skips rows */
-	column: SQLWrapper
-	/** its direction */
-	direction: SortDirection
-}
+  /** the column; unique and never null, or a page repeats or skips rows */
+  column: SQLWrapper;
+  /** its direction */
+  direction: SortDirection;
+};
 
 /** `col ASC NULLS LAST` — explicit placement so SQLite's default never leaks in. */
 function orderSQL(key: SortKey): SQL {
-	const nulls = effectiveNulls(key.direction, key.nulls)
-	const dir = sql.raw(key.direction === "asc" ? "ASC" : "DESC")
-	const placement = sql.raw(nulls === "first" ? "NULLS FIRST" : "NULLS LAST")
-	return sql`${key.column} ${dir} ${placement}`
+  const nulls = effectiveNulls(key.direction, key.nulls);
+  const dir = sql.raw(key.direction === "asc" ? "ASC" : "DESC");
+  const placement = sql.raw(nulls === "first" ? "NULLS FIRST" : "NULLS LAST");
+
+  return sql`${key.column} ${dir} ${placement}`;
 }
 
 /** ORDER BY for the keys followed by the tiebreak, which makes the order total. */
 function orderByKeys(keys: readonly SortKey[], tiebreak: KeysetTiebreak): SQL[] {
-	return [...keys.map(orderSQL), orderSQL({ column: tiebreak.column, direction: tiebreak.direction })]
+  return [...keys.map(orderSQL), orderSQL({ column: tiebreak.column, direction: tiebreak.direction })];
 }
 
 /** A count as SQL text: a non-negative safe integer, checked, so nothing but digits reaches sql.raw */
 function countText(value: number): string {
-	if (!Number.isSafeInteger(value) || value < 0) throw new RangeError(`not a count: ${value}`)
-	return String(value)
+  if (!Number.isSafeInteger(value) || value < 0) throw new RangeError(`not a count: ${value}`);
+
+  return String(value);
 }
 
 /** A count as a SQL literal, where a bound parameter would cost the D1 budget one */
-const countLiteral = (value: number): SQL => sql.raw(countText(value))
+const countLiteral = (value: number): SQL => sql.raw(countText(value));
 
 /** An integer as SQL text, past 2^53 included, its exact digits: checked, so nothing but a sign and digits reaches sql.raw */
 function integerText(value: bigint | number): string {
-	if (typeof value === "number" && !Number.isInteger(value)) throw new RangeError(`not an integer: ${value}`)
-	return BigInt(value).toString()
+  if (typeof value === "number" && !Number.isInteger(value)) throw new RangeError(`not an integer: ${value}`);
+
+  return BigInt(value).toString();
 }
 
 /** An integer, a JS number's or a bigint's, as a SQL literal, where a bound parameter would cost the D1 budget one */
-const integerLiteral = (value: bigint | number): SQL => sql.raw(integerText(value))
+const integerLiteral = (value: bigint | number): SQL => sql.raw(integerText(value));
 
 /**
  * A bound the keyset reads from the cursor's own row (cursor-ref.ts) rather than binds: a long text
@@ -66,21 +69,22 @@ const integerLiteral = (value: bigint | number): SQL => sql.raw(integerText(valu
  * `ends` when a NULL bound means no bound is safe, and the list ends there.
  */
 class AnchorBound {
-	readonly ends: boolean
-	readonly kind: "infinite" | "row"
-	readonly value: SQL
+  readonly ends: boolean;
+  readonly kind: "infinite" | "row";
+  readonly value: SQL;
 
-	constructor(kind: "infinite" | "row", value: SQL, ends = false) {
-		this.ends = ends
-		this.kind = kind
-		this.value = value
-	}
+  constructor(kind: "infinite" | "row", value: SQL, ends = false) {
+    this.ends = ends;
+    this.kind = kind;
+    this.value = value;
+  }
 }
 
 function equalTo(key: SortKey, value: unknown): SQL {
-	if (value instanceof AnchorBound)
-		return value.kind === "infinite" ? sql`${key.column} IS ${value.value}` : (eq(key.column, value.value) as SQL)
-	return value === null || value === undefined ? isNull(key.column) : (eq(key.column, value) as SQL)
+  if (value instanceof AnchorBound)
+    return value.kind === "infinite" ? sql`${key.column} IS ${value.value}` : eq(key.column, value.value);
+
+  return value === null || value === undefined ? isNull(key.column) : eq(key.column, value);
 }
 
 /**
@@ -88,40 +92,44 @@ function equalTo(key: SortKey, value: unknown): SQL {
  * NULL as a row value, the flag first, so the bound is read once whichever it holds
  */
 function afterInfinite(key: SortKey, bound: AnchorBound): SQL {
-	const nulls = effectiveNulls(key.direction, key.nulls)
-	/* NULLs are last ascending and first descending exactly when they flag 1 in the row's order */
-	const flag = sql.raw((nulls === "last") === (key.direction === "asc") ? "IS NULL" : "IS NOT NULL")
-	const op = sql.raw(key.direction === "asc" ? ">" : "<")
-	return sql`(${key.column} ${flag}, ${key.column}) ${op} (SELECT database_bound ${flag}, database_bound FROM (SELECT ${bound.value} AS database_bound))`
+  const nulls = effectiveNulls(key.direction, key.nulls);
+  // NULLs are last ascending and first descending exactly when they flag 1 in the row's order
+  const flag = sql.raw((nulls === "last") === (key.direction === "asc") ? "IS NULL" : "IS NOT NULL");
+  const op = sql.raw(key.direction === "asc" ? ">" : "<");
+
+  return sql`(${key.column} ${flag}, ${key.column}) ${op} (SELECT database_bound ${flag}, database_bound FROM (SELECT ${bound.value} AS database_bound))`;
 }
 
 /** Rows strictly after `value` on this key alone; null when none can be. */
 function after(key: SortKey, value: unknown): SQL | null {
-	if (value instanceof AnchorBound && value.kind === "infinite") return afterInfinite(key, value)
-	const nulls = effectiveNulls(key.direction, key.nulls)
-	if (value === null || value === undefined) {
-		/* At a null: non-null values come after only when nulls sort first. */
-		return nulls === "first" ? isNotNull(key.column) : null
-	}
-	const bound = value instanceof AnchorBound ? value.value : value
-	const beyond = (key.direction === "asc" ? gt(key.column, bound) : lt(key.column, bound)) as SQL
-	return nulls === "last" ? (or(beyond, isNull(key.column)) as SQL) : beyond
+  if (value instanceof AnchorBound && value.kind === "infinite") return afterInfinite(key, value);
+  const nulls = effectiveNulls(key.direction, key.nulls);
+
+  if (value === null || value === undefined) {
+    // At a null: non-null values come after only when nulls sort first.
+    return nulls === "first" ? isNotNull(key.column) : null;
+  }
+
+  const bound = value instanceof AnchorBound ? value.value : value;
+  const beyond = key.direction === "asc" ? gt(key.column, bound) : lt(key.column, bound);
+
+  return nulls === "last" ? (or(beyond, isNull(key.column)) as SQL) : beyond;
 }
 
 /** Where a cursor points: the sort keys and the row's values for them, then the tiebreak and its id */
 type KeysetPosition = {
-	/** the row's tiebreak value */
-	id: unknown
-	/** the list's sort keys, in order */
-	keys: readonly SortKey[]
-	/** the list's tiebreak */
-	tiebreak: KeysetTiebreak
-	/** the row's value for each key, in the keys' order; null for a NULL */
-	values: readonly unknown[]
-}
+  /** the row's tiebreak value */
+  id: unknown;
+  /** the list's sort keys, in order */
+  keys: readonly SortKey[];
+  /** the list's tiebreak */
+  tiebreak: KeysetTiebreak;
+  /** the row's value for each key, in the keys' order; null for a NULL */
+  values: readonly unknown[];
+};
 
 const anyOf = (branches: readonly SQL[]): SQL =>
-	branches.length === 1 ? (branches[0] as SQL) : (or(...branches) as SQL)
+  branches.length === 1 ? (branches[0] as SQL) : (or(...branches) as SQL);
 
 /**
  * "After this row" over the keys from `start`, the earlier ones equal: flat, so each value repeats
@@ -130,30 +138,37 @@ const anyOf = (branches: readonly SQL[]): SQL =>
  *   (k1 after) OR (k1 = v1 AND k2 after) OR (k1 = v1 AND k2 = v2 AND (k3 after OR (k3 = v3 AND …)))
  */
 function afterFrom(position: KeysetPosition, start: number): SQL {
-	const { id, keys, tiebreak, values } = position
-	const branches: SQL[] = []
-	const prefix: SQL[] = []
-	const within = (step: SQL) => (prefix.length > 0 ? (and(...prefix, step) as SQL) : step)
-	for (let index = start; index < keys.length; index++) {
-		const key = keys[index] as SortKey
-		const value = values[index]
-		if (value instanceof AnchorBound) {
-			const rest = and(equalTo(key, value), afterFrom(position, index + 1)) as SQL
-			/* a bound read from the row is never a bare null, so some row can follow it */
-			branches.push(within(or(after(key, value) as SQL, rest) as SQL))
-			return anyOf(branches)
-		}
-		const step = after(key, value)
-		if (step) branches.push(within(step))
-		prefix.push(equalTo(key, value))
-	}
-	branches.push(within((tiebreak.direction === "asc" ? gt(tiebreak.column, id) : lt(tiebreak.column, id)) as SQL))
-	return anyOf(branches)
+  const { id, keys, tiebreak, values } = position;
+  const branches: SQL[] = [];
+  const prefix: SQL[] = [];
+  const within = (step: SQL) => (prefix.length > 0 ? (and(...prefix, step) as SQL) : step);
+
+  for (let index = start; index < keys.length; index++) {
+    const key = keys[index] as SortKey;
+    const value = values[index];
+
+    if (value instanceof AnchorBound) {
+      const rest = and(equalTo(key, value), afterFrom(position, index + 1)) as SQL;
+      // a bound read from the row is never a bare null, so some row can follow it
+      branches.push(within(or(after(key, value) as SQL, rest) as SQL));
+
+      return anyOf(branches);
+    }
+
+    const step = after(key, value);
+
+    if (step) branches.push(within(step));
+    prefix.push(equalTo(key, value));
+  }
+
+  branches.push(within(tiebreak.direction === "asc" ? gt(tiebreak.column, id) : lt(tiebreak.column, id)));
+
+  return anyOf(branches);
 }
 
 /** The NULL checks of each bound with no safe fallback: one is NULL once its anchor row is gone or renamed */
 const unsafeBounds = (values: readonly unknown[]): SQL[] =>
-	values.flatMap((value) => (value instanceof AnchorBound && value.ends ? [isNull(value.value)] : []))
+  values.flatMap((value) => (value instanceof AnchorBound && value.ends ? [isNull(value.value)] : []));
 
 /**
  * The WHERE clause of the rows after `position` in the list's order: every key, then the tiebreak,
@@ -161,9 +176,10 @@ const unsafeBounds = (values: readonly unknown[]): SQL[] =>
  * repeats and skips no row
  */
 function keysetSQL(position: KeysetPosition): SQL {
-	const unsafe = unsafeBounds(position.values)
-	const seek = afterFrom(position, 0)
-	return unsafe.length > 0 ? (or(...unsafe, seek) as SQL) : seek
+  const unsafe = unsafeBounds(position.values);
+  const seek = afterFrom(position, 0);
+
+  return unsafe.length > 0 ? (or(...unsafe, seek) as SQL) : seek;
 }
 
 /**
@@ -171,19 +187,20 @@ function keysetSQL(position: KeysetPosition): SQL {
  * when no bound can be. It reads the anchor row alone, so Postgres plans it once a query.
  */
 function anchorGone(values: readonly unknown[]): SQL | undefined {
-	const unsafe = unsafeBounds(values)
-	return unsafe.length === 0 ? undefined : sql`CASE WHEN ${or(...unsafe)} THEN 1 ELSE 0 END`
+  const unsafe = unsafeBounds(values);
+
+  return unsafe.length === 0 ? undefined : sql`CASE WHEN ${or(...unsafe)} THEN 1 ELSE 0 END`;
 }
 
 export {
-	AnchorBound,
-	anchorGone,
-	countLiteral,
-	integerLiteral,
-	type KeysetPosition,
-	keysetSQL,
-	orderByKeys,
-	orderSQL,
-	type SortKey,
-	type KeysetTiebreak,
-}
+  AnchorBound,
+  anchorGone,
+  countLiteral,
+  integerLiteral,
+  type KeysetPosition,
+  keysetSQL,
+  orderByKeys,
+  orderSQL,
+  type SortKey,
+  type KeysetTiebreak,
+};

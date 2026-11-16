@@ -3,34 +3,38 @@
  * typed, through drizzle's DrizzleQueryError, as the README promises. tests/bun and tests/integration/d1
  * run the same on bun:sqlite and D1.
  */
-import { createClient } from "@libsql/client"
-import { drizzle } from "drizzle-orm/libsql"
-import { describe, expect, it } from "vitest"
-import { probes, SEED, searched } from "../support/spellfix.ts"
+import { createClient } from "@libsql/client";
+import { drizzle } from "drizzle-orm/libsql";
+import { describe, expect, it } from "vitest";
+
+import { probes, SEED, searched } from "../support/spellfix.ts";
 
 describe("buildFtsWhereWithSpellfix on libsql, without spellfix1", () => {
-	it("searches the terms as typed, its vocabulary table absent as it must be", async () => {
-		const client = createClient({ url: ":memory:" })
-		try {
-			for (const statement of SEED) await client.execute(statement)
-			expect(await searched(drizzle({ client }), "hello")).toEqual([1])
-			expect(await searched(drizzle({ client }), "hello wor")).toEqual([1])
-		} finally {
-			client.close()
-		}
-	})
+  it("searches the terms as typed, its vocabulary table absent as it must be", async () => {
+    const client = createClient({ url: ":memory:" });
 
-	/* Q3 of r21: libsql can load spellfix1, so it is asked, once per client however many wrappers */
-	it("asks once over four requests, each on its own wrapper of the one client", async () => {
-		const client = createClient({ url: ":memory:" })
-		try {
-			for (const statement of SEED) await client.execute(statement)
-			const counted = probes()
-			for (let request = 0; request < 4; request++)
-				expect(await searched(counted.wrap(drizzle({ client })), "hello")).toEqual([1])
-			expect(counted.count).toBe(1)
-		} finally {
-			client.close()
-		}
-	})
-})
+    try {
+      for (const statement of SEED) await client.execute(statement);
+      expect(await searched(drizzle({ client }), "hello")).toEqual([1]);
+      expect(await searched(drizzle({ client }), "hello wor")).toEqual([1]);
+    } finally {
+      client.close();
+    }
+  });
+
+  // Q3 of r21: libsql can load spellfix1, so it is asked, once per client however many wrappers
+  it("asks once over four requests, each on its own wrapper of the one client", async () => {
+    const client = createClient({ url: ":memory:" });
+
+    try {
+      for (const statement of SEED) await client.execute(statement);
+      const counted = probes();
+
+      for (let request = 0; request < 4; request++)
+        expect(await searched(counted.wrap(drizzle({ client })), "hello")).toEqual([1]);
+      expect(counted.count).toBe(1);
+    } finally {
+      client.close();
+    }
+  });
+});

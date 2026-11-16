@@ -5,89 +5,100 @@
  * A tiebreak id past 2^53 cannot find its own row, so no cursor is minted from one. No test
  * framework is imported, so vitest and bun:test share it.
  */
-import { defineRelations, getTableColumns } from "drizzle-orm"
-import { integer, sqliteTable } from "drizzle-orm/sqlite-core"
-import { queryHelpers } from "../../../src/query/drizzle.ts"
-import { createListQuerySchema } from "../../../src/query/schema.ts"
-import { applyListQuery, buildDerivedListQuery, buildListQuery } from "../../../src/query/sqlite/build-list-query.ts"
-import { SEALED } from "../../../src/query/__fixtures__/cursor-secret.ts"
+import { defineRelations, getTableColumns } from "drizzle-orm";
+import { integer, sqliteTable } from "drizzle-orm/sqlite-core";
 
-export const big = sqliteTable("big", { id: integer("id").primaryKey(), n: integer("n") })
-export const bigRelations = defineRelations({ big })
-const schema = createListQuerySchema({ pagination: { defaultLimit: 1, maxLimit: 1 }, sort: ["n"] })
+import { SEALED } from "../../../src/query/__fixtures__/cursor-secret.ts";
+import { queryHelpers } from "../../../src/query/drizzle.ts";
+import { createListQuerySchema } from "../../../src/query/schema.ts";
+import { applyListQuery, buildDerivedListQuery, buildListQuery } from "../../../src/query/sqlite/build-list-query.ts";
 
-export const CREATE = "CREATE TABLE big (id INTEGER PRIMARY KEY, n INTEGER)"
-/* three keys past 2^53 that a lossy read rounds onto each other, between two it reads exactly */
+const big = sqliteTable("big", { id: integer("id").primaryKey(), n: integer("n") });
+export const bigRelations = defineRelations({ big });
+const schema = createListQuerySchema({ pagination: { defaultLimit: 1, maxLimit: 1 }, sort: ["n"] });
+
+export const CREATE = "CREATE TABLE big (id INTEGER PRIMARY KEY, n INTEGER)";
+
+// three keys past 2^53 that a lossy read rounds onto each other, between two it reads exactly
 export const KEYS =
-	"INSERT INTO big VALUES (1, 1), (2, 9007199254740993), (3, 9007199254740995), (4, 9007199254740997), (5, 100)"
-/* two tiebreak ids past 2^53 */
-export const IDS = "INSERT INTO big VALUES (9007199254740993, 1), (9007199254740995, 2)"
-export const EXPECTED: Record<string, number[]> = { "n.asc": [1, 5, 2, 3, 4], "n.desc": [4, 3, 2, 5, 1] }
-/* what a refusal to mint names: how to read the id exactly */
-export const EXACTLY = /safeIntegers.*intMode: "bigint".*mode: "bigint".*text id/
+  "INSERT INTO big VALUES (1, 1), (2, 9007199254740993), (3, 9007199254740995), (4, 9007199254740997), (5, 100)";
+
+// two tiebreak ids past 2^53
+export const IDS = "INSERT INTO big VALUES (9007199254740993, 1), (9007199254740995, 2)";
+export const EXPECTED: Record<string, number[]> = { "n.asc": [1, 5, 2, 3, 4], "n.desc": [4, 3, 2, 5, 1] };
+
+// what a refusal to mint names: how to read the id exactly
+export const EXACTLY = /safeIntegers.*intMode: "bigint".*mode: "bigint".*text id/;
 
 /** One page under `order` after `cursor`: its ids, the next cursor, and hasMore */
 export type Page = (
-	order: string,
-	cursor: string | undefined,
-) => Promise<{ hasMore: boolean; ids: number[]; next: string | null }>
+  order: string,
+  cursor: string | undefined,
+) => Promise<{ hasMore: boolean; ids: number[]; next: string | null }>;
 
-type Builder = { select(fields: object): { from(table: typeof big): { $dynamic(): never } } }
-type Relational = { query: { big: { findMany(options: never): Promise<Array<{ id: number }>> } } }
+type Builder = { select(fields: object): { from(table: typeof big): { $dynamic(): never } } };
+
+type Relational = { query: { big: { findMany(options: never): Promise<Array<{ id: number }>> } } };
 
 /** A page read through buildListQuery */
 export const viaBuilder =
-	(db: Builder): Page =>
-	async (order, cursor) => {
-		const parsed = schema.parse({ cursor, order })
-		const list = buildListQuery({ ...SEALED, parsed, table: big })
-		const rows = await applyListQuery((extras) => db.select({ ...getTableColumns(big), ...extras }).from(big), list)
-		const [items, meta] = queryHelpers.paginate(rows as Array<{ id: number }>, list)
-		return { hasMore: meta.hasMore, ids: items.map((row) => row.id), next: meta.nextCursor }
-	}
+  (db: Builder): Page =>
+  async (order, cursor) => {
+    const parsed = schema.parse({ cursor, order });
+    const list = buildListQuery({ ...SEALED, parsed, table: big });
+    const rows = await applyListQuery((extras) => db.select({ ...getTableColumns(big), ...extras }).from(big), list);
+    const [items, meta] = queryHelpers.paginate(rows as Array<{ id: number }>, list);
+
+    return { hasMore: meta.hasMore, ids: items.map((row) => row.id), next: meta.nextCursor };
+  };
 
 /**
  * A page read through buildDerivedListQuery (Q1 of r19): with no anchor table its cursor binds the key
  * as the driver read it, as no row holds it; `anchored`, the keyset reads it back from the anchor's row
  */
 export const viaDerived =
-	(db: Builder, anchored = false): Page =>
-	async (order, cursor) => {
-		const parsed = schema.parse({ cursor, order })
-		/* an anchor names the table its rows are, which the keyset reads the exact key back from */
-		const keyedBy = anchored ? { anchor: { idColumn: big.id, table: big } } : { idColumn: big.id }
-		const list = buildDerivedListQuery({ ...SEALED, ...keyedBy, parsed, sortColumns: { n: big.n } })
-		const rows = await applyListQuery((extras) => db.select({ ...getTableColumns(big), ...extras }).from(big), list)
-		const [items, meta] = queryHelpers.paginate(rows as Array<{ id: number }>, list)
-		return { hasMore: meta.hasMore, ids: items.map((row) => row.id), next: meta.nextCursor }
-	}
+  (db: Builder, anchored = false): Page =>
+  async (order, cursor) => {
+    const parsed = schema.parse({ cursor, order });
+    // an anchor names the table its rows are, which the keyset reads the exact key back from
+    const keyedBy = anchored ? { anchor: { idColumn: big.id, table: big } } : { idColumn: big.id };
+    const list = buildDerivedListQuery({ ...SEALED, ...keyedBy, parsed, sortColumns: { n: big.n } });
+    const rows = await applyListQuery((extras) => db.select({ ...getTableColumns(big), ...extras }).from(big), list);
+    const [items, meta] = queryHelpers.paginate(rows as Array<{ id: number }>, list);
 
-/* what a derived list's refusal names: the key past ±(2^53 − 1), and how to page it */
+    return { hasMore: meta.hasMore, ids: items.map((row) => row.id), next: meta.nextCursor };
+  };
+
+// what a derived list's refusal names: the key past ±(2^53 − 1), and how to page it
 export const ROUNDED =
-	/n 900719925474099\d is past ±\(2\^53 − 1\), where the driver rounded it: a derived list has no row to read the exact key back from.*be read as bigint/
+  /n 900719925474099\d is past ±\(2\^53 − 1\), where the driver rounded it: a derived list has no row to read the exact key back from.*be read as bigint/;
 
 /** A page read through queryHelpers.listOptions and drizzle's findMany */
 export const viaRelational =
-	(db: Relational): Page =>
-	async (order, cursor) => {
-		const query = { ...schema.parse({ order }), cursor }
-		const listed = queryHelpers.listOptions(query, SEALED)
-		const rows = await db.query.big.findMany(listed as never)
-		const [items, meta] = queryHelpers.paginate(rows, listed)
-		return { hasMore: meta.hasMore, ids: items.map((row) => row.id), next: meta.nextCursor }
-	}
+  (db: Relational): Page =>
+  async (order, cursor) => {
+    const query = { ...schema.parse({ order }), cursor };
+    const listed = queryHelpers.listOptions(query, SEALED);
+    const rows = await db.query.big.findMany(listed as never);
+    const [items, meta] = queryHelpers.paginate(rows, listed);
+
+    return { hasMore: meta.hasMore, ids: items.map((row) => row.id), next: meta.nextCursor };
+  };
 
 /** Every page under `order`, at most twelve, so a loop shows as a repeat rather than a hang */
 export async function pageAll(page: Page, order: string): Promise<number[]> {
-	const seen: number[] = []
-	let cursor: string | undefined
-	for (let i = 0; i < 12; i++) {
-		const { ids, next } = await page(order, cursor)
-		seen.push(...ids)
-		if (next === null) break
-		cursor = next
-	}
-	return seen
+  const seen: number[] = [];
+  let cursor: string | undefined;
+
+  for (let i = 0; i < 12; i++) {
+    const { ids, next } = await page(order, cursor);
+    seen.push(...ids);
+
+    if (next === null) break;
+    cursor = next;
+  }
+
+  return seen;
 }
 
 /**
@@ -96,20 +107,23 @@ export async function pageAll(page: Page, order: string): Promise<number[]> {
  * row no cursor holds)
  */
 export async function walkEnding(
-	page: Page,
-	order: string,
+  page: Page,
+  order: string,
 ): Promise<{ error?: unknown; ids: number[]; stranded?: true }> {
-	const ids: number[] = []
-	let cursor: string | undefined
-	try {
-		for (let i = 0; i < 12; i++) {
-			const { hasMore, ids: served, next } = await page(order, cursor)
-			ids.push(...served)
-			if (next === null) return hasMore ? { ids, stranded: true } : { ids }
-			cursor = next
-		}
-	} catch (error) {
-		return { error, ids }
-	}
-	return { ids }
+  const ids: number[] = [];
+  let cursor: string | undefined;
+
+  try {
+    for (let i = 0; i < 12; i++) {
+      const { hasMore, ids: served, next } = await page(order, cursor);
+      ids.push(...served);
+
+      if (next === null) return hasMore ? { ids, stranded: true } : { ids };
+      cursor = next;
+    }
+  } catch (error) {
+    return { error, ids };
+  }
+
+  return { ids };
 }

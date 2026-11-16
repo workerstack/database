@@ -15,11 +15,11 @@
  * memberships, its settings, its comment or its labels, dies with it, so it is the replay's own,
  * the role made bare again before the COMMIT (pg-replay-commit.ts).
  */
-import { sqlIdentifier } from "../../codegen/utils/case.ts"
-import { codeOf, literal, type Sql, TAG } from "./pg-replay-database.ts"
-import { addWrites, catalogsOf, counts, type Rows, subjectRows, type Writes, writesSince } from "./pg-server-writes.ts"
-import type { Snapshot } from "./pg-server-snapshot.ts"
-import { flag } from "./pg-nodes.ts"
+import { sqlIdentifier } from "../../codegen/utils/case.ts";
+import { flag } from "./pg-nodes.ts";
+import { codeOf, literal, type Sql, TAG } from "./pg-replay-database.ts";
+import type { Snapshot } from "./pg-server-snapshot.ts";
+import { addWrites, catalogsOf, counts, type Rows, subjectRows, type Writes, writesSince } from "./pg-server-writes.ts";
 
 /**
  * One replay's state: its connection, the server as committed (`admin`), its database, the backend
@@ -29,93 +29,104 @@ import { flag } from "./pg-nodes.ts"
  * as last read committed (`seen`)
  */
 type Run = {
-	admin: Sql
-	created: string[]
-	createrole: boolean
-	database: string
-	ours: { rows: Rows; writes: Writes }
-	owner: string
-	role: string
-	seen: Snapshot
-	sql: Sql
-	/** the tablespaces it left out the CREATE of, which a statement then runs in pg_default instead */
-	tablespaces: Set<string>
-	superuser: boolean
-}
+  admin: Sql;
+  created: string[];
+  createrole: boolean;
+  database: string;
+  ours: { rows: Rows; writes: Writes };
+  owner: string;
+  role: string;
+  seen: Snapshot;
+  sql: Sql;
+  /** the tablespaces it left out the CREATE of, which a statement then runs in pg_default instead */
+  tablespaces: Set<string>;
+  superuser: boolean;
+};
 
 /** The role `sql` runs as, which CURRENT_USER and its kin name in a file, whether it is a superuser, and whether it has CREATEROLE */
 async function devRoleOf(sql: Sql): Promise<{ createrole: boolean; role: string; superuser: boolean }> {
-	const [row] = await sql.unsafe(
-		"SELECT rolname, rolsuper, rolcreaterole FROM pg_roles WHERE rolname = current_user",
-		[],
-	)
-	return {
-		createrole: row?.["rolcreaterole"] === true,
-		role: String(row?.["rolname"] ?? ""),
-		superuser: row?.["rolsuper"] === true,
-	}
+  const [row] = await sql.unsafe(
+    "SELECT rolname, rolsuper, rolcreaterole FROM pg_roles WHERE rolname = current_user",
+    [],
+  );
+
+  return {
+    createrole: row?.["rolcreaterole"] === true,
+    role: String(row?.["rolname"] ?? ""),
+    superuser: row?.["rolsuper"] === true,
+  };
 }
 
 /** `act` run, its writes to the shared catalogs counted as database's own, with the rows of them that are `mine` */
 async function own(run: Run, act: () => Promise<void>, mine: (subject: string) => boolean): Promise<void> {
-	const before = (await counts(run.sql)).writes
-	await act()
-	const written = writesSince((await counts(run.sql)).writes, before)
-	addWrites(run.ours.writes, written)
-	const read = { catalogs: catalogsOf(run.superuser), sql: run.sql }
-	for (const [subject, row] of await subjectRows(read, written, mine)) run.ours.rows.set(subject, row)
+  const before = (await counts(run.sql)).writes;
+  await act();
+  const written = writesSince((await counts(run.sql)).writes, before);
+  addWrites(run.ours.writes, written);
+  const read = { catalogs: catalogsOf(run.superuser), sql: run.sql };
+
+  for (const [subject, row] of await subjectRows(read, written, mine)) run.ours.rows.set(subject, row);
 }
 
-/* the options a replay keeps of a CREATE ROLE, each a membership, by the clause that writes it */
+// the options a replay keeps of a CREATE ROLE, each a membership, by the clause that writes it
 // lookup-table: a CREATE ROLE's membership options, by the parse tree's name for each
 const MEMBERSHIPS: Readonly<Record<string, string>> = {
-	addroleto: "IN ROLE",
-	adminmembers: "ADMIN",
-	rolemembers: "ROLE",
-}
+  addroleto: "IN ROLE",
+  adminmembers: "ADMIN",
+  rolemembers: "ROLE",
+};
 
-/* the attributes every role a replay makes has, each the default of its option but LOGIN's under CREATE USER */
-const BARE = "NOLOGIN NOSUPERUSER NOREPLICATION NOBYPASSRLS"
+// the attributes every role a replay makes has, each the default of its option but LOGIN's under CREATE USER
+const BARE = "NOLOGIN NOSUPERUSER NOREPLICATION NOBYPASSRLS";
 
 // lookup-table: the options BARE already says, each spelled as the parse tree holds it
-const SAID: ReadonlySet<string> = /* @__PURE__ */ new Set(["bypassrls", "canlogin", "isreplication", "superuser"])
+const SAID: ReadonlySet<string> = /* @__PURE__ */ new Set(["bypassrls", "canlogin", "isreplication", "superuser"]);
 
 type Option = {
-	DefElem: {
-		arg?:
-			| { Boolean?: { boolval?: boolean | undefined } | undefined; List?: { items: RoleSpec[] } | undefined }
-			| undefined
-		defname: string
-	}
-}
-type RoleSpec = { RoleSpec: { rolename?: string | undefined; roletype: string } }
+  DefElem: {
+    arg?:
+      | { Boolean?: { boolval?: boolean | undefined } | undefined; List?: { items: RoleSpec[] } | undefined }
+      | undefined;
+    defname: string;
+  };
+};
+
+type RoleSpec = { RoleSpec: { rolename?: string | undefined; roletype: string } };
 
 /**
  * The CREATE ROLE a replay runs for a history's `node`: the role with BARE's attributes and the
  * memberships among roles in `made`; `whole` when it leaves out nothing the history said
  */
 function bareRole(
-	node: Record<string, unknown>,
-	made: readonly string[],
+  node: Record<string, unknown>,
+  made: readonly string[],
 ): { sql: string; whole: boolean; within: string[] } {
-	const clauses: string[] = []
-	const within: string[] = []
-	let whole = node["stmt_type"] !== "ROLESTMT_USER"
-	for (const { DefElem } of (node["options"] ?? []) as Option[]) {
-		const clause = MEMBERSHIPS[DefElem.defname]
-		if (clause === undefined) {
-			whole &&= SAID.has(DefElem.defname) && !flag(DefElem.arg?.Boolean?.boolval)
-			continue
-		}
-		/* a membership option names its roles as a list, always */
-		const specs = (DefElem.arg as { List: { items: RoleSpec[] } }).List.items.map(({ RoleSpec }) => RoleSpec)
-		const names = specs.map((spec) => spec.rolename ?? "")
-		if (specs.every((spec) => spec.roletype === "ROLESPEC_CSTRING" && made.includes(spec.rolename as string))) {
-			clauses.push(` ${clause} ${names.map(sqlIdentifier).join(", ")}`)
-			if (DefElem.defname === "addroleto") within.push(...names)
-		} else whole = false
-	}
-	return { sql: `CREATE ROLE ${sqlIdentifier(String(node["role"]))} ${BARE}${clauses.join("")}`, whole, within }
+  const clauses: string[] = [];
+  const within: string[] = [];
+  let whole = node["stmt_type"] !== "ROLESTMT_USER";
+
+  for (const { DefElem } of (node["options"] ?? []) as Option[]) {
+    const clause = MEMBERSHIPS[DefElem.defname];
+
+    if (clause === undefined) {
+      whole &&= SAID.has(DefElem.defname) && !flag(DefElem.arg?.Boolean?.boolval);
+      continue;
+    }
+
+    // a membership option names its roles as a list, always
+    const specs = (DefElem.arg as { List: { items: RoleSpec[] } }).List.items.map(({ RoleSpec }) => RoleSpec);
+    const names = specs.map((spec) => spec.rolename ?? "");
+
+    if (specs.every((spec) => spec.roletype === "ROLESPEC_CSTRING" && made.includes(spec.rolename as string))) {
+      clauses.push(` ${clause} ${names.map(sqlIdentifier).join(", ")}`);
+
+      if (DefElem.defname === "addroleto") within.push(...names);
+    } else {
+      whole = false;
+    }
+  }
+
+  return { sql: `CREATE ROLE ${sqlIdentifier(String(node["role"]))} ${BARE}${clauses.join("")}`, whole, within };
 }
 
 /**
@@ -127,33 +138,39 @@ function bareRole(
  * read is read again
  */
 async function createRole(
-	sql: Sql,
-	{ database, owner, role, sent }: { database: string; owner: string; role: string; sent: string },
+  sql: Sql,
+  { database, owner, role, sent }: { database: string; owner: string; role: string; sent: string },
 ): Promise<boolean> {
-	const mark = (query: string) => sql.unsafe(query, [])
-	for (;;) {
-		const [found] = await sql.unsafe(
-			"SELECT d.description FROM pg_roles r LEFT JOIN pg_shdescription d ON d.objoid = r.oid AND d.classoid = 'pg_authid'::regclass WHERE r.rolname = $1",
-			[role],
-		)
-		const exists = found !== undefined
-		await mark("SAVEPOINT database_role")
-		try {
-			if (!exists) {
-				await sql.unsafe(sent, [])
-				await sql.unsafe(`COMMENT ON ROLE ${sqlIdentifier(role)} IS ${literal(`${TAG} ${owner}`)}`, [])
-			}
-			/* the replay that made the role holds it too, so whichever replay using it ends last drops it */
-			await sql.unsafe(`GRANT CONNECT ON DATABASE ${database} TO ${sqlIdentifier(role)}`, [])
-			await mark("RELEASE SAVEPOINT database_role")
-			return !exists || String(found["description"]).startsWith(`${TAG} `)
-		} catch (error) {
-			const raced = exists ? codeOf(error) === "42704" : codeOf(error) === "42710" || codeOf(error) === "23505"
-			if (!raced) throw error
-			// reason: another replay dropped the role, or made it, since the read: read it again
-			await mark("ROLLBACK TO SAVEPOINT database_role")
-		}
-	}
+  const mark = (query: string) => sql.unsafe(query, []);
+
+  for (;;) {
+    const [found] = await sql.unsafe(
+      "SELECT d.description FROM pg_roles r LEFT JOIN pg_shdescription d ON d.objoid = r.oid AND d.classoid = 'pg_authid'::regclass WHERE r.rolname = $1",
+      [role],
+    );
+
+    const exists = found !== undefined;
+    await mark("SAVEPOINT database_role");
+
+    try {
+      if (!exists) {
+        await sql.unsafe(sent, []);
+        await sql.unsafe(`COMMENT ON ROLE ${sqlIdentifier(role)} IS ${literal(`${TAG} ${owner}`)}`, []);
+      }
+
+      // the replay that made the role holds it too, so whichever replay using it ends last drops it
+      await sql.unsafe(`GRANT CONNECT ON DATABASE ${database} TO ${sqlIdentifier(role)}`, []);
+      await mark("RELEASE SAVEPOINT database_role");
+
+      return !exists || String(found["description"]).startsWith(`${TAG} `);
+    } catch (error) {
+      const raced = exists ? codeOf(error) === "42704" : codeOf(error) === "42710" || codeOf(error) === "23505";
+
+      if (!raced) throw error;
+      // reason: another replay dropped the role, or made it, since the read: read it again
+      await mark("ROLLBACK TO SAVEPOINT database_role");
+    }
+  }
 }
 
 /**
@@ -161,22 +178,24 @@ async function createRole(
  * grant on the replay's database; whether the replay made it without some of what the history said
  */
 async function ownRole(run: Run, node: Record<string, unknown>): Promise<boolean> {
-	const role = String(node["role"])
-	const { sql: sent, whole, within } = bareRole(node, run.created)
-	let made = false
-	await own(
-		run,
-		async () => {
-			made = await createRole(run.sql, { ...run, role, sent })
-			if (made) run.created.push(role)
-		},
-		(subject) =>
-			subject === `role ${role}` ||
-			subject === `comment on role ${role}` ||
-			[role, ...within].some((each) => subject.startsWith(`membership ${each} to `)) ||
-			subject === `database ${run.database}`,
-	)
-	return made && !whole
+  const role = String(node["role"]);
+  const { sql: sent, whole, within } = bareRole(node, run.created);
+  let made = false;
+  await own(
+    run,
+    async () => {
+      made = await createRole(run.sql, { ...run, role, sent });
+
+      if (made) run.created.push(role);
+    },
+    (subject) =>
+      subject === `role ${role}` ||
+      subject === `comment on role ${role}` ||
+      [role, ...within].some((each) => subject.startsWith(`membership ${each} to `)) ||
+      subject === `database ${run.database}`,
+  );
+
+  return made && !whole;
 }
 
 /**
@@ -185,19 +204,22 @@ async function ownRole(run: Run, node: Record<string, unknown>): Promise<boolean
  * as a role that is not a superuser may not name one it lacks
  */
 async function bareAgain(run: Run, roles: readonly string[]): Promise<void> {
-	if (roles.length === 0) return
-	const rows = await run.sql.unsafe(
-		"SELECT rolname, rolsuper, rolreplication, rolbypassrls FROM pg_roles WHERE rolname = ANY($1::text[])",
-		[[...roles]],
-	)
-	for (const row of rows) {
-		const denied = [
-			row["rolsuper"] === true ? " NOSUPERUSER" : "",
-			row["rolreplication"] === true ? " NOREPLICATION" : "",
-			row["rolbypassrls"] === true ? " NOBYPASSRLS" : "",
-		].join("")
-		await run.sql.unsafe(`ALTER ROLE ${sqlIdentifier(String(row["rolname"]))} NOLOGIN${denied} PASSWORD NULL`, [])
-	}
+  if (roles.length === 0) return;
+
+  const rows = await run.sql.unsafe(
+    "SELECT rolname, rolsuper, rolreplication, rolbypassrls FROM pg_roles WHERE rolname = ANY($1::text[])",
+    [[...roles]],
+  );
+
+  for (const row of rows) {
+    const denied = [
+      row["rolsuper"] === true ? " NOSUPERUSER" : "",
+      row["rolreplication"] === true ? " NOREPLICATION" : "",
+      row["rolbypassrls"] === true ? " NOBYPASSRLS" : "",
+    ].join("");
+
+    await run.sql.unsafe(`ALTER ROLE ${sqlIdentifier(String(row["rolname"]))} NOLOGIN${denied} PASSWORD NULL`, []);
+  }
 }
 
 /**
@@ -205,19 +227,19 @@ async function bareAgain(run: Run, roles: readonly string[]): Promise<void> {
  * tagged with its owner, held by a grant on its database, and dropped with the roles it made
  */
 async function adopt(run: Run, roles: readonly string[]): Promise<void> {
-	for (const role of roles) {
-		await run.sql.unsafe(`COMMENT ON ROLE ${sqlIdentifier(role)} IS ${literal(`${TAG} ${run.owner}`)}`, [])
-		await run.sql.unsafe(`GRANT CONNECT ON DATABASE ${run.database} TO ${sqlIdentifier(role)}`, [])
-		run.created.push(role)
-	}
+  for (const role of roles) {
+    await run.sql.unsafe(`COMMENT ON ROLE ${sqlIdentifier(role)} IS ${literal(`${TAG} ${run.owner}`)}`, []);
+    await run.sql.unsafe(`GRANT CONNECT ON DATABASE ${run.database} TO ${sqlIdentifier(role)}`, []);
+    run.created.push(role);
+  }
 }
 
-/* the roles of a list the server holds but those a replay made and tagged, which it drops after itself */
-const HELD = `SELECT r.rolname FROM pg_roles r LEFT JOIN pg_shdescription d ON d.objoid = r.oid AND d.classoid = 'pg_authid'::regclass WHERE r.rolname = ANY($1::text[]) AND (d.description IS NULL OR d.description NOT LIKE 'database\\_replay %')`
+// the roles of a list the server holds but those a replay made and tagged, which it drops after itself
+const HELD = `SELECT r.rolname FROM pg_roles r LEFT JOIN pg_shdescription d ON d.objoid = r.oid AND d.classoid = 'pg_authid'::regclass WHERE r.rolname = ANY($1::text[]) AND (d.description IS NULL OR d.description NOT LIKE 'database\\_replay %')`;
 
 /** Which of `roles` the server holds, a replay's own left out: another replay's role is gone once it ends */
 async function heldRoles(sql: Sql, roles: readonly string[]): Promise<Set<string>> {
-	return new Set((await sql.unsafe(HELD, [[...roles]])).map((row) => String(row["rolname"])))
+  return new Set((await sql.unsafe(HELD, [[...roles]])).map((row) => String(row["rolname"])));
 }
 
-export { adopt, bareAgain, bareRole, createRole, devRoleOf, heldRoles, own, ownRole, type Run }
+export { adopt, bareAgain, bareRole, createRole, devRoleOf, heldRoles, own, ownRole, type Run };

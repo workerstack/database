@@ -4,104 +4,130 @@
  * read as the DELETE they are. Comments, literals, quoted names and parenthesized groups are
  * blanked before the verb is looked for, so no word inside them is taken for it.
  */
-import { codeOf, joined } from "./sql-lexer.ts"
+import { codeOf, joined } from "./sql-lexer.ts";
 
 /** The closing index of the quote opened at `start`, a doubled quote standing for itself */
 function closeQuote(sql: string, start: number, close: string): number {
-	let i = start + 1
-	while (i < sql.length && !(sql[i] === close && sql[i + 1] !== close)) i += sql[i] === close ? 2 : 1
-	return i
+  let i = start + 1;
+
+  while (i < sql.length && !(sql[i] === close && sql[i + 1] !== close)) i += sql[i] === close ? 2 : 1;
+
+  return i;
 }
 
 /** The end (exclusive) of the comment, literal or quoted name at `i`, or i when there is none */
 function skipped(sql: string, i: number): number {
-	const two = sql.slice(i, i + 2)
-	if (two === "--") {
-		const end = sql.indexOf("\n", i)
-		return end === -1 ? sql.length : end
-	}
-	if (two === "/*") {
-		const end = sql.indexOf("*/", i + 2)
-		return end === -1 ? sql.length : end + 2
-	}
-	const char = sql[i] as string
-	if (char === "[") return sql.indexOf("]", i) === -1 ? sql.length : sql.indexOf("]", i) + 1
-	return `'"\``.includes(char) ? closeQuote(sql, i, char) + 1 : i
+  const two = sql.slice(i, i + 2);
+
+  if (two === "--") {
+    const end = sql.indexOf("\n", i);
+
+    return end === -1 ? sql.length : end;
+  }
+
+  if (two === "/*") {
+    const end = sql.indexOf("*/", i + 2);
+
+    return end === -1 ? sql.length : end + 2;
+  }
+
+  const char = sql[i] as string;
+
+  if (char === "[") return sql.indexOf("]", i) === -1 ? sql.length : sql.indexOf("]", i) + 1;
+
+  return `'"\``.includes(char) ? closeQuote(sql, i, char) + 1 : i;
 }
 
 /** `sql` at the same length, with everything that cannot hold its verb turned to spaces */
 function blanked(sql: string): string {
-	let out = ""
-	let depth = 0
-	for (let i = 0; i < sql.length;) {
-		const end = skipped(sql, i)
-		if (end > i) {
-			out += " ".repeat(end - i)
-			i = end
-			continue
-		}
-		const char = sql[i] as string
-		if (char === "(") depth++
-		out += depth === 0 ? char : " "
-		if (char === ")") depth--
-		i++
-	}
-	return out
+  let out = "";
+  let depth = 0;
+
+  for (let i = 0; i < sql.length;) {
+    const end = skipped(sql, i);
+
+    if (end > i) {
+      out += " ".repeat(end - i);
+      i = end;
+      continue;
+    }
+
+    const char = sql[i] as string;
+
+    if (char === "(") depth++;
+    out += depth === 0 ? char : " ";
+
+    if (char === ")") depth--;
+    i++;
+  }
+
+  return out;
 }
 
 // per-process-constant: one CTE once blanked: its name (a quoted one is spaces), its column list and body spaces
-const CTE = "(?:[^\\s,]+\\s*)?as(?:\\s+not)?(?:\\s+materialized)?\\s*"
+const CTE = "(?:[^\\s,]+\\s*)?as(?:\\s+not)?(?:\\s+materialized)?\\s*";
+
 // per-process-constant: a WITH clause's CTEs, read by their shape, so no CTE's name is taken for the verb; a word must follow
-const CTES = /* @__PURE__ */ new RegExp(`^with(?:\\s+recursive)?\\s+${CTE}(?:,\\s*${CTE})*(?=\\w)`, "i")
+const CTES = /* @__PURE__ */ new RegExp(`^with(?:\\s+recursive)?\\s+${CTE}(?:,\\s*${CTE})*(?=\\w)`, "i");
 
 /** `sql` from its main statement's verb on; `sql` itself, trimmed, when no verb is found */
 export function statementHead(sql: string): string {
-	const top = blanked(sql)
-	const start = top.search(/\S/)
-	if (start === -1) return ""
-	const ctes = /^with\b/i.test(top.slice(start)) ? CTES.exec(top.slice(start)) : undefined
-	if (ctes === null) return sql.slice(start).trim()
-	return sql.slice(start + (ctes?.[0].length ?? 0)).trim()
+  const top = blanked(sql);
+  const start = top.search(/\S/);
+
+  if (start === -1) return "";
+  const ctes = /^with\b/i.test(top.slice(start)) ? CTES.exec(top.slice(start)) : undefined;
+
+  if (ctes === null) return sql.slice(start).trim();
+
+  return sql.slice(start + (ctes?.[0].length ?? 0)).trim();
 }
 
-/* one part of a name: quoted whole, its doubled quotes standing for one, or bare. A string is a name
- * where SQLite takes one for it; Postgres's code reaches here with its strings blanked */
-const PART = '[uU]&"(?:[^"]|"")+"|"(?:[^"]|"")+"|`(?:[^`]|``)+`|\'(?:[^\']|\'\')+\'|\\[[^\\]]+\\]|[^\\s(."`\'\\[,=;*]+'
-// per-process-constant: one part, captured
-const ONE_PART = /* @__PURE__ */ new RegExp(PART, "g")
-// per-process-constant: a name, its schema parts before it, as a pattern
-const NAME = `(?:(?:${PART})\\s*\\.\\s*)*(?:${PART})`
+// one part of a name: quoted whole, its doubled quotes standing for one, or bare. A string is a name
+// where SQLite takes one for it; Postgres's code reaches here with its strings blanked
+const PART = '[uU]&"(?:[^"]|"")+"|"(?:[^"]|"")+"|`(?:[^`]|``)+`|\'(?:[^\']|\'\')+\'|\\[[^\\]]+\\]|[^\\s(."`\'\\[,=;*]+';
 
-/* the table an INSERT, UPDATE or DELETE targets, from the SQL a wrapper recorded, read from the
- * statement's own verb on: a name its schema qualifies or not, each part quoted or bare. `target` is
- * how an UPDATE or DELETE names it: on Postgres past ONLY, a reserved word there that names no table,
- * or inside ONLY's parentheses; on SQLite, which has no ONLY, only names a table
- * */
+// per-process-constant: one part, captured
+const ONE_PART = /* @__PURE__ */ new RegExp(PART, "g");
+
+// per-process-constant: a name, its schema parts before it, as a pattern
+const NAME = `(?:(?:${PART})\\s*\\.\\s*)*(?:${PART})`;
+
+// the table an INSERT, UPDATE or DELETE targets, from the SQL a wrapper recorded, read from the
+// statement's own verb on: a name its schema qualifies or not, each part quoted or bare. `target` is
+// how an UPDATE or DELETE names it: on Postgres past ONLY, a reserved word there that names no table,
+// or inside ONLY's parentheses; on SQLite, which has no ONLY, only names a table
 const statementTables = (target: string) =>
-	new RegExp(
-		`^(?:(?:insert\\s+(?:or\\s+\\w+\\s+)?into|replace\\s+into)\\s+(${NAME})|(?:update(?:\\s+or\\s+\\w+)?|delete\\s+from)${target})`,
-		"i",
-	)
+  new RegExp(
+    `^(?:(?:insert\\s+(?:or\\s+\\w+\\s+)?into|replace\\s+into)\\s+(${NAME})|(?:update(?:\\s+or\\s+\\w+)?|delete\\s+from)${target})`,
+    "i",
+  );
+
 // per-process-constant: see above
 const STATEMENT_TABLE = {
-	postgres: /* @__PURE__ */ statementTables(`(?:\\s+only\\s*\\(\\s*(${NAME})\\s*\\)|(?:\\s+only\\b)?\\s+(${NAME}))`),
-	sqlite: /* @__PURE__ */ statementTables(`\\s+(${NAME})`),
-}
+  postgres: /* @__PURE__ */ statementTables(`(?:\\s+only\\s*\\(\\s*(${NAME})\\s*\\)|(?:\\s+only\\b)?\\s+(${NAME}))`),
+  sqlite: /* @__PURE__ */ statementTables(`\\s+(${NAME})`),
+};
 
 /** A Unicode-escaped name's text, each `\\XXXX`, `\\+XXXXXX` and `\\\\` read as Postgres reads it under the default escape */
 const unescaped = (text: string): string =>
-	text.replace(/\\(\\|\+[\da-f]{6}|[\da-f]{4})/gi, (_, code: string) =>
-		code === "\\" ? code : String.fromCodePoint(Number.parseInt(code.replace("+", ""), 16)),
-	)
+  text.replaceAll(/\\(\\|\+[\da-f]{6}|[\da-f]{4})/gi, (_, code: string) =>
+    code === "\\" ? code : String.fromCodePoint(Number.parseInt(code.replace("+", ""), 16)),
+  );
 
 /** One name part as `dialect` resolves it: unquoted, and a bare one with its ASCII letters lowered on Postgres */
 function unquoted(part: string, dialect: "postgres" | "sqlite"): string {
-	if (/^u&"/i.test(part)) return unescaped(part.slice(3, -1).replaceAll('""', '"'))
-	if (part.startsWith('"')) return part.slice(1, -1).replaceAll('""', '"')
-	if (part.startsWith("`")) return part.slice(1, -1).replaceAll("``", "`")
-	if (part.startsWith("'")) return part.slice(1, -1).replaceAll("''", "'")
-	if (part.startsWith("[")) return part.slice(1, -1)
-	return dialect === "postgres" ? part.replace(/[A-Z]+/g, (upper) => upper.toLowerCase()) : part
+  if (/^u&"/i.test(part)) return unescaped(part.slice(3, -1).replaceAll('""', '"'));
+
+  if (part.startsWith('"')) return part.slice(1, -1).replaceAll('""', '"');
+
+  if (part.startsWith("`")) return part.slice(1, -1).replaceAll("``", "`");
+
+  if (part.startsWith("'")) return part.slice(1, -1).replaceAll("''", "'");
+
+  if (part.startsWith("[")) return part.slice(1, -1);
+
+  return dialect === "postgres" ? part.replaceAll(/[A-Z]+/g, (upper) => upper.toLowerCase()) : part;
 }
 
 /**
@@ -112,39 +138,44 @@ function unquoted(part: string, dialect: "postgres" | "sqlite"): string {
  * the table alone; Postgres resolves both to a map key as every other violation does
  */
 export function statementTable(
-	query: string | undefined,
-	dialect: "postgres" | "sqlite",
+  query: string | undefined,
+  dialect: "postgres" | "sqlite",
 ): { schema: string | undefined; table: string } | undefined {
-	/* SQLite's code keeps its strings, which name a table there */
-	const code = dialect === "sqlite" ? joined(query ?? "", dialect, true) : codeOf(query ?? "", dialect)
-	const head = statementHead(code)
-	const match = STATEMENT_TABLE[dialect].exec(head)
-	const name = match?.slice(1).find((group) => group !== undefined)
-	/* the escape a UESCAPE names is a string, which Postgres's code here holds as a space */
-	if (name === undefined || /^\s*uescape\b/i.test(head.slice((match as RegExpExecArray)[0].length))) return undefined
-	const parts = (name.match(ONE_PART) as string[]).map((part) => unquoted(part, dialect))
-	return { schema: parts.at(-2), table: parts.at(-1) as string }
+  // SQLite's code keeps its strings, which name a table there
+  const code = dialect === "sqlite" ? joined(query ?? "", dialect, true) : codeOf(query ?? "", dialect);
+  const head = statementHead(code);
+  const match = STATEMENT_TABLE[dialect].exec(head);
+  const name = match?.slice(1).find((group) => group !== undefined);
+
+  // the escape a UESCAPE names is a string, which Postgres's code here holds as a space
+  if (name === undefined || /^\s*uescape\b/i.test(head.slice((match as RegExpExecArray)[0].length))) return undefined;
+  const parts = (name.match(ONE_PART) as string[]).map((part) => unquoted(part, dialect));
+
+  return { schema: parts.at(-2), table: parts.at(-1) as string };
 }
 
 // per-process-constant: an UPDATE up to its SET list, past an alias and an INDEXED BY or NOT INDEXED
 const UPDATE_SET = /* @__PURE__ */ new RegExp(
-	`^update(?:\\s+or\\s+\\w+)?\\s+${NAME}(?:\\s+(?:as\\s+)?\\w+)?(?:\\s+indexed\\s+by\\s+(?:${PART})|\\s+not\\s+indexed)?\\s+set\\s+`,
-	"i",
-)
+  `^update(?:\\s+or\\s+\\w+)?\\s+${NAME}(?:\\s+(?:as\\s+)?\\w+)?(?:\\s+indexed\\s+by\\s+(?:${PART})|\\s+not\\s+indexed)?\\s+set\\s+`,
+  "i",
+);
+
 // per-process-constant: the head of one assignment: a column, or a parenthesized list of them, before its `=`
-const ASSIGNED = /* @__PURE__ */ new RegExp(`^\\s*(?:\\(([^)]*)\\)|(${PART}))\\s*=`)
+const ASSIGNED = /* @__PURE__ */ new RegExp(`^\\s*(?:\\(([^)]*)\\)|(${PART}))\\s*=`);
 
 /** The raw pieces of `list` between its top-level commas: none inside a literal, a quoted name or a group */
 function topLevelPieces(list: string): string[] {
-	const top = blanked(list)
-	const pieces: string[] = []
-	let start = 0
-	for (let i = 0; i < top.length; i++) {
-		if (top[i] !== ",") continue
-		pieces.push(list.slice(start, i))
-		start = i + 1
-	}
-	return [...pieces, list.slice(start)]
+  const top = blanked(list);
+  const pieces: string[] = [];
+  let start = 0;
+
+  for (let i = 0; i < top.length; i++) {
+    if (top[i] !== ",") continue;
+    pieces.push(list.slice(start, i));
+    start = i + 1;
+  }
+
+  return [...pieces, list.slice(start)];
 }
 
 /**
@@ -153,29 +184,39 @@ function topLevelPieces(list: string): string[] {
  * when `query` is no UPDATE
  */
 export function updatedColumns(query: string | undefined): string[] | undefined {
-	const head = statementHead(query ?? "")
-	const set = UPDATE_SET.exec(head)
-	if (set === null) return undefined
-	return assignedIn(head.slice(set[0].length), /\b(?:where|from|returning)\b/i)
+  const head = statementHead(query ?? "");
+  const set = UPDATE_SET.exec(head);
+
+  if (set === null) return undefined;
+
+  return assignedIn(head.slice(set[0].length), /\b(?:where|from|returning)\b/i);
 }
 
 // per-process-constant: an INSERT or REPLACE up to its target table's end
-const INSERT_INTO = /* @__PURE__ */ new RegExp(`^(?:insert\\s+(?:or\\s+\\w+\\s+)?into|replace\\s+into)\\s+${NAME}`, "i")
+const INSERT_INTO = /* @__PURE__ */ new RegExp(
+  `^(?:insert\\s+(?:or\\s+\\w+\\s+)?into|replace\\s+into)\\s+${NAME}`,
+  "i",
+);
 
 /** The index of the `)` that closes the group opened at `open`, past literals and quoted names; the end when none does */
 function groupEnd(sql: string, open: number): number {
-	let depth = 0
-	for (let i = open; i < sql.length;) {
-		const end = skipped(sql, i)
-		if (end > i) {
-			i = end
-			continue
-		}
-		if (sql[i] === "(") depth++
-		if (sql[i] === ")" && --depth === 0) return i
-		i++
-	}
-	return sql.length
+  let depth = 0;
+
+  for (let i = open; i < sql.length;) {
+    const end = skipped(sql, i);
+
+    if (end > i) {
+      i = end;
+      continue;
+    }
+
+    if (sql[i] === "(") depth++;
+
+    if (sql[i] === ")" && --depth === 0) return i;
+    i++;
+  }
+
+  return sql.length;
 }
 
 /**
@@ -184,26 +225,32 @@ function groupEnd(sql: string, open: number): number {
  * any, in parentheses
  */
 export function insertedColumns(query: string | undefined): string[] | undefined {
-	const head = statementHead(query ?? "")
-	const into = INSERT_INTO.exec(head)
-	if (into === null) return undefined
-	const rest = head.slice(into[0].length)
-	const open = /^\s*(?:as\s+\w+\s*)?\(/i.exec(rest)
-	if (open === null) return undefined
-	const list = rest.slice(open[0].length, groupEnd(rest, open[0].length - 1))
-	return topLevelPieces(list)
-		.flatMap((piece) => piece.trim().match(ONE_PART) ?? [])
-		.map((part) => unquoted(part, "sqlite"))
+  const head = statementHead(query ?? "");
+  const into = INSERT_INTO.exec(head);
+
+  if (into === null) return undefined;
+  const rest = head.slice(into[0].length);
+  const open = /^\s*(?:as\s+\w+\s*)?\(/i.exec(rest);
+
+  if (open === null) return undefined;
+  const list = rest.slice(open[0].length, groupEnd(rest, open[0].length - 1));
+
+  return topLevelPieces(list)
+    .flatMap((piece) => piece.trim().match(ONE_PART) ?? [])
+    .map((part) => unquoted(part, "sqlite"));
 }
 
 /** The columns a SET list assigns, unquoted, the list read up to the first top-level match of `end` */
 function assignedIn(list: string, end: RegExp): string[] {
-	const stop = blanked(list).search(end)
-	return topLevelPieces(stop === -1 ? list : list.slice(0, stop)).flatMap((piece) => {
-		const [, many, one] = ASSIGNED.exec(piece) ?? []
-		if (one !== undefined) return [unquoted(one, "sqlite")]
-		return many === undefined ? [] : (many.match(ONE_PART) ?? []).map((part) => unquoted(part, "sqlite"))
-	})
+  const stop = blanked(list).search(end);
+
+  return topLevelPieces(stop === -1 ? list : list.slice(0, stop)).flatMap((piece) => {
+    const [, many, one] = ASSIGNED.exec(piece) ?? [];
+
+    if (one !== undefined) return [unquoted(one, "sqlite")];
+
+    return many === undefined ? [] : (many.match(ONE_PART) ?? []).map((part) => unquoted(part, "sqlite"));
+  });
 }
 
 /**
@@ -211,12 +258,15 @@ function assignedIn(list: string, end: RegExp): string[] {
  * WHERE, RETURNING or next ON CONFLICT; undefined when `query` is no INSERT or has none
  */
 export function upsertColumns(query: string | undefined): string[] | undefined {
-	/* matched on the blanked head, where a quoted name is spaces: the match ends at SET, so none is swallowed */
-	const head = statementHead(query ?? "")
-	if (!/^(?:insert|replace)\b/i.test(head)) return undefined
-	const sets = [...blanked(head).matchAll(/\bdo\s+update\s+set\b/gi)]
-	if (sets.length === 0) return undefined
-	return sets.flatMap((set) =>
-		assignedIn(head.slice(set.index + set[0].length), /\b(?:where|returning|on\s+conflict)\b/i),
-	)
+  // matched on the blanked head, where a quoted name is spaces: the match ends at SET, so none is swallowed
+  const head = statementHead(query ?? "");
+
+  if (!/^(?:insert|replace)\b/i.test(head)) return undefined;
+  const sets = [...blanked(head).matchAll(/\bdo\s+update\s+set\b/gi)];
+
+  if (sets.length === 0) return undefined;
+
+  return sets.flatMap((set) =>
+    assignedIn(head.slice(set.index + set[0].length), /\b(?:where|returning|on\s+conflict)\b/i),
+  );
 }

@@ -3,183 +3,188 @@
  * types allow, a pattern one database can emit, and `autogenerate` defaulting to true on a column
  * something other than the caller fills.
  */
-import type { ColumnMetaKind } from "../meta/column.ts"
-import type { ConstantValue, FieldConstraintsMeta } from "./analyzer-types.ts"
-import { formatOf } from "./format-constraints.ts"
-import { patternLiteral } from "./utils/pattern.ts"
+import type { ColumnMetaKind } from "../meta/column.ts";
+import type { ConstantValue, FieldConstraintsMeta } from "./analyzer-types.ts";
+import { formatOf } from "./format-constraints.ts";
+import { patternLiteral } from "./utils/pattern.ts";
 
 /** Field constraints extracted from type arguments */
-export type FieldConstraints = FieldConstraintsMeta
+export type FieldConstraints = FieldConstraintsMeta;
 
-/* the keys of each constraint type in src/sqlite/constraints.ts, which tests/types/constraint-keys.typetest.ts holds them to */
-/* a timestamp's keys: its bounds and the flags every helper takes */
-export const NUMBER_KEYS = [
-	"autogenerate",
-	"max",
-	"min",
-	"mutable",
-	"nomutate",
-	"private",
-	"relation",
-	"tenant",
-] as const
-/* a real's keys: a timestamp's, and the zod schema its value is piped into */
-export const REAL_KEYS = [
-	"autogenerate",
-	"max",
-	"min",
-	"mutable",
-	"nomutate",
-	"private",
-	"relation",
-	"schema",
-	"tenant",
-] as const
-/* an integer's keys: a real's, and the standard format that numbers its values */
-export const INTEGER_KEYS = [
-	"autogenerate",
-	"format",
-	"max",
-	"min",
-	"mutable",
-	"nomutate",
-	"private",
-	"relation",
-	"schema",
-	"tenant",
-] as const
-export const JSON_KEYS = ["autogenerate", "maxBytes", "mutable", "nomutate", "private", "relation", "tenant"] as const
-export const ENUM_KEYS = ["format", "nomutate", "private", "tenant"] as const
-/* a foreign key's keys: a text's but format and schema, as its value is another table's key */
-export const REF_KEYS = [
-	"autogenerate",
-	"email",
-	"imageUri",
-	"lowercase",
-	"max",
-	"min",
-	"mutable",
-	"name",
-	"nomutate",
-	"password",
-	"pattern",
-	"private",
-	"relation",
-	"tenant",
-	"trim",
-	"uppercase",
-	"url",
-] as const
-export const TEXT_KEYS = [
-	"autogenerate",
-	"email",
-	"format",
-	"imageUri",
-	"lowercase",
-	"max",
-	"min",
-	"mutable",
-	"name",
-	"nomutate",
-	"password",
-	"pattern",
-	"private",
-	"relation",
-	"schema",
-	"tenant",
-	"trim",
-	"uppercase",
-	"url",
-] as const
+// the keys of each constraint type in src/sqlite/constraints.ts, which tests/types/constraint-keys.typetest.ts holds them to
+// a timestamp's keys: its bounds and the flags every helper takes
+const NUMBER_KEYS = ["autogenerate", "max", "min", "mutable", "nomutate", "private", "relation", "tenant"] as const;
 
-type Keys = typeof NUMBER_KEYS
-type None = readonly []
+// a real's keys: a timestamp's, and the zod schema its value is piped into
+const REAL_KEYS = [
+  "autogenerate",
+  "max",
+  "min",
+  "mutable",
+  "nomutate",
+  "private",
+  "relation",
+  "schema",
+  "tenant",
+] as const;
 
-/** The constraint keys each c helper takes, its constraint type's; a state machine is c.enum's own */
+// an integer's keys: a real's, and the standard format that numbers its values
+const INTEGER_KEYS = [
+  "autogenerate",
+  "format",
+  "max",
+  "min",
+  "mutable",
+  "nomutate",
+  "private",
+  "relation",
+  "schema",
+  "tenant",
+] as const;
+
+const JSON_KEYS = ["autogenerate", "maxBytes", "mutable", "nomutate", "private", "relation", "tenant"] as const;
+const ENUM_KEYS = ["format", "nomutate", "private", "tenant"] as const;
+
+// a foreign key's keys: a text's but format and schema, as its value is another table's key
+const REF_KEYS = [
+  "autogenerate",
+  "email",
+  "imageUri",
+  "lowercase",
+  "max",
+  "min",
+  "mutable",
+  "name",
+  "nomutate",
+  "password",
+  "pattern",
+  "private",
+  "relation",
+  "tenant",
+  "trim",
+  "uppercase",
+  "url",
+] as const;
+
+const TEXT_KEYS = [
+  "autogenerate",
+  "email",
+  "format",
+  "imageUri",
+  "lowercase",
+  "max",
+  "min",
+  "mutable",
+  "name",
+  "nomutate",
+  "password",
+  "pattern",
+  "private",
+  "relation",
+  "schema",
+  "tenant",
+  "trim",
+  "uppercase",
+  "url",
+] as const;
+
+type Keys = typeof NUMBER_KEYS;
+
+type None = readonly [];
+
+/**
+ * The constraint keys each c helper takes, its constraint type's; a state machine is c.enum's own.
+ * @public for tests/types/constraint-keys.typetest.ts, which tsc compiles and knip does not read
+ */
 export type ConstraintKeys = {
-	readonly boolean: None
-	readonly createdAt: Keys
-	readonly deletedAt: Keys
-	readonly enum: typeof ENUM_KEYS
-	readonly id: None
-	readonly integer: typeof INTEGER_KEYS
-	readonly json: typeof JSON_KEYS
-	readonly real: typeof REAL_KEYS
-	readonly ref: typeof REF_KEYS
-	readonly serialId: None
-	readonly text: typeof TEXT_KEYS
-	readonly timestamp: Keys
-	readonly updatedAt: Keys
-}
+  readonly boolean: None;
+  readonly createdAt: Keys;
+  readonly deletedAt: Keys;
+  readonly enum: typeof ENUM_KEYS;
+  readonly id: None;
+  readonly integer: typeof INTEGER_KEYS;
+  readonly json: typeof JSON_KEYS;
+  readonly real: typeof REAL_KEYS;
+  readonly ref: typeof REF_KEYS;
+  readonly serialId: None;
+  readonly text: typeof TEXT_KEYS;
+  readonly timestamp: Keys;
+  readonly updatedAt: Keys;
+};
 
 // lookup-table: the constraint keys each c helper takes
-export const CONSTRAINT_KEYS: ConstraintKeys = {
-	boolean: [],
-	createdAt: NUMBER_KEYS,
-	deletedAt: NUMBER_KEYS,
-	enum: ENUM_KEYS,
-	id: [],
-	integer: INTEGER_KEYS,
-	json: JSON_KEYS,
-	real: REAL_KEYS,
-	ref: REF_KEYS,
-	serialId: [],
-	text: TEXT_KEYS,
-	timestamp: NUMBER_KEYS,
-	updatedAt: NUMBER_KEYS,
-}
+const CONSTRAINT_KEYS: ConstraintKeys = {
+  boolean: [],
+  createdAt: NUMBER_KEYS,
+  deletedAt: NUMBER_KEYS,
+  enum: ENUM_KEYS,
+  id: [],
+  integer: INTEGER_KEYS,
+  json: JSON_KEYS,
+  real: REAL_KEYS,
+  ref: REF_KEYS,
+  serialId: [],
+  text: TEXT_KEYS,
+  timestamp: NUMBER_KEYS,
+  updatedAt: NUMBER_KEYS,
+};
 
-/* every key any helper takes, so a key none takes is named as one database does not read */
-const KNOWN: readonly string[] = [...TEXT_KEYS, "maxBytes"]
+// every key any helper takes, so a key none takes is named as one database does not read
+const KNOWN: readonly string[] = [...TEXT_KEYS, "maxBytes"];
 
 /** Refuses a key the helper's constraint type does not take, naming the helper: its rule would be dropped without a word */
 function refuseForeignKeys(
-	constraints: Readonly<Record<string, ConstantValue>>,
-	{ helper, place }: { helper: ColumnMetaKind | null; place: string },
+  constraints: Readonly<Record<string, ConstantValue>>,
+  { helper, place }: { helper: ColumnMetaKind | null; place: string },
 ): void {
-	if (helper !== null && !Object.hasOwn(CONSTRAINT_KEYS, helper))
-		throw new Error(`${place}: database has no helper c.${helper}`)
-	const allowed: readonly string[] = helper === null ? [] : CONSTRAINT_KEYS[helper]
-	const key = Object.keys(constraints).find((each) => !allowed.includes(each))
-	if (key === undefined) return
-	if (!KNOWN.includes(key)) throw new Error(`${place}: database reads no constraint named ${key}`)
-	throw new Error(`${place}: ${helper === null ? "a drizzle column" : `c.${helper}`} takes no ${key}`)
+  if (helper !== null && !Object.hasOwn(CONSTRAINT_KEYS, helper))
+    throw new Error(`${place}: database has no helper c.${helper}`);
+  const allowed: readonly string[] = helper === null ? [] : CONSTRAINT_KEYS[helper];
+  const key = Object.keys(constraints).find((each) => !allowed.includes(each));
+
+  if (key === undefined) return;
+
+  if (!KNOWN.includes(key)) throw new Error(`${place}: database reads no constraint named ${key}`);
+  throw new Error(`${place}: ${helper === null ? "a drizzle column" : `c.${helper}`} takes no ${key}`);
 }
 
-/* the keys no field takes together, and why: either would win without a word; a
-   tenant column moving on update would move the row to another tenant, and a private one would
-   publish no boundary */
+// the keys no field takes together, and why: either would win without a word; a
+// tenant column moving on update would move the row to another tenant, and a private one would
+// publish no boundary
 const CONTRADICTIONS: ReadonlyArray<readonly [string, string, string]> = [
-	["mutable", "nomutate", "declare one"],
-	["lowercase", "uppercase", "declare one"],
-	["tenant", "mutable", "a tenant column is set once; a row does not move between tenants"],
-	[
-		"tenant",
-		"private",
-		"the stamp publishes a tenant column as the table's boundary, and a private column is published nowhere",
-	],
-]
+  ["mutable", "nomutate", "declare one"],
+  ["lowercase", "uppercase", "declare one"],
+  ["tenant", "mutable", "a tenant column is set once; a row does not move between tenants"],
+  [
+    "tenant",
+    "private",
+    "the stamp publishes a tenant column as the table's boundary, and a private column is published nowhere",
+  ],
+];
 
-/* a text's kinds: one rule each, so a second would drop the first's without a word */
-const KINDS = ["email", "imageUri", "name", "password", "url"] as const
+// a text's kinds: one rule each, so a second would drop the first's without a word
+const KINDS = ["email", "imageUri", "name", "password", "url"] as const;
 
 // lookup-table: the keys a kind would drop without a word, and what it does instead; any other it holds
 const DROPPED: Readonly<Record<string, { keys: readonly string[]; said: string; what: string }>> = {
-	email: { keys: ["uppercase"], said: "it is lowercased", what: "an email" },
-	password: { keys: ["lowercase", "trim", "uppercase"], said: "it is kept as written", what: "a password" },
-	url: { keys: ["lowercase", "uppercase"], said: "it is kept as written, but for its trim", what: "a url" },
-}
+  email: { keys: ["uppercase"], said: "it is lowercased", what: "an email" },
+  password: { keys: ["lowercase", "trim", "uppercase"], said: "it is kept as written", what: "a password" },
+  url: { keys: ["lowercase", "uppercase"], said: "it is kept as written, but for its trim", what: "a url" },
+};
 
 /** Refuses a second kind, a format beside a kind, or a key the one declared would drop, each of which a reader of the tables file believes holds */
 function refuseKinds(constraints: Readonly<Record<string, ConstantValue>>, place: string): void {
-	const [kind, second] = KINDS.filter((each) => constraints[each] === true)
-	if (second !== undefined) throw new Error(`${place}: ${kind} and ${second} contradict; declare one`)
-	/* a format is a text's whole rule, as a kind is */
-	if (kind !== undefined && constraints["format"] !== undefined)
-		throw new Error(`${place}: format and ${kind} contradict; declare one`)
-	const dropped = DROPPED[kind as string]
-	const key = dropped?.keys.find((each) => constraints[each] === true)
-	if (key !== undefined) throw new Error(`${place}: ${dropped?.what} takes no ${key}: ${dropped?.said}`)
+  const [kind, second] = KINDS.filter((each) => constraints[each] === true);
+
+  if (second !== undefined) throw new Error(`${place}: ${kind} and ${second} contradict; declare one`);
+
+  // a format is a text's whole rule, as a kind is
+  if (kind !== undefined && constraints["format"] !== undefined)
+    throw new Error(`${place}: format and ${kind} contradict; declare one`);
+  const dropped = DROPPED[kind as string];
+  const key = dropped?.keys.find((each) => constraints[each] === true);
+
+  if (key !== undefined) throw new Error(`${place}: ${dropped?.what} takes no ${key}: ${dropped?.said}`);
 }
 
 /**
@@ -189,22 +194,28 @@ function refuseKinds(constraints: Readonly<Record<string, ConstantValue>>, place
  * build, so the generated module would throw on import
  */
 function refuseEmptyBounds(
-	constraints: Readonly<Record<string, ConstantValue>>,
-	{ measure, place }: { measure: "length" | "value"; place: string },
+  constraints: Readonly<Record<string, ConstantValue>>,
+  { measure, place }: { measure: "length" | "value"; place: string },
 ): void {
-	const { max, maxBytes, min } = constraints
-	const bounds = [
-		["min", min],
-		["max", max],
-	] as const
-	if (measure === "length")
-		for (const [key, value] of bounds)
-			if (typeof value === "number" && !(Number.isInteger(value) && value >= 0))
-				throw new Error(`${place}: ${key} ${value} is no length: a length is a whole number from 0`)
-	if (typeof min === "number" && typeof max === "number" && min > max)
-		throw new Error(`${place}: min ${min} is past max ${max}: no value is both`)
-	if (typeof maxBytes === "number" && !(Number.isInteger(maxBytes) && maxBytes >= 1))
-		throw new Error(`${place}: maxBytes ${maxBytes} is no size: it is a whole number from 1`)
+  const { max, maxBytes, min } = constraints;
+
+  const bounds = [
+    ["min", min],
+    ["max", max],
+  ] as const;
+
+  if (measure === "length") {
+    for (const [key, value] of bounds) {
+      if (typeof value === "number" && !(Number.isInteger(value) && value >= 0))
+        throw new Error(`${place}: ${key} ${value} is no length: a length is a whole number from 0`);
+    }
+  }
+
+  if (typeof min === "number" && typeof max === "number" && min > max)
+    throw new Error(`${place}: min ${min} is past max ${max}: no value is both`);
+
+  if (typeof maxBytes === "number" && !(Number.isInteger(maxBytes) && maxBytes >= 1))
+    throw new Error(`${place}: maxBytes ${maxBytes} is no size: it is a whole number from 1`);
 }
 
 /**
@@ -216,23 +227,26 @@ function refuseEmptyBounds(
  */
 /** Refuses what no field can be declared with: an unknown measure or constraint, a contradiction, a bad relation, empty bounds */
 function refuseMalformed(
-	constraints: Readonly<Record<string, ConstantValue>>,
-	{ helper, measure, place }: { helper: ColumnMetaKind | null; measure: "length" | "value"; place: string },
+  constraints: Readonly<Record<string, ConstantValue>>,
+  { helper, measure, place }: { helper: ColumnMetaKind | null; measure: "length" | "value"; place: string },
 ): void {
-	/* a JavaScript caller's measure reaches here unchecked by tsc */
-	if (measure !== "length" && measure !== "value") throw new Error(`${place}: measure must be "length" or "value"`)
-	refuseForeignKeys(constraints, { helper, place })
-	const contradiction = CONTRADICTIONS.find(([a, b]) => constraints[a] === true && constraints[b] === true)
-	if (contradiction !== undefined) {
-		const [a, b, why] = contradiction
-		throw new Error(`${place}: ${a} and ${b} contradict; ${why}`)
-	}
-	refuseKinds(constraints, place)
-	const relation = constraints["relation"]
-	/* a relation's name is a property of the generated relations, so it is an identifier */
-	if (relation !== undefined && (typeof relation !== "string" || !/^[A-Za-z_$][\w$]*$/.test(relation)))
-		throw new Error(`${place}: relation ${JSON.stringify(relation)} is no name a relation can take`)
-	refuseEmptyBounds(constraints, { measure, place })
+  // a JavaScript caller's measure reaches here unchecked by tsc
+  if (measure !== "length" && measure !== "value") throw new Error(`${place}: measure must be "length" or "value"`);
+  refuseForeignKeys(constraints, { helper, place });
+  const contradiction = CONTRADICTIONS.find(([a, b]) => constraints[a] === true && constraints[b] === true);
+
+  if (contradiction !== undefined) {
+    const [a, b, why] = contradiction;
+    throw new Error(`${place}: ${a} and ${b} contradict; ${why}`);
+  }
+
+  refuseKinds(constraints, place);
+  const relation = constraints["relation"];
+
+  // a relation's name is a property of the generated relations, so it is an identifier
+  if (relation !== undefined && (typeof relation !== "string" || !/^[A-Za-z_$][\w$]*$/.test(relation)))
+    throw new Error(`${place}: relation ${JSON.stringify(relation)} is no name a relation can take`);
+  refuseEmptyBounds(constraints, { measure, place });
 }
 
 /**
@@ -241,54 +255,54 @@ function refuseMalformed(
  * meets, or a format the helper cannot hold, each message prefixed with `place`
  */
 export function fieldConstraintsOf(
-	constraints: Readonly<Record<string, ConstantValue>>,
-	{
-		fieldName,
-		filled,
-		helper,
-		measure,
-		place,
-		values,
-	}: {
-		/** the column's property name; one starting with `_` is private */
-		fieldName: string
-		/** whether something other than the caller fills the column, a `c.createdAt`, `c.updatedAt` or `c.deletedAt` column, or a timestamp key's default or update hook, which turns `autogenerate` on unless it is declared false */
-		filled: boolean
-		/** the c helper that built the column, whose constraint type names the keys it takes; null for a drizzle column, which takes none */
-		helper: ColumnMetaKind | null
-		/** what `min` and `max` bound: a text's length, or the value itself */
-		measure: "length" | "value"
-		/** where the column is declared, as each error message names it */
-		place: string
-		/** the column's enum values, each of which a c.enum's format must take; null when it has none */
-		values: readonly string[] | null
-	},
+  constraints: Readonly<Record<string, ConstantValue>>,
+  {
+    fieldName,
+    filled,
+    helper,
+    measure,
+    place,
+    values,
+  }: {
+    /** the column's property name; one starting with `_` is private */
+    fieldName: string;
+    /** whether something other than the caller fills the column, a `c.createdAt`, `c.updatedAt` or `c.deletedAt` column, or a timestamp key's default or update hook, which turns `autogenerate` on unless it is declared false */
+    filled: boolean;
+    /** the c helper that built the column, whose constraint type names the keys it takes; null for a drizzle column, which takes none */
+    helper: ColumnMetaKind | null;
+    /** what `min` and `max` bound: a text's length, or the value itself */
+    measure: "length" | "value";
+    /** where the column is declared, as each error message names it */
+    place: string;
+    /** the column's enum values, each of which a c.enum's format must take; null when it has none */
+    values: readonly string[] | null;
+  },
 ): FieldConstraints {
-	refuseMalformed(constraints, { helper, measure, place })
-	const format = formatOf(constraints, { helper, place, values })
-	const relation = constraints["relation"]
+  refuseMalformed(constraints, { helper, measure, place });
+  const format = formatOf(constraints, { helper, place, values });
+  const relation = constraints["relation"];
 
-	const autogenerate = filled ? constraints["autogenerate"] !== false : constraints["autogenerate"] === true
+  const autogenerate = filled ? constraints["autogenerate"] !== false : constraints["autogenerate"] === true;
 
-	return {
-		autogenerate,
-		email: constraints["email"] === true,
-		format,
-		imageUri: constraints["imageUri"] === true,
-		lowercase: constraints["lowercase"] === true,
-		max: typeof constraints["max"] === "number" ? constraints["max"] : null,
-		maxBytes: typeof constraints["maxBytes"] === "number" ? constraints["maxBytes"] : null,
-		min: typeof constraints["min"] === "number" ? constraints["min"] : null,
-		mutable: constraints["mutable"] === true,
-		name: constraints["name"] === true,
-		nomutate: constraints["nomutate"] === true,
-		password: constraints["password"] === true,
-		pattern: typeof constraints["pattern"] === "string" ? patternLiteral(constraints["pattern"], place) : null,
-		private: constraints["private"] === true || fieldName.startsWith("_"),
-		relation: typeof relation === "string" ? relation : null,
-		tenant: constraints["tenant"] === true,
-		trim: constraints["trim"] === true,
-		uppercase: constraints["uppercase"] === true,
-		url: constraints["url"] === true,
-	}
+  return {
+    autogenerate,
+    email: constraints["email"] === true,
+    format,
+    imageUri: constraints["imageUri"] === true,
+    lowercase: constraints["lowercase"] === true,
+    max: typeof constraints["max"] === "number" ? constraints["max"] : null,
+    maxBytes: typeof constraints["maxBytes"] === "number" ? constraints["maxBytes"] : null,
+    min: typeof constraints["min"] === "number" ? constraints["min"] : null,
+    mutable: constraints["mutable"] === true,
+    name: constraints["name"] === true,
+    nomutate: constraints["nomutate"] === true,
+    password: constraints["password"] === true,
+    pattern: typeof constraints["pattern"] === "string" ? patternLiteral(constraints["pattern"], place) : null,
+    private: constraints["private"] === true || fieldName.startsWith("_"),
+    relation: typeof relation === "string" ? relation : null,
+    tenant: constraints["tenant"] === true,
+    trim: constraints["trim"] === true,
+    uppercase: constraints["uppercase"] === true,
+    url: constraints["url"] === true,
+  };
 }

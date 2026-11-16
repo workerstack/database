@@ -2,157 +2,162 @@
  * `database codegen`: analyze a tables file and run the generators on it. Config mode runs each database that
  * database.config.ts declares; direct mode (--tables) is one database with the direct set, beside the tables file.
  */
-import path from "node:path"
-import type { GeneratorContext } from "../codegen/generators/context-types.ts"
-import { isGeneratedContent, type Staged } from "../codegen/utils/fs.ts"
-import { claim, commitRuns, holdLines, type Run } from "./codegen-record.ts"
-import { parseArgs } from "./args.ts"
-import type { CodegenConfig, DatabaseCodegen } from "./database-config.ts"
-import { databaseIn, loadDatabaseConfig, tablesFile } from "./database-config.ts"
-import { CliError, type CliIo } from "./output.ts"
-import { dbIdentifiers } from "../codegen/utils/case.ts"
-import { GENERATORS, type GeneratorName } from "../codegen/config.ts"
-import { importStyleOf } from "../codegen/utils/paths.ts"
+import path from "node:path";
 
-type Generator = GeneratorName
+import { GENERATORS, type GeneratorName } from "../codegen/config.ts";
+import type { GeneratorContext } from "../codegen/generators/context-types.ts";
+import { dbIdentifiers } from "../codegen/utils/case.ts";
+import { isGeneratedContent, type Staged } from "../codegen/utils/fs.ts";
+import { importStyleOf } from "../codegen/utils/paths.ts";
+import { parseArgs } from "./args.ts";
+import { claim, commitRuns, holdLines, type Run } from "./codegen-record.ts";
+import type { CodegenConfig, DatabaseCodegen } from "./database-config.ts";
+import { databaseIn, loadDatabaseConfig, tablesFile } from "./database-config.ts";
+import { CliError, type CliIo } from "./output.ts";
+
+type Generator = GeneratorName;
 
 /** What direct mode runs: no config means no package exports, ORM driver, translations or FTS */
 const DIRECT: readonly Generator[] = [
-	"constraints",
-	"rows",
-	"relations",
-	"diagrams",
-	"columns",
-	"dtos",
-	"entities",
-	"manifest",
-	"enum-checks",
-]
+  "constraints",
+  "rows",
+  "relations",
+  "diagrams",
+  "columns",
+  "dtos",
+  "entities",
+  "manifest",
+  "enum-checks",
+];
 
 /** One database's codegen: its analysis, settings, and where its files go */
 type Plan = {
-	ctx: GeneratorContext
-	db: DatabaseCodegen
-	/** Config mode: generated subpaths are added to package.json and filePrefix reaches the files */
-	exports: boolean
-	/** Where generated files go unless a generator has its own output: output.default, else the tables' directory */
-	outDir: string
-	/** The stem of every generated file name */
-	prefix: string
-}
+  ctx: GeneratorContext;
+  db: DatabaseCodegen;
+  /** Config mode: generated subpaths are added to package.json and filePrefix reaches the files */
+  exports: boolean;
+  /** Where generated files go unless a generator has its own output: output.default, else the tables' directory */
+  outDir: string;
+  /** The stem of every generated file name */
+  prefix: string;
+};
 
 /** Where `generator` writes: the config's override, else `fallback` */
-const out = (plan: Plan, generator: Generator, fallback: string) => plan.db.output?.[generator] ?? fallback
-const beside = (plan: Plan, suffix: string) => path.join(plan.outDir, `${plan.prefix}.${suffix}`)
+const out = (plan: Plan, generator: Generator, fallback: string) => plan.db.output?.[generator] ?? fallback;
+const beside = (plan: Plan, suffix: string) => path.join(plan.outDir, `${plan.prefix}.${suffix}`);
 
 // lookup-table: each generator's call, so a plan runs as one loop
 const STEPS: Readonly<Record<Generator, (plan: Plan) => Promise<void>>> = {
-	columns: async (plan) => {
-		const { generateColumns } = await import("../codegen/generators/columns.ts")
-		const output = out(plan, "columns", plan.outDir)
-		generateColumns(plan.ctx, plan.exports ? { filePrefix: plan.prefix, output, updatePackageJson: true } : { output })
-	},
-	constraints: async (plan) => {
-		const { generateConstraints } = await import("../codegen/generators/constraints.ts")
-		generateConstraints(plan.ctx, {
-			output: out(plan, "constraints", beside(plan, "constraints.gen.ts")),
-			partitions: plan.db.partitions,
-		})
-	},
-	diagrams: async (plan) => {
-		const { generateDiagrams } = await import("../codegen/generators/diagrams.ts")
-		generateDiagrams(plan.ctx, { output: out(plan, "diagrams", path.join(plan.outDir, "diagrams")) })
-	},
-	dtos: async (plan) => {
-		const { generateDtos } = await import("../codegen/generators/dtos/index.ts")
-		const output = out(plan, "dtos", path.join(plan.outDir, "dtos"))
-		const relationsOutput = out(plan, "relations", beside(plan, "relations.gen.ts"))
-		generateDtos(
-			plan.ctx,
-			plan.exports ? { filePrefix: plan.prefix, output, relationsOutput, updatePackageJson: true } : { output },
-		)
-	},
-	entities: async (plan) => {
-		const { generateEntities } = await import("../codegen/generators/entities.ts")
-		generateEntities(plan.ctx, {
-			output: out(plan, "entities", beside(plan, "entities.gen.ts")),
-			updatePackageJson: plan.exports,
-		})
-	},
-	"enum-checks": async (plan) => {
-		const { generateEnumChecks } = await import("../codegen/generators/enum-checks.ts")
-		generateEnumChecks(plan.ctx, { output: out(plan, "enum-checks", beside(plan, "enum-checks.gen.ts")) })
-	},
-	"field-names": async (plan) => {
-		const { generateFieldNames } = await import("../codegen/generators/field-names.ts")
-		const output = out(plan, "field-names", beside(plan, "field-names.gen.ts"))
-		generateFieldNames(plan.ctx, { output, updatePackageJson: plan.exports })
-	},
-	fts: async (plan) => {
-		const { fts } = plan.db
-		if (!fts || Object.keys(fts).length === 0) return
-		const { generateFts } = await import("../codegen/generators/fts.ts")
-		generateFts(plan.ctx, { filePrefix: plan.prefix, fts, output: out(plan, "fts", plan.outDir) })
-	},
-	manifest: async (plan) => {
-		const { generateManifest } = await import("../codegen/generators/manifest.ts")
-		generateManifest(plan.ctx, { output: out(plan, "manifest", beside(plan, "manifest.gen.json")) })
-	},
-	orm: async (plan) => {
-		const { dialect } = plan.ctx
-		const { driver, filePrefix } = plan.db
-		if (!driver) return
-		const { generateOrm } = await import("../codegen/generators/orm.ts")
-		const relationsOutput = path.resolve(plan.ctx.cwd, out(plan, "relations", beside(plan, "relations.gen.ts")))
-		generateOrm(plan.ctx, {
-			dialect,
-			driver,
-			filePrefix,
-			output: out(plan, "orm", beside(plan, "orm.gen.ts")),
-			relationsOutput,
-		})
-	},
-	relations: async (plan) => {
-		const { generateRelations } = await import("../codegen/generators/relations.ts")
-		generateRelations(plan.ctx, { output: out(plan, "relations", beside(plan, "relations.gen.ts")) })
-	},
-	rows: async (plan) => {
-		const { generateRows } = await import("../codegen/generators/rows.ts")
-		generateRows(plan.ctx, { output: out(plan, "rows", beside(plan, "rows.gen.ts")) })
-	},
-	translations: async (plan) => {
-		const { generateTranslations } = await import("../codegen/generators/translations.ts")
-		generateTranslations(plan.ctx, { baseDir: plan.outDir, filePrefix: plan.prefix })
-	},
-}
+  columns: async (plan) => {
+    const { generateColumns } = await import("../codegen/generators/columns.ts");
+    const output = out(plan, "columns", plan.outDir);
+    generateColumns(plan.ctx, plan.exports ? { filePrefix: plan.prefix, output, updatePackageJson: true } : { output });
+  },
+  constraints: async (plan) => {
+    const { generateConstraints } = await import("../codegen/generators/constraints.ts");
+    generateConstraints(plan.ctx, {
+      output: out(plan, "constraints", beside(plan, "constraints.gen.ts")),
+      partitions: plan.db.partitions,
+    });
+  },
+  diagrams: async (plan) => {
+    const { generateDiagrams } = await import("../codegen/generators/diagrams.ts");
+    generateDiagrams(plan.ctx, { output: out(plan, "diagrams", path.join(plan.outDir, "diagrams")) });
+  },
+  dtos: async (plan) => {
+    const { generateDtos } = await import("../codegen/generators/dtos/index.ts");
+    const output = out(plan, "dtos", path.join(plan.outDir, "dtos"));
+    const relationsOutput = out(plan, "relations", beside(plan, "relations.gen.ts"));
+    generateDtos(
+      plan.ctx,
+      plan.exports ? { filePrefix: plan.prefix, output, relationsOutput, updatePackageJson: true } : { output },
+    );
+  },
+  entities: async (plan) => {
+    const { generateEntities } = await import("../codegen/generators/entities.ts");
+    generateEntities(plan.ctx, {
+      output: out(plan, "entities", beside(plan, "entities.gen.ts")),
+      updatePackageJson: plan.exports,
+    });
+  },
+  "enum-checks": async (plan) => {
+    const { generateEnumChecks } = await import("../codegen/generators/enum-checks.ts");
+    generateEnumChecks(plan.ctx, { output: out(plan, "enum-checks", beside(plan, "enum-checks.gen.ts")) });
+  },
+  "field-names": async (plan) => {
+    const { generateFieldNames } = await import("../codegen/generators/field-names.ts");
+    const output = out(plan, "field-names", beside(plan, "field-names.gen.ts"));
+    generateFieldNames(plan.ctx, { output, updatePackageJson: plan.exports });
+  },
+  fts: async (plan) => {
+    const { fts } = plan.db;
+
+    if (!fts || Object.keys(fts).length === 0) return;
+    const { generateFts } = await import("../codegen/generators/fts.ts");
+    generateFts(plan.ctx, { filePrefix: plan.prefix, fts, output: out(plan, "fts", plan.outDir) });
+  },
+  manifest: async (plan) => {
+    const { generateManifest } = await import("../codegen/generators/manifest.ts");
+    generateManifest(plan.ctx, { output: out(plan, "manifest", beside(plan, "manifest.gen.json")) });
+  },
+  orm: async (plan) => {
+    const { dialect } = plan.ctx;
+    const { driver, filePrefix } = plan.db;
+
+    if (!driver) return;
+    const { generateOrm } = await import("../codegen/generators/orm.ts");
+    const relationsOutput = path.resolve(plan.ctx.cwd, out(plan, "relations", beside(plan, "relations.gen.ts")));
+    generateOrm(plan.ctx, {
+      dialect,
+      driver,
+      filePrefix,
+      output: out(plan, "orm", beside(plan, "orm.gen.ts")),
+      relationsOutput,
+    });
+  },
+  relations: async (plan) => {
+    const { generateRelations } = await import("../codegen/generators/relations.ts");
+    generateRelations(plan.ctx, { output: out(plan, "relations", beside(plan, "relations.gen.ts")) });
+  },
+  rows: async (plan) => {
+    const { generateRows } = await import("../codegen/generators/rows.ts");
+    generateRows(plan.ctx, { output: out(plan, "rows", beside(plan, "rows.gen.ts")) });
+  },
+  translations: async (plan) => {
+    const { generateTranslations } = await import("../codegen/generators/translations.ts");
+    generateTranslations(plan.ctx, { baseDir: plan.outDir, filePrefix: plan.prefix });
+  },
+};
 
 /** One database to generate for: its settings, and how its plan is built */
 type Database = {
-	db: DatabaseCodegen
-	/** Direct mode: no config, files beside the tables file under the analyzed name */
-	direct: boolean
-	/** Its namespace in package.json exports, when the package exports another database too */
-	exportNamespace: string | undefined
-	generators: readonly string[]
-	name: string
-	tablesPath: string
-}
+  db: DatabaseCodegen;
+  /** Direct mode: no config, files beside the tables file under the analyzed name */
+  direct: boolean;
+  /** Its namespace in package.json exports, when the package exports another database too */
+  exportNamespace: string | undefined;
+  generators: readonly string[];
+  name: string;
+  tablesPath: string;
+};
 
 async function analyzed(tablesPath: string, io: CliIo) {
-	const { analyze } = await import("../codegen/analyzer.ts")
-	const { validateTables } = await import("../codegen/utils/validate.ts")
-	const analysis = await analyze(tablesPath, { cwd: io.cwd })
-	const validation = validateTables(analysis)
-	if (validation.errors.length > 0) {
-		throw new CliError(["Validation errors:", ...validation.errors.map((e) => `  ${e}`)].join("\n"))
-	}
-	for (const warning of validation.warnings) io.err(`  warn: ${warning}`)
-	return analysis
+  const { analyze } = await import("../codegen/analyzer.ts");
+  const { validateTables } = await import("../codegen/utils/validate.ts");
+  const analysis = await analyze(tablesPath, { cwd: io.cwd });
+  const validation = validateTables(analysis);
+
+  if (validation.errors.length > 0)
+    throw new CliError(["Validation errors:", ...validation.errors.map((e) => `  ${e}`)].join("\n"));
+
+  for (const warning of validation.warnings) io.err(`  warn: ${warning}`);
+
+  return analysis;
 }
 
 /** Where a database's files go unless a generator has its own output: output.default, else the tables' directory */
 const outDirOf = (db: DatabaseCodegen, tablesPath: string, cwd: string) =>
-	db.output?.["default"] === undefined ? path.dirname(tablesPath) : path.resolve(cwd, db.output["default"])
+  db.output?.["default"] === undefined ? path.dirname(tablesPath) : path.resolve(cwd, db.output["default"]);
 
 /**
  * Each database's namespace in package.json exports: its name when its package.json exports
@@ -160,141 +165,158 @@ const outDirOf = (db: DatabaseCodegen, tablesPath: string, cwd: string) =>
  * package exports one database alone. Every database the config declares counts, whichever run.
  */
 async function exportNamespaces(config: CodegenConfig, cwd: string): Promise<Map<string, string>> {
-	const { findNearestPackageJson } = await import("../codegen/utils/package-json.ts")
-	const byPackage = new Map<string, string[]>()
-	for (const [name, db] of Object.entries(config.databases)) {
-		const pkg = findNearestPackageJson(outDirOf(db, path.resolve(cwd, db.tables), cwd), cwd) ?? ""
-		byPackage.set(pkg, [...(byPackage.get(pkg) ?? []), name])
-	}
-	const namespaces = new Map<string, string>()
-	for (const names of byPackage.values()) if (names.length > 1) for (const name of names) namespaces.set(name, name)
-	return namespaces
+  const { findNearestPackageJson } = await import("../codegen/utils/package-json.ts");
+  const byPackage = new Map<string, string[]>();
+
+  for (const [name, db] of Object.entries(config.databases)) {
+    const pkg = findNearestPackageJson(outDirOf(db, path.resolve(cwd, db.tables), cwd), cwd) ?? "";
+    byPackage.set(pkg, [...(byPackage.get(pkg) ?? []), name]);
+  }
+
+  const namespaces = new Map<string, string>();
+
+  for (const names of byPackage.values()) if (names.length > 1) for (const name of names) namespaces.set(name, name);
+
+  return namespaces;
 }
 
 /** The identifiers the database's name gives generated code; a name none can be made of fails the run */
 function assertNamable(dbName: string): void {
-	try {
-		dbIdentifiers(dbName)
-	} catch (error) {
-		throw new CliError((error as Error).message)
-	}
+  try {
+    dbIdentifiers(dbName);
+  } catch (error) {
+    throw new CliError((error as Error).message);
+  }
 }
 
 /** Refuse a config dialect the tables contradict: it would generate the wrong engine's code */
 function assertDialect(database: Database, tables: "postgres" | "sqlite" | null): void {
-	const declared = database.db.dialect
-	if (declared === undefined || tables === null || declared === tables) return
-	throw new CliError(
-		`${database.name}: database.config.ts says dialect ${declared}, but ${path.basename(database.tablesPath)} declares ${tables} tables; fix the config's dialect`,
-	)
+  const declared = database.db.dialect;
+
+  if (declared === undefined || tables === null || declared === tables) return;
+  throw new CliError(
+    `${database.name}: database.config.ts says dialect ${declared}, but ${path.basename(database.tablesPath)} declares ${tables} tables; fix the config's dialect`,
+  );
 }
 
 /** Validate, analyze and run `database`'s generators (all, or `only`) into `staged`; returns what it staged */
 async function generate(
-	database: Database,
-	run: { only: string | undefined; staged: Staged },
-	io: CliIo,
+  database: Database,
+  run: { only: string | undefined; staged: Staged },
+  io: CliIo,
 ): Promise<Run> {
-	const analyzedTables = await analyzed(database.tablesPath, io)
-	/* in config mode the database is the one the config names, whatever its tables file is called */
-	const analysis = database.direct ? analyzedTables : { ...analyzedTables, dbName: database.name }
-	assertNamable(analysis.dbName)
-	io.out(
-		database.direct
-			? `Analyzed ${analysis.tables.length} tables (${analysis.dbName})`
-			: `  ${analysis.tables.length} tables`,
-	)
-	assertDialect(database, analysis.dialect)
-	const tablesDir = path.dirname(database.tablesPath)
-	/* loaded with the run, as the generators are: ts-morph is an optional peer, and the cli entry loads without it */
-	const { tsconfigOptions } = await import("../codegen/runtime/ts-options.mjs")
-	const plan: Plan = {
-		ctx: {
-			analysis,
-			cwd: database.direct ? tablesDir : io.cwd,
-			/* the engine its tables are built for; a database with no table yet generates nothing an engine shapes */
-			dialect: database.db.dialect ?? analysis.dialect ?? "sqlite",
-			exportNamespace: database.exportNamespace,
-			importStyle: importStyleOf(tsconfigOptions(database.tablesPath)),
-			log: io.out,
-			staged: run.staged,
-			tablesPath: database.tablesPath,
-			warn: io.err,
-		},
-		db: database.db,
-		exports: !database.direct,
-		outDir: outDirOf(database.db, database.tablesPath, io.cwd),
-		prefix: database.direct ? `db.${analysis.dbName}` : (database.db.filePrefix ?? `db.${database.name}`),
-	}
-	const before = new Map(run.staged)
-	const owners = new Map<string, string>()
-	for (const generator of GENERATORS) {
-		if (!database.generators.includes(generator) || (run.only !== undefined && run.only !== generator)) continue
-		const last = new Map(run.staged)
-		await STEPS[generator](plan)
-		claim(owners, { cwd: plan.ctx.cwd, generator, last, run: database.name, staged: run.staged })
-	}
-	const wrote = [...run.staged]
-		.filter(([file, content]) => before.get(file) !== content && isGeneratedContent(content))
-		.map(([file]) => file)
-	return {
-		name: database.direct ? analysis.dbName : database.name,
-		partial: run.only !== undefined,
-		prefix: plan.prefix,
-		root: plan.outDir,
-		wrote,
-	}
+  const analyzedTables = await analyzed(database.tablesPath, io);
+  // in config mode the database is the one the config names, whatever its tables file is called
+  const analysis = database.direct ? analyzedTables : { ...analyzedTables, dbName: database.name };
+  assertNamable(analysis.dbName);
+  io.out(
+    database.direct
+      ? `Analyzed ${analysis.tables.length} tables (${analysis.dbName})`
+      : `  ${analysis.tables.length} tables`,
+  );
+  assertDialect(database, analysis.dialect);
+  const tablesDir = path.dirname(database.tablesPath);
+  // loaded with the run, as the generators are: ts-morph is an optional peer, and the cli entry loads without it
+  const { tsconfigOptions } = await import("../codegen/runtime/ts-options.mjs");
+
+  const plan: Plan = {
+    ctx: {
+      analysis,
+      cwd: database.direct ? tablesDir : io.cwd,
+      // the engine its tables are built for; a database with no table yet generates nothing an engine shapes
+      dialect: database.db.dialect ?? analysis.dialect ?? "sqlite",
+      exportNamespace: database.exportNamespace,
+      importStyle: importStyleOf(tsconfigOptions(database.tablesPath)),
+      log: io.out,
+      staged: run.staged,
+      tablesPath: database.tablesPath,
+      warn: io.err,
+    },
+    db: database.db,
+    exports: !database.direct,
+    outDir: outDirOf(database.db, database.tablesPath, io.cwd),
+    prefix: database.direct ? `db.${analysis.dbName}` : (database.db.filePrefix ?? `db.${database.name}`),
+  };
+
+  const before = new Map(run.staged);
+  const owners = new Map<string, string>();
+
+  for (const generator of GENERATORS) {
+    if (!database.generators.includes(generator) || (run.only !== undefined && run.only !== generator)) continue;
+    const last = new Map(run.staged);
+    await STEPS[generator](plan);
+    claim(owners, { cwd: plan.ctx.cwd, generator, last, run: database.name, staged: run.staged });
+  }
+
+  const wrote = [...run.staged]
+    .filter(([file, content]) => before.get(file) !== content && isGeneratedContent(content))
+    .map(([file]) => file);
+
+  return {
+    name: database.direct ? analysis.dbName : database.name,
+    partial: run.only !== undefined,
+    prefix: plan.prefix,
+    root: plan.outDir,
+    wrote,
+  };
 }
 
 /** The databases a codegen run covers: the one --tables names, or those database.config.ts declares */
 async function databases(positionals: readonly string[], tables: string | undefined, io: CliIo): Promise<Database[]> {
-	if (tables !== undefined) {
-		const tablesPath = tablesFile(io.cwd, tables, "--tables")
-		return [{ db: { tables }, direct: true, exportNamespace: undefined, generators: DIRECT, name: "", tablesPath }]
-	}
-	const config = await loadDatabaseConfig(io.cwd)
-	/* a name given twice runs once: a second run into the same staged map would record nothing */
-	const names = positionals.length > 0 ? [...new Set(positionals)] : Object.keys(config.databases)
-	const picked = names.map((name) => [name, databaseIn(config, name)] as const)
-	const namespaces = await exportNamespaces(config, io.cwd)
-	return picked.map(([name, db]) => ({
-		db,
-		direct: false,
-		exportNamespace: namespaces.get(name),
-		generators: db.generators ?? GENERATORS,
-		name,
-		tablesPath: tablesFile(io.cwd, db.tables, "tables"),
-	}))
+  if (tables !== undefined) {
+    const tablesPath = tablesFile(io.cwd, tables, "--tables");
+
+    return [{ db: { tables }, direct: true, exportNamespace: undefined, generators: DIRECT, name: "", tablesPath }];
+  }
+
+  const config = await loadDatabaseConfig(io.cwd);
+  // a name given twice runs once: a second run into the same staged map would record nothing
+  const names = positionals.length > 0 ? [...new Set(positionals)] : Object.keys(config.databases);
+  const picked = names.map((name) => [name, databaseIn(config, name)] as const);
+  const namespaces = await exportNamespaces(config, io.cwd);
+
+  return picked.map(([name, db]) => ({
+    db,
+    direct: false,
+    exportNamespace: namespaces.get(name),
+    generators: db.generators ?? GENERATORS,
+    name,
+    tablesPath: tablesFile(io.cwd, db.tables, "tables"),
+  }));
 }
 
 export async function cmdCodegen(argv: readonly string[], io: CliIo): Promise<void> {
-	const { options, positionals } = parseArgs(argv, "codegen")
-	const only = options["generator"] as string | undefined
-	if (only !== undefined && !(GENERATORS as readonly string[]).includes(only)) {
-		throw new CliError(`Unknown generator: ${only}. Known: ${GENERATORS.join(", ")}`)
-	}
-	const picked = await databases(positionals, options["tables"] as string | undefined, io)
-	/* a generator no picked database runs would write nothing and exit 0 */
-	const runnable = GENERATORS.filter((generator) => picked.some((database) => database.generators.includes(generator)))
-	if (only !== undefined && !runnable.includes(only as Generator))
-		throw new CliError(`codegen does not run ${only} here; it runs ${runnable.join(", ")}`)
-	/* every database runs into one staged set, so nothing is written until every one succeeds
-	 * and databases sharing a package.json each see the exports the others staged */
-	const staged: Staged = new Map()
-	const runs: Run[] = []
-	/* each line held until the files are written, so a failed run claims none it never wrote */
-	const { commit, context, failed, held } = holdLines(io)
-	for (const database of picked) {
-		if (!database.direct) context(`\nCodegen: ${database.name}`)
-		runs.push(await generate(database, { only, staged }, held).catch((error: unknown) => failed(error)))
-	}
-	const direct = picked.find((database) => database.direct)
-	/* a run of the whole config knows every database it declares; one that names some, or runs one generator, does not */
-	const whole = direct === undefined && positionals.length === 0 && only === undefined
-	commit(() =>
-		commitRuns(staged, runs, {
-			declared: whole ? picked.map((database) => database.name) : undefined,
-			recordDir: direct === undefined ? io.cwd : path.dirname(direct.tablesPath),
-		}),
-	)
+  const { options, positionals } = parseArgs(argv, "codegen");
+  const only = options["generator"] as string | undefined;
+
+  if (only !== undefined && !(GENERATORS as readonly string[]).includes(only))
+    throw new CliError(`Unknown generator: ${only}. Known: ${GENERATORS.join(", ")}`);
+
+  const picked = await databases(positionals, options["tables"] as string | undefined, io);
+  // a generator no picked database runs would write nothing and exit 0
+  const runnable = GENERATORS.filter((generator) => picked.some((database) => database.generators.includes(generator)));
+
+  if (only !== undefined && !runnable.includes(only as Generator))
+    throw new CliError(`codegen does not run ${only} here; it runs ${runnable.join(", ")}`);
+  // every database runs into one staged set, so nothing is written until every one succeeds
+  // and databases sharing a package.json each see the exports the others staged
+  const staged: Staged = new Map();
+  const runs: Run[] = [];
+  // each line held until the files are written, so a failed run claims none it never wrote
+  const { commit, context, failed, held } = holdLines(io);
+
+  for (const database of picked) {
+    if (!database.direct) context(`\nCodegen: ${database.name}`);
+    runs.push(await generate(database, { only, staged }, held).catch((error: unknown) => failed(error)));
+  }
+
+  const direct = picked.find((database) => database.direct);
+  // a run of the whole config knows every database it declares; one that names some, or runs one generator, does not
+  const whole = direct === undefined && positionals.length === 0 && only === undefined;
+  commit(() =>
+    commitRuns(staged, runs, {
+      declared: whole ? picked.map((database) => database.name) : undefined,
+      recordDir: direct === undefined ? io.cwd : path.dirname(direct.tablesPath),
+    }),
+  );
 }

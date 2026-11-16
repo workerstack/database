@@ -8,24 +8,24 @@
  */
 
 /** wrangler's migrations table where the binding names no `migrations_table` */
-export const D1_MIGRATIONS_TABLE = "d1_migrations"
+export const D1_MIGRATIONS_TABLE = "d1_migrations";
 
 /** database's record of the hash each D1 file was applied under, which wrangler's table does not keep */
-export const D1_HASH_TABLE = "_database_migration_hashes"
+export const D1_HASH_TABLE = "_database_migration_hashes";
 
 /**
  * database's record of the hash each pending D1 file is about to be applied under, written before
  * wrangler runs it and moved into D1_HASH_TABLE once wrangler's table names it
  */
-export const D1_HASH_INTENT_TABLE = "_database_migration_hash_intents"
+export const D1_HASH_INTENT_TABLE = "_database_migration_hash_intents";
 
 /** database's migration history before 0.8, which `database migrate baseline` copies into wrangler's */
-export const DRIZZLE_HISTORY_TABLE = "__drizzle_migrations"
+export const DRIZZLE_HISTORY_TABLE = "__drizzle_migrations";
 
 /** Every table a D1 database's history is in, the binding's own `migrations_table` first */
 export const d1HistoryTables = (migrationsTable: string = D1_MIGRATIONS_TABLE): string[] => [
-	migrationsTable,
-	D1_HASH_TABLE,
-	D1_HASH_INTENT_TABLE,
-	DRIZZLE_HISTORY_TABLE,
-]
+  migrationsTable,
+  D1_HASH_TABLE,
+  D1_HASH_INTENT_TABLE,
+  DRIZZLE_HISTORY_TABLE,
+];

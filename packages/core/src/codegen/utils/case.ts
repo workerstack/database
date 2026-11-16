@@ -4,13 +4,14 @@
 
 /** Convert snake_case to camelCase */
 export function snakeToCamel(str: string): string {
-	return str.replace(/_([a-z])/g, (_, char) => char.toUpperCase())
+  return str.replaceAll(/_([a-z])/g, (_, char) => char.toUpperCase());
 }
 
 /** Convert snake_case to PascalCase */
 export function snakeToPascal(str: string): string {
-	const camel = snakeToCamel(str)
-	return camel.charAt(0).toUpperCase() + camel.slice(1)
+  const camel = snakeToCamel(str);
+
+  return camel.charAt(0).toUpperCase() + camel.slice(1);
 }
 
 /**
@@ -19,27 +20,27 @@ export function snakeToPascal(str: string): string {
  * oauth2-token
  */
 export function camelToKebab(str: string): string {
-	return str
-		.replace(/([a-z0-9])([A-Z])/g, "$1-$2")
-		.replace(/([A-Z])([A-Z][a-z])/g, "$1-$2")
-		.toLowerCase()
+  return str
+    .replaceAll(/([a-z0-9])([A-Z])/g, "$1-$2")
+    .replaceAll(/([A-Z])([A-Z][a-z])/g, "$1-$2")
+    .toLowerCase();
 }
 
 /**
  * A table variable as every generated subpath of it names it, its DTOs', rqb-cols' and sql-cols'
  * alike: kebab case, from camelCase and snake_case both, so blogPost and blog_post are blog-post
  */
-export const subpathName = (varName: string): string => camelToKebab(varName).replaceAll("_", "-")
+export const subpathName = (varName: string): string => camelToKebab(varName).replaceAll("_", "-");
 
 /** Convert snake_case/camelCase to SCREAMING_SNAKE_CASE */
 export function toScreamingSnakeCase(str: string): string {
-	return str.replace(/([a-z])([A-Z])/g, "$1_$2").toUpperCase()
+  return str.replaceAll(/([a-z])([A-Z])/g, "$1_$2").toUpperCase();
 }
 
-const IDENTIFIER = /^[A-Za-z_$][\w$]*$/
+const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
 
 /** The identifiers generated code names a database by */
-export type DbIdentifiers = { camel: string; constant: string; pascal: string }
+export type DbIdentifiers = { camel: string; constant: string; pascal: string };
 
 /**
  * A database name as identifiers: camelCase across any character an identifier cannot hold
@@ -47,29 +48,34 @@ export type DbIdentifiers = { camel: string; constant: string; pascal: string }
  * that is no identifier, as with a leading digit, so codegen fails before writing a file.
  */
 export function dbIdentifiers(name: string): DbIdentifiers {
-	const [first = "", ...rest] = name.split(/[^\w$]+/).filter((word) => word !== "")
-	const camel = first + rest.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join("")
-	if (!IDENTIFIER.test(camel))
-		throw new Error(`database "${name}": generated code names it by identifiers, and none can be made of it; rename it`)
-	return { camel, constant: toScreamingSnakeCase(camel), pascal: camel.charAt(0).toUpperCase() + camel.slice(1) }
+  const [first = "", ...rest] = name.split(/[^\w$]+/).filter((word) => word !== "");
+  const camel = first + rest.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join("");
+
+  if (!IDENTIFIER.test(camel)) {
+    throw new Error(
+      `database "${name}": generated code names it by identifiers, and none can be made of it; rename it`,
+    );
+  }
+
+  return { camel, constant: toScreamingSnakeCase(camel), pascal: camel.charAt(0).toUpperCase() + camel.slice(1) };
 }
 
 /** A key as an object property: bare when it is an identifier, quoted otherwise */
-export const propertyName = (key: string): string => (IDENTIFIER.test(key) ? key : JSON.stringify(key))
+export const propertyName = (key: string): string => (IDENTIFIER.test(key) ? key : JSON.stringify(key));
 
 /** `object`'s `key` as an expression: `object.key` for an identifier, `object["key"]` otherwise */
 export const propertyAccess = (object: string, key: string): string =>
-	IDENTIFIER.test(key) ? `${object}.${key}` : `${object}[${JSON.stringify(key)}]`
+  IDENTIFIER.test(key) ? `${object}.${key}` : `${object}[${JSON.stringify(key)}]`;
 
 /**
  * A name read from the schema as a TypeScript string literal. Every generator writes a SQL name,
  * an id prefix or an error key through this, never between hand-written quotes: a name may hold
  * a quote or a backslash.
  */
-export const stringLiteral = (text: string): string => JSON.stringify(text)
+export const stringLiteral = (text: string): string => JSON.stringify(text);
 
 /** A name as text inside a generated block comment, which a `*\/` in it would close */
-export const commentText = (text: string): string => text.replaceAll("*/", "* /")
+export const commentText = (text: string): string => text.replaceAll("*/", "* /");
 
 /** A name in generated SQL text, always double-quoted: a plain identifier may still be a keyword (`order`, `group`) */
-export const sqlIdentifier = (name: string): string => `"${name.replaceAll('"', '""')}"`
+export const sqlIdentifier = (name: string): string => `"${name.replaceAll('"', '""')}"`;

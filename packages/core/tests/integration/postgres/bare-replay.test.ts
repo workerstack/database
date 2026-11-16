@@ -4,293 +4,309 @@
  * counts never see, is read from the server's committed catalogs and is the file's when it is to an
  * object the file names. apply on one server is the oracle.
  */
-import { rmSync } from "node:fs"
-import { afterEach, describe, expect, it, onTestFinished } from "vitest"
-import { applyWithAtlas } from "../../../src/migrate/core/atlas-apply.ts"
-import { pgCheck, T, tempDir } from "../support/pg-check.ts"
-import { pgUrl, withScratchDb } from "../support/pg.ts"
-import { asRole, dropRoles, LOOPBACK, query, roleOf, testRoles, unique } from "../support/pg-roles.ts"
-import { writingServer } from "../../support/server-lock.ts"
+import { rmSync } from "node:fs";
 
-const { checked, checkThenApply, devUrl, dir, files, options } = pgCheck()
+import { afterEach, describe, expect, it, onTestFinished } from "vitest";
 
-/* a txmode none file's head, its change approved */
-const NONE = "-- atlas:txmode none\n\n-- database:allow-unsafe: the test's change\n"
+import { applyWithAtlas } from "../../../src/migrate/core/atlas-apply.ts";
+import { writingServer } from "../../support/server-lock.ts";
+import { pgCheck, T, tempDir } from "../support/pg-check.ts";
+import { asRole, dropRoles, LOOPBACK, query, roleOf, testRoles, unique } from "../support/pg-roles.ts";
+import { pgUrl, withScratchDb } from "../support/pg.ts";
 
-/* P1 of r22: Atlas sends a txmode none file's statements bare; 0.20 wrapped each in BEGIN/COMMIT, so a batched
-   backfill's COMMIT failed check and passed apply, and a LOCK TABLE passed check and failed apply */
+const { checked, checkThenApply, devUrl, dir, files, options } = pgCheck();
+
+// a txmode none file's head, its change approved
+const NONE = "-- atlas:txmode none\n\n-- database:allow-unsafe: the test's change\n";
+
+// P1 of r22: Atlas sends a txmode none file's statements bare; 0.20 wrapped each in BEGIN/COMMIT, so a batched
+// backfill's COMMIT failed check and passed apply, and a LOCK TABLE passed check and failed apply
 describe("a txmode none file replays bare, as Atlas sends it (P1; sibling: r21 P1's per-statement BEGIN)", () => {
-	const HEAD = `${T}INSERT INTO t (id) SELECT g FROM generate_series(1, 2500) g;\nCREATE PROCEDURE backfill() LANGUAGE plpgsql AS $$ BEGIN LOOP UPDATE t SET w = 1 WHERE id IN (SELECT id FROM t WHERE w IS NULL LIMIT 1000); EXIT WHEN NOT FOUND; COMMIT; END LOOP; END $$;\n`
-	it.each([
-		[
-			"a DO block that commits per batch",
-			"DO $$ BEGIN LOOP UPDATE t SET w = 1 WHERE id IN (SELECT id FROM t WHERE w IS NULL LIMIT 1000); EXIT WHEN NOT FOUND; COMMIT; END LOOP; END $$;\n",
-		],
-		["a CALL of a procedure that commits per batch", "CALL backfill();\n"],
-		/* each statement runs in a guarded transaction first: the file's own block, and a cursor kept past one, still run bare */
-		[
-			"a file that opens its own transaction, locking and saving inside it",
-			"BEGIN;\nLOCK TABLE t IN SHARE MODE;\nSAVEPOINT s;\nUPDATE t SET w = 2;\nRELEASE s;\nCOMMIT;\n",
-		],
-		["a cursor declared WITH HOLD", "DECLARE c CURSOR WITH HOLD FOR SELECT id FROM t;\nCLOSE c;\n"],
-	])(
-		"passes %s, as apply runs it",
-		async (_, body) => {
-			expect(await checkThenApply(HEAD, `${NONE}${body}`)).toEqual({ apply: undefined, check: undefined })
-		},
-		60_000,
-	)
+  const HEAD = `${T}INSERT INTO t (id) SELECT g FROM generate_series(1, 2500) g;\nCREATE PROCEDURE backfill() LANGUAGE plpgsql AS $$ BEGIN LOOP UPDATE t SET w = 1 WHERE id IN (SELECT id FROM t WHERE w IS NULL LIMIT 1000); EXIT WHEN NOT FOUND; COMMIT; END LOOP; END $$;\n`;
+  it.each([
+    [
+      "a DO block that commits per batch",
+      "DO $$ BEGIN LOOP UPDATE t SET w = 1 WHERE id IN (SELECT id FROM t WHERE w IS NULL LIMIT 1000); EXIT WHEN NOT FOUND; COMMIT; END LOOP; END $$;\n",
+    ],
+    ["a CALL of a procedure that commits per batch", "CALL backfill();\n"],
+    // each statement runs in a guarded transaction first: the file's own block, and a cursor kept past one, still run bare
+    [
+      "a file that opens its own transaction, locking and saving inside it",
+      "BEGIN;\nLOCK TABLE t IN SHARE MODE;\nSAVEPOINT s;\nUPDATE t SET w = 2;\nRELEASE s;\nCOMMIT;\n",
+    ],
+    ["a cursor declared WITH HOLD", "DECLARE c CURSOR WITH HOLD FOR SELECT id FROM t;\nCLOSE c;\n"],
+  ])(
+    "passes %s, as apply runs it",
+    async (_, body) => {
+      expect(await checkThenApply(HEAD, `${NONE}${body}`)).toEqual({ apply: undefined, check: undefined });
+    },
+    60_000,
+  );
 
-	it.each([
-		[
-			"LOCK TABLE",
-			"LOCK TABLE t IN SHARE MODE;\nUPDATE t SET w = 2;\n",
-			"LOCK TABLE can only be used in transaction blocks",
-		],
-		["SAVEPOINT", "SAVEPOINT s;\nUPDATE t SET w = 2;\n", "SAVEPOINT can only be used in transaction blocks"],
-		["RELEASE", "RELEASE s;\n", "RELEASE SAVEPOINT can only be used in transaction blocks"],
-		["ROLLBACK TO", "ROLLBACK TO s;\n", "ROLLBACK TO SAVEPOINT can only be used in transaction blocks"],
-		[
-			"DECLARE without HOLD",
-			"DECLARE c CURSOR FOR SELECT id FROM t;\n",
-			"DECLARE CURSOR can only be used in transaction blocks",
-		],
-	])(
-		"refuses %s outside a block at check, as apply refuses it",
-		async (_, body, said) => {
-			const { apply, check } = await checkThenApply(HEAD, `${NONE}${body}`)
-			expect(check).toContain(said)
-			expect(apply).toContain(said)
-		},
-		60_000,
-	)
-})
+  it.each([
+    [
+      "LOCK TABLE",
+      "LOCK TABLE t IN SHARE MODE;\nUPDATE t SET w = 2;\n",
+      "LOCK TABLE can only be used in transaction blocks",
+    ],
+    ["SAVEPOINT", "SAVEPOINT s;\nUPDATE t SET w = 2;\n", "SAVEPOINT can only be used in transaction blocks"],
+    ["RELEASE", "RELEASE s;\n", "RELEASE SAVEPOINT can only be used in transaction blocks"],
+    ["ROLLBACK TO", "ROLLBACK TO s;\n", "ROLLBACK TO SAVEPOINT can only be used in transaction blocks"],
+    [
+      "DECLARE without HOLD",
+      "DECLARE c CURSOR FOR SELECT id FROM t;\n",
+      "DECLARE CURSOR can only be used in transaction blocks",
+    ],
+  ])(
+    "refuses %s outside a block at check, as apply refuses it",
+    async (_, body, said) => {
+      const { apply, check } = await checkThenApply(HEAD, `${NONE}${body}`);
+      expect(check).toContain(said);
+      expect(apply).toContain(said);
+    },
+    60_000,
+  );
+});
 
-/* the amendment to P1 of r22: bare, a change past the database commits before any read sees it, so each
-   statement runs in a transaction of its own first, and its counts refuse that change uncommitted */
+// the amendment to P1 of r22: bare, a change past the database commits before any read sees it, so each
+// statement runs in a transaction of its own first, and its counts refuse that change uncommitted
 describe("a txmode none file's statement runs in a transaction of its own first (P1 amendment; sibling: a DO's ALTER ROLE)", () => {
-	/* P5 of r22: a role the statement adds is the replay's to adopt, a change to one the server held is not */
-	it("adopts a role a DO makes and leaves none, and refuses a DO that changes a role the server held, naming it", async () => {
-		const [made, held] = testRoles("database_t_bare", "database_t_held")
-		await query(pgUrl(), `CREATE ROLE ${held} NOLOGIN`)
-		const { refused: adopted } = await checked(T, `${NONE}DO $$ BEGIN CREATE ROLE ${made}; END $$;\n`)
-		const { refused } = await checked(T, `${NONE}DO $$ BEGIN ALTER ROLE ${held} CONNECTION LIMIT 4; END $$;\n`)
-		expect({ adopted, refused, role: await roleOf(made) }).toEqual({
-			adopted: undefined,
-			refused: expect.stringContaining(`role ${held} changed (rolconnlimit)`),
-			role: [],
-		})
-		expect(await query(pgUrl(), `SELECT rolconnlimit FROM pg_roles WHERE rolname = '${held}'`)).toEqual([
-			{ rolconnlimit: -1 },
-		])
-	}, 60_000)
-})
+  // P5 of r22: a role the statement adds is the replay's to adopt, a change to one the server held is not
+  it("adopts a role a DO makes and leaves none, and refuses a DO that changes a role the server held, naming it", async () => {
+    const [made, held] = testRoles("database_t_bare", "database_t_held");
+    await query(pgUrl(), `CREATE ROLE ${held} NOLOGIN`);
+    const { refused: adopted } = await checked(T, `${NONE}DO $$ BEGIN CREATE ROLE ${made}; END $$;\n`);
+    const { refused } = await checked(T, `${NONE}DO $$ BEGIN ALTER ROLE ${held} CONNECTION LIMIT 4; END $$;\n`);
+    expect({ adopted, refused, role: await roleOf(made) }).toEqual({
+      adopted: undefined,
+      refused: expect.stringContaining(`role ${held} changed (rolconnlimit)`),
+      role: [],
+    });
+    expect(await query(pgUrl(), `SELECT rolconnlimit FROM pg_roles WHERE rolname = '${held}'`)).toEqual([
+      { rolconnlimit: -1 },
+    ]);
+  }, 60_000);
+});
 
 /** The databases of the server named `name` */
-const databaseOf = (name: string) => query(pgUrl(), `SELECT datname FROM pg_database WHERE datname = '${name}'`)
+const databaseOf = (name: string) => query(pgUrl(), `SELECT datname FROM pg_database WHERE datname = '${name}'`);
 
-/* P2 of r22: a second backend's write is committed by it, so the replay's own counts never see it; the server's
-   committed catalogs, read around each file and each bare statement, do. PR1 of r23: Postgres keeps no creator for a
-   role or a database, so the cleanup leaves what it cannot prove the replay made, and says so */
+// P2 of r22: a second backend's write is committed by it, so the replay's own counts never see it; the server's
+// committed catalogs, read around each file and each bare statement, do. PR1 of r23: Postgres keeps no creator for a
+// role or a database, so the cleanup leaves what it cannot prove the replay made, and says so
 describe("a second backend's change is the file's (P2; sibling: P1's bare path)", () => {
-	const DBLINK = "-- database:allow-unsafe: the test's history\nCREATE EXTENSION IF NOT EXISTS dblink;\n"
-	const ALLOW = "-- database:allow-unsafe: the test's change\n"
-	const [side, svc] = [unique("database_t_side"), unique("database_t_svc")]
-	afterEach(async () => {
-		await query(pgUrl(), `DROP DATABASE IF EXISTS ${side} WITH (FORCE)`)
-		await dropRoles(svc)
-	})
-	const body = `IF NOT EXISTS (SELECT FROM pg_database WHERE datname = '${side}') THEN PERFORM dblink_exec(${LOOPBACK}, 'CREATE DATABASE ${side}'); END IF;
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${svc}') THEN PERFORM dblink_exec(${LOOPBACK}, 'CREATE ROLE ${svc} LOGIN PASSWORD ''from-the-repo'''); END IF;`
-	const idiom = `DO $$ BEGIN\n  ${body}\nEND $$;\n`
-	/* a function named `name` taking `args` that runs the idiom, spelling both names */
-	const made = (name: string, args = "") =>
-		`CREATE FUNCTION ${name}(${args}) RETURNS text LANGUAGE plpgsql AS $f$ BEGIN\n  ${body}\n  RETURN ''; END $f$;\n`
+  const DBLINK = "-- database:allow-unsafe: the test's history\nCREATE EXTENSION IF NOT EXISTS dblink;\n";
+  const ALLOW = "-- database:allow-unsafe: the test's change\n";
+  const [side, svc] = [unique("database_t_side"), unique("database_t_svc")];
+  afterEach(async () => {
+    await query(pgUrl(), `DROP DATABASE IF EXISTS ${side} WITH (FORCE)`);
+    await dropRoles(svc);
+  });
 
-	it.each([
-		["a DO block in a txmode none file", "", `-- atlas:txmode none\n\n${ALLOW}${idiom}`],
-		["a DO block in a file in a transaction", "", `${ALLOW}${idiom}`],
-		["a call of a function the file makes", "", `${ALLOW}${made("make_side")}${ALLOW}SELECT make_side();\n`],
-		[
-			"a call by a bare name that an earlier file's overload of a pg_catalog function takes",
-			`${ALLOW}${made("upper", "x int")}`,
-			`${ALLOW}SELECT upper(1), '${side}', '${svc}';\n`,
-		],
-	])(
-		"refuses dblink_exec's CREATE DATABASE and CREATE ROLE from %s, naming both, and leaves both",
-		async (_, before, pending) => {
-			const { refused } = await checked(`${T}${DBLINK}${before}`, pending)
-			expect(refused).toContain(`database ${side} added`)
-			expect(refused).toContain(`role ${svc} added`)
-			expect(refused).toContain("on devUrl's server, as another session may have made those changes")
-			expect({ database: await databaseOf(side), role: (await roleOf(svc)).length }).toEqual({
-				database: [{ datname: side }],
-				role: 1,
-			})
-		},
-		60_000,
-	)
-})
+  const body = `IF NOT EXISTS (SELECT FROM pg_database WHERE datname = '${side}') THEN PERFORM dblink_exec(${LOOPBACK}, 'CREATE DATABASE ${side}'); END IF;
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${svc}') THEN PERFORM dblink_exec(${LOOPBACK}, 'CREATE ROLE ${svc} LOGIN PASSWORD ''from-the-repo'''); END IF;`;
 
-/* the server's catalogs show every session's work, so only a change to an object the file names is the file's */
+  const idiom = `DO $$ BEGIN\n  ${body}\nEND $$;\n`;
+
+  // a function named `name` taking `args` that runs the idiom, spelling both names
+  const made = (name: string, args = "") =>
+    `CREATE FUNCTION ${name}(${args}) RETURNS text LANGUAGE plpgsql AS $f$ BEGIN\n  ${body}\n  RETURN ''; END $f$;\n`;
+
+  it.each([
+    ["a DO block in a txmode none file", "", `-- atlas:txmode none\n\n${ALLOW}${idiom}`],
+    ["a DO block in a file in a transaction", "", `${ALLOW}${idiom}`],
+    ["a call of a function the file makes", "", `${ALLOW}${made("make_side")}${ALLOW}SELECT make_side();\n`],
+    [
+      "a call by a bare name that an earlier file's overload of a pg_catalog function takes",
+      `${ALLOW}${made("upper", "x int")}`,
+      `${ALLOW}SELECT upper(1), '${side}', '${svc}';\n`,
+    ],
+  ])(
+    "refuses dblink_exec's CREATE DATABASE and CREATE ROLE from %s, naming both, and leaves both",
+    async (_, before, pending) => {
+      const { refused } = await checked(`${T}${DBLINK}${before}`, pending);
+      expect(refused).toContain(`database ${side} added`);
+      expect(refused).toContain(`role ${svc} added`);
+      expect(refused).toContain("on devUrl's server, as another session may have made those changes");
+      expect({ database: await databaseOf(side), role: (await roleOf(svc)).length }).toEqual({
+        database: [{ datname: side }],
+        role: 1,
+      });
+    },
+    60_000,
+  );
+});
+
+// the server's catalogs show every session's work, so only a change to an object the file names is the file's
 describe("another session's change is its own (P2; sibling: two checks on one server)", () => {
-	it.each([
-		["passes a role another session makes while the file runs, which the file does not name", false],
-		["refuses one the file names, as it could have made it", true],
-	])(
-		"%s",
-		async (_, named) => {
-			const [other] = testRoles("database_t_other")
-			/*
-			 * the file waits for the other session's role, spelled by concatenation so the file does not
-			 * name it, so the role commits between the reads around the file whatever the server's load:
-			 * a role committed after the file is no change of it (AE6, .tmp/grunt/p21/areas/pg/ae6/red.log)
-			 */
-			const tail = other.slice("database_t_".length)
-			const wait = `DO $$ BEGIN WHILE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'database_t_' || '${tail}') LOOP PERFORM pg_sleep(0.02); END LOOP; END $$`
-			const spelled = named ? `-- database:allow-unsafe: the test's name\nSELECT '${other}';\n` : ""
-			const pending = `-- atlas:txmode none\n\n-- database:allow-unsafe: the test's wait\n${wait};\n${spelled}`
-			const check = checked(T, pending)
-			/* the role is made once the file waits for it, so after the read before the file */
-			const waiting = `SELECT 1 AS n FROM pg_stat_activity WHERE query LIKE 'DO $$ BEGIN WHILE NOT EXISTS%${tail}%' AND datname LIKE 'database\\_replay\\_%'`
-			while ((await query(pgUrl(), waiting)).length === 0) await new Promise((tick) => setTimeout(tick, 25))
-			await query(pgUrl(), `CREATE ROLE ${other}`)
-			const { refused } = await check
-			expect(refused === undefined ? undefined : refused.includes(`role ${other} added`)).toBe(named ? true : undefined)
-		},
-		60_000,
-	)
+  it.each([
+    ["passes a role another session makes while the file runs, which the file does not name", false],
+    ["refuses one the file names, as it could have made it", true],
+  ])(
+    "%s",
+    async (_, named) => {
+      const [other] = testRoles("database_t_other");
+      // the file waits for the other session's role, spelled by concatenation so the file does not
+      // name it, so the role commits between the reads around the file whatever the server's load:
+      // a role committed after the file is no change of it (AE6, .tmp/grunt/p21/areas/pg/ae6/red.log)
+      const tail = other.slice("database_t_".length);
+      const wait = `DO $$ BEGIN WHILE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'database_t_' || '${tail}') LOOP PERFORM pg_sleep(0.02); END LOOP; END $$`;
+      const spelled = named ? `-- database:allow-unsafe: the test's name\nSELECT '${other}';\n` : "";
+      const pending = `-- atlas:txmode none\n\n-- database:allow-unsafe: the test's wait\n${wait};\n${spelled}`;
+      const check = checked(T, pending);
+      // the role is made once the file waits for it, so after the read before the file
+      const waiting = `SELECT 1 AS n FROM pg_stat_activity WHERE query LIKE 'DO $$ BEGIN WHILE NOT EXISTS%${tail}%' AND datname LIKE 'database\\_replay\\_%'`;
 
-	it("passes two checks on one server at once, each making a role and running bare statements", async () => {
-		const roles = testRoles("database_t_one", "database_t_two")
-		const dirs = [dir(), tempDir()]
-		try {
-			const both = roles.map(async (role, i) => {
-				const at = dirs[i] as string
-				await files(
-					`${T}-- database:allow-unsafe: the test's role\nCREATE ROLE ${role};\n`,
-					`-- atlas:txmode none\n\n-- database:allow-unsafe: the test's sleep\nSELECT pg_sleep(0.5);\nGRANT SELECT ON t TO ${role};\nSELECT pg_sleep(0.5);\n`,
-					at,
-				)
-				return withScratchDb((url) =>
-					applyWithAtlas({ ...options({ devUrl: devUrl(), url }, [], at), checkOnly: true }).then(
-						() => undefined,
-						(error: Error) => error.message,
-					),
-				)
-			})
-			expect(await Promise.all(both)).toEqual([undefined, undefined])
-		} finally {
-			rmSync(dirs[1] as string, { force: true, recursive: true })
-		}
-	}, 60_000)
-})
+      while ((await query(pgUrl(), waiting)).length === 0) await new Promise((tick) => setTimeout(tick, 25));
+      await query(pgUrl(), `CREATE ROLE ${other}`);
+      const { refused } = await check;
+      expect(refused === undefined ? undefined : refused.includes(`role ${other} added`)).toBe(
+        named ? true : undefined,
+      );
+    },
+    60_000,
+  );
 
-/* PR1 of r23: Postgres keeps no creator for a role or a database, so a change beside plain statements is another session's */
+  it("passes two checks on one server at once, each making a role and running bare statements", async () => {
+    const roles = testRoles("database_t_one", "database_t_two");
+    const dirs = [dir(), tempDir()];
+
+    try {
+      const both = roles.map(async (role, i) => {
+        const at = dirs[i] as string;
+        await files(
+          `${T}-- database:allow-unsafe: the test's role\nCREATE ROLE ${role};\n`,
+          `-- atlas:txmode none\n\n-- database:allow-unsafe: the test's sleep\nSELECT pg_sleep(0.5);\nGRANT SELECT ON t TO ${role};\nSELECT pg_sleep(0.5);\n`,
+          at,
+        );
+
+        return withScratchDb((url) =>
+          applyWithAtlas({ ...options({ devUrl: devUrl(), url }, [], at), checkOnly: true }).then(
+            () => {},
+            (error: Error) => error.message,
+          ),
+        );
+      });
+
+      expect(await Promise.all(both)).toEqual([undefined, undefined]);
+    } finally {
+      rmSync(dirs[1] as string, { force: true, recursive: true });
+    }
+  }, 60_000);
+});
+
+// PR1 of r23: Postgres keeps no creator for a role or a database, so a change beside plain statements is another session's
 describe("a file that runs only what its parse says made no change past its database (PR1 of r23; sibling: P2's spelled names)", () => {
-	it.each([
-		["a file in a transaction", ""],
-		["a txmode none file", "-- atlas:txmode none\n\n"],
-	])(
-		"passes %s of plain statements that spell a login role and a database another session makes while it runs, and leaves both",
-		async (_, mode) => {
-			const [role] = testRoles("database_t_rpt")
-			const database = unique("database_t_rptdb")
-			onTestFinished(() => query(pgUrl(), `DROP DATABASE IF EXISTS ${database} WITH (FORCE)`).then(() => undefined))
-			const check = checked(
-				T,
-				`${mode}CREATE SCHEMA ${role};\nCREATE TABLE ${role}.daily (id int);\nCREATE SCHEMA ${database};\n-- database:allow-unsafe: the test's sleep\nSELECT pg_sleep(3), '${role}' AS waiting;\n`,
-			)
-			const sleeping = `SELECT 1 AS n FROM pg_stat_activity WHERE query LIKE 'SELECT pg_sleep(3), ''${role}''%' AND datname LIKE 'database\\_replay\\_%'`
-			while ((await query(pgUrl(), sleeping)).length === 0) await new Promise((tick) => setTimeout(tick, 25))
-			await query(pgUrl(), `CREATE ROLE ${role} LOGIN PASSWORD 'bi'`)
-			await query(pgUrl(), `CREATE DATABASE ${database}`)
-			/* both committed while the file still ran, so between the reads around it */
-			const during = (await query(pgUrl(), sleeping)).length > 0
-			const { refused } = await check
-			expect({ database: await databaseOf(database), during, refused, role: await roleOf(role) }).toEqual({
-				database: [{ datname: database }],
-				during: true,
-				refused: undefined,
-				role: [{ rolconnlimit: -1, rolname: role }],
-			})
-		},
-		60_000,
-	)
-})
+  it.each([
+    ["a file in a transaction", ""],
+    ["a txmode none file", "-- atlas:txmode none\n\n"],
+  ])(
+    "passes %s of plain statements that spell a login role and a database another session makes while it runs, and leaves both",
+    async (_, mode) => {
+      const [role] = testRoles("database_t_rpt");
+      const database = unique("database_t_rptdb");
+      onTestFinished(() => query(pgUrl(), `DROP DATABASE IF EXISTS ${database} WITH (FORCE)`).then(() => {}));
+
+      const check = checked(
+        T,
+        `${mode}CREATE SCHEMA ${role};\nCREATE TABLE ${role}.daily (id int);\nCREATE SCHEMA ${database};\n-- database:allow-unsafe: the test's sleep\nSELECT pg_sleep(3), '${role}' AS waiting;\n`,
+      );
+
+      const sleeping = `SELECT 1 AS n FROM pg_stat_activity WHERE query LIKE 'SELECT pg_sleep(3), ''${role}''%' AND datname LIKE 'database\\_replay\\_%'`;
+
+      while ((await query(pgUrl(), sleeping)).length === 0) await new Promise((tick) => setTimeout(tick, 25));
+      await query(pgUrl(), `CREATE ROLE ${role} LOGIN PASSWORD 'bi'`);
+      await query(pgUrl(), `CREATE DATABASE ${database}`);
+      // both committed while the file still ran, so between the reads around it
+      const during = (await query(pgUrl(), sleeping)).length > 0;
+      const { refused } = await check;
+      expect({ database: await databaseOf(database), during, refused, role: await roleOf(role) }).toEqual({
+        database: [{ datname: database }],
+        during: true,
+        refused: undefined,
+        role: [{ rolconnlimit: -1, rolname: role }],
+      });
+    },
+    60_000,
+  );
+});
 
 /** A txmode none file whose committing DO runs `change` bare */
-const bare = (change: string) => `${NONE}DO $$ BEGIN COMMIT; EXECUTE '${change}'; END $$;\n`
+const bare = (change: string) => `${NONE}DO $$ BEGIN COMMIT; EXECUTE '${change}'; END $$;\n`;
 
-/* each catalog statement the AE6 tests make on the shared server, written to the run's log */
-const logCatalog = (statement: string): void => void process.stderr.write(`[database] AE6 catalog: ${statement}\n`)
+// each catalog statement the AE6 tests make on the shared server, written to the run's log
+const logCatalog = (statement: string): void => void process.stderr.write(`[database] AE6 catalog: ${statement}\n`);
 
 /** `statement` run on the test server as its superuser, logged first */
 async function catalog(statement: string): Promise<void> {
-	logCatalog(statement)
-	await query(pgUrl(), statement)
+  logCatalog(statement);
+  await query(pgUrl(), statement);
 }
 
-/* AE6 of r22: a bare committing DO's change to a role or setting it names by keyword, which the read must resolve */
+// AE6 of r22: a bare committing DO's change to a role or setting it names by keyword, which the read must resolve
 describe("a bare change to a row the file names by keyword is the file's (AE6; sibling: P2's spelled names)", () => {
-	it("refuses ALTER ROLE CURRENT_USER SET under a CREATEDB devUrl, naming the setting devUrl's server keeps", async () => {
-		const [role] = testRoles("database_t_kw")
-		logCatalog(
-			`CREATE ROLE ${role} LOGIN CREATEDB PASSWORD <the URL's>; DROP ROLE ${role} with dropRoles as the test ends`,
-		)
-		const dev = await asRole(pgUrl(), role, "CREATEDB")
-		try {
-			logCatalog(`ALTER ROLE CURRENT_USER SET work_mem = '9MB', as ${role}, from the check's bare DO`)
-			const { refused } = await checked(T, bare("ALTER ROLE CURRENT_USER SET work_mem = ''9MB''"), dev)
-			expect(refused).toMatch(
-				new RegExp(`; database leaves .*setting every database for ${role} added on devUrl's server`),
-			)
-		} finally {
-			await catalog(`ALTER ROLE ${role} RESET ALL`)
-		}
-	}, 60_000)
+  it("refuses ALTER ROLE CURRENT_USER SET under a CREATEDB devUrl, naming the setting devUrl's server keeps", async () => {
+    const [role] = testRoles("database_t_kw");
+    logCatalog(
+      `CREATE ROLE ${role} LOGIN CREATEDB PASSWORD <the URL's>; DROP ROLE ${role} with dropRoles as the test ends`,
+    );
+    const dev = await asRole(pgUrl(), role, "CREATEDB");
 
-	/* every role's setting is about `all`, which another test's checked file may spell, so the check runs alone (server-lock.ts) */
-	it("refuses ALTER ROLE ALL SET, naming the setting every role keeps", async () => {
-		await writingServer(async () => {
-			try {
-				logCatalog("ALTER ROLE ALL SET database_t.probe = 'leaked', from the check's bare DO")
-				const { refused } = await checked(T, bare("ALTER ROLE ALL SET database_t.probe = ''leaked''"))
-				expect(refused).toContain("database leaves setting every database for every role ")
-			} finally {
-				await catalog("ALTER ROLE ALL RESET database_t.probe")
-			}
-		})
-	}, 60_000)
-})
+    try {
+      logCatalog(`ALTER ROLE CURRENT_USER SET work_mem = '9MB', as ${role}, from the check's bare DO`);
+      const { refused } = await checked(T, bare("ALTER ROLE CURRENT_USER SET work_mem = ''9MB''"), dev);
+      expect(refused).toMatch(
+        new RegExp(`; database leaves .*setting every database for ${role} added on devUrl's server`),
+      );
+    } finally {
+      await catalog(`ALTER ROLE ${role} RESET ALL`);
+    }
+  }, 60_000);
 
-/* PR2 of r23: the trial in a transaction advanced a sequence, which its ROLLBACK keeps, so the bare
-   rerun wrote other ids than apply's and a later statement naming them failed check alone */
+  // every role's setting is about `all`, which another test's checked file may spell, so the check runs alone (server-lock.ts)
+  it("refuses ALTER ROLE ALL SET, naming the setting every role keeps", async () => {
+    await writingServer(async () => {
+      try {
+        logCatalog("ALTER ROLE ALL SET database_t.probe = 'leaked', from the check's bare DO");
+        const { refused } = await checked(T, bare("ALTER ROLE ALL SET database_t.probe = ''leaked''"));
+        expect(refused).toContain("database leaves setting every database for every role ");
+      } finally {
+        await catalog("ALTER ROLE ALL RESET database_t.probe");
+      }
+    });
+  }, 60_000);
+});
+
+// PR2 of r23: the trial in a transaction advanced a sequence, which its ROLLBACK keeps, so the bare
+// rerun wrote other ids than apply's and a later statement naming them failed check alone
 describe("a statement retried bare after its trial writes the ids apply writes (PR2 of r23)", () => {
-	const PLANS = `${T}CREATE TABLE plans (id serial PRIMARY KEY, name text NOT NULL);
-CREATE PROCEDURE backfill() LANGUAGE plpgsql AS $$ BEGIN FOR i IN 1..3 LOOP INSERT INTO plans (name) VALUES ('plan ' || i); COMMIT; END LOOP; END $$;\n`
-	const NAMING =
-		"CREATE TABLE accounts (id int PRIMARY KEY, plan_id int REFERENCES plans (id));\nINSERT INTO accounts VALUES (1, 1), (3, 3);\n"
+  const PLANS = `${T}CREATE TABLE plans (id serial PRIMARY KEY, name text NOT NULL);
+CREATE PROCEDURE backfill() LANGUAGE plpgsql AS $$ BEGIN FOR i IN 1..3 LOOP INSERT INTO plans (name) VALUES ('plan ' || i); COMMIT; END LOOP; END $$;\n`;
 
-	it.each([
-		[
-			"a DO block that commits per row",
-			"DO $$ BEGIN FOR i IN 1..3 LOOP INSERT INTO plans (name) VALUES ('plan ' || i); COMMIT; END LOOP; END $$;\n",
-		],
-		["a CALL of a procedure that commits per row", "CALL backfill();\n"],
-		["a DO block calling that procedure", "DO $$ BEGIN CALL backfill(); END $$;\n"],
-	])(
-		"passes %s, then a statement naming ids 1 and 3, as apply runs them",
-		async (_, body) => {
-			expect(await checkThenApply(PLANS, `${NONE}${body}${NAMING}`)).toEqual({ apply: undefined, check: undefined })
-		},
-		60_000,
-	)
+  const NAMING =
+    "CREATE TABLE accounts (id int PRIMARY KEY, plan_id int REFERENCES plans (id));\nINSERT INTO accounts VALUES (1, 1), (3, 3);\n";
 
-	it("leaves a sequence the statement never advanced where it was (sibling)", async () => {
-		const body = "DO $$ BEGIN UPDATE t SET w = 1; COMMIT; END $$;\nINSERT INTO plans (name) VALUES ('first');\n"
-		const first =
-			"CREATE TABLE accounts (id int PRIMARY KEY, plan_id int REFERENCES plans (id));\nINSERT INTO accounts VALUES (1, 1);\n"
-		expect(await checkThenApply(PLANS, `${NONE}${body}${first}`)).toEqual({ apply: undefined, check: undefined })
-	}, 60_000)
-})
+  it.each([
+    [
+      "a DO block that commits per row",
+      "DO $$ BEGIN FOR i IN 1..3 LOOP INSERT INTO plans (name) VALUES ('plan ' || i); COMMIT; END LOOP; END $$;\n",
+    ],
+    ["a CALL of a procedure that commits per row", "CALL backfill();\n"],
+    ["a DO block calling that procedure", "DO $$ BEGIN CALL backfill(); END $$;\n"],
+  ])(
+    "passes %s, then a statement naming ids 1 and 3, as apply runs them",
+    async (_, body) => {
+      expect(await checkThenApply(PLANS, `${NONE}${body}${NAMING}`)).toEqual({ apply: undefined, check: undefined });
+    },
+    60_000,
+  );
+
+  it("leaves a sequence the statement never advanced where it was (sibling)", async () => {
+    const body = "DO $$ BEGIN UPDATE t SET w = 1; COMMIT; END $$;\nINSERT INTO plans (name) VALUES ('first');\n";
+
+    const first =
+      "CREATE TABLE accounts (id int PRIMARY KEY, plan_id int REFERENCES plans (id));\nINSERT INTO accounts VALUES (1, 1);\n";
+
+    expect(await checkThenApply(PLANS, `${NONE}${body}${first}`)).toEqual({ apply: undefined, check: undefined });
+  }, 60_000);
+});

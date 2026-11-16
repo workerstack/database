@@ -1,273 +1,331 @@
-import { declarationOf, declaredNames, isHiddenMember, walkPublic } from "./public-declarations.js"
-import { findPackageRoot, publicSurface } from "./public-surface.js"
+import { declarationOf, declaredNames, isHiddenMember, walkPublic } from "./public-declarations.js";
+import { findPackageRoot, publicSurface } from "./public-surface.js";
 
-/* Hover is the docs a consumer reads: every declaration the package's exports reach, and every member they can see on
- * it, carries a written doc, in the consumer's terms, on a shape this rule can see. */
+// Hover is the docs a consumer reads: every declaration the package's exports reach, and every member they can see on
+// it, carries a written doc, in the consumer's terms, on a shape this rule can see.
 
-const ASK = "say what a caller needs and the type does not"
+const ASK = "say what a caller needs and the type does not";
+
 const FAULTS = {
-	empty: `its JSDoc is empty: ${ASK}`,
-	inferred: "its type is inferred, so its shape goes unchecked: write the type out",
-	internal: "its JSDoc cites an internal reference, which ships to consumers: say it in their terms",
-	missing: `has no JSDoc: add a /** */ block that ${ASK.replace("say ", "says ")}`,
-	restates: `its JSDoc only restates the name: ${ASK}`,
-	sameLine: "its JSDoc shares a line with the code before it, so editors do not show it: put it on its own line",
-}
+  empty: `its JSDoc is empty: ${ASK}`,
+  inferred: "its type is inferred, so its shape goes unchecked: write the type out",
+  internal: "its JSDoc cites an internal reference, which ships to consumers: say it in their terms",
+  missing: `has no JSDoc: add a /** */ block that ${ASK.replace("say ", "says ")}`,
+  restates: `its JSDoc only restates the name: ${ASK}`,
+  sameLine: "its JSDoc shares a line with the code before it, so editors do not show it: put it on its own line",
+};
 
 // lookup-table: the words a doc may hold beside the name and still say nothing
-const STOPWORDS = new Set("a an the of for to this that is are value option options returns type property".split(" "))
-/* database's own references, which mean nothing to a consumer: a review round (r22, r22b), a milestone (M5, M75, M123), a
- * plan (plan 21), a step (B2-3) and a finding (F58, S1n, PA1, AD14). A finding id is one or two capitals and at most
- * two digits, so an SQLSTATE (XX000) and a target such as ES2022 or HS256 stay clean by shape. */
-const INTERNAL = /\br[0-9]{2,}[a-z]?\b|\bM[0-9]{3}\b|\b[Pp]lan [0-9]+\b|\bB[0-9]+-[0-9]+\b/
-/* the reviews, sessions and scratch database's own work is named by: a round (round two, round-five), a named review (the
- * 0.15.0 review, the area D review, the consumers review), an area (area D), a session (database-9d) and a scratch log
- * (.tmp/grunt/…). Each is internal whatever its number or word, so they report by shape, with no list to keep. */
+const STOPWORDS = new Set("a an the of for to this that is are value option options returns type property".split(" "));
+
+// database's own references, which mean nothing to a consumer: a review round (r22, r22b), a milestone (M5, M75, M123), a
+// plan (plan 21), a step (B2-3) and a finding (F58, S1n, PA1, AD14). A finding id is one or two capitals and at most
+// two digits, so an SQLSTATE (XX000) and a target such as ES2022 or HS256 stay clean by shape.
+const INTERNAL = /\br[0-9]{2,}[a-z]?\b|\bM[0-9]{3}\b|\b[Pp]lan [0-9]+\b|\bB[0-9]+-[0-9]+\b/;
+
+// the reviews, sessions and scratch database's own work is named by: a round (round two, round-five), a named review (the
+// 0.15.0 review, the area D review, the consumers review), an area (area D), a session (database-9d) and a scratch log
+// (.tmp/grunt/…). Each is internal whatever its number or word, so they report by shape, with no list to keep.
 const REVIEWS =
-	/\bround[- ](?:[0-9]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b|\b(?:the|[0-9]+(?:\.[0-9]+)+)(?: [\w.'-]+){0,3} review\b/i
-const SESSIONS = /\barea [A-Z]\b|\bdatabase-[0-9a-f]{2}\b|\.tmp\/grunt\b/
-const FINDING_ID = /\b[A-Z]{1,2}[0-9]{1,2}[a-z]?\b/g
-/* a finding id written lowercase, two letters and at most two digits (pa10, sl3n, qe8), in prose: a code span or a
- * path segment names code, not a finding, so `pa1` and sl3/probe.log stay clean. database writes a one-letter id in
- * capitals, so a register (r2), a version (v1) and a name such as utf8, es2022 or h264 stay clean by shape. */
-const LOWER_ID = /(?<![\w./:@#-])[a-z]{2}[0-9]{1,2}[a-z]?(?![\w/:@#-]|\.\w)/g
-/* lookup-table: the real names a finding id's shape takes, each kept because a consumer's doc means the thing itself.
- * A name not listed reports, so a new one is added here by a visible change, never passed in silence. */
+  /\bround[- ](?:[0-9]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b|\b(?:the|[0-9]+(?:\.[0-9]+)+)(?: [\w.'-]+){0,3} review\b/i;
+
+const SESSIONS = /\barea [A-Z]\b|\bdatabase-[0-9a-f]{2}\b|\.tmp\/grunt\b/;
+const FINDING_ID = /\b[A-Z]{1,2}[0-9]{1,2}[a-z]?\b/g;
+
+// a finding id written lowercase, two letters and at most two digits (pa10, sl3n, qe8), in prose: a code span or a
+// path segment names code, not a finding, so `pa1` and sl3/probe.log stay clean. database writes a one-letter id in
+// capitals, so a register (r2), a version (v1) and a name such as utf8, es2022 or h264 stay clean by shape.
+const LOWER_ID = /(?<![\w./:@#-])[a-z]{2}[0-9]{1,2}[a-z]?(?![\w/:@#-]|\.\w)/g;
+
+// lookup-table: the real names a finding id's shape takes, each kept because a consumer's doc means the thing itself.
+// A name not listed reports, so a new one is added here by a visible change, never passed in silence.
 const LOOK_ALIKES = new Map([
-	["D1", "Cloudflare D1, the database that database's sqlite/d1 entries run on"],
-	["PG17", "Postgres 17, a server version"],
-	["RE2", "the regular expression engine a pattern constraint is written for"],
-])
+  ["D1", "Cloudflare D1, the database that database's sqlite/d1 entries run on"],
+  ["PG17", "Postgres 17, a server version"],
+  ["RE2", "the regular expression engine a pattern constraint is written for"],
+]);
 
 function citesInternal(text) {
-	const prose = text.replace(/`[^`]*`/g, " ")
-	const ids = [...(text.match(FINDING_ID) ?? []), ...(prose.match(LOWER_ID) ?? [])]
-	return [INTERNAL, REVIEWS, SESSIONS].some((shape) => shape.test(text)) || ids.some((token) => !LOOK_ALIKES.has(token))
+  const prose = text.replaceAll(/`[^`]*`/g, " ");
+  const ids = [...(text.match(FINDING_ID) ?? []), ...(prose.match(LOWER_ID) ?? [])];
+
+  return (
+    [INTERNAL, REVIEWS, SESSIONS].some((shape) => shape.test(text)) || ids.some((token) => !LOOK_ALIKES.has(token))
+  );
 }
 
 const SIGNATURES = {
-	TSCallSignatureDeclaration: "(call)",
-	TSConstructSignatureDeclaration: "(new)",
-	TSIndexSignature: "(index)",
-}
+  TSCallSignatureDeclaration: "(call)",
+  TSConstructSignatureDeclaration: "(new)",
+  TSIndexSignature: "(index)",
+};
+
 // lookup-table: the member nodes a consumer sees and a doc goes on
 const MEMBERS = new Set([
-	"AccessorProperty",
-	"MethodDefinition",
-	"PropertyDefinition",
-	"TSAbstractMethodDefinition",
-	"TSAbstractPropertyDefinition",
-	"TSEnumMember",
-	"TSMethodSignature",
-	"TSPropertySignature",
-])
+  "AccessorProperty",
+  "MethodDefinition",
+  "PropertyDefinition",
+  "TSAbstractMethodDefinition",
+  "TSAbstractPropertyDefinition",
+  "TSEnumMember",
+  "TSMethodSignature",
+  "TSPropertySignature",
+]);
 
 // lookup-table: the nodes arithmetic on literals is made of
-const LITERAL_ARITHMETIC = new Set(["BinaryExpression", "ParenthesizedExpression", "UnaryExpression"])
+const LITERAL_ARITHMETIC = new Set(["BinaryExpression", "ParenthesizedExpression", "UnaryExpression"]);
 
 function isLiteral(node) {
-	if (node === null || node === undefined) return false
-	if (node.type === "Literal") return true
-	if (node.type === "TemplateLiteral") return node.expressions.length === 0
-	if (!LITERAL_ARITHMETIC.has(node.type)) return false
-	if (node.type === "BinaryExpression") return isLiteral(node.left) && isLiteral(node.right)
-	return isLiteral(node.argument ?? node.expression)
+  if (node === null || node === undefined) return false;
+
+  if (node.type === "Literal") return true;
+
+  if (node.type === "TemplateLiteral") return node.expressions.length === 0;
+
+  if (!LITERAL_ARITHMETIC.has(node.type)) return false;
+
+  if (node.type === "BinaryExpression") return isLiteral(node.left) && isLiteral(node.right);
+
+  return isLiteral(node.argument ?? node.expression);
 }
 
 function statesItsType(init) {
-	if (init?.type === "TSSatisfiesExpression") return statesItsType(init.expression)
-	if (isLiteral(init) || init?.type === "TSAsExpression") return true
-	const isFunction = init?.type === "ArrowFunctionExpression" || init?.type === "FunctionExpression"
-	return isFunction && Boolean(init.returnType)
+  if (init?.type === "TSSatisfiesExpression") return statesItsType(init.expression);
+
+  if (isLiteral(init) || init?.type === "TSAsExpression") return true;
+  const isFunction = init?.type === "ArrowFunctionExpression" || init?.type === "FunctionExpression";
+
+  return isFunction && Boolean(init.returnType);
 }
 
 function keyName(key) {
-	if (key.type === "Identifier") return key.name
-	if (key.type === "Literal") return String(key.value)
-	if (key.type === "MemberExpression") return `${key.object.name}.${key.property.name}`
-	return key.name ?? "(computed)"
+  if (key.type === "Identifier") return key.name;
+
+  if (key.type === "Literal") return String(key.value);
+
+  if (key.type === "MemberExpression") return `${key.object.name}.${key.property.name}`;
+
+  return key.name ?? "(computed)";
 }
 
 function isUnnameableKey(node) {
-	return node.computed === true && node.key?.type === "Identifier"
+  return node.computed === true && node.key?.type === "Identifier";
 }
 
 function docText(comment) {
-	return comment.value
-		.replace(/^\*/, "")
-		.split("\n")
-		.map((line) => line.replace(/^\s*\*?\s?/, ""))
-		.join("\n")
+  return comment.value
+    .replace(/^\*/, "")
+    .split("\n")
+    .map((line) => line.replace(/^\s*\*?\s?/, ""))
+    .join("\n");
 }
 
 function words(text) {
-	return text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []
+  return text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
 }
 
 function nameWords(name) {
-	return words(name.replace(/([\p{Ll}\p{N}])(\p{Lu})/gu, "$1 $2"))
+  return words(name.replaceAll(/([\p{Ll}\p{N}])(\p{Lu})/gu, "$1 $2"));
 }
 
 function faultIn(comment, name) {
-	if (comment === undefined) return "missing"
-	const text = docText(comment)
-	const prose = text.split(/^\s*@/m)[0].trim()
-	if (prose === "") return "empty"
-	if (citesInternal(text)) return "internal"
-	const own = new Set([...nameWords(name), ...words(name)])
-	return words(prose).every((word) => own.has(word) || STOPWORDS.has(word)) ? "restates" : null
+  if (comment === undefined) return "missing";
+  const text = docText(comment);
+  const prose = text.split(/^\s*@/m)[0].trim();
+
+  if (prose === "") return "empty";
+
+  if (citesInternal(text)) return "internal";
+  const own = new Set([...nameWords(name), ...words(name)]);
+
+  return words(prose).every((word) => own.has(word) || STOPWORDS.has(word)) ? "restates" : null;
 }
 
-/* TypeScript attaches a member's doc only from the comments after a line break, so `{ /** x *\/ a: string }` is no doc */
+// TypeScript attaches a member's doc only from the comments after a line break, so `{ /** x *\/ a: string }` is no doc
 function sharesLine(context, comment) {
-	const text = context.sourceCode.getText()
-	return text.slice(text.lastIndexOf("\n", comment.start) + 1, comment.start).trim() !== ""
+  const text = context.sourceCode.getText();
+
+  return text.slice(text.lastIndexOf("\n", comment.start) + 1, comment.start).trim() !== "";
 }
 
 function jsdocOf(context, node) {
-	const comments = context.sourceCode.getCommentsBefore(node)
-	return comments.findLast((comment) => comment.type === "Block" && comment.value.startsWith("*"))
+  const comments = context.sourceCode.getCommentsBefore(node);
+
+  return comments.findLast((comment) => comment.type === "Block" && comment.value.startsWith("*"));
 }
 
-/* the walk of one public declaration; `label` is `Owner.member`, `name` the part a doc may not merely restate */
+// the walk of one public declaration; `label` is `Owner.member`, `name` the part a doc may not merely restate
 function checker(context, owner, entry) {
-	const report = (fault, node, label) =>
-		context.report({ message: `\`${label}\` is public through "${entry}" and ${FAULTS[fault]}`, node })
-	const check = (node, label, name) => {
-		const comment = jsdocOf(context, node)
-		const inline = comment !== undefined && node.type !== "TSParameterProperty" && sharesLine(context, comment)
-		const fault = inline ? "sameLine" : faultIn(comment, name)
-		if (fault !== null) report(fault, node, label)
-	}
-	const inferred = (node, label) => report("inferred", node, label)
-	return { check, inferred, owner }
+  const report = (fault, node, label) =>
+    context.report({ message: `\`${label}\` is public through "${entry}" and ${FAULTS[fault]}`, node });
+
+  const check = (node, label, name) => {
+    const comment = jsdocOf(context, node);
+    const inline = comment !== undefined && node.type !== "TSParameterProperty" && sharesLine(context, comment);
+    const fault = inline ? "sameLine" : faultIn(comment, name);
+
+    if (fault !== null) report(fault, node, label);
+  };
+
+  const inferred = (node, label) => report("inferred", node, label);
+
+  return { check, inferred, owner };
 }
 
 function methodKey(node) {
-	return `${node.static ? "static " : ""}${keyName(node.key)}`
+  return `${node.static ? "static " : ""}${keyName(node.key)}`;
 }
 
 function isBareClassMember(body, node) {
-	if (node.type !== "MethodDefinition") return false
-	const siblings = body.filter(
-		(other) => other !== node && other.type === node.type && methodKey(other) === methodKey(node),
-	)
-	if (node.kind === "set") return siblings.some((other) => other.kind === "get")
-	const signed = siblings.some((other) => other.value.type === "TSEmptyBodyFunctionExpression")
-	return signed && node.value.type !== "TSEmptyBodyFunctionExpression"
+  if (node.type !== "MethodDefinition") return false;
+
+  const siblings = body.filter(
+    (other) => other !== node && other.type === node.type && methodKey(other) === methodKey(node),
+  );
+
+  if (node.kind === "set") return siblings.some((other) => other.kind === "get");
+  const signed = siblings.some((other) => other.value.type === "TSEmptyBodyFunctionExpression");
+
+  return signed && node.value.type !== "TSEmptyBodyFunctionExpression";
 }
 
 function checkReturn(walk, node, label) {
-	const isFunction = node.type === "MethodDefinition" && node.kind !== "constructor" && node.kind !== "set"
-	if (isFunction && node.value.body && !node.value.returnType) walk.inferred(node, label)
+  const isFunction = node.type === "MethodDefinition" && node.kind !== "constructor" && node.kind !== "set";
+
+  if (isFunction && node.value.body && !node.value.returnType) walk.inferred(node, label);
 }
 
 function checkClassValue(walk, node, label) {
-	const isProperty = node.type === "PropertyDefinition" || node.type === "AccessorProperty"
-	if (isProperty && !node.typeAnnotation && !statesItsType(node.value)) walk.inferred(node, label)
+  const isProperty = node.type === "PropertyDefinition" || node.type === "AccessorProperty";
+
+  if (isProperty && !node.typeAnnotation && !statesItsType(node.value)) walk.inferred(node, label);
 }
 
 function checkMember(walk, node, siblings) {
-	const name = keyName(node.id ?? node.key)
-	const label = `${walk.owner}.${name}`
-	if (siblings !== undefined && isBareClassMember(siblings, node)) return
-	walk.check(node, label, name)
-	checkReturn(walk, node, label)
-	checkClassValue(walk, node, label)
+  const name = keyName(node.id ?? node.key);
+  const label = `${walk.owner}.${name}`;
+
+  if (siblings !== undefined && isBareClassMember(siblings, node)) return;
+  walk.check(node, label, name);
+  checkReturn(walk, node, label);
+  checkClassValue(walk, node, label);
 }
 
 function visitorOf(walk) {
-	const visit = (node) => {
-		if (node.type === "ClassBody") return classBody(node)
-		if (node.type === "TSParameterProperty") return parameterProperty(node)
-		if (node.type === "TSConditionalType") return conditional(node)
-		if (node.type in SIGNATURES) walk.check(node, `${walk.owner}.${SIGNATURES[node.type]}`, "")
-		if (!MEMBERS.has(node.type)) return true
-		if (isUnnameableKey(node)) return false
-		checkMember(walk, node)
-		return true
-	}
-	const classBody = (body) => {
-		for (const member of body.body) {
-			/* a static block's statements run once at load and declare nothing a consumer reaches */
-			if (member.type === "StaticBlock" || isHiddenMember(member) || isUnnameableKey(member)) continue
-			/* an index signature is checked by the visit, as on an interface */
-			if (!MEMBERS.has(member.type)) {
-				walkPublic(member, visit)
-				continue
-			}
-			checkMember(walk, member, body.body)
-			walkPublic(member.type === "MethodDefinition" ? member.value : member, skipSelf(member, visit))
-		}
-		return false
-	}
-	const parameterProperty = (node) => {
-		walk.check(node, `${walk.owner}.${keyName(node.parameter)}`, keyName(node.parameter))
-		return true
-	}
-	const conditional = (node) => {
-		for (const part of [node.checkType, node.trueType, node.falseType]) walkPublic(part, visit)
-		return false
-	}
-	return visit
+  const visit = (node) => {
+    if (node.type === "ClassBody") return classBody(node);
+
+    if (node.type === "TSParameterProperty") return parameterProperty(node);
+
+    if (node.type === "TSConditionalType") return conditional(node);
+
+    if (node.type in SIGNATURES) walk.check(node, `${walk.owner}.${SIGNATURES[node.type]}`, "");
+
+    if (!MEMBERS.has(node.type)) return true;
+
+    if (isUnnameableKey(node)) return false;
+    checkMember(walk, node);
+
+    return true;
+  };
+
+  const classBody = (body) => {
+    for (const member of body.body) {
+      // a static block's statements run once at load and declare nothing a consumer reaches
+      if (member.type === "StaticBlock" || isHiddenMember(member) || isUnnameableKey(member)) continue;
+
+      // an index signature is checked by the visit, as on an interface
+      if (!MEMBERS.has(member.type)) {
+        walkPublic(member, visit);
+        continue;
+      }
+
+      checkMember(walk, member, body.body);
+      walkPublic(member.type === "MethodDefinition" ? member.value : member, skipSelf(member, visit));
+    }
+
+    return false;
+  };
+
+  const parameterProperty = (node) => {
+    walk.check(node, `${walk.owner}.${keyName(node.parameter)}`, keyName(node.parameter));
+
+    return true;
+  };
+
+  const conditional = (node) => {
+    for (const part of [node.checkType, node.trueType, node.falseType]) walkPublic(part, visit);
+
+    return false;
+  };
+
+  return visit;
 }
 
 function skipSelf(self, visit) {
-	return (node) => (node === self ? true : visit(node))
+  return (node) => (node === self ? true : visit(node));
 }
 
-/* `file` is the linted file: its rule context, the public names it declares and the functions it overloads */
+// `file` is the linted file: its rule context, the public names it declares and the functions it overloads
 function checkDeclaration(file, statement, name) {
-	const declaration = declarationOf(statement)
-	const walk = checker(file.context, name, file.names.get(name))
-	const variable = declaration.declarations?.find((d) => d.id.name === name)
-	if (declaration.type === "FunctionDeclaration" && file.signed.has(name)) return
-	walk.check(statement, name, name)
-	if (variable !== undefined && !variable.id.typeAnnotation && !statesItsType(variable.init))
-		walk.inferred(statement, name)
-	if (declaration.type === "FunctionDeclaration" && !declaration.returnType) walk.inferred(statement, name)
-	walkPublic(variable ?? declaration, visitorOf(walk))
+  const declaration = declarationOf(statement);
+  const walk = checker(file.context, name, file.names.get(name));
+  const variable = declaration.declarations?.find((d) => d.id.name === name);
+
+  if (declaration.type === "FunctionDeclaration" && file.signed.has(name)) return;
+  walk.check(statement, name, name);
+
+  if (variable !== undefined && !variable.id.typeAnnotation && !statesItsType(variable.init))
+    walk.inferred(statement, name);
+
+  if (declaration.type === "FunctionDeclaration" && !declaration.returnType) walk.inferred(statement, name);
+  walkPublic(variable ?? declaration, visitorOf(walk));
 }
 
 function signedNames(program) {
-	const signed = new Set()
-	for (const statement of program.body) {
-		const declaration = declarationOf(statement)
-		if (declaration?.type === "TSDeclareFunction") signed.add(declaration.id.name)
-	}
-	return signed
+  const signed = new Set();
+
+  for (const statement of program.body) {
+    const declaration = declarationOf(statement);
+
+    if (declaration?.type === "TSDeclareFunction") signed.add(declaration.id.name);
+  }
+
+  return signed;
 }
 
-/* `entries` names the `exports` keys whose surface is checked, so an entry stays clean once its docs are written
- * while the others are; with none, every entry is */
+// `entries` names the `exports` keys whose surface is checked, so an entry stays clean once its docs are written
+// while the others are; with none, every entry is
 const OPTIONS = {
-	additionalProperties: false,
-	properties: { entries: { items: { type: "string" }, type: "array" } },
-	type: "object",
-}
+  additionalProperties: false,
+  properties: { entries: { items: { type: "string" }, type: "array" } },
+  type: "object",
+};
 
 export const rule = {
-	create(context) {
-		const root = findPackageRoot(context.filename)
-		if (root === null) return {}
-		const surface = publicSurface(root, context.options[0]?.entries ?? null)
-		return {
-			Program(program) {
-				for (const { file, form } of surface.unknown) {
-					if (file !== context.filename) continue
-					const message = `database/public-jsdoc cannot follow ${form} here, so what it exposes goes unchecked: write it as a plain export`
-					context.report({ message, node: program })
-				}
-				const names = surface.names.get(context.filename)
-				if (names === undefined) return
-				const file = { context, names, signed: signedNames(program) }
-				for (const statement of program.body) {
-					for (const name of declaredNames(statement)) {
-						if (names.has(name)) checkDeclaration(file, statement, name)
-					}
-				}
-			},
-		}
-	},
-	meta: { schema: [OPTIONS] },
-}
+  create(context) {
+    const root = findPackageRoot(context.filename);
+
+    if (root === null) return {};
+    const surface = publicSurface(root, context.options[0]?.entries ?? null);
+
+    return {
+      Program(program) {
+        for (const { file, form } of surface.unknown) {
+          if (file !== context.filename) continue;
+          const message = `database/public-jsdoc cannot follow ${form} here, so what it exposes goes unchecked: write it as a plain export`;
+          context.report({ message, node: program });
+        }
+
+        const names = surface.names.get(context.filename);
+
+        if (names === undefined) return;
+        const file = { context, names, signed: signedNames(program) };
+
+        for (const statement of program.body)
+          for (const name of declaredNames(statement)) if (names.has(name)) checkDeclaration(file, statement, name);
+      },
+    };
+  },
+  meta: { schema: [OPTIONS] },
+};

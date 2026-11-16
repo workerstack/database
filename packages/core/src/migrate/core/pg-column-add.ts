@@ -8,66 +8,70 @@
  * IMMUTABLE or STABLE, so the rule names the steady ones, not the volatile: a history routine by its
  * own declarations, a built-in by Postgres 17's (pg-steady-builtins.ts, read from pg_proc).
  */
-import type { Finding } from "./classify-alter.ts"
-import { domainOf } from "./pg-domains.ts"
-import { STEADY_BUILTINS } from "./pg-steady-builtins.ts"
+import type { Finding } from "./classify-alter.ts";
+import { domainOf } from "./pg-domains.ts";
 import {
-	columnTypeOf,
-	type Facts,
-	functionBehind,
-	keyOf,
-	names,
-	type Node,
-	nodesOf,
-	typeOf,
-	written,
-} from "./pg-nodes.ts"
+  columnTypeOf,
+  type Facts,
+  functionBehind,
+  keyOf,
+  names,
+  type Node,
+  nodesOf,
+  typeOf,
+  written,
+} from "./pg-nodes.ts";
+import { STEADY_BUILTINS } from "./pg-steady-builtins.ts";
 
-const REWRITES = "rewrites or scans the table under an exclusive lock"
+const REWRITES = "rewrites or scans the table under an exclusive lock";
 
 /** What a foreign key on `table` referencing `referenced` checks, as rating names it */
 const foreignScan = (table: string, referenced: string): string =>
-	`scans ${table}, blocking writes to ${referenced === table ? table : `${table} and ${referenced}`}`
+  `scans ${table}, blocking writes to ${referenced === table ? table : `${table} and ${referenced}`}`;
 
 /**
  * An added column's inline foreign key: Postgres checks it against no row while the column is NULL,
  * and scans both tables once a value fills it
  */
 function inlineKey(constraints: readonly Node[], table: string, filled: boolean): Finding[] {
-	const key = constraints.find((each) => each["contype"] === "CONSTR_FOREIGN")
-	if (key === undefined || !filled) return []
-	const referenced = written(key["pktable"])
-	const note = `${foreignScan(table, referenced)}; add the column, then the foreign key NOT VALID, then VALIDATE CONSTRAINT in a later file`
-	return [{ level: "lock", note }]
+  const key = constraints.find((each) => each["contype"] === "CONSTR_FOREIGN");
+
+  if (key === undefined || !filled) return [];
+  const referenced = written(key["pktable"]);
+  const note = `${foreignScan(table, referenced)}; add the column, then the foreign key NOT VALID, then VALIDATE CONSTRAINT in a later file`;
+
+  return [{ level: "lock", note }];
 }
 
 // lookup-table: the functions a default computes a value of its own for each row with
 const DISTINCT = /* @__PURE__ */ new Set([
-	"clock_timestamp",
-	"gen_random_uuid",
-	"nextval",
-	"random",
-	"timeofday",
-	"uuid_generate_v1",
-	"uuid_generate_v1mc",
-	"uuid_generate_v4",
-])
+  "clock_timestamp",
+  "gen_random_uuid",
+  "nextval",
+  "random",
+  "timeofday",
+  "uuid_generate_v1",
+  "uuid_generate_v1mc",
+  "uuid_generate_v4",
+]);
 
 // lookup-table: the serial types, each a sequence's nextval() as the column's default
-const SERIALS = /* @__PURE__ */ new Set(["bigserial", "serial", "serial2", "serial4", "serial8", "smallserial"])
+const SERIALS = /* @__PURE__ */ new Set(["bigserial", "serial", "serial2", "serial4", "serial8", "smallserial"]);
 
 /** The inline constraints of the column an AT_AddColumn command adds */
 const inlineConstraints = (cmd: Node): Node[] =>
-	((((cmd["def"] as Node)["ColumnDef"] as Node)["constraints"] as Node[] | undefined) ?? []).map(
-		(each) => each["Constraint"] as Node,
-	)
+  ((((cmd["def"] as Node)["ColumnDef"] as Node)["constraints"] as Node[] | undefined) ?? []).map(
+    (each) => each["Constraint"] as Node,
+  );
 
 /** Whether the function `parts` names is known not to be volatile: a steady built-in, or a history routine every overload of which says IMMUTABLE or STABLE */
 function steady(parts: readonly string[], facts: Facts): boolean {
-	const routine = facts.routines.get(keyOf(parts, facts.schema))
-	if (routine !== undefined) return [...routine.signatures.values()].every((volatility) => volatility !== "volatile")
-	const builtin = parts.length === 1 || (parts.length === 2 && parts[0] === "pg_catalog")
-	return builtin && STEADY_BUILTINS.has(parts.at(-1) as string)
+  const routine = facts.routines.get(keyOf(parts, facts.schema));
+
+  if (routine !== undefined) return [...routine.signatures.values()].every((volatility) => volatility !== "volatile");
+  const builtin = parts.length === 1 || (parts.length === 2 && parts[0] === "pg_catalog");
+
+  return builtin && STEADY_BUILTINS.has(parts.at(-1) as string);
 }
 
 /**
@@ -75,16 +79,18 @@ function steady(parts: readonly string[], facts: Facts): boolean {
  * operator or a cast a migration defined, which Postgres calls as it would the function
  */
 const callsIn = (expr: unknown, facts: Facts): string[][] =>
-	nodesOf(expr).flatMap(([type, node]) => {
-		if (type === "FuncCall") return [names(node["funcname"])]
-		const behind = functionBehind(type, node, facts)
-		return behind === undefined ? [] : [behind.fn.split(".")]
-	})
+  nodesOf(expr).flatMap(([type, node]) => {
+    if (type === "FuncCall") return [names(node["funcname"])];
+    const behind = functionBehind(type, node, facts);
+
+    return behind === undefined ? [] : [behind.fn.split(".")];
+  });
 
 /** The default expressions an added column takes: its own, or with none, its domain's `fill` */
 function defaultsOf(constraints: readonly Node[], fill: unknown): unknown[] {
-	const own = constraints.filter((each) => each["contype"] === "CONSTR_DEFAULT").map((each) => each["raw_expr"])
-	return own.length > 0 || fill === undefined ? own : [fill]
+  const own = constraints.filter((each) => each["contype"] === "CONSTR_DEFAULT").map((each) => each["raw_expr"]);
+
+  return own.length > 0 || fill === undefined ? own : [fill];
 }
 
 /**
@@ -96,26 +102,29 @@ function defaultsOf(constraints: readonly Node[], fill: unknown): unknown[] {
  * domain's.
  */
 function fillOf(column: Node, constraints: readonly Node[], facts: Facts) {
-	const has = (type: string) => constraints.some((each) => each["contype"] === type)
-	/* an array of a domain takes no default, and meets no constraint, of its element's domain */
-	const domain =
-		columnTypeOf(column, facts.schema).dims === 0
-			? domainOf(typeOf(column["typeName"], facts.schema), facts)
-			: undefined
-	const defaults = defaultsOf(constraints, domain?.fill)
-	const calls = callsIn(defaults, facts)
-	const volatile = calls.some((parts) => DISTINCT.has(parts.at(-1) as string))
-	const serial = SERIALS.has(names((column["typeName"] as Node)["names"]).at(-1) as string)
-	const distinct = serial || volatile || has("CONSTR_IDENTITY")
-	const filled = distinct || defaults.length > 0 || has("CONSTR_GENERATED")
-	return {
-		/* a value that fills the rows meets a CHECK of the domain on each one */
-		checksDefault: domain?.checked === true && filled,
-		distinct,
-		domain,
-		filled,
-		rewrites: calls.some((parts) => !steady(parts, facts)),
-	}
+  const has = (type: string) => constraints.some((each) => each["contype"] === type);
+
+  // an array of a domain takes no default, and meets no constraint, of its element's domain
+  const domain =
+    columnTypeOf(column, facts.schema).dims === 0
+      ? domainOf(typeOf(column["typeName"], facts.schema), facts)
+      : undefined;
+
+  const defaults = defaultsOf(constraints, domain?.fill);
+  const calls = callsIn(defaults, facts);
+  const volatile = calls.some((parts) => DISTINCT.has(parts.at(-1) as string));
+  const serial = SERIALS.has(names((column["typeName"] as Node)["names"]).at(-1) as string);
+  const distinct = serial || volatile || has("CONSTR_IDENTITY");
+  const filled = distinct || defaults.length > 0 || has("CONSTR_GENERATED");
+
+  return {
+    // a value that fills the rows meets a CHECK of the domain on each one
+    checksDefault: domain?.checked === true && filled,
+    distinct,
+    domain,
+    filled,
+    rewrites: calls.some((parts) => !steady(parts, facts)),
+  };
 }
 
 /**
@@ -124,9 +133,10 @@ function fillOf(column: Node, constraints: readonly Node[], facts: Facts) {
  * never fails (the reviewer's ruling 1 on 4.1)
  */
 function rewriteNote(column: Node, checksDefault: boolean, facts: Facts): string {
-	if (!checksDefault) return REWRITES
-	const domain = typeOf(column["typeName"], facts.schema)
-	return `${REWRITES}; Postgres checks the default against ${domain}'s constraints on every existing row, and fails if any row's value breaks one`
+  if (!checksDefault) return REWRITES;
+  const domain = typeOf(column["typeName"], facts.schema);
+
+  return `${REWRITES}; Postgres checks the default against ${domain}'s constraints on every existing row, and fails if any row's value breaks one`;
 }
 
 /**
@@ -135,17 +145,20 @@ function rewriteNote(column: Node, checksDefault: boolean, facts: Facts): string
  * table, default or none.
  */
 function addColumn(cmd: Node, table: string, { facts }: { facts: Facts }): Finding[] {
-	const constraints = inlineConstraints(cmd)
-	const has = (type: string) => constraints.some((each) => each["contype"] === type)
-	const column = (cmd["def"] as Node)["ColumnDef"] as Node
-	const { checksDefault, distinct, domain, filled, rewrites } = fillOf(column, constraints, facts)
-	const notNull = has("CONSTR_NOTNULL") || domain?.notNull === true
-	const scans = has("CONSTR_CHECK") || domain?.constrained === true
-	const findings: Finding[] = []
-	if ((notNull && !filled) || (has("CONSTR_PRIMARY") && !distinct)) findings.push({ level: "unsafe" })
-	if (distinct || rewrites || has("CONSTR_GENERATED") || scans)
-		findings.push({ level: "lock", note: rewriteNote(column, checksDefault, facts) })
-	return [...findings, ...inlineKey(constraints, table, filled)]
+  const constraints = inlineConstraints(cmd);
+  const has = (type: string) => constraints.some((each) => each["contype"] === type);
+  const column = (cmd["def"] as Node)["ColumnDef"] as Node;
+  const { checksDefault, distinct, domain, filled, rewrites } = fillOf(column, constraints, facts);
+  const notNull = has("CONSTR_NOTNULL") || domain?.notNull === true;
+  const scans = has("CONSTR_CHECK") || domain?.constrained === true;
+  const findings: Finding[] = [];
+
+  if ((notNull && !filled) || (has("CONSTR_PRIMARY") && !distinct)) findings.push({ level: "unsafe" });
+
+  if (distinct || rewrites || has("CONSTR_GENERATED") || scans)
+    findings.push({ level: "lock", note: rewriteNote(column, checksDefault, facts) });
+
+  return [...findings, ...inlineKey(constraints, table, filled)];
 }
 
-export { addColumn, foreignScan, inlineConstraints, REWRITES }
+export { addColumn, foreignScan, inlineConstraints, REWRITES };

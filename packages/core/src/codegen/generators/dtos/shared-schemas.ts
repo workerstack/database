@@ -2,29 +2,31 @@
  * Cross-entity dedup: Zod expressions repeated across entities become one constant in
  * `_shared`, and every entity references it.
  */
-import { createHash } from "node:crypto"
-import type { ImportsMeta } from "../../analyzer-types.ts"
-import type { SharedSchema, TableInfo } from "./dto-types.ts"
-import { byCodeUnit } from "../../utils/order.ts"
+import { createHash } from "node:crypto";
+
+import type { ImportsMeta } from "../../analyzer-types.ts";
+import { byCodeUnit } from "../../utils/order.ts";
+import type { SharedSchema, TableInfo } from "./dto-types.ts";
 
 /**
  * Base Zod type aliases — each constructor called once in shared, everything chains on it.
  * Order matters: longer prefixes first to avoid partial matches.
  */
 export const BASE_TYPE_ALIASES: Array<[string, string]> = [
-	["z.number().int().nonnegative()", "_intNN"],
-	["z.number().int()", "_int"],
-	["z.number()", "_num"],
-	["z.string()", "_str"],
-	["z.boolean()", "_bool"],
-	["z.email()", "_eml"],
-	["z.url()", "_url"],
-]
+  ["z.number().int().nonnegative()", "_intNN"],
+  ["z.number().int()", "_int"],
+  ["z.number()", "_num"],
+  ["z.string()", "_str"],
+  ["z.boolean()", "_bool"],
+  ["z.email()", "_eml"],
+  ["z.url()", "_url"],
+];
 
 /** Replace z.string() → _str, z.number().int() → _int, etc. in a zodType string */
 export function rewriteBaseTypes(zodType: string): string {
-	const alias = BASE_TYPE_ALIASES.find(([from]) => zodType.startsWith(from))
-	return alias === undefined ? zodType : alias[1] + zodType.slice(alias[0].length)
+  const alias = BASE_TYPE_ALIASES.find(([from]) => zodType.startsWith(from));
+
+  return alias === undefined ? zodType : alias[1] + zodType.slice(alias[0].length);
 }
 
 /**
@@ -33,15 +35,19 @@ export function rewriteBaseTypes(zodType: string): string {
  * is then inside the expression, and cutting there would leave a broken one
  */
 function stripMeta(zodType: string): [string, string] {
-	const metaIdx = zodType.lastIndexOf(".meta(")
-	if (metaIdx === -1) return [zodType, ""]
-	let depth = 0
-	for (let i = metaIdx + 5; i < zodType.length; i++) {
-		depth += zodType[i] === "(" ? 1 : zodType[i] === ")" ? -1 : 0
-		if (depth === 0)
-			return i === zodType.length - 1 ? [zodType.slice(0, metaIdx), zodType.slice(metaIdx)] : [zodType, ""]
-	}
-	return [zodType, ""]
+  const metaIdx = zodType.lastIndexOf(".meta(");
+
+  if (metaIdx === -1) return [zodType, ""];
+  let depth = 0;
+
+  for (let i = metaIdx + 5; i < zodType.length; i++) {
+    depth += zodType[i] === "(" ? 1 : zodType[i] === ")" ? -1 : 0;
+
+    if (depth === 0)
+      return i === zodType.length - 1 ? [zodType.slice(0, metaIdx), zodType.slice(metaIdx)] : [zodType, ""];
+  }
+
+  return [zodType, ""];
 }
 
 /**
@@ -51,36 +57,41 @@ function stripMeta(zodType: string): [string, string] {
  * is shared whatever keys its columns publish
  */
 function layersOf(zodType: string): { base: string; keys: string; nullable: string; optional: string } {
-	const optional = zodType.endsWith(".optional()") ? ".optional()" : ""
-	const [before, last] = stripMeta(zodType.slice(0, zodType.length - optional.length))
-	const keys = last.startsWith('.meta({"x-database-') ? last : ""
-	const rest = keys === "" ? zodType.slice(0, zodType.length - optional.length) : before
-	const wrapper = `${keys}.nullable()`
-	const nullable = keys !== "" && rest.endsWith(wrapper) ? wrapper : rest.endsWith(".nullable()") ? ".nullable()" : ""
-	return { base: rest.slice(0, rest.length - nullable.length), keys, nullable, optional }
+  const optional = zodType.endsWith(".optional()") ? ".optional()" : "";
+  const [before, last] = stripMeta(zodType.slice(0, zodType.length - optional.length));
+  const keys = last.startsWith('.meta({"x-database-') ? last : "";
+  const rest = keys === "" ? zodType.slice(0, zodType.length - optional.length) : before;
+  const wrapper = `${keys}.nullable()`;
+  const nullable = keys !== "" && rest.endsWith(wrapper) ? wrapper : rest.endsWith(".nullable()") ? ".nullable()" : "";
+
+  return { base: rest.slice(0, rest.length - nullable.length), keys, nullable, optional };
 }
 
 /** Whether `zodType` names none of the identifiers the shared file cannot import (enum consts, schemas). */
 function canBeShared(zodType: string, external: ReadonlySet<string>): boolean {
-	return [...external].every((id) => !new RegExp(`(?<![\\w$.])${id.replace(/[$]/g, "\\$")}(?![\\w$])`).test(zodType))
+  return [...external].every(
+    (id) => !new RegExp(`(?<![\\w$.])${id.replaceAll(/[$]/g, "\\$")}(?![\\w$])`).test(zodType),
+  );
 }
 
-type Usage = { counts: Map<string, number> }
+type Usage = { counts: Map<string, number> };
 
 /** How often each shareable zodType occurs: the shared file's use counts */
 function usageOf(tables: TableInfo[], external: ReadonlySet<string>): Usage {
-	const usage: Usage = { counts: new Map() }
-	for (const table of tables) {
-		for (const { zodType } of table.fields) {
-			if (!canBeShared(zodType, external)) continue
-			/* a field's keys stay with it, so what it counts toward is its shape without them */
-			const { base, nullable, optional } = layersOf(zodType)
-			/* one whose keys sit on its member too uses the base's shared name, never a variant */
-			const shape = nullable.startsWith(".meta(") ? base : base + nullable + optional
-			usage.counts.set(shape, (usage.counts.get(shape) ?? 0) + 1)
-		}
-	}
-	return usage
+  const usage: Usage = { counts: new Map() };
+
+  for (const table of tables) {
+    for (const { zodType } of table.fields) {
+      if (!canBeShared(zodType, external)) continue;
+      // a field's keys stay with it, so what it counts toward is its shape without them
+      const { base, nullable, optional } = layersOf(zodType);
+      // one whose keys sit on its member too uses the base's shared name, never a variant
+      const shape = nullable.startsWith(".meta(") ? base : base + nullable + optional;
+      usage.counts.set(shape, (usage.counts.get(shape) ?? 0) + 1);
+    }
+  }
+
+  return usage;
 }
 
 /**
@@ -91,11 +102,12 @@ function usageOf(tables: TableInfo[], external: ReadonlySet<string>): Usage {
  * code-unit order, so the shared file's order is its content's too.
  */
 function sharedCores(usage: Usage): string[] {
-	const cores = new Set([...usage.counts.keys()].map((zodType) => stripMeta(layersOf(zodType).base)[0]))
-	return [...cores].filter((core) => !/^[\w$]+$/.test(rewriteBaseTypes(core))).sort(byCodeUnit)
+  const cores = new Set([...usage.counts.keys()].map((zodType) => stripMeta(layersOf(zodType).base)[0]));
+
+  return [...cores].filter((core) => !/^[\w$]+$/.test(rewriteBaseTypes(core))).sort(byCodeUnit);
 }
 
-const digestOf = (zodType: string) => createHash("sha256").update(zodType).digest("hex")
+const digestOf = (zodType: string) => createHash("sha256").update(zodType).digest("hex");
 
 /**
  * Emits each shared schema under a name its own code gives, `_z_<8 hex>`, so adding a column to
@@ -103,47 +115,55 @@ const digestOf = (zodType: string) => createHash("sha256").update(zodType).diges
  * (`colliding`, read from every schema the run names) each take 16, whichever is added first.
  */
 class SharedNames {
-	readonly result = new Map<string, SharedSchema>()
-	/* a field and its assignment, no parameter property, so a consumer's erasableSyntaxOnly takes the file */
-	private readonly colliding: ReadonlySet<string>
+  readonly result = new Map<string, SharedSchema>();
+  // a field and its assignment, no parameter property, so a consumer's erasableSyntaxOnly takes the file
+  private readonly colliding: ReadonlySet<string>;
 
-	constructor(colliding: ReadonlySet<string> = new Set()) {
-		this.colliding = colliding
-	}
+  constructor(colliding: ReadonlySet<string> = new Set()) {
+    this.colliding = colliding;
+  }
 
-	add(zodType: string, code: string, count: number): string {
-		const digest = digestOf(zodType)
-		const short = digest.slice(0, 8)
-		const name = `_z_${this.colliding.has(short) ? digest.slice(0, 16) : short}`
-		this.result.set(zodType, { code, count, name })
-		return name
-	}
+  add(zodType: string, code: string, count: number): string {
+    const digest = digestOf(zodType);
+    const short = digest.slice(0, 8);
+    const name = `_z_${this.colliding.has(short) ? digest.slice(0, 16) : short}`;
+    this.result.set(zodType, { code, count, name });
+
+    return name;
+  }
 }
 
 /** The 8-hex prefixes two or more of `zodTypes` share */
 function collidingPrefixes(zodTypes: Iterable<string>): Set<string> {
-	const seen = new Set<string>()
-	const out = new Set<string>()
-	for (const zodType of zodTypes) {
-		const short = digestOf(zodType).slice(0, 8)
-		if (seen.has(short)) out.add(short)
-		seen.add(short)
-	}
-	return out
+  const seen = new Set<string>();
+  const out = new Set<string>();
+
+  for (const zodType of zodTypes) {
+    const short = digestOf(zodType).slice(0, 8);
+
+    if (seen.has(short)) out.add(short);
+    seen.add(short);
+  }
+
+  return out;
 }
 
 /** A shared base and its variants: `.nullable()`, `.nullable().optional()`, `.optional()`. */
 function addVariants(names: SharedNames, base: string, counts: Map<string, number>): void {
-	const count = (zodType: string) => counts.get(zodType) ?? 0
-	const baseName = names.add(base, rewriteBaseTypes(base), count(base))
-	const nullable = `${base}.nullable()`
-	const nullableOptional = `${base}.nullable().optional()`
-	if (count(nullable) > 0 || count(nullableOptional) > 0) {
-		const nullableName = names.add(nullable, `${baseName}.nullable()`, count(nullable))
-		if (count(nullableOptional) > 0) names.add(nullableOptional, `${nullableName}.optional()`, count(nullableOptional))
-	}
-	const optional = `${base}.optional()`
-	if (count(optional) > 0) names.add(optional, `${baseName}.optional()`, count(optional))
+  const count = (zodType: string) => counts.get(zodType) ?? 0;
+  const baseName = names.add(base, rewriteBaseTypes(base), count(base));
+  const nullable = `${base}.nullable()`;
+  const nullableOptional = `${base}.nullable().optional()`;
+
+  if (count(nullable) > 0 || count(nullableOptional) > 0) {
+    const nullableName = names.add(nullable, `${baseName}.nullable()`, count(nullable));
+
+    if (count(nullableOptional) > 0) names.add(nullableOptional, `${nullableName}.optional()`, count(nullableOptional));
+  }
+
+  const optional = `${base}.optional()`;
+
+  if (count(optional) > 0) names.add(optional, `${baseName}.optional()`, count(optional));
 }
 
 /**
@@ -152,22 +172,25 @@ function addVariants(names: SharedNames, base: string, counts: Map<string, numbe
  * Shared base schemas get one constant, variants chain on top: `_z0.nullable()`.
  */
 export function buildSharedSchemas(tables: TableInfo[], imports: ImportsMeta): Map<string, SharedSchema> {
-	const external = new Set<string>([...imports.enumImports.keys(), ...imports.jsonSchemaImports])
-	const usage = usageOf(tables, external)
-	/* which schemas are shared turns on their use, never on their names: a first pass collects them,
-	   so a colliding pair is named alike in any order */
-	const run = (names: SharedNames) => {
-		for (const core of sharedCores(usage)) addVariants(names, core, usage.counts)
-		return names.result
-	}
-	return run(new SharedNames(collidingPrefixes(run(new SharedNames()).keys())))
+  const external = new Set<string>([...imports.enumImports.keys(), ...imports.jsonSchemaImports]);
+  const usage = usageOf(tables, external);
+
+  // which schemas are shared turns on their use, never on their names: a first pass collects them,
+  // so a colliding pair is named alike in any order
+  const run = (names: SharedNames) => {
+    for (const core of sharedCores(usage)) addVariants(names, core, usage.counts);
+
+    return names.result;
+  };
+
+  return run(new SharedNames(collidingPrefixes(run(new SharedNames()).keys())));
 }
 
 /** A field's code as its entity file writes it, and the names it takes from the shared file */
-export type Rewritten = { code: string; names: readonly string[] }
+export type Rewritten = { code: string; names: readonly string[] };
 
 /** A rewrite that substituted the shared schema `name` */
-const on = (name: string, code: string): Rewritten => ({ code, names: [name] })
+const on = (name: string, code: string): Rewritten => ({ code, names: [name] });
 
 /**
  * Rewrite an inline zodType to reference shared _z* constants where possible.
@@ -177,20 +200,25 @@ const on = (name: string, code: string): Rewritten => ({ code, names: [name] })
  * core `uses`; otherwise every one of `uses` and the base-type alias the rewrite put in.
  */
 export function rewriteWithShared(
-	zodType: string,
-	sharedSchemas: Map<string, SharedSchema>,
-	uses: readonly string[] = [],
+  zodType: string,
+  sharedSchemas: Map<string, SharedSchema>,
+  uses: readonly string[] = [],
 ): Rewritten {
-	const full = sharedSchemas.get(zodType)
-	if (full) return on(full.name, full.name)
-	const { base, keys, nullable, optional } = layersOf(zodType)
-	const withNullable = sharedSchemas.get(base + nullable)
-	if (withNullable) return on(withNullable.name, withNullable.name + keys + optional)
-	const shared = sharedSchemas.get(base)
-	if (shared) return on(shared.name, shared.name + nullable + keys + optional)
-	const [core, meta] = stripMeta(base)
-	const sharedCore = meta ? sharedSchemas.get(core) : undefined
-	if (sharedCore) return on(sharedCore.name, sharedCore.name + meta + nullable + keys + optional)
-	const alias = BASE_TYPE_ALIASES.find(([from]) => zodType.startsWith(from))?.[1]
-	return { code: rewriteBaseTypes(zodType), names: alias === undefined ? uses : [...uses, alias] }
+  const full = sharedSchemas.get(zodType);
+
+  if (full) return on(full.name, full.name);
+  const { base, keys, nullable, optional } = layersOf(zodType);
+  const withNullable = sharedSchemas.get(base + nullable);
+
+  if (withNullable) return on(withNullable.name, withNullable.name + keys + optional);
+  const shared = sharedSchemas.get(base);
+
+  if (shared) return on(shared.name, shared.name + nullable + keys + optional);
+  const [core, meta] = stripMeta(base);
+  const sharedCore = meta ? sharedSchemas.get(core) : undefined;
+
+  if (sharedCore) return on(sharedCore.name, sharedCore.name + meta + nullable + keys + optional);
+  const alias = BASE_TYPE_ALIASES.find(([from]) => zodType.startsWith(from))?.[1];
+
+  return { code: rewriteBaseTypes(zodType), names: alias === undefined ? uses : [...uses, alias] };
 }

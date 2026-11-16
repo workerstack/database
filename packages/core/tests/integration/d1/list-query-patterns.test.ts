@@ -3,122 +3,137 @@
  * whose only `*` are at its ends are fixed texts, found by instr, substr or `=`, which no cap
  * limits; a pattern with an inner `*` over the cap is the client's to shorten, a 400 naming it.
  */
-import { getTableColumns } from "drizzle-orm"
-import { drizzle } from "drizzle-orm/d1"
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
-import { afterEach, describe, expect, it } from "vitest"
-import { DatabaseError } from "../../../src/error.ts"
-import { createListQuerySchema } from "../../../src/query/schema.ts"
-import { applyListQuery, buildListQuery } from "../../../src/query/sqlite/build-list-query.ts"
-import { likeSearch } from "../../../src/query/sqlite/search.ts"
-import { searchText } from "../../../src/query/sqlite/search-text.ts"
-import { classifyD1Error } from "../../../src/sqlite/d1/error-handler.ts"
-import { SEALED } from "../../../src/query/__fixtures__/cursor-secret.ts"
-import { type D1Harness, d1Memory } from "../support/d1.ts"
+import { getTableColumns } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/d1";
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { afterEach, describe, expect, it } from "vitest";
 
-const post = sqliteTable("post", { _search: text("_search"), id: integer("id").primaryKey(), title: text("title") })
-const schema = createListQuerySchema({ filter: { title: "string" }, search: ["title"], sort: ["id"] })
+import { DatabaseError } from "../../../src/error.ts";
+import { SEALED } from "../../../src/query/__fixtures__/cursor-secret.ts";
+import { createListQuerySchema } from "../../../src/query/schema.ts";
+import { applyListQuery, buildListQuery } from "../../../src/query/sqlite/build-list-query.ts";
+import { searchText } from "../../../src/query/sqlite/search-text.ts";
+import { likeSearch } from "../../../src/query/sqlite/search.ts";
+import { classifyD1Error } from "../../../src/sqlite/d1/error-handler.ts";
+import { type D1Harness, d1Memory } from "../support/d1.ts";
 
-const SLUG = "how-to-run-postgres-17-on-a-laptop-without-docker"
-const CJK = "東京都庁舎東京都庁舎東京都庁舎東京"
-/* astral characters, one code point and two UTF-16 units each, which a prefix's length counts as SQLite does (Q2) */
-const ASTRAL = "😀b😀"
-const TITLES: Array<string | null> = [SLUG, CJK, "Ab-cd", null, ASTRAL]
+const post = sqliteTable("post", { _search: text("_search"), id: integer("id").primaryKey(), title: text("title") });
+const schema = createListQuerySchema({ filter: { title: "string" }, search: ["title"], sort: ["id"] });
 
-let harness: D1Harness | undefined
+const SLUG = "how-to-run-postgres-17-on-a-laptop-without-docker";
+const CJK = "東京都庁舎東京都庁舎東京都庁舎東京";
+
+// astral characters, one code point and two UTF-16 units each, which a prefix's length counts as SQLite does (Q2)
+const ASTRAL = "😀b😀";
+const TITLES: Array<string | null> = [SLUG, CJK, "Ab-cd", null, ASTRAL];
+
+let harness: D1Harness | undefined;
+
 afterEach(async () => {
-	await harness?.dispose()
-	harness = undefined
-})
+  await harness?.dispose();
+  harness = undefined;
+});
 
 /** The ids of the rows the list request `params` answers under `parse`, on a D1 holding TITLES as ids 1 to 5 */
 async function ids(params: Record<string, string>, parse = schema.parse): Promise<number[]> {
-	harness ??= await d1Memory()
-	await harness.CORE.exec("CREATE TABLE IF NOT EXISTS post (id integer PRIMARY KEY, title text, _search text)")
-	await harness.CORE.exec("DELETE FROM post")
-	for (const [i, title] of TITLES.entries())
-		await harness.CORE.prepare("INSERT INTO post VALUES (?, ?, ?)")
-			.bind(i + 1, title, title === null ? null : searchText(title))
-			.run()
-	const query = buildListQuery({
-		...SEALED,
-		parsed: parse({ order: "id.asc", ...params }) as never,
-		search: likeSearch(post._search),
-		table: post,
-	})
-	const db = drizzle((harness as NonNullable<typeof harness>).CORE)
-	const rows = await applyListQuery((extras) => db.select({ ...getTableColumns(post), ...extras }).from(post), query)
-	return rows.map((row) => row.id)
+  harness ??= await d1Memory();
+  await harness.CORE.exec("CREATE TABLE IF NOT EXISTS post (id integer PRIMARY KEY, title text, _search text)");
+  await harness.CORE.exec("DELETE FROM post");
+
+  for (const [i, title] of TITLES.entries()) {
+    await harness.CORE.prepare("INSERT INTO post VALUES (?, ?, ?)")
+      .bind(i + 1, title, title === null ? null : searchText(title))
+      .run();
+  }
+
+  const query = buildListQuery({
+    ...SEALED,
+    parsed: parse({ order: "id.asc", ...params }),
+    search: likeSearch(post._search),
+    table: post,
+  });
+
+  const db = drizzle(harness.CORE);
+  const rows = await applyListQuery((extras) => db.select({ ...getTableColumns(post), ...extras }).from(post), query);
+
+  return rows.map((row) => row.id);
 }
 
 describe("a fixed text on D1, past its LIKE cap (U21)", () => {
-	it("finds a search term of 17 CJK characters, 53 bytes folded", async () => {
-		expect(await ids({ q: CJK })).toEqual([2])
-	})
+  it("finds a search term of 17 CJK characters, 53 bytes folded", async () => {
+    expect(await ids({ q: CJK })).toEqual([2]);
+  });
 
-	it("finds a like and an ilike value on a 49-character slug", async () => {
-		expect(await ids({ filter: `title.like.*${SLUG}*` })).toEqual([1])
-		expect(await ids({ filter: `title.ilike.*${SLUG.toUpperCase()}*` })).toEqual([1])
-	})
+  it("finds a like and an ilike value on a 49-character slug", async () => {
+    expect(await ids({ filter: `title.like.*${SLUG}*` })).toEqual([1]);
+    expect(await ids({ filter: `title.ilike.*${SLUG.toUpperCase()}*` })).toEqual([1]);
+  });
 
-	it("matches each fixed shape as GLOB and LIKE did, a NULL never, like by case and ilike without", async () => {
-		const shapes: Array<[string, number[]]> = [
-			["title.like.*", [1, 2, 3, 5]],
-			["title.like.Ab*", [3]],
-			["title.like.ab*", []],
-			["title.ilike.ab*", [3]],
-			["title.like.*-cd", [3]],
-			["title.like.*o-ru*", [1]],
-			["title.like.Ab-cd", [3]],
-			["title.ilike.AB-CD", [3]],
-			["title.like.東京都*", [2]],
-			["title.like.*庁舎東京", [2]],
-			["title.like.😀b*", [5]],
-			["title.ilike.😀B*", [5]],
-			["title.like.*b😀", [5]],
-		]
-		for (const [filter, expected] of shapes) expect(await ids({ filter }), filter).toEqual(expected)
-	})
-})
+  it("matches each fixed shape as GLOB and LIKE did, a NULL never, like by case and ilike without", async () => {
+    const shapes: Array<[string, number[]]> = [
+      ["title.like.*", [1, 2, 3, 5]],
+      ["title.like.Ab*", [3]],
+      ["title.like.ab*", []],
+      ["title.ilike.ab*", [3]],
+      ["title.like.*-cd", [3]],
+      ["title.like.*o-ru*", [1]],
+      ["title.like.Ab-cd", [3]],
+      ["title.ilike.AB-CD", [3]],
+      ["title.like.東京都*", [2]],
+      ["title.like.*庁舎東京", [2]],
+      ["title.like.😀b*", [5]],
+      ["title.ilike.😀B*", [5]],
+      ["title.like.*b😀", [5]],
+    ];
+
+    for (const [filter, expected] of shapes) expect(await ids({ filter }), filter).toEqual(expected);
+  });
+});
 
 describe("a pattern on D1 past its LIKE cap (U21)", () => {
-	/* Q8 of the 0.14.1 review: the list schema measures the pattern as escaped, so D1 never reads a row of it */
-	it("is refused by the list schema, with its measured size", () => {
-		expect(() => schema.parse({ filter: `title.like.how*${SLUG}` })).toThrow(
-			"Filter pattern too long for 'title': 53 bytes once escaped (max 50)",
-		)
-	})
+  // Q8 of the 0.14.1 review: the list schema measures the pattern as escaped, so D1 never reads a row of it
+  it("is refused by the list schema, with its measured size", () => {
+    expect(() => schema.parse({ filter: `title.like.how*${SLUG}` })).toThrow(
+      "Filter pattern too long for 'title': 53 bytes once escaped (max 50)",
+    );
+  });
 
-	it("answers a 400 that names the cap, where it was a 500, under a schema that lets it through", async () => {
-		const lenient = createListQuerySchema({
-			filter: { title: "string" },
-			limits: { maxPatternBytes: 100 },
-			sort: ["id"],
-		})
-		const error = await ids({ filter: `title.like.how*${SLUG}` }, lenient.parse).catch((caught: unknown) => caught)
-		const classified = classifyD1Error(error, [])
-		expect(classified).toBeInstanceOf(DatabaseError)
-		expect([classified?.status, classified?.errorKey]).toEqual([400, "invalid_value"])
-		expect(String(classified?.cause)).toContain("50 bytes")
-	})
-})
+  it("answers a 400 that names the cap, where it was a 500, under a schema that lets it through", async () => {
+    const lenient = createListQuerySchema({
+      filter: { title: "string" },
+      limits: { maxPatternBytes: 100 },
+      sort: ["id"],
+    });
 
-/* QE2 of r22b: 0.14's instr compared the folded term with the raw text, where LIKE (0.13) folded ASCII case */
+    const error = await ids({ filter: `title.like.how*${SLUG}` }, lenient.parse).catch((caught: unknown) => caught);
+    const classified = classifyD1Error(error, []);
+    expect(classified).toBeInstanceOf(DatabaseError);
+    expect([classified?.status, classified?.errorKey]).toEqual([400, "invalid_value"]);
+    expect(String(classified?.cause)).toContain("50 bytes");
+  });
+});
+
+// QE2 of r22b: 0.14's instr compared the folded term with the raw text, where LIKE (0.13) folded ASCII case
 describe("likeSearch folds ASCII case on any expression on D1 (QE2; sibling: a `searchText` column)", () => {
-	it("finds a raw title by any ASCII case of its words", async () => {
-		harness ??= await d1Memory()
-		await harness.CORE.exec("CREATE TABLE IF NOT EXISTS post (id integer PRIMARY KEY, title text, _search text)")
-		await harness.CORE.exec("DELETE FROM post")
-		for (const [i, title] of ["Hello World", "hello world", "Postgres Tips"].entries())
-			await harness.CORE.prepare("INSERT INTO post VALUES (?, ?, NULL)")
-				.bind(i + 1, title)
-				.run()
-		const db = drizzle(harness.CORE)
-		const titles = async (q: string) =>
-			(await db.select({ title: post.title }).from(post).where(likeSearch(post.title)(q)!).orderBy(post.id)).map(
-				(row) => row.title,
-			)
-		expect(await titles("Hello")).toEqual(["Hello World", "hello world"])
-		expect(await titles("POSTGRES")).toEqual(["Postgres Tips"])
-	})
-})
+  it("finds a raw title by any ASCII case of its words", async () => {
+    harness ??= await d1Memory();
+    await harness.CORE.exec("CREATE TABLE IF NOT EXISTS post (id integer PRIMARY KEY, title text, _search text)");
+    await harness.CORE.exec("DELETE FROM post");
+
+    for (const [i, title] of ["Hello World", "hello world", "Postgres Tips"].entries()) {
+      await harness.CORE.prepare("INSERT INTO post VALUES (?, ?, NULL)")
+        .bind(i + 1, title)
+        .run();
+    }
+
+    const db = drizzle(harness.CORE);
+
+    const titles = async (q: string) =>
+      (await db.select({ title: post.title }).from(post).where(likeSearch(post.title)(q)!).orderBy(post.id)).map(
+        (row) => row.title,
+      );
+
+    expect(await titles("Hello")).toEqual(["Hello World", "hello world"]);
+    expect(await titles("POSTGRES")).toEqual(["Postgres Tips"]);
+  });
+});

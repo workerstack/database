@@ -2,118 +2,130 @@
  * Error translation generator: the error keys of the tables' constraint map and their en-US
  * messages, built from the same analysis as the constraints file, so the two always agree.
  */
-import path from "node:path"
-import { dbIdentifiers, propertyName, stringLiteral } from "../utils/case.ts"
-import { writeGenFile } from "../utils/fs.ts"
-import { buildConstraintMap, constraintsIn } from "./constraints.ts"
-import type { GeneratorContext } from "./context-types.ts"
-import { type ImportStyle, styled } from "../utils/paths.ts"
+import path from "node:path";
+
+import { dbIdentifiers, propertyName, stringLiteral } from "../utils/case.ts";
+import { writeGenFile } from "../utils/fs.ts";
+import { type ImportStyle, styled } from "../utils/paths.ts";
+import { buildConstraintMap, constraintsIn } from "./constraints.ts";
+import type { GeneratorContext } from "./context-types.ts";
 
 /** Where the translations generator writes the error keys and their messages */
 export type TranslationsConfig = {
-	/** the directory `<filePrefix>.error-keys.gen.ts` is written to, with the en-US messages under its `translations/error-keys/`, relative to the codegen working directory */
-	baseDir: string
-	/** file name stem, the one the constraints file uses */
-	filePrefix: string
-}
+  /** the directory `<filePrefix>.error-keys.gen.ts` is written to, with the en-US messages under its `translations/error-keys/`, relative to the codegen working directory */
+  baseDir: string;
+  /** file name stem, the one the constraints file uses */
+  filePrefix: string;
+};
 
 /** One error key the constraint map declares, with the cause the server reports beside it */
-type ErrorKey = { cause: string; key: string }
+type ErrorKey = { cause: string; key: string };
 
 /**
  * The en-US message for a key. A duplicate names its column, or a composite unique its columns, from
  * the cause, since the key alone cannot say where a table name ends and a snake_case column begins.
  */
 function englishMessage({ cause, key }: ErrorKey): string {
-	if (key.endsWith("_duplicate")) {
-		/* a private column's constraint names no column, so its message names none either */
-		if (cause === "A record with these values already exists") return cause
-		/* a composite unique names its columns together, as its constraint's cause does */
-		const columns = /^A record with this (.+) combination already exists$/.exec(cause)?.[1]
-		if (columns !== undefined) return `A record with this ${columns.replaceAll("_", " ")} combination already exists`
-		const field = /^A record with this (\S+) value already exists$/.exec(cause)?.[1]
-		if (field === undefined || field === "id") return "Record with this ID already exists"
-		return `A record with this ${field.replaceAll("_", " ")} already exists`
-	}
-	if (key.endsWith("_reference_not_found")) return "Referenced record does not exist"
-	/* the rest are 400s no retry fixes: an enum value, or a CHECK, by the cause it names when it names one */
-	/* a private column's enum CHECK keys under its table (`<table>_value_invalid`), any other under its column */
-	if (key.endsWith("_enum_invalid") || key.endsWith("_value_invalid"))
-		return "This value is not one of the allowed values"
-	return cause === "Check constraint violated" ? "This value breaks a rule of the record" : cause
+  if (key.endsWith("_duplicate")) {
+    // a private column's constraint names no column, so its message names none either
+    if (cause === "A record with these values already exists") return cause;
+    // a composite unique names its columns together, as its constraint's cause does
+    const columns = /^A record with this (.+) combination already exists$/.exec(cause)?.[1];
+
+    if (columns !== undefined) return `A record with this ${columns.replaceAll("_", " ")} combination already exists`;
+    const field = /^A record with this (\S+) value already exists$/.exec(cause)?.[1];
+
+    if (field === undefined || field === "id") return "Record with this ID already exists";
+
+    return `A record with this ${field.replaceAll("_", " ")} already exists`;
+  }
+
+  if (key.endsWith("_reference_not_found")) return "Referenced record does not exist";
+
+  // the rest are 400s no retry fixes: an enum value, or a CHECK, by the cause it names when it names one
+  // a private column's enum CHECK keys under its table (`<table>_value_invalid`), any other under its column
+  if (key.endsWith("_enum_invalid") || key.endsWith("_value_invalid"))
+    return "This value is not one of the allowed values";
+
+  return cause === "Check constraint violated" ? "This value breaks a rule of the record" : cause;
 }
 
 /** Every error key the tables' constraint map declares, sorted, with its cause */
 function errorKeysOf(ctx: GeneratorContext): ErrorKey[] {
-	const byKey = new Map(
-		constraintsIn(buildConstraintMap(ctx.analysis.tables, ctx.dialect)).map((c) => [c.errorKey, c.cause]),
-	)
-	/* keys are unique, so no two compare equal */
-	return [...byKey].sort(([a], [b]) => (a < b ? -1 : 1)).map(([key, cause]) => ({ cause, key }))
+  const byKey = new Map(
+    constraintsIn(buildConstraintMap(ctx.analysis.tables, ctx.dialect)).map((c) => [c.errorKey, c.cause]),
+  );
+
+  // keys are unique, so no two compare equal
+  return [...byKey].sort(([a], [b]) => (a < b ? -1 : 1)).map(([key, cause]) => ({ cause, key }));
 }
 
 /** Generate the error keys and their en-US messages from the analyzed tables */
 export function generateTranslations(ctx: GeneratorContext, config: TranslationsConfig): void {
-	const { dbName } = ctx.analysis
-	const baseDir = path.resolve(ctx.cwd, config.baseDir)
-	const errorKeys = errorKeysOf(ctx)
-	if (errorKeys.length === 0) {
-		ctx.warn("Warning: no constraint declares an error key; translations skipped")
-		return
-	}
+  const { dbName } = ctx.analysis;
+  const baseDir = path.resolve(ctx.cwd, config.baseDir);
+  const errorKeys = errorKeysOf(ctx);
 
-	const translationsDir = path.join(baseDir, "translations", "error-keys")
-	const file: TranslationFile = { dbName, errorKeys, filePrefix: config.filePrefix, importStyle: ctx.importStyle }
-	writeGenFile(path.join(baseDir, `${config.filePrefix}.error-keys.gen.ts`), generateErrorKeysFile(file), {
-		generator: "database",
-		staged: ctx.staged,
-	})
-	writeGenFile(path.join(translationsDir, `${config.filePrefix}.error-keys.en.gen.ts`), generateEnglishFile(file), {
-		generator: "database",
-		staged: ctx.staged,
-	})
+  if (errorKeys.length === 0) {
+    ctx.warn("Warning: no constraint declares an error key; translations skipped");
 
-	ctx.log(`Generated error translations for ${dbName} database`)
-	ctx.log(`Error keys: ${errorKeys.length}`)
+    return;
+  }
+
+  const translationsDir = path.join(baseDir, "translations", "error-keys");
+  const file: TranslationFile = { dbName, errorKeys, filePrefix: config.filePrefix, importStyle: ctx.importStyle };
+  writeGenFile(path.join(baseDir, `${config.filePrefix}.error-keys.gen.ts`), generateErrorKeysFile(file), {
+    generator: "database",
+    staged: ctx.staged,
+  });
+  writeGenFile(path.join(translationsDir, `${config.filePrefix}.error-keys.en.gen.ts`), generateEnglishFile(file), {
+    generator: "database",
+    staged: ctx.staged,
+  });
+
+  ctx.log(`Generated error translations for ${dbName} database`);
+  ctx.log(`Error keys: ${errorKeys.length}`);
 }
 
 type TranslationFile = {
-	dbName: string
-	errorKeys: ErrorKey[]
-	filePrefix: string
-	importStyle: ImportStyle | undefined
-}
+  dbName: string;
+  errorKeys: ErrorKey[];
+  filePrefix: string;
+  importStyle: ImportStyle | undefined;
+};
 
-const errorKeysConst = (dbName: string) => `${dbIdentifiers(dbName).constant}_DB_ERROR_KEYS`
+const errorKeysConst = (dbName: string) => `${dbIdentifiers(dbName).constant}_DB_ERROR_KEYS`;
 
 /** Generate error keys TypeScript file */
 function generateErrorKeysFile({ dbName, errorKeys }: TranslationFile): string {
-	const constName = errorKeysConst(dbName)
-	const typeName = `${dbIdentifiers(dbName).pascal}DbErrorKey`
-	return [
-		`const ${constName} = {`,
-		errorKeys.map(({ key }) => `\t${propertyName(key)}: ${stringLiteral(key)}`).join(",\n"),
-		"} as const",
-		"",
-		`type ${typeName} = keyof typeof ${constName}`,
-		"",
-		`export { ${constName}, type ${typeName} }`,
-		"",
-	].join("\n")
+  const constName = errorKeysConst(dbName);
+  const typeName = `${dbIdentifiers(dbName).pascal}DbErrorKey`;
+
+  return [
+    `const ${constName} = {`,
+    errorKeys.map(({ key }) => `\t${propertyName(key)}: ${stringLiteral(key)}`).join(",\n"),
+    "} as const",
+    "",
+    `type ${typeName} = keyof typeof ${constName}`,
+    "",
+    `export { ${constName}, type ${typeName} }`,
+    "",
+  ].join("\n");
 }
 
 /** Generate the en-US translation TypeScript file */
 function generateEnglishFile({ dbName, errorKeys, filePrefix, importStyle }: TranslationFile): string {
-	const constName = errorKeysConst(dbName)
-	const exportName = `${constName}_EN`
-	return [
-		`import type { ${constName} } from "${styled(`../../${filePrefix}.error-keys.gen`, importStyle)}"`,
-		"",
-		`const ${exportName}: Record<keyof typeof ${constName}, string> = {`,
-		errorKeys.map((entry) => `\t${propertyName(entry.key)}: ${stringLiteral(englishMessage(entry))}`).join(",\n"),
-		"} as const",
-		"",
-		`export { ${exportName} }`,
-		"",
-	].join("\n")
+  const constName = errorKeysConst(dbName);
+  const exportName = `${constName}_EN`;
+
+  return [
+    `import type { ${constName} } from "${styled(`../../${filePrefix}.error-keys.gen`, importStyle)}"`,
+    "",
+    `const ${exportName}: Record<keyof typeof ${constName}, string> = {`,
+    errorKeys.map((entry) => `\t${propertyName(entry.key)}: ${stringLiteral(englishMessage(entry))}`).join(",\n"),
+    "} as const",
+    "",
+    `export { ${exportName} }`,
+    "",
+  ].join("\n");
 }

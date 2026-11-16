@@ -1,80 +1,84 @@
-import { integer, SQLiteDialect, sqliteTable, text } from "drizzle-orm/sqlite-core"
-import { describe, expect, it } from "vitest"
-import { CursorRef } from "../cursor.ts"
-import { createCursor } from "../cursor-mint.ts"
-import type { SortField } from "../types.ts"
-import { SEALED } from "../__fixtures__/cursor-secret.ts"
-import { cursorWhere } from "./cursor-where.ts"
+import { integer, SQLiteDialect, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { describe, expect, it } from "vitest";
+
+import { SEALED } from "../__fixtures__/cursor-secret.ts";
+import { createCursor } from "../cursor-mint.ts";
+import { CursorRef } from "../cursor.ts";
+import type { SortField } from "../types.ts";
+import { cursorWhere } from "./cursor-where.ts";
 
 /** The predicate alone, as the builders take it */
 /** The predicate of a SQLite list, every list here being one */
 const whereOf = (args: Omit<Parameters<typeof cursorWhere>[0], "dialect">) =>
-	cursorWhere({ ...args, dialect: "sqlite" }).where
+  cursorWhere({ ...args, dialect: "sqlite" }).where;
 
-const doc = sqliteTable("doc", { id: integer("id").primaryKey(), title: text("title") })
-const sort: SortField[] = [{ direction: "asc", field: "title" }]
-const keys = [{ column: doc.title, direction: "asc" as const }]
-const tiebreak = { column: doc.id, direction: "asc" as const }
-const dialect = new SQLiteDialect()
+const doc = sqliteTable("doc", { id: integer("id").primaryKey(), title: text("title") });
+const sort: SortField[] = [{ direction: "asc", field: "title" }];
+const keys = [{ column: doc.title, direction: "asc" as const }];
+const tiebreak = { column: doc.id, direction: "asc" as const };
+const dialect = new SQLiteDialect();
 
 describe("cursorWhere", () => {
-	it("resumes after the cursor's row, a reference read from the table", () => {
-		const plain = whereOf({
-			cursor: createCursor({ id: 3, title: "b" }, sort, SEALED),
-			keys,
-			options: SEALED,
-			sort,
-			table: doc,
-			tiebreak,
-		})
-		expect(dialect.sqlToQuery(plain).params).toEqual(["b", "b", 3])
-		const byRef = createCursor({ id: 3, title: new CursorRef("b", 1) }, sort, SEALED)
-		const read = whereOf({ cursor: byRef, keys, options: SEALED, sort, table: doc, tiebreak })
-		expect(dialect.sqlToQuery(read).sql).toContain('LEFT JOIN "doc" ON "doc"."id" = ?)')
-	})
+  it("resumes after the cursor's row, a reference read from the table", () => {
+    const plain = whereOf({
+      cursor: createCursor({ id: 3, title: "b" }, sort, SEALED),
+      keys,
+      options: SEALED,
+      sort,
+      table: doc,
+      tiebreak,
+    });
 
-	it("refuses a reference on a list with no table, and a value its key cannot take", () => {
-		const byRef = createCursor({ id: 3, title: new CursorRef("b", 1) }, sort, SEALED)
-		expect(() => whereOf({ cursor: byRef, keys, options: SEALED, sort, table: undefined, tiebreak })).toThrow(
-			expect.objectContaining({ status: 500 }),
-		)
-		const wrong = createCursor({ id: 3, title: 5 }, sort, SEALED)
-		expect(() => whereOf({ cursor: wrong, keys, options: SEALED, sort, table: doc, tiebreak })).toThrow(
-			expect.objectContaining({ errorKey: "invalid_cursor", status: 400 }),
-		)
-	})
-})
+    expect(dialect.sqlToQuery(plain).params).toEqual(["b", "b", 3]);
+    const byRef = createCursor({ id: 3, title: new CursorRef("b", 1) }, sort, SEALED);
+    const read = whereOf({ cursor: byRef, keys, options: SEALED, sort, table: doc, tiebreak });
+    expect(dialect.sqlToQuery(read).sql).toContain('LEFT JOIN "doc" ON "doc"."id" = ?)');
+  });
 
-/* U10 of the 0.12 round: a seconds-mode key with no table to read its row from binds its Date to the millisecond */
+  it("refuses a reference on a list with no table, and a value its key cannot take", () => {
+    const byRef = createCursor({ id: 3, title: new CursorRef("b", 1) }, sort, SEALED);
+    expect(() => whereOf({ cursor: byRef, keys, options: SEALED, sort, table: undefined, tiebreak })).toThrow(
+      expect.objectContaining({ status: 500 }),
+    );
+    const wrong = createCursor({ id: 3, title: 5 }, sort, SEALED);
+    expect(() => whereOf({ cursor: wrong, keys, options: SEALED, sort, table: doc, tiebreak })).toThrow(
+      expect.objectContaining({ errorKey: "invalid_cursor", status: 400 }),
+    );
+  });
+});
+
+// U10 of the 0.12 round: a seconds-mode key with no table to read its row from binds its Date to the millisecond
 describe("cursorWhere on a seconds-mode timestamp key", () => {
-	const event = sqliteTable("event", { at: integer("at", { mode: "timestamp" }), id: integer("id").primaryKey() })
-	const bySort: SortField[] = [{ direction: "asc", field: "at" }]
-	const atKeys = [{ column: event.at, direction: "asc" as const }]
-	const cursor = createCursor({ at: new Date(1_700_000_000_123), id: 3 }, bySort, SEALED)
+  const event = sqliteTable("event", { at: integer("at", { mode: "timestamp" }), id: integer("id").primaryKey() });
+  const bySort: SortField[] = [{ direction: "asc", field: "at" }];
+  const atKeys = [{ column: event.at, direction: "asc" as const }];
+  const cursor = createCursor({ at: new Date(1_700_000_000_123), id: 3 }, bySort, SEALED);
 
-	it("binds the exact milliseconds on a list with no table", () => {
-		const where = whereOf({
-			cursor,
-			keys: atKeys,
-			options: SEALED,
-			sort: bySort,
-			table: undefined,
-			tiebreak: { column: event.id, direction: "asc" },
-		})
-		expect(dialect.sqlToQuery(where).params).toContain(1_700_000_000.123)
-	})
+  it("binds the exact milliseconds on a list with no table", () => {
+    const where = whereOf({
+      cursor,
+      keys: atKeys,
+      options: SEALED,
+      sort: bySort,
+      table: undefined,
+      tiebreak: { column: event.id, direction: "asc" },
+    });
 
-	it("reads the bound from the row on a list with a table, the milliseconds its fallback", () => {
-		const where = whereOf({
-			cursor,
-			keys: atKeys,
-			options: SEALED,
-			sort: bySort,
-			table: event,
-			tiebreak: { column: event.id, direction: "asc" },
-		})
-		expect(dialect.sqlToQuery(where).sql).toContain(
-			'coalesce((SELECT CASE WHEN CAST("event"."at" * 1000 AS INTEGER) = 1700000000123 THEN "event"."at" END FROM "event" WHERE "event"."id" = ?), (1700000000123 / 1000.0))',
-		)
-	})
-})
+    expect(dialect.sqlToQuery(where).params).toContain(1_700_000_000.123);
+  });
+
+  it("reads the bound from the row on a list with a table, the milliseconds its fallback", () => {
+    const where = whereOf({
+      cursor,
+      keys: atKeys,
+      options: SEALED,
+      sort: bySort,
+      table: event,
+      tiebreak: { column: event.id, direction: "asc" },
+    });
+
+    expect(dialect.sqlToQuery(where).sql).toContain(
+      'coalesce((SELECT CASE WHEN CAST("event"."at" * 1000 AS INTEGER) = 1700000000123 THEN "event"."at" END FROM "event" WHERE "event"."id" = ?), (1700000000123 / 1000.0))',
+    );
+  });
+});

@@ -10,6 +10,7 @@ node_modules
 
 # testing
 **/coverage/
+**/cov-full/
 **/test-results/
 # vitest 5's blob reports and attachments
 **/.vitest/
@@ -43,17 +44,18 @@ packages/core/.e2e-*/
 .cache/
 
 # copied in from the repo root at pack time, and the declarations emitted then (see the prepack script)
-packages/core/README.md
 packages/core/LICENSE
 packages/core/types/
 
 # repo's per-checkout overrides
 repo.config.local.ts
 
-# repo:ignore a280cfb1
+# repo:ignore 6bfbc92f
 .tmp/
 .worktrees/
 coverage/
+.vitest/
+repo.config.local.ts
 **/.repo/plans/
 **/.repo/plans-fast/
 **/.repo/roadmaps/
@@ -64,6 +66,11 @@ coverage/
 **/.repo/tmp/
 **/.repo/backlog.md
 node_modules/
+knip.jsonc
+knip.unignored-*.jsonc
+.oxfmtrc.jsonc
+.oxlintrc.jsonc
+.oxlintrc.unskipped-*.jsonc
 .agents/
 .claude/
 .codex/

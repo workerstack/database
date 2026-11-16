@@ -5,16 +5,17 @@
  * the DTO never takes what Postgres refuses, and refuses what Postgres takes only for a spelling
  * the 0.14 changelog lists. A read DTO keeps the plain type, as a read never refuses a stored row.
  */
-import type pg from "pg"
-import type * as z from "zod"
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
-import { classifyPgError } from "../../../src/pg/error-handler.ts"
-import { cleanGeneratedDtos, generatedDtos } from "../support/dtos.ts"
-import { usePg } from "../support/pg.ts"
+import type pg from "pg";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import type * as z from "zod";
 
-afterAll(() => cleanGeneratedDtos())
+import { classifyPgError } from "../../../src/pg/error-handler.ts";
+import { cleanGeneratedDtos, generatedDtos } from "../support/dtos.ts";
+import { usePg } from "../support/pg.ts";
 
-/* each column nullable, so a body of the key and one column says that column's verdict */
+afterAll(() => cleanGeneratedDtos());
+
+// each column nullable, so a body of the key and one column says that column's verdict
 const COLUMNS = `{
 	id: text("id").primaryKey(),
 	d: date("d"),
@@ -36,370 +37,378 @@ const COLUMNS = `{
 	iv: interval("iv"),
 	u: uuid("u"),
 	v: varchar("v", { length: 3 }),
-}`
+}`;
+
 const DDL =
-	"CREATE TEMP TABLE kinds (id text PRIMARY KEY, d date, ts timestamp, tz timestamptz, t time, tt timetz, n52 numeric(5,2), n3 numeric(3), nn numeric, nr numeric(5,2), b bigint, r real, ip inet, net cidr, mac macaddr, mac8 macaddr8, bits bit(3), iv interval, u uuid, v varchar(3))"
+  "CREATE TEMP TABLE kinds (id text PRIMARY KEY, d date, ts timestamp, tz timestamptz, t time, tt timetz, n52 numeric(5,2), n3 numeric(3), nn numeric, nr numeric(5,2), b bigint, r real, ip inet, net cidr, mac macaddr, mac8 macaddr8, bits bit(3), iv interval, u uuid, v varchar(3))";
 
 /** [column, value, whether the write DTO takes it, whether Postgres does] */
-type Case = [column: string, value: number | string, dto: boolean, pg: boolean]
+type Case = [column: string, value: number | string, dto: boolean, pg: boolean];
 
 const CASES: Case[] = [
-	["d", "2024-02-29", true, true],
-	["d", "2024-02-30", false, false],
-	/* stricter than Postgres, listed in the 0.14 changelog: its special inputs, and a year past 9999 */
-	["d", "tomorrow", false, true],
-	["d", "10000-01-01", false, true],
-	/* A2-3 of r22: year 0000, which zod's ISO date takes and Postgres refuses with a 22008 */
-	["d", "0000-01-01", false, false],
-	["d", "0000-02-29", false, false],
-	["d", "0001-01-01", true, true],
-	["d", "0400-02-29", true, true],
-	["ts", "0000-01-01T00:00:00", false, false],
-	["tz", "0000-01-01T00:00:00Z", false, false],
-	["tz", "0001-01-01T00:00:00Z", true, true],
-	["ts", "2024-01-01T10:00:00", true, true],
-	["ts", "2024-01-01T10:00:00.123456", true, true],
-	["ts", "2024-13-01T10:00:00", false, false],
-	["ts", "soon", false, false],
-	/* stricter than Postgres, listed in the 0.14 changelog: a timestamp discards an offset or Z */
-	["ts", "2024-01-01T10:00:00+05:00", false, true],
-	["ts", "2024-01-01T10:00:00Z", false, true],
-	/* stricter than Postgres, listed since 0.15 (F11): the end of a day, which Postgres reads as the next one's start */
-	["ts", "2024-01-01T24:00:00", false, true],
-	["tz", "2024-01-01T10:00:00+02:00", true, true],
-	/* stricter than Postgres, listed in the 0.25 upgrade (CD1 of r23): a 7th digit, which Postgres rounds, perhaps into the next day */
-	["tz", "2024-01-01T10:00:00.1234567Z", false, true],
-	["tz", "2024-01-01T10:00:00.123456Z", true, true],
-	["tz", "2024-01-01T25:00:00Z", false, false],
-	/* stricter than Postgres, listed in the 0.14 changelog: a local time's instant depends on the session's TimeZone */
-	["tz", "2024-01-01T10:00:00", false, true],
-	["t", "10:00", true, true],
-	["t", "23:59:59.999999", true, true],
-	["t", "25:00", false, false],
-	/* stricter than Postgres, listed in the 0.14 changelog */
-	["t", "24:00:00", false, true],
-	/* stricter than Postgres, listed since 0.15 (F11): a leap second, which Postgres reads as the next minute */
-	["t", "23:59:60", false, true],
-	/* an offset as RFC 3339 writes it, as a timestamptz's, though Postgres takes more (CD11 of r22b) */
-	["tt", "10:00:00+02", false, true],
-	["tt", "10:00:00+02:00", true, true],
-	["tt", "10:00Z", true, true],
-	["tt", "10:00:00+02:30", true, true],
-	["tt", "10:61:00+02", false, false],
-	/* F4 of the 0.14.1 review: Postgres takes an offset up to 15:59, and refuses one past it with a 22009 */
-	["tt", "10:00:00+15:59", true, true],
-	["tt", "10:00:00+16", false, false],
-	["tt", "10:00:00-23:59", false, false],
-	["tz", "2024-01-01T10:00:00+15:59", true, true],
-	["tz", "2024-01-01T10:00:00+16:00", false, false],
-	["tz", "2024-01-01T10:00:00-23:00", false, false],
-	["n52", "123.45", true, true],
-	["n52", "-999.99", true, true],
-	["n52", "0012.5", true, true],
-	["n52", "1234.5", false, false],
-	/* Postgres rounds the fraction first, and 999.995 rounds to 1000.00, past numeric(5,2): a 22003 */
-	["n52", "999.995", false, false],
-	["n52", "abc", false, false],
-	/* stricter than Postgres, listed in the 0.14 changelog: a fraction it would round, an exponent, NaN */
-	["n52", "1.234", false, true],
-	["n52", "1e2", false, true],
-	["n52", "NaN", false, true],
-	["n3", "999", true, true],
-	["n3", "1000", false, false],
-	["n3", "1.5", false, true],
-	["nn", "123456789012345678901234567890.123", true, true],
-	["nn", "-0.5", true, true],
-	["nn", "1.5e3", false, true],
-	["nr", 999.99, true, true],
-	["nr", -999.994, true, true],
-	["nr", 999.995, false, false],
-	["nr", 1000, false, false],
-	["b", "9223372036854775807", true, true],
-	["b", "-9223372036854775808", true, true],
-	["b", "9223372036854775808", false, false],
-	["b", "-9223372036854775809", false, false],
-	["b", "12.5", false, false],
-	["r", 3.4028235e38, true, true],
-	["r", -3.4028235e38, true, true],
-	["r", 3.5e38, false, false],
-	["r", 0, true, true],
-	/* real refuses what rounds to zero: at or below half the smallest float4, 2^-150 */
-	["r", 1e-50, false, false],
-	["r", 7.006492321624085e-46, false, false],
-	["r", 7.006492321624087e-46, true, true],
-	["r", 1e-45, true, true],
-	["r", -1e-45, true, true],
-	["ip", "192.168.0.1", true, true],
-	["ip", "192.168.0.1/24", true, true],
-	["ip", "::1", true, true],
-	["ip", "fe80::1/64", true, true],
-	["ip", "300.1.1.1", false, false],
-	["ip", "localhost", false, false],
-	/* AA12 of r22: an IPv6 address as Postgres reads one, its IPv4 tail in two to four parts */
-	["ip", "::", true, true],
-	["ip", "1:2:3:4:5:6:7:8", true, true],
-	["ip", "2001:DB8::ABCD", true, true],
-	["ip", "::ffff:1.2.3.4", true, true],
-	["ip", "64:ff9b::1.2.3.4", true, true],
-	["ip", "1:2:3:4:5:6:1.2.3.4", true, true],
-	["ip", "::ffff:1.2.3", true, true],
-	["ip", "::ffff:1.2", true, true],
-	["ip", "0001:0002::0003", true, true],
-	["ip", "::ffff:256.1.1.1", false, false],
-	["ip", "::ffff:01.2.3.4", false, false],
-	["ip", "::ffff:1.2.3.4.5", false, false],
-	["ip", "1:2:3:4:5:6:7:1.2.3.4", false, false],
-	["ip", "1:2:3:4:5:6::1.2.3.4", false, false],
-	["ip", "fe80::1%eth0", false, false],
-	["ip", "12345::", false, false],
-	["ip", ":::", false, false],
-	["ip", "1::2::3", false, false],
-	["ip", "1:2:3:4::5:6:7:8", false, false],
-	["ip", "::/0", true, true],
-	["ip", "::1/128", true, true],
-	["ip", "::/129", false, false],
-	["ip", "::/064", false, false],
-	["ip", "::/1.5", false, false],
-	/* stricter than Postgres, listed in the 0.21 changelog: a colon before the prefix, an empty first tail part */
-	["ip", "1::f:/64", false, true],
-	["ip", "::.255", false, true],
-	["net", "192.168.0.0/24", true, true],
-	["net", "10.0.0.0/8", true, true],
-	["net", "192.168.0.1", true, true],
-	["net", "2001:db8::/32", true, true],
-	["net", "fe80::/64", true, true],
-	["net", "::ffff:192.168.0.0/120", true, true],
-	["net", "::ffff:1.2.3.0/120", true, true],
-	["net", "::ffff:1.2.3/120", true, true],
-	["net", "::ffff:1.2/112", true, true],
-	["net", "::/0", true, true],
-	["net", "::/129", false, false],
-	["net", "::/064", false, false],
-	["net", "::/1.5", false, false],
-	["net", "::ffff:1.2.3.4/120", false, false],
-	/* a cidr has no bits set right of its mask: Postgres refuses each of these */
-	["net", "192.168.0.1/24", false, false],
-	["net", "10.0.0.1/8", false, false],
-	["net", "fe80::1/64", false, false],
-	["net", "2001:db8::1/32", false, false],
-	["net", "192.168.0.0/33", false, false],
-	/* stricter than Postgres, listed in the 0.14 changelog: an abbreviated network */
-	["net", "10.1", false, true],
-	["mac", "08:00:2b:01:02:03", true, true],
-	["mac", "08-00-2B-01-02-03", true, true],
-	["mac", "08002b:010203", true, true],
-	["mac", "0800.2b01.0203", true, true],
-	["mac", "0800-2b01-0203", true, true],
-	["mac", "08002b010203", true, true],
-	["mac", "8:0:2b:1:2:3", true, true],
-	["mac", "08:00-2b:01:02:03", false, false],
-	["mac", "08:00:2b:01:02", false, false],
-	["mac", "08:00:2b:01:02:03:04:05", false, false],
-	["mac", "08:00:2g:01:02:03", false, false],
-	/* stricter than Postgres, listed in the 0.21 changelog: a blank in it */
-	["mac", " 08:00:2b:01:02:03", false, true],
-	["mac", "08: 00:2b:01:02:03", false, true],
-	["mac8", "08:00:2b:01:02:03:04:05", true, true],
-	["mac8", "08002b:0102030405", true, true],
-	["mac8", "0800.2b01.0203.0405", true, true],
-	["mac8", "08002b01:02030405", true, true],
-	["mac8", "08002b0102030405", true, true],
-	/* six octets, which macaddr8 widens with ff:fe */
-	["mac8", "08:00:2b:01:02:03", true, true],
-	["mac8", "08002b010203", true, true],
-	["mac8", "08:00:2b:01:02:03:04", false, false],
-	["mac8", "08:00:2b:01:02:03:04:05:06", false, false],
-	/* AA5 of r22: two digits an octet, one separator, between any two octets or none */
-	["mac8", "8:0:2b:1:2:3", false, false],
-	["mac8", "8:00:2b:01:02:03", false, false],
-	["mac8", "08:0:2b:01:02:03:04:05", false, false],
-	["mac8", "8-0-2b-1-2-3", false, false],
-	["mac8", "08:00-2b:01:02:03", false, false],
-	["mac8", "08002b0102030405060", false, false],
-	["mac8", "08.00.2b.01.02.03", true, true],
-	["mac8", "08.00.2b.01.02.03.04.05", true, true],
-	["mac8", "0800:2b01:0203:0405", true, true],
-	["mac8", "08:002b:01:0203", true, true],
-	["mac8", "08-00-2B-01-02-03-04-05", true, true],
-	/* stricter than Postgres, listed in the 0.21 changelog: a blank in it, or a character after its last octet */
-	["mac8", " 08:00:2b:01:02:03", false, true],
-	["mac8", "08:00:2b:01:02:03:", false, true],
-	["mac8", "08002b0102030", false, true],
-	["bits", "101", true, true],
-	["bits", "000", true, true],
-	["bits", "10", false, false],
-	["bits", "1010", false, false],
-	["bits", "102", false, false],
-	["iv", "P1Y2M3DT4H5M6S", true, true],
-	["iv", "PT0.5S", true, true],
-	["iv", "P1W", true, true],
-	["iv", "P", false, false],
-	["iv", "-P1D", false, false],
-	/* AA6 of r22: a comma for the seconds' decimal mark, which Postgres refuses with a 22007 */
-	["iv", "PT1,5S", false, false],
-	["iv", "PT1M1,25S", false, false],
-	/* A2-3 of r22: a part past what Postgres holds alone, a 22015; each at the most digits it holds */
-	["iv", "P2147483648D", false, false],
-	["iv", "PT9999999999H", false, false],
-	["iv", "PT999999999999H", false, false],
-	["iv", "P999999999999W", false, false],
-	/* A3-5 of r23: one digit past each part's most, the step where the DTO's digit bound meets Postgres's */
-	["iv", "P999999999Y", false, false],
-	["iv", "P9999999999M", false, false],
-	["iv", "P999999999W", false, false],
-	["iv", "PT999999999999M", false, false],
-	["iv", "PT9999999999999S", false, false],
-	["iv", "P99999999Y", true, true],
-	["iv", "P999999999M", true, true],
-	["iv", "P99999999W", true, true],
-	["iv", "P999999999D", true, true],
-	["iv", "PT999999999H", true, true],
-	["iv", "PT99999999999M", true, true],
-	["iv", "PT999999999999.999999S", true, true],
-	/* stricter than Postgres, listed in the 0.14 changelog: a negative or fractional part, the alternative format, and Postgres's own spelling */
-	["iv", "P-1D", false, true],
-	["iv", "P1.5Y", false, true],
-	["iv", "P0001-02-03T04:05:06", false, true],
-	/* A2-3: a part Postgres holds, past the most digits the DTO takes of it, which every part takes */
-	["iv", "PT2562047788H", false, true],
-	["iv", "1 day", false, true],
-	/* F3 of the 0.14.1 review: a uuid is z.guid(), the canonical spelling */
-	["u", "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11", true, true],
-	["u", "A0EEBC99-9C0B-4EF8-BB6D-6BB9BD380A11", true, true],
-	["u", "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a1", false, false],
-	["u", "not-a-uuid", false, false],
-	/* stricter than Postgres, listed since 0.15: braces, and the digits bare */
-	["u", "{a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11}", false, true],
-	["u", "a0eebc999c0b4ef8bb6d6bb9bd380a11", false, true],
-	["v", "abc", true, true],
-	/* stricter than Postgres, listed since 0.15 (F11): blanks past varchar(n), which Postgres cuts */
-	["v", "abc  ", false, true],
-]
+  ["d", "2024-02-29", true, true],
+  ["d", "2024-02-30", false, false],
+  // stricter than Postgres, listed in the 0.14 changelog: its special inputs, and a year past 9999
+  ["d", "tomorrow", false, true],
+  ["d", "10000-01-01", false, true],
+  // A2-3 of r22: year 0000, which zod's ISO date takes and Postgres refuses with a 22008
+  ["d", "0000-01-01", false, false],
+  ["d", "0000-02-29", false, false],
+  ["d", "0001-01-01", true, true],
+  ["d", "0400-02-29", true, true],
+  ["ts", "0000-01-01T00:00:00", false, false],
+  ["tz", "0000-01-01T00:00:00Z", false, false],
+  ["tz", "0001-01-01T00:00:00Z", true, true],
+  ["ts", "2024-01-01T10:00:00", true, true],
+  ["ts", "2024-01-01T10:00:00.123456", true, true],
+  ["ts", "2024-13-01T10:00:00", false, false],
+  ["ts", "soon", false, false],
+  // stricter than Postgres, listed in the 0.14 changelog: a timestamp discards an offset or Z
+  ["ts", "2024-01-01T10:00:00+05:00", false, true],
+  ["ts", "2024-01-01T10:00:00Z", false, true],
+  // stricter than Postgres, listed since 0.15 (F11): the end of a day, which Postgres reads as the next one's start
+  ["ts", "2024-01-01T24:00:00", false, true],
+  ["tz", "2024-01-01T10:00:00+02:00", true, true],
+  // stricter than Postgres, listed in the 0.25 upgrade (CD1 of r23): a 7th digit, which Postgres rounds, perhaps into the next day
+  ["tz", "2024-01-01T10:00:00.1234567Z", false, true],
+  ["tz", "2024-01-01T10:00:00.123456Z", true, true],
+  ["tz", "2024-01-01T25:00:00Z", false, false],
+  // stricter than Postgres, listed in the 0.14 changelog: a local time's instant depends on the session's TimeZone
+  ["tz", "2024-01-01T10:00:00", false, true],
+  ["t", "10:00", true, true],
+  ["t", "23:59:59.999999", true, true],
+  ["t", "25:00", false, false],
+  // stricter than Postgres, listed in the 0.14 changelog
+  ["t", "24:00:00", false, true],
+  // stricter than Postgres, listed since 0.15 (F11): a leap second, which Postgres reads as the next minute
+  ["t", "23:59:60", false, true],
+  // an offset as RFC 3339 writes it, as a timestamptz's, though Postgres takes more (CD11 of r22b)
+  ["tt", "10:00:00+02", false, true],
+  ["tt", "10:00:00+02:00", true, true],
+  ["tt", "10:00Z", true, true],
+  ["tt", "10:00:00+02:30", true, true],
+  ["tt", "10:61:00+02", false, false],
+  // F4 of the 0.14.1 review: Postgres takes an offset up to 15:59, and refuses one past it with a 22009
+  ["tt", "10:00:00+15:59", true, true],
+  ["tt", "10:00:00+16", false, false],
+  ["tt", "10:00:00-23:59", false, false],
+  ["tz", "2024-01-01T10:00:00+15:59", true, true],
+  ["tz", "2024-01-01T10:00:00+16:00", false, false],
+  ["tz", "2024-01-01T10:00:00-23:00", false, false],
+  ["n52", "123.45", true, true],
+  ["n52", "-999.99", true, true],
+  ["n52", "0012.5", true, true],
+  ["n52", "1234.5", false, false],
+  // Postgres rounds the fraction first, and 999.995 rounds to 1000.00, past numeric(5,2): a 22003
+  ["n52", "999.995", false, false],
+  ["n52", "abc", false, false],
+  // stricter than Postgres, listed in the 0.14 changelog: a fraction it would round, an exponent, NaN
+  ["n52", "1.234", false, true],
+  ["n52", "1e2", false, true],
+  ["n52", "NaN", false, true],
+  ["n3", "999", true, true],
+  ["n3", "1000", false, false],
+  ["n3", "1.5", false, true],
+  ["nn", "123456789012345678901234567890.123", true, true],
+  ["nn", "-0.5", true, true],
+  ["nn", "1.5e3", false, true],
+  ["nr", 999.99, true, true],
+  ["nr", -999.994, true, true],
+  ["nr", 999.995, false, false],
+  ["nr", 1000, false, false],
+  ["b", "9223372036854775807", true, true],
+  ["b", "-9223372036854775808", true, true],
+  ["b", "9223372036854775808", false, false],
+  ["b", "-9223372036854775809", false, false],
+  ["b", "12.5", false, false],
+  ["r", 3.4028235e38, true, true],
+  ["r", -3.4028235e38, true, true],
+  ["r", 3.5e38, false, false],
+  ["r", 0, true, true],
+  // real refuses what rounds to zero: at or below half the smallest float4, 2^-150
+  ["r", 1e-50, false, false],
+  ["r", 7.006492321624085e-46, false, false],
+  ["r", 7.006492321624087e-46, true, true],
+  ["r", 1e-45, true, true],
+  ["r", -1e-45, true, true],
+  ["ip", "192.168.0.1", true, true],
+  ["ip", "192.168.0.1/24", true, true],
+  ["ip", "::1", true, true],
+  ["ip", "fe80::1/64", true, true],
+  ["ip", "300.1.1.1", false, false],
+  ["ip", "localhost", false, false],
+  // AA12 of r22: an IPv6 address as Postgres reads one, its IPv4 tail in two to four parts
+  ["ip", "::", true, true],
+  ["ip", "1:2:3:4:5:6:7:8", true, true],
+  ["ip", "2001:DB8::ABCD", true, true],
+  ["ip", "::ffff:1.2.3.4", true, true],
+  ["ip", "64:ff9b::1.2.3.4", true, true],
+  ["ip", "1:2:3:4:5:6:1.2.3.4", true, true],
+  ["ip", "::ffff:1.2.3", true, true],
+  ["ip", "::ffff:1.2", true, true],
+  ["ip", "0001:0002::0003", true, true],
+  ["ip", "::ffff:256.1.1.1", false, false],
+  ["ip", "::ffff:01.2.3.4", false, false],
+  ["ip", "::ffff:1.2.3.4.5", false, false],
+  ["ip", "1:2:3:4:5:6:7:1.2.3.4", false, false],
+  ["ip", "1:2:3:4:5:6::1.2.3.4", false, false],
+  ["ip", "fe80::1%eth0", false, false],
+  ["ip", "12345::", false, false],
+  ["ip", ":::", false, false],
+  ["ip", "1::2::3", false, false],
+  ["ip", "1:2:3:4::5:6:7:8", false, false],
+  ["ip", "::/0", true, true],
+  ["ip", "::1/128", true, true],
+  ["ip", "::/129", false, false],
+  ["ip", "::/064", false, false],
+  ["ip", "::/1.5", false, false],
+  // stricter than Postgres, listed in the 0.21 changelog: a colon before the prefix, an empty first tail part
+  ["ip", "1::f:/64", false, true],
+  ["ip", "::.255", false, true],
+  ["net", "192.168.0.0/24", true, true],
+  ["net", "10.0.0.0/8", true, true],
+  ["net", "192.168.0.1", true, true],
+  ["net", "2001:db8::/32", true, true],
+  ["net", "fe80::/64", true, true],
+  ["net", "::ffff:192.168.0.0/120", true, true],
+  ["net", "::ffff:1.2.3.0/120", true, true],
+  ["net", "::ffff:1.2.3/120", true, true],
+  ["net", "::ffff:1.2/112", true, true],
+  ["net", "::/0", true, true],
+  ["net", "::/129", false, false],
+  ["net", "::/064", false, false],
+  ["net", "::/1.5", false, false],
+  ["net", "::ffff:1.2.3.4/120", false, false],
+  // a cidr has no bits set right of its mask: Postgres refuses each of these
+  ["net", "192.168.0.1/24", false, false],
+  ["net", "10.0.0.1/8", false, false],
+  ["net", "fe80::1/64", false, false],
+  ["net", "2001:db8::1/32", false, false],
+  ["net", "192.168.0.0/33", false, false],
+  // stricter than Postgres, listed in the 0.14 changelog: an abbreviated network
+  ["net", "10.1", false, true],
+  ["mac", "08:00:2b:01:02:03", true, true],
+  ["mac", "08-00-2B-01-02-03", true, true],
+  ["mac", "08002b:010203", true, true],
+  ["mac", "0800.2b01.0203", true, true],
+  ["mac", "0800-2b01-0203", true, true],
+  ["mac", "08002b010203", true, true],
+  ["mac", "8:0:2b:1:2:3", true, true],
+  ["mac", "08:00-2b:01:02:03", false, false],
+  ["mac", "08:00:2b:01:02", false, false],
+  ["mac", "08:00:2b:01:02:03:04:05", false, false],
+  ["mac", "08:00:2g:01:02:03", false, false],
+  // stricter than Postgres, listed in the 0.21 changelog: a blank in it
+  ["mac", " 08:00:2b:01:02:03", false, true],
+  ["mac", "08: 00:2b:01:02:03", false, true],
+  ["mac8", "08:00:2b:01:02:03:04:05", true, true],
+  ["mac8", "08002b:0102030405", true, true],
+  ["mac8", "0800.2b01.0203.0405", true, true],
+  ["mac8", "08002b01:02030405", true, true],
+  ["mac8", "08002b0102030405", true, true],
+  // six octets, which macaddr8 widens with ff:fe
+  ["mac8", "08:00:2b:01:02:03", true, true],
+  ["mac8", "08002b010203", true, true],
+  ["mac8", "08:00:2b:01:02:03:04", false, false],
+  ["mac8", "08:00:2b:01:02:03:04:05:06", false, false],
+  // AA5 of r22: two digits an octet, one separator, between any two octets or none
+  ["mac8", "8:0:2b:1:2:3", false, false],
+  ["mac8", "8:00:2b:01:02:03", false, false],
+  ["mac8", "08:0:2b:01:02:03:04:05", false, false],
+  ["mac8", "8-0-2b-1-2-3", false, false],
+  ["mac8", "08:00-2b:01:02:03", false, false],
+  ["mac8", "08002b0102030405060", false, false],
+  ["mac8", "08.00.2b.01.02.03", true, true],
+  ["mac8", "08.00.2b.01.02.03.04.05", true, true],
+  ["mac8", "0800:2b01:0203:0405", true, true],
+  ["mac8", "08:002b:01:0203", true, true],
+  ["mac8", "08-00-2B-01-02-03-04-05", true, true],
+  // stricter than Postgres, listed in the 0.21 changelog: a blank in it, or a character after its last octet
+  ["mac8", " 08:00:2b:01:02:03", false, true],
+  ["mac8", "08:00:2b:01:02:03:", false, true],
+  ["mac8", "08002b0102030", false, true],
+  ["bits", "101", true, true],
+  ["bits", "000", true, true],
+  ["bits", "10", false, false],
+  ["bits", "1010", false, false],
+  ["bits", "102", false, false],
+  ["iv", "P1Y2M3DT4H5M6S", true, true],
+  ["iv", "PT0.5S", true, true],
+  ["iv", "P1W", true, true],
+  ["iv", "P", false, false],
+  ["iv", "-P1D", false, false],
+  // AA6 of r22: a comma for the seconds' decimal mark, which Postgres refuses with a 22007
+  ["iv", "PT1,5S", false, false],
+  ["iv", "PT1M1,25S", false, false],
+  // A2-3 of r22: a part past what Postgres holds alone, a 22015; each at the most digits it holds
+  ["iv", "P2147483648D", false, false],
+  ["iv", "PT9999999999H", false, false],
+  ["iv", "PT999999999999H", false, false],
+  ["iv", "P999999999999W", false, false],
+  // A3-5 of r23: one digit past each part's most, the step where the DTO's digit bound meets Postgres's
+  ["iv", "P999999999Y", false, false],
+  ["iv", "P9999999999M", false, false],
+  ["iv", "P999999999W", false, false],
+  ["iv", "PT999999999999M", false, false],
+  ["iv", "PT9999999999999S", false, false],
+  ["iv", "P99999999Y", true, true],
+  ["iv", "P999999999M", true, true],
+  ["iv", "P99999999W", true, true],
+  ["iv", "P999999999D", true, true],
+  ["iv", "PT999999999H", true, true],
+  ["iv", "PT99999999999M", true, true],
+  ["iv", "PT999999999999.999999S", true, true],
+  // stricter than Postgres, listed in the 0.14 changelog: a negative or fractional part, the alternative format, and Postgres's own spelling
+  ["iv", "P-1D", false, true],
+  ["iv", "P1.5Y", false, true],
+  ["iv", "P0001-02-03T04:05:06", false, true],
+  // A2-3: a part Postgres holds, past the most digits the DTO takes of it, which every part takes
+  ["iv", "PT2562047788H", false, true],
+  ["iv", "1 day", false, true],
+  // F3 of the 0.14.1 review: a uuid is z.guid(), the canonical spelling
+  ["u", "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11", true, true],
+  ["u", "A0EEBC99-9C0B-4EF8-BB6D-6BB9BD380A11", true, true],
+  ["u", "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a1", false, false],
+  ["u", "not-a-uuid", false, false],
+  // stricter than Postgres, listed since 0.15: braces, and the digits bare
+  ["u", "{a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11}", false, true],
+  ["u", "a0eebc999c0b4ef8bb6d6bb9bd380a11", false, true],
+  ["v", "abc", true, true],
+  // stricter than Postgres, listed since 0.15 (F11): blanks past varchar(n), which Postgres cuts
+  ["v", "abc  ", false, true],
+];
 
-/* each column as drizzle's string mode reads it, as text */
+// each column as drizzle's string mode reads it, as text
 const READ =
-	"SELECT id, d::text AS d, ts::text AS ts, tz::text AS tz, t::text AS t, tt::text AS tt, n52::text AS n52, n3::text AS n3, nn::text AS nn, nr::float8 AS nr, b::text AS b, r, ip::text AS ip, net::text AS net, mac::text AS mac, mac8::text AS mac8, bits::text AS bits, iv::text AS iv, u::text AS u, v FROM kinds ORDER BY id"
+  "SELECT id, d::text AS d, ts::text AS ts, tz::text AS tz, t::text AS t, tt::text AS tt, n52::text AS n52, n3::text AS n3, nn::text AS nn, nr::float8 AS nr, b::text AS b, r, ip::text AS ip, net::text AS net, mac::text AS mac, mac8::text AS mac8, bits::text AS bits, iv::text AS iv, u::text AS u, v FROM kinds ORDER BY id";
 
 /** Whether Postgres stores `value` in `column` */
 async function stored(client: pg.Client, [column, value]: [string, number | string]): Promise<boolean> {
-	try {
-		await client.query(`INSERT INTO kinds (id, ${column}) VALUES ('k', $1)`, [value])
-		return true
-	} catch {
-		// reason: the probe asks whether Postgres refuses the value; a refusal is the answer, not a failure
-		return false
-	}
+  try {
+    await client.query(`INSERT INTO kinds (id, ${column}) VALUES ('k', $1)`, [value]);
+
+    return true;
+  } catch {
+    // reason: the probe asks whether Postgres refuses the value; a refusal is the answer, not a failure
+    return false;
+  }
 }
 
 /** The kinds table's generated create and read DTOs */
 async function kindsDtos(): Promise<{ create: z.ZodObject; read: z.ZodObject }> {
-	const dtos = await generatedDtos(
-		"f50",
-		`import { bigint, bit, cidr, date, inet, interval, macaddr, macaddr8, numeric, real, text, time, timestamp, uuid, varchar } from "drizzle-orm/pg-core"\nexport const kinds = pgTable("kinds", ${COLUMNS})`,
-		{ dialect: "postgres" },
-	)
-	return {
-		create: dtos["kinds"]?.["kindsDtoCreateSchema"] as z.ZodObject,
-		read: dtos["kinds"]?.["kindsDtoReadSchema"] as z.ZodObject,
-	}
+  const dtos = await generatedDtos(
+    "f50",
+    `import { bigint, bit, cidr, date, inet, interval, macaddr, macaddr8, numeric, real, text, time, timestamp, uuid, varchar } from "drizzle-orm/pg-core"\nexport const kinds = pgTable("kinds", ${COLUMNS})`,
+    { dialect: "postgres" },
+  );
+
+  return {
+    create: dtos["kinds"]?.["kindsDtoCreateSchema"] as z.ZodObject,
+    read: dtos["kinds"]?.["kindsDtoReadSchema"] as z.ZodObject,
+  };
 }
 
 describe("a plain Postgres column's write DTO, by its data type (F50)", () => {
-	const sessions = usePg()
-	let create: z.ZodObject
-	let read: z.ZodObject
+  const sessions = usePg();
+  let create: z.ZodObject;
+  let read: z.ZodObject;
 
-	beforeAll(async () => {
-		;({ create, read } = await kindsDtos())
-	})
+  beforeAll(async () => {
+    ({ create, read } = await kindsDtos());
+  });
 
-	beforeEach(async () => {
-		await sessions.pg().query(DDL)
-	})
+  beforeEach(async () => {
+    await sessions.pg().query(DDL);
+  });
 
-	it.each(CASES)("%s %j: the DTO takes it %s, Postgres %s", async (...[column, value, dto, pg]: Case) => {
-		expect(create.safeParse({ id: "k", [column]: value }).success).toBe(dto)
-		expect(await stored(sessions.pg(), [column, value])).toBe(pg)
-	})
+  it.each(CASES)("%s %j: the DTO takes it %s, Postgres %s", async (...[column, value, dto, pg]: Case) => {
+    expect(create.safeParse({ id: "k", [column]: value }).success).toBe(dto);
+    expect(await stored(sessions.pg(), [column, value])).toBe(pg);
+  });
 
-	/* why each refuses what Postgres takes: the instant a timestamp or a session zone would lose */
-	it("keeps the instant of each kind's accepted form, where the refused one loses it", async () => {
-		const client = sessions.pg()
-		const local = "2024-01-01T10:00:00"
-		const instant = "2024-01-01T10:00:00+05:00"
-		expect(create.safeParse({ id: "a", ts: local, tz: instant }).success).toBe(true)
-		await client.query("INSERT INTO kinds (id, ts, tz) VALUES ('a', $1, $2)", [local, instant])
-		await client.query("INSERT INTO kinds (id, ts) VALUES ('b', $1)", [instant])
-		const at = async (id: string) =>
-			(await client.query("SELECT ts::text AS ts, (tz AT TIME ZONE 'UTC')::text AS tz FROM kinds WHERE id = $1", [id]))
-				.rows[0]
-		expect(await at("a")).toEqual({ ts: "2024-01-01 10:00:00", tz: "2024-01-01 05:00:00" })
-		/* the +05:00 is gone: the stored timestamp names 10:00 in no zone, not 05:00 UTC */
-		expect(await at("b")).toMatchObject({ ts: "2024-01-01 10:00:00" })
-		await client.query("SET TIME ZONE 'Asia/Kathmandu'")
-		await client.query("INSERT INTO kinds (id, tz) VALUES ('c', $1)", [local])
-		expect(await at("c")).toMatchObject({ tz: "2024-01-01 04:15:00" })
-	})
+  // why each refuses what Postgres takes: the instant a timestamp or a session zone would lose
+  it("keeps the instant of each kind's accepted form, where the refused one loses it", async () => {
+    const client = sessions.pg();
+    const local = "2024-01-01T10:00:00";
+    const instant = "2024-01-01T10:00:00+05:00";
+    expect(create.safeParse({ id: "a", ts: local, tz: instant }).success).toBe(true);
+    await client.query("INSERT INTO kinds (id, ts, tz) VALUES ('a', $1, $2)", [local, instant]);
+    await client.query("INSERT INTO kinds (id, ts) VALUES ('b', $1)", [instant]);
 
-	it("reads back whatever Postgres stores, its infinities and its own spellings included", async () => {
-		await sessions
-			.pg()
-			.query(
-				"INSERT INTO kinds VALUES ('k', 'infinity', 'infinity', '-infinity', '24:00', '24:00+00', 'NaN', 7, 'Infinity', 1.5, 1, 1e-45)",
-			)
-		/* as text, as drizzle's string mode reads each of them */
-		const { rows } = await sessions.pg().query(READ)
-		expect(read.safeParse(rows[0]).success).toBe(true)
-	})
-})
+    const at = async (id: string) =>
+      (await client.query("SELECT ts::text AS ts, (tz AT TIME ZONE 'UTC')::text AS tz FROM kinds WHERE id = $1", [id]))
+        .rows[0];
 
-/* what Postgres stores past the write DTO's rule, and what it refuses by any write path */
+    expect(await at("a")).toEqual({ ts: "2024-01-01 10:00:00", tz: "2024-01-01 05:00:00" });
+    // the +05:00 is gone: the stored timestamp names 10:00 in no zone, not 05:00 UTC
+    expect(await at("b")).toMatchObject({ ts: "2024-01-01 10:00:00" });
+    await client.query("SET TIME ZONE 'Asia/Kathmandu'");
+    await client.query("INSERT INTO kinds (id, tz) VALUES ('c', $1)", [local]);
+    expect(await at("c")).toMatchObject({ tz: "2024-01-01 04:15:00" });
+  });
+
+  it("reads back whatever Postgres stores, its infinities and its own spellings included", async () => {
+    await sessions
+      .pg()
+      .query(
+        "INSERT INTO kinds VALUES ('k', 'infinity', 'infinity', '-infinity', '24:00', '24:00+00', 'NaN', 7, 'Infinity', 1.5, 1, 1e-45)",
+      );
+    // as text, as drizzle's string mode reads each of them
+    const { rows } = await sessions.pg().query(READ);
+    expect(read.safeParse(rows[0]).success).toBe(true);
+  });
+});
+
+// what Postgres stores past the write DTO's rule, and what it refuses by any write path
 describe("a plain Postgres column's stored values and refusals beyond its DTO (F4, F5)", () => {
-	const sessions = usePg()
-	let read: z.ZodObject
+  const sessions = usePg();
+  let read: z.ZodObject;
 
-	beforeAll(async () => {
-		;({ read } = await kindsDtos())
-	})
+  beforeAll(async () => {
+    ({ read } = await kindsDtos());
+  });
 
-	beforeEach(async () => {
-		await sessions.pg().query(DDL)
-	})
+  beforeEach(async () => {
+    await sessions.pg().query(DDL);
+  });
 
-	/* F5 of the 0.14.1 review: a real holds the infinities and NaN, which the driver reads as JS numbers. A
-	   read takes the infinities, which JSON writes as null; z.toJSONSchema cannot represent NaN, so a
-	   stored NaN, Postgres's alone (SQLite stores it as NULL), still fails the read DTO */
-	it("reads back a stored Infinity and -Infinity, and refuses a stored NaN", async () => {
-		await sessions
-			.pg()
-			.query("INSERT INTO kinds (id, r) VALUES ('a', 'NaN'), ('b', 'Infinity'), ('c', '-Infinity'), ('d', 1.5)")
-		const { rows } = await sessions.pg().query(READ)
-		expect(rows.map((row) => row.r)).toEqual([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, 1.5])
-		expect(rows.map((row) => read.safeParse(row).success)).toEqual([false, true, true, true])
-	})
+  // F5 of the 0.14.1 review: a real holds the infinities and NaN, which the driver reads as JS numbers. A
+  // read takes the infinities, which JSON writes as null; z.toJSONSchema cannot represent NaN, so a
+  // stored NaN, Postgres's alone (SQLite stores it as NULL), still fails the read DTO
+  it("reads back a stored Infinity and -Infinity, and refuses a stored NaN", async () => {
+    await sessions
+      .pg()
+      .query("INSERT INTO kinds (id, r) VALUES ('a', 'NaN'), ('b', 'Infinity'), ('c', '-Infinity'), ('d', 1.5)");
+    const { rows } = await sessions.pg().query(READ);
+    expect(rows.map((row) => row.r)).toEqual([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, 1.5]);
+    expect(rows.map((row) => read.safeParse(row).success)).toEqual([false, true, true, true]);
+  });
 
-	/* F4 of the 0.14.1 review: the offset Postgres refuses past 15:59 is the request's value, a 400 by any write path */
-	it("answers an offset past 15:59 with a 400 naming the column, as every other bad value", async () => {
-		const error = await sessions
-			.pg()
-			.query("INSERT INTO kinds (id, tt) VALUES ('k', $1)", ["10:00:00+16"])
-			.catch((caught: unknown) => caught)
-		expect((error as { code?: string }).code).toBe("22009")
-		expect(classifyPgError(error, [])).toMatchObject({ errorKey: "invalid_value", status: 400 })
-	})
+  // F4 of the 0.14.1 review: the offset Postgres refuses past 15:59 is the request's value, a 400 by any write path
+  it("answers an offset past 15:59 with a 400 naming the column, as every other bad value", async () => {
+    const error = await sessions
+      .pg()
+      .query("INSERT INTO kinds (id, tt) VALUES ('k', $1)", ["10:00:00+16"])
+      .catch((caught: unknown) => caught);
 
-	/* A2-3 of r22: parts the DTO takes, each one Postgres holds, whose sum it does not: the handler's 400 */
-	it.each([
-		["P99999999Y999999999M", "22008"],
-		["PT999999999H99999999999M999999999999S", "22015"],
-	])("answers the interval %s, past Postgres's range by its sum, with a 400 (%s)", async (value, code) => {
-		const { create } = await kindsDtos()
-		expect(create.safeParse({ id: "k", iv: value }).success).toBe(true)
-		const error = await sessions
-			.pg()
-			.query("INSERT INTO kinds (id, iv) VALUES ('k', $1)", [value])
-			.catch((caught: unknown) => caught)
-		expect((error as { code?: string }).code).toBe(code)
-		expect(classifyPgError(error, [])).toMatchObject({ errorKey: "invalid_value", status: 400 })
-	})
-})
+    expect((error as { code?: string }).code).toBe("22009");
+    expect(classifyPgError(error, [])).toMatchObject({ errorKey: "invalid_value", status: 400 });
+  });
+
+  // A2-3 of r22: parts the DTO takes, each one Postgres holds, whose sum it does not: the handler's 400
+  it.each([
+    ["P99999999Y999999999M", "22008"],
+    ["PT999999999H99999999999M999999999999S", "22015"],
+  ])("answers the interval %s, past Postgres's range by its sum, with a 400 (%s)", async (value, code) => {
+    const { create } = await kindsDtos();
+    expect(create.safeParse({ id: "k", iv: value }).success).toBe(true);
+
+    const error = await sessions
+      .pg()
+      .query("INSERT INTO kinds (id, iv) VALUES ('k', $1)", [value])
+      .catch((caught: unknown) => caught);
+
+    expect((error as { code?: string }).code).toBe(code);
+    expect(classifyPgError(error, [])).toMatchObject({ errorKey: "invalid_value", status: 400 });
+  });
+});

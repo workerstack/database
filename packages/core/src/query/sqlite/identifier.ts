@@ -5,7 +5,7 @@
 
 /** `name` as a double-quoted SQLite identifier, embedded quotes doubled */
 function quoteIdent(name: string): string {
-	return `"${name.replaceAll('"', '""')}"`
+  return `"${name.replaceAll('"', '""')}"`;
 }
 
-export { quoteIdent }
+export { quoteIdent };

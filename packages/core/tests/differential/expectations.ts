@@ -11,60 +11,61 @@
  * The tip is in exactly one of the two lists. The commit that fixes a finding moves "tip" from `failsOn` to
  * `passesOn` in each of its shapes.
  */
-import type { Version } from "./support/oracles.ts"
+import type { Version } from "./support/oracles.ts";
 
-export type ShapeId = keyof typeof EXPECTED
+export type ShapeId = keyof typeof EXPECTED;
+
 export type Shape = {
-	claim: string
-	failsOn: readonly Version[]
-	finding: string
-	passesOn: readonly Version[]
-	suite: "lists" | "proof"
-}
+  claim: string;
+  failsOn: readonly Version[];
+  finding: string;
+  passesOn: readonly Version[];
+  suite: "lists" | "proof";
+};
 
 export const EXPECTED = {
-	/* fixed on the tip by plan 25 (3.1). 0.20.1 is unheld: it answered QL2's own repro with a 400, and has
-	   failures of its own in the same inputs, which 0.21 fixed */
-	QL2: {
-		claim:
-			"a key held apart, in a text or blob column of no affinity or BLOB's beside a TEXT that reads as a number, binds through cast(? as real|integer), whose affinity converts that TEXT: a cursor walk skips rows ascending and loops descending",
-		failsOn: ["0.21.0"],
-		finding: "QL2",
-		passesOn: ["tip"],
-		suite: "lists",
-	},
-	/* fixed on the tip by plan 25 (3.2). 0.20.1 is unheld: it served QL8's pages, but refuses a page by number
-	   of its own over a timestamp key no JS Date holds (seeds 10, 31 and 43) */
-	QL8: {
-		claim: "a page by number is refused with 500 for a row no cursor is minted from, which 0.20.1 served",
-		failsOn: ["0.21.0"],
-		finding: "QL8",
-		passesOn: ["tip"],
-		suite: "lists",
-	},
-	/* fixed on the tip by plan 25 (3.2): such a page serves with nextCursor null and hasMore true */
-	"QL8-mint": {
-		claim:
-			"a page by number is refused with 500 for the row its next cursor would be minted from, a row no cursor can hold",
-		failsOn: ["0.21.0", "0.20.1"],
-		finding: "QL8",
-		passesOn: ["tip"],
-		suite: "lists",
-	},
-	/* fixed on the tip by plan 25 (3.9) */
-	SD1: {
-		claim: "a file dropping what an unchanged trigger or view uses passes check, then a write or a read fails on D1",
-		failsOn: ["0.21.0"],
-		finding: "SD1",
-		passesOn: ["tip"],
-		suite: "proof",
-	},
-	/* fixed on the tip by plan 25 (3.9) */
-	SD2: {
-		claim: "an INSTEAD OF trigger for one or two events of a view is refused, though D1 applies it and runs its writes",
-		failsOn: ["0.21.0"],
-		finding: "SD2",
-		passesOn: ["tip"],
-		suite: "proof",
-	},
-} as const satisfies Record<string, Shape>
+  // fixed on the tip by plan 25 (3.1). 0.20.1 is unheld: it answered QL2's own repro with a 400, and has
+  // failures of its own in the same inputs, which 0.21 fixed
+  QL2: {
+    claim:
+      "a key held apart, in a text or blob column of no affinity or BLOB's beside a TEXT that reads as a number, binds through cast(? as real|integer), whose affinity converts that TEXT: a cursor walk skips rows ascending and loops descending",
+    failsOn: ["0.21.0"],
+    finding: "QL2",
+    passesOn: ["tip"],
+    suite: "lists",
+  },
+  // fixed on the tip by plan 25 (3.2). 0.20.1 is unheld: it served QL8's pages, but refuses a page by number
+  // of its own over a timestamp key no JS Date holds (seeds 10, 31 and 43)
+  QL8: {
+    claim: "a page by number is refused with 500 for a row no cursor is minted from, which 0.20.1 served",
+    failsOn: ["0.21.0"],
+    finding: "QL8",
+    passesOn: ["tip"],
+    suite: "lists",
+  },
+  // fixed on the tip by plan 25 (3.2): such a page serves with nextCursor null and hasMore true
+  "QL8-mint": {
+    claim:
+      "a page by number is refused with 500 for the row its next cursor would be minted from, a row no cursor can hold",
+    failsOn: ["0.21.0", "0.20.1"],
+    finding: "QL8",
+    passesOn: ["tip"],
+    suite: "lists",
+  },
+  // fixed on the tip by plan 25 (3.9)
+  SD1: {
+    claim: "a file dropping what an unchanged trigger or view uses passes check, then a write or a read fails on D1",
+    failsOn: ["0.21.0"],
+    finding: "SD1",
+    passesOn: ["tip"],
+    suite: "proof",
+  },
+  // fixed on the tip by plan 25 (3.9)
+  SD2: {
+    claim: "an INSTEAD OF trigger for one or two events of a view is refused, though D1 applies it and runs its writes",
+    failsOn: ["0.21.0"],
+    finding: "SD2",
+    passesOn: ["tip"],
+    suite: "proof",
+  },
+} as const satisfies Record<string, Shape>;

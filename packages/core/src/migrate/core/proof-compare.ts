@@ -6,25 +6,28 @@
  * every value a new one holds, row for row, is named as renamed: still unsafe, since code that
  * reads the old name breaks.
  */
-import type { LocalDb } from "../drivers/local-db.ts"
+import type { LocalDb } from "../drivers/local-db.ts";
 
 /** One table as the proof compares it: its stored columns, whether each may hold NULL, its default, and its rows */
-type Shape = { columns: string[]; defaults: Map<string, string | null>; nullable: Set<string>; rows: string[][] }
+type Shape = { columns: string[]; defaults: Map<string, string | null>; nullable: Set<string>; rows: string[][] };
 
 /** What a file did to the tables before it: the proof's findings without what it could not prove */
-type Findings = { cautious: string[]; unsafe: string[] }
+type Findings = { cautious: string[]; unsafe: string[] };
 
 /** Each value of `keys`, with how many times it occurs */
 function counts(keys: readonly string[]): Map<string, number> {
-	const out = new Map<string, number>()
-	for (const key of keys) out.set(key, (out.get(key) ?? 0) + 1)
-	return out
+  const out = new Map<string, number>();
+
+  for (const key of keys) out.set(key, (out.get(key) ?? 0) + 1);
+
+  return out;
 }
 
 /** How many of `before` are not in `after`, each counted as often as it occurs */
 function missing(before: readonly string[], after: readonly string[]): number {
-	const held = counts(after)
-	return [...counts(before)].reduce((sum, [key, n]) => sum + Math.max(0, n - (held.get(key) ?? 0)), 0)
+  const held = counts(after);
+
+  return [...counts(before)].reduce((sum, [key, n]) => sum + Math.max(0, n - (held.get(key) ?? 0)), 0);
 }
 
 /**
@@ -32,26 +35,31 @@ function missing(before: readonly string[], after: readonly string[]): number {
  * that default as SQLite quotes it. Atlas's "make NOT NULL with a default" rebuild fills its NULLs so.
  */
 function allowedDefaults(db: LocalDb, { now, was }: { now: Shape; was: Shape }): Map<string, string> {
-	const out = new Map<string, string>()
-	for (const column of was.columns) {
-		const fresh = now.defaults.get(column)
-		if (!was.nullable.has(column) || now.nullable.has(column) || fresh === null || fresh === undefined) continue
-		out.set(column, String(db.all(`SELECT quote(${fresh}) AS v`)[0]?.["v"]))
-	}
-	return out
+  const out = new Map<string, string>();
+
+  for (const column of was.columns) {
+    const fresh = now.defaults.get(column);
+
+    if (!was.nullable.has(column) || now.nullable.has(column) || fresh === null || fresh === undefined) continue;
+    out.set(column, String(db.all(`SELECT quote(${fresh}) AS v`)[0]?.["v"]));
+  }
+
+  return out;
 }
 
 /** Each row of `shape` as one key over `columns`, a NULL in a column of `fill` read as its default */
 function rowKeys(shape: Shape, columns: readonly string[], fill: ReadonlyMap<string, string> = new Map()): string[] {
-	const at = columns.map((column) => shape.columns.indexOf(column))
-	return shape.rows.map((row) =>
-		JSON.stringify(
-			columns.map((column, i) => {
-				const value = row[at[i] as number] as string
-				return value === "NULL" ? (fill.get(column) ?? value) : value
-			}),
-		),
-	)
+  const at = columns.map((column) => shape.columns.indexOf(column));
+
+  return shape.rows.map((row) =>
+    JSON.stringify(
+      columns.map((column, i) => {
+        const value = row[at[i] as number] as string;
+
+        return value === "NULL" ? (fill.get(column) ?? value) : value;
+      }),
+    ),
+  );
 }
 
 /**
@@ -59,20 +67,22 @@ function rowKeys(shape: Shape, columns: readonly string[], fill: ReadonlyMap<str
  * leaving out makes the rows match (a value moved between rows keeps the column's values)
  */
 function changedColumns(was: Shape, now: Shape, fill: ReadonlyMap<string, string>): string[] {
-	const columns = was.columns.filter((each) => now.columns.includes(each))
-	const differs = (picked: readonly string[]) => missing(rowKeys(was, picked, fill), rowKeys(now, picked)) > 0
-	const own = columns.filter((column) => differs([column]))
-	return own.length > 0 ? own : columns.filter((column) => !differs(columns.filter((each) => each !== column)))
+  const columns = was.columns.filter((each) => now.columns.includes(each));
+  const differs = (picked: readonly string[]) => missing(rowKeys(was, picked, fill), rowKeys(now, picked)) > 0;
+  const own = columns.filter((column) => differs([column]));
+
+  return own.length > 0 ? own : columns.filter((column) => !differs(columns.filter((each) => each !== column)));
 }
 
 /** The new column of `now` that holds `lost`'s values row for row, beside the columns both keep */
 function renamedTo({ now, was }: { now: Shape; was: Shape }, lost: string, taken: ReadonlySet<string>) {
-	const kept = was.columns.filter((each) => now.columns.includes(each))
-	const before = rowKeys(was, [...kept, lost])
-	return now.columns.find(
-		(column) =>
-			!was.columns.includes(column) && !taken.has(column) && missing(before, rowKeys(now, [...kept, column])) === 0,
-	)
+  const kept = was.columns.filter((each) => now.columns.includes(each));
+  const before = rowKeys(was, [...kept, lost]);
+
+  return now.columns.find(
+    (column) =>
+      !was.columns.includes(column) && !taken.has(column) && missing(before, rowKeys(now, [...kept, column])) === 0,
+  );
 }
 
 /**
@@ -80,34 +90,47 @@ function renamedTo({ now, was }: { now: Shape; was: Shape }, lost: string, taken
  * the columns it had: so a value copied, swapped or moved between rows shows, not only one lost
  */
 function compareTable(db: LocalDb, table: string, { now, was }: { now: Shape; was: Shape }): Findings {
-	const out: Findings = { cautious: [], unsafe: [] }
-	const taken = new Set<string>()
-	for (const column of was.columns.filter((each) => !now.columns.includes(each))) {
-		const renamed = renamedTo({ now, was }, column, taken)
-		if (renamed === undefined) out.unsafe.push(`loses ${table}.${column}`)
-		else {
-			taken.add(renamed)
-			out.unsafe.push(`renames ${table}.${column} to ${table}.${renamed}`)
-		}
-	}
-	/* a lost row changes every column's values: the loss alone is the finding */
-	if (now.rows.length < was.rows.length) {
-		out.unsafe.push(`loses ${was.rows.length - now.rows.length} of the ${was.rows.length} rows of ${table}`)
-		return out
-	}
-	const columns = was.columns.filter((each) => now.columns.includes(each))
-	const fill = allowedDefaults(db, { now, was })
-	if (missing(rowKeys(was, columns, fill), rowKeys(now, columns)) === 0) {
-		const nulls = [...fill.keys()].filter((column) =>
-			was.rows.some((row) => row[was.columns.indexOf(column)] === "NULL"),
-		)
-		for (const column of nulls) out.cautious.push(`fills ${table}.${column}'s NULLs with its default`)
-		return out
-	}
-	const changed = changedColumns(was, now, fill)
-	if (changed.length === 0) out.unsafe.push(`changes rows of ${table}`)
-	for (const column of changed) out.unsafe.push(`changes values of ${table}.${column}`)
-	return out
+  const out: Findings = { cautious: [], unsafe: [] };
+  const taken = new Set<string>();
+
+  for (const column of was.columns.filter((each) => !now.columns.includes(each))) {
+    const renamed = renamedTo({ now, was }, column, taken);
+
+    if (renamed === undefined) {
+      out.unsafe.push(`loses ${table}.${column}`);
+    } else {
+      taken.add(renamed);
+      out.unsafe.push(`renames ${table}.${column} to ${table}.${renamed}`);
+    }
+  }
+
+  // a lost row changes every column's values: the loss alone is the finding
+  if (now.rows.length < was.rows.length) {
+    out.unsafe.push(`loses ${was.rows.length - now.rows.length} of the ${was.rows.length} rows of ${table}`);
+
+    return out;
+  }
+
+  const columns = was.columns.filter((each) => now.columns.includes(each));
+  const fill = allowedDefaults(db, { now, was });
+
+  if (missing(rowKeys(was, columns, fill), rowKeys(now, columns)) === 0) {
+    const nulls = [...fill.keys()].filter((column) =>
+      was.rows.some((row) => row[was.columns.indexOf(column)] === "NULL"),
+    );
+
+    for (const column of nulls) out.cautious.push(`fills ${table}.${column}'s NULLs with its default`);
+
+    return out;
+  }
+
+  const changed = changedColumns(was, now, fill);
+
+  if (changed.length === 0) out.unsafe.push(`changes rows of ${table}`);
+
+  for (const column of changed) out.unsafe.push(`changes values of ${table}.${column}`);
+
+  return out;
 }
 
 /**
@@ -115,45 +138,56 @@ function compareTable(db: LocalDb, table: string, { now, was }: { now: Shape; wa
  * renamedTo matches it, with the renames; none when a column has no match or the rows differ
  */
 function columnMoves(was: Shape, now: Shape): Array<[string, string]> | undefined {
-	const moves: Array<[string, string]> = []
-	const taken = new Set<string>()
-	for (const column of was.columns.filter((each) => !now.columns.includes(each))) {
-		const renamed = renamedTo({ now, was }, column, taken)
-		if (renamed === undefined) return undefined
-		taken.add(renamed)
-		moves.push([column, renamed])
-	}
-	const moved = was.columns.map((column) => moves.find(([from]) => from === column)?.[1] ?? column)
-	return missing(rowKeys(was, was.columns), rowKeys(now, moved)) === 0 ? moves : undefined
+  const moves: Array<[string, string]> = [];
+  const taken = new Set<string>();
+
+  for (const column of was.columns.filter((each) => !now.columns.includes(each))) {
+    const renamed = renamedTo({ now, was }, column, taken);
+
+    if (renamed === undefined) return undefined;
+    taken.add(renamed);
+    moves.push([column, renamed]);
+  }
+
+  const moved = was.columns.map((column) => moves.find(([from]) => from === column)?.[1] ?? column);
+
+  return missing(rowKeys(was, was.columns), rowKeys(now, moved)) === 0 ? moves : undefined;
 }
 
 /** The new table of `after` that holds every row of `was`, each column by its name or a new one, and the column renames */
 function renamedTable(was: Shape, before: ReadonlyMap<string, Shape>, after: ReadonlyMap<string, Shape>) {
-	for (const [name, now] of after) {
-		if (before.has(name) || now.rows.length !== was.rows.length) continue
-		const moves = columnMoves(was, now)
-		if (moves !== undefined) return { moves, name }
-	}
-	return undefined
+  for (const [name, now] of after) {
+    if (before.has(name) || now.rows.length !== was.rows.length) continue;
+    const moves = columnMoves(was, now);
+
+    if (moves !== undefined) return { moves, name };
+  }
+
+  return;
 }
 
 /** What a file did to each table that was there before it */
 function compare(db: LocalDb, before: ReadonlyMap<string, Shape>, after: ReadonlyMap<string, Shape>): Findings {
-	const out: Findings = { cautious: [], unsafe: [] }
-	for (const [table, was] of before) {
-		const now = after.get(table)
-		const renamed = now === undefined ? renamedTable(was, before, after) : undefined
-		if (renamed !== undefined) {
-			out.unsafe.push(`renames ${table} to ${renamed.name}`)
-			for (const [from, to] of renamed.moves) out.unsafe.push(`renames ${table}.${from} to ${renamed.name}.${to}`)
-		} else if (now === undefined) out.unsafe.push(`loses every row of ${table}`)
-		else {
-			const found = compareTable(db, table, { now, was })
-			out.cautious.push(...found.cautious)
-			out.unsafe.push(...found.unsafe)
-		}
-	}
-	return out
+  const out: Findings = { cautious: [], unsafe: [] };
+
+  for (const [table, was] of before) {
+    const now = after.get(table);
+    const renamed = now === undefined ? renamedTable(was, before, after) : undefined;
+
+    if (renamed !== undefined) {
+      out.unsafe.push(`renames ${table} to ${renamed.name}`);
+
+      for (const [from, to] of renamed.moves) out.unsafe.push(`renames ${table}.${from} to ${renamed.name}.${to}`);
+    } else if (now === undefined) {
+      out.unsafe.push(`loses every row of ${table}`);
+    } else {
+      const found = compareTable(db, table, { now, was });
+      out.cautious.push(...found.cautious);
+      out.unsafe.push(...found.unsafe);
+    }
+  }
+
+  return out;
 }
 
-export { compare, type Findings, type Shape }
+export { compare, type Shape };

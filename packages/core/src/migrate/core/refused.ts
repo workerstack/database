@@ -1,9 +1,9 @@
 /** The files a stopped run names: still pending, applied before it stopped, and unknown, whose answer was lost */
 type Files = {
-	applied?: readonly string[] | undefined
-	pending: readonly string[]
-	unknown?: readonly string[] | undefined
-}
+  applied?: readonly string[] | undefined;
+  pending: readonly string[];
+  unknown?: readonly string[] | undefined;
+};
 
 /**
  * A migration run stopped: the reason, the files still pending, the files that applied before it
@@ -11,15 +11,15 @@ type Files = {
  * whose answer was lost, for `database migrate status` to read
  */
 export class Refused extends Error {
-	readonly applied: string[]
-	readonly pending: string[]
-	readonly unknown: string[]
+  readonly applied: string[];
+  readonly pending: string[];
+  readonly unknown: string[];
 
-	constructor(message: string, { applied = [], pending, unknown = [] }: Files) {
-		super(message)
-		this.name = "Refused"
-		this.applied = [...applied]
-		this.pending = [...pending]
-		this.unknown = [...unknown]
-	}
+  constructor(message: string, { applied = [], pending, unknown = [] }: Files) {
+    super(message);
+    this.name = "Refused";
+    this.applied = [...applied];
+    this.pending = [...pending];
+    this.unknown = [...unknown];
+  }
 }

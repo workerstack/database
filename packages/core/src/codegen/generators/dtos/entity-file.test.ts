@@ -1,199 +1,211 @@
-import { describe, expect, it } from "vitest"
-import type { EntityMetaInput } from "../../../meta.ts"
-import type { ImportRef } from "../../analyzer-types.ts"
-import { fieldOf } from "../../__fixtures__/runtime.ts"
-import type { FieldInfo, SchemaType, SharedName, SharedSchema, TableInfo } from "./dto-types.ts"
-import { type EntityFileOptions, generateEntityFile, schemaImportLines } from "./entity-file.ts"
-import { fieldSchemaOf } from "./field-schema.ts"
-import { buildSharedSchemas } from "./shared-schemas.ts"
+import { describe, expect, it } from "vitest";
 
-const NONE = { createdAt: false, deletedAt: false, updatedAt: false }
+import type { EntityMetaInput } from "../../../meta.ts";
+import { fieldOf } from "../../__fixtures__/runtime.ts";
+import type { ImportRef } from "../../analyzer-types.ts";
+import type { FieldInfo, SchemaType, SharedName, SharedSchema, TableInfo } from "./dto-types.ts";
+import { type EntityFileOptions, generateEntityFile, schemaImportLines } from "./entity-file.ts";
+import { fieldSchemaOf } from "./field-schema.ts";
+import { buildSharedSchemas } from "./shared-schemas.ts";
+
+const NONE = { createdAt: false, deletedAt: false, updatedAt: false };
 
 function table(fields: FieldInfo[], overrides: Partial<TableInfo> = {}): TableInfo {
-	return {
-		databaseMeta: null,
-		fields,
-		hasTimestamps: NONE,
-		name: "blog_post",
-		needsSharedMeta: false,
-		timestampStyle: "snake_case",
-		...overrides,
-	}
+  return {
+    databaseMeta: null,
+    fields,
+    hasTimestamps: NONE,
+    name: "blog_post",
+    needsSharedMeta: false,
+    timestampStyle: "snake_case",
+    ...overrides,
+  };
 }
 
-const field = (key: string, type: FieldInfo["type"], zodType: string): FieldInfo => ({ key, type, uses: [], zodType })
+const field = (key: string, type: FieldInfo["type"], zodType: string): FieldInfo => ({ key, type, uses: [], zodType });
 
 /** `info`, its builder saying it names `uses` */
-const using = (info: FieldInfo, ...uses: SharedName[]): FieldInfo => ({ ...info, uses })
+const using = (info: FieldInfo, ...uses: SharedName[]): FieldInfo => ({ ...info, uses });
 
 function file(t: TableInfo, options: Partial<EntityFileOptions> = {}): string {
-	return generateEntityFile(t, {
-		entityDir: "/app/dtos/blog-post",
-		schemaImports: [],
-		sharedSchemas: new Map(),
-		...options,
-	})
+  return generateEntityFile(t, {
+    entityDir: "/app/dtos/blog-post",
+    schemaImports: [],
+    sharedSchemas: new Map(),
+    ...options,
+  });
 }
 
 const META: EntityMetaInput = {
-	generated: ["id"],
-	identity: "id",
-	immutable: ["id"],
-	kind: "entity",
-	name: "blog_post",
-	softDelete: null,
-	states: { column: "status", initial: null, terminal: ["done"], values: ["open", "done"] },
-	partialUniqueIndexes: [{ columns: ["slug"], name: "post_slug_live", where: "deleted_at IS NULL" }],
-	tenantColumn: null,
-	uniqueIndexes: [{ columns: ["slug"], name: "post_slug" }],
-}
+  generated: ["id"],
+  identity: "id",
+  immutable: ["id"],
+  kind: "entity",
+  name: "blog_post",
+  partialUniqueIndexes: [{ columns: ["slug"], name: "post_slug_live", where: "deleted_at IS NULL" }],
+  softDelete: null,
+  states: { column: "status", initial: null, terminal: ["done"], values: ["open", "done"] },
+  tenantColumn: null,
+  uniqueIndexes: [{ columns: ["slug"], name: "post_slug" }],
+};
 
-/* C4 of r20: the builder says which shared names a field uses; a schema of the app's own named like one is not one */
+// C4 of r20: the builder says which shared names a field uses; a schema of the app's own named like one is not one
 /** The entity file's import from `_shared`, or "" for none */
 const sharedImportOf = (fields: FieldInfo[]) =>
-	file(table(fields))
-		.split("\n")
-		.find((line) => line.includes("_shared")) ?? ""
+  file(table(fields))
+    .split("\n")
+    .find((line) => line.includes("_shared")) ?? "";
 
 describe("generateEntityFile's shared imports", () => {
-	it("imports what the builder says it uses, and no name the code merely contains", () => {
-		const own = ["jsonValueSchemaStrict", "cidrSchemaDoc", "timestampSchemaDoc"].map((name) =>
-			field(name, "read", `${name}.nullable()`),
-		)
-		expect(sharedImportOf(own)).toBe("")
-		const used = using(field("doc", "create", "jsonValueSchema.nullable()"), "jsonValueSchema")
-		expect(sharedImportOf([...own, used])).toContain("{ jsonValueSchema }")
-	})
+  it("imports what the builder says it uses, and no name the code merely contains", () => {
+    const own = ["jsonValueSchemaStrict", "cidrSchemaDoc", "timestampSchemaDoc"].map((name) =>
+      field(name, "read", `${name}.nullable()`),
+    );
 
-	/* C3 of r21: a hoisted core holds the names its builder used, so the entity imports only the core */
-	it.each([
-		['jsonb("p")', "postgres"],
-		['jsonb("p").notNull()', "postgres"],
-		['json("p")', "postgres"],
-		['json("p").notNull()', "postgres"],
-		['text("p", { mode: "json" })', "sqlite"],
-		['text("p", { mode: "json" }).notNull()', "sqlite"],
-	] as const)("imports only names the file reads, for a plain JSON column %s", (raw, dialect) => {
-		const imports = {
-			enumImports: new Map<string, string>(),
-			identifiers: new Map<string, string>(),
-			jsonSchemaImports: new Set<string>(),
-		}
-		const fields = (["create", "update", "read"] as SchemaType[]).flatMap((type) => {
-			const built = fieldSchemaOf(fieldOf("p", raw, { dialect }), type, { dialect, imports })
-			return built === null ? [] : [{ key: "p", type, uses: built.uses, zodType: built.code }]
-		})
-		const t = table(fields)
-		const output = file(t, { sharedSchemas: buildSharedSchemas([t], imports) })
-		const line = output.split("\n").find((at) => at.includes("_shared")) ?? ""
-		const names = /\{ (.+) \}/.exec(line)?.[1]?.split(", ") ?? []
-		const body = output.replace(line, "")
-		expect(names.filter((name) => !new RegExp(`\\b${name.replaceAll("$", "\\$")}\\b`).test(body))).toEqual([])
-	})
-})
+    expect(sharedImportOf(own)).toBe("");
+    const used = using(field("doc", "create", "jsonValueSchema.nullable()"), "jsonValueSchema");
+    expect(sharedImportOf([...own, used])).toContain("{ jsonValueSchema }");
+  });
+
+  // C3 of r21: a hoisted core holds the names its builder used, so the entity imports only the core
+  it.each([
+    ['jsonb("p")', "postgres"],
+    ['jsonb("p").notNull()', "postgres"],
+    ['json("p")', "postgres"],
+    ['json("p").notNull()', "postgres"],
+    ['text("p", { mode: "json" })', "sqlite"],
+    ['text("p", { mode: "json" }).notNull()', "sqlite"],
+  ] as const)("imports only names the file reads, for a plain JSON column %s", (raw, dialect) => {
+    const imports = {
+      enumImports: new Map<string, string>(),
+      identifiers: new Map<string, string>(),
+      jsonSchemaImports: new Set<string>(),
+    };
+
+    const fields = (["create", "update", "read"] as SchemaType[]).flatMap((type) => {
+      const built = fieldSchemaOf(fieldOf("p", raw, { dialect }), type, { dialect, imports });
+
+      return built === null ? [] : [{ key: "p", type, uses: built.uses, zodType: built.code }];
+    });
+
+    const t = table(fields);
+    const output = file(t, { sharedSchemas: buildSharedSchemas([t], imports) });
+    const line = output.split("\n").find((at) => at.includes("_shared")) ?? "";
+    const names = /\{ (.+) \}/.exec(line)?.[1]?.split(", ") ?? [];
+    const body = output.replace(line, "");
+    expect(names.filter((name) => !new RegExp(`\\b${name.replaceAll("$", "\\$")}\\b`).test(body))).toEqual([]);
+  });
+});
 
 describe("schemaImportLines", () => {
-	it("imports each name from its module, relative to the entity file for project files", () => {
-		const refs: ImportRef[] = [
-			{ from: "./schemas", imported: "prefs", name: "prefs", path: "/app/schemas.ts" },
-			{ from: "./schemas", imported: "theme", name: "localTheme", path: "/app/schemas.ts" },
-			{ from: "@app/enums", imported: "ROLES", name: "ROLES", path: null },
-			{ from: "./all", imported: "*", name: "all", path: "/app/all.ts" },
-			{ from: "@app/def", imported: "default", name: "def", path: null },
-			{ from: "./in-dir", imported: "x", name: "x", path: "/app/dtos/blog-post/in-dir.ts" },
-		]
-		expect(schemaImportLines(refs, "/app/dtos/blog-post")).toEqual([
-			'import * as all from "../../all"',
-			'import { prefs, theme as localTheme } from "../../schemas"',
-			'import { x } from "./in-dir"',
-			'import def from "@app/def"',
-			'import { ROLES } from "@app/enums"',
-		])
-	})
-})
+  it("imports each name from its module, relative to the entity file for project files", () => {
+    const refs: ImportRef[] = [
+      { from: "./schemas", imported: "prefs", name: "prefs", path: "/app/schemas.ts" },
+      { from: "./schemas", imported: "theme", name: "localTheme", path: "/app/schemas.ts" },
+      { from: "@app/enums", imported: "ROLES", name: "ROLES", path: null },
+      { from: "./all", imported: "*", name: "all", path: "/app/all.ts" },
+      { from: "@app/def", imported: "default", name: "def", path: null },
+      { from: "./in-dir", imported: "x", name: "x", path: "/app/dtos/blog-post/in-dir.ts" },
+    ];
+
+    expect(schemaImportLines(refs, "/app/dtos/blog-post")).toEqual([
+      'import * as all from "../../all"',
+      'import { prefs, theme as localTheme } from "../../schemas"',
+      'import { x } from "./in-dir"',
+      'import def from "@app/def"',
+      'import { ROLES } from "@app/enums"',
+    ]);
+  });
+});
 
 describe("generateEntityFile", () => {
-	it("writes each schema type it has fields for, with the stamp on read and the types after", () => {
-		const output = file(
-			table([field("id", "read", "z.string()"), field("id", "create", "z.string().optional()")], {
-				databaseMeta: META,
-			}),
-			{ metaImportFrom: "@app/database/meta" },
-		)
-		expect(output).toContain('import { databaseMeta } from "@app/database/meta"')
-		expect(output).toContain("export const blogPostDtoReadSchema = z.object({\n\tid: _str,\n}).meta(databaseMeta({")
-		expect(output).toContain('\tstates: {\n\t\tcolumn: "status",\n\t\tinitial: null,\n\t\tterminal: ["done"],')
-		expect(output).toContain('\tuniqueIndexes: [{ columns: ["slug"], name: "post_slug" }],')
-		/* C7 of the 0.14.1 review: each partial index with its predicate */
-		expect(output).toContain(
-			'\tpartialUniqueIndexes: [{ columns: ["slug"], name: "post_slug_live", where: "deleted_at IS NULL" }],',
-		)
-		expect(output).toContain("export const blogPostDtoCreateSchema = z.object({\n\tid: _str.optional(),\n})\n")
-		expect(output).not.toContain("blogPostDtoUpdateSchema")
-		expect(output).toContain("export type BlogPostDtoRead = z.infer<typeof blogPostDtoReadSchema>")
-		expect(output).toContain('import { _str } from "../_shared/index.gen"')
-	})
+  it("writes each schema type it has fields for, with the stamp on read and the types after", () => {
+    const output = file(
+      table([field("id", "read", "z.string()"), field("id", "create", "z.string().optional()")], {
+        databaseMeta: META,
+      }),
+      { metaImportFrom: "@app/database/meta" },
+    );
 
-	it("renders a stamp without states or indexes, and the default meta import", () => {
-		const output = file(
-			table([field("id", "read", "z.string()")], {
-				databaseMeta: { ...META, softDelete: "deleted_at", states: null, uniqueIndexes: [] },
-			}),
-		)
-		expect(output).toContain('import { databaseMeta } from "@workerstack/database/meta"')
-		expect(output).toContain(
-			'\tsoftDelete: "deleted_at",\n\tstates: null,\n\ttenantColumn: null,\n\tuniqueIndexes: [],',
-		)
-	})
-})
+    expect(output).toContain('import { databaseMeta } from "@app/database/meta"');
+    expect(output).toContain("export const blogPostDtoReadSchema = z.object({\n\tid: _str,\n}).meta(databaseMeta({");
+    expect(output).toContain('\tstates: {\n\t\tcolumn: "status",\n\t\tinitial: null,\n\t\tterminal: ["done"],');
+    expect(output).toContain('\tuniqueIndexes: [{ columns: ["slug"], name: "post_slug" }],');
+    // C7 of the 0.14.1 review: each partial index with its predicate
+    expect(output).toContain(
+      '\tpartialUniqueIndexes: [{ columns: ["slug"], name: "post_slug_live", where: "deleted_at IS NULL" }],',
+    );
+    expect(output).toContain("export const blogPostDtoCreateSchema = z.object({\n\tid: _str.optional(),\n})\n");
+    expect(output).not.toContain("blogPostDtoUpdateSchema");
+    expect(output).toContain("export type BlogPostDtoRead = z.infer<typeof blogPostDtoReadSchema>");
+    expect(output).toContain('import { _str } from "../_shared/index.gen"');
+  });
+
+  it("renders a stamp without states or indexes, and the default meta import", () => {
+    const output = file(
+      table([field("id", "read", "z.string()")], {
+        databaseMeta: { ...META, softDelete: "deleted_at", states: null, uniqueIndexes: [] },
+      }),
+    );
+
+    expect(output).toContain('import { databaseMeta } from "@workerstack/database/meta"');
+    expect(output).toContain(
+      '\tsoftDelete: "deleted_at",\n\tstates: null,\n\ttenantColumn: null,\n\tuniqueIndexes: [],',
+    );
+  });
+});
 
 describe("generateEntityFile: shared module imports", () => {
-	it("spreads the shared timestamps into read and readPartial, never a create or update body (F4)", () => {
-		const fields = [
-			field("title", "read", "z.string()"),
-			field("created_at", "read", "timestampSchema"),
-			using(field("created_at", "update", "timestampSchema.optional()"), "timestampSchema"),
-			field("title", "update", "z.string().optional()"),
-		]
-		const output = file(table(fields, { hasTimestamps: { createdAt: true, deletedAt: false, updatedAt: true } }), {
-			filePrefix: "db.blog",
-		})
-		expect(output).toContain("\t...timestampsCreatedUpdatedReadSnakeCase,\n\ttitle: _str,\n")
-		expect(output).toContain("blogPostDtoUpdateSchema = z.object({\n\tcreated_at: timestampSchema.optional(),")
-		expect(output).toContain(
-			'import { _str, timestampSchema, timestampsCreatedUpdatedReadPartialSnakeCase, timestampsCreatedUpdatedReadSnakeCase } from "../_shared/db.blog._shared.gen"',
-		)
-	})
+  it("spreads the shared timestamps into read and readPartial, never a create or update body (F4)", () => {
+    const fields = [
+      field("title", "read", "z.string()"),
+      field("created_at", "read", "timestampSchema"),
+      using(field("created_at", "update", "timestampSchema.optional()"), "timestampSchema"),
+      field("title", "update", "z.string().optional()"),
+    ];
 
-	it("uses shared constants, local consts for repeated inline schemas, and the shared meta", () => {
-		const sharedSchemas = new Map<string, SharedSchema>([
-			["z.string().max(9)", { code: "_str.max(9)", count: 3, name: "_z0" }],
-		])
-		const fields = [
-			field("a", "read", "z.string().max(9)"),
-			field("b", "read", "z.enum(ROLES)"),
-			field("c", "read", "z.enum(ROLES)"),
-			field("d", "read", "z.string().max(9).nullable()"),
-			field("e", "read", "prefs"),
-		]
-		const output = file(table(fields, { needsSharedMeta: true }), { sharedSchemas })
-		expect(output).toContain("const _l0 = z.enum(ROLES)\n")
-		expect(output).toContain("\ta: _z0,\n\tb: _l0,\n\tc: _l0,\n\td: _z0.nullable(),\n\te: prefs,\n")
-		expect(output).toContain('import { _m, _z0 } from "../_shared/index.gen"')
-	})
+    const output = file(table(fields, { hasTimestamps: { createdAt: true, deletedAt: false, updatedAt: true } }), {
+      filePrefix: "db.blog",
+    });
 
-	it("imports nothing from _shared when nothing comes from there", () => {
-		expect(file(table([field("e", "read", "prefs")]))).not.toContain("_shared")
-	})
-})
+    expect(output).toContain("\t...timestampsCreatedUpdatedReadSnakeCase,\n\ttitle: _str,\n");
+    expect(output).toContain("blogPostDtoUpdateSchema = z.object({\n\tcreated_at: timestampSchema.optional(),");
+    expect(output).toContain(
+      'import { _str, timestampSchema, timestampsCreatedUpdatedReadPartialSnakeCase, timestampsCreatedUpdatedReadSnakeCase } from "../_shared/db.blog._shared.gen"',
+    );
+  });
 
-/* C2 of r17: an entity file whose own code names database's predicate imports database's namespace, from where database is imported */
+  it("uses shared constants, local consts for repeated inline schemas, and the shared meta", () => {
+    const sharedSchemas = new Map<string, SharedSchema>([
+      ["z.string().max(9)", { code: "_str.max(9)", count: 3, name: "_z0" }],
+    ]);
+
+    const fields = [
+      field("a", "read", "z.string().max(9)"),
+      field("b", "read", "z.enum(ROLES)"),
+      field("c", "read", "z.enum(ROLES)"),
+      field("d", "read", "z.string().max(9).nullable()"),
+      field("e", "read", "prefs"),
+    ];
+
+    const output = file(table(fields, { needsSharedMeta: true }), { sharedSchemas });
+    expect(output).toContain("const _l0 = z.enum(ROLES)\n");
+    expect(output).toContain("\ta: _z0,\n\tb: _l0,\n\tc: _l0,\n\td: _z0.nullable(),\n\te: prefs,\n");
+    expect(output).toContain('import { _m, _z0 } from "../_shared/index.gen"');
+  });
+
+  it("imports nothing from _shared when nothing comes from there", () => {
+    expect(file(table([field("e", "read", "prefs")]))).not.toContain("_shared");
+  });
+});
+
+// C2 of r17: an entity file whose own code names database's predicate imports database's namespace, from where database is imported
 describe("generateEntityFile: database's namespace", () => {
-	const guarded = table([field("title", "read", "z.string().refine(database.isStorableText)")])
+  const guarded = table([field("title", "read", "z.string().refine(database.isStorableText)")]);
 
-	it("imports it only when the file names it, from the configured specifier or database's own", () => {
-		expect(file(guarded, { databaseFrom: "~/database" })).toContain('import * as database from "~/database"')
-		expect(file(guarded)).toContain('import * as database from "@workerstack/database"')
-		expect(file(table([field("title", "read", "z.string()")]))).not.toContain("import * as database")
-	})
-})
+  it("imports it only when the file names it, from the configured specifier or database's own", () => {
+    expect(file(guarded, { databaseFrom: "~/database" })).toContain('import * as database from "~/database"');
+    expect(file(guarded)).toContain('import * as database from "@workerstack/database"');
+    expect(file(table([field("title", "read", "z.string()")]))).not.toContain("import * as database");
+  });
+});

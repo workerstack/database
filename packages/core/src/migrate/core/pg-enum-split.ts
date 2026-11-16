@@ -1,3 +1,4 @@
+import { codeOf } from "../../sql-lexer.ts";
 /**
  * Atlas writes `ALTER TYPE … ADD VALUE` into the same file as the statements that use the new
  * value, and Postgres refuses that inside one transaction ("unsafe use of new value", 55P04), so
@@ -5,29 +6,30 @@
  * a file of their own at the migration's version and the rest to the next second, each its own
  * transaction.
  */
-import { nextVersion } from "./atlas-dir.ts"
-import { codeOf } from "../../sql-lexer.ts"
-import { QNAME } from "./sql-code.ts"
-import { withDirectivesFirst } from "./pg-objects.ts"
-import { atlasFile, pgStatements } from "./pg-split.ts"
-import { atlasHeader } from "./atlas-header.ts"
+import { nextVersion } from "./atlas-dir.ts";
+import { atlasHeader } from "./atlas-header.ts";
+import { withDirectivesFirst } from "./pg-objects.ts";
+import { atlasFile, pgStatements } from "./pg-split.ts";
+import { QNAME } from "./sql-code.ts";
 
 // per-process-constant: a pattern composed from the name grammar, compiled once
-const ADD_VALUE = /* @__PURE__ */ new RegExp(`^ALTER TYPE (?:IF EXISTS )?${QNAME} ADD VALUE\\b`, "i")
-const VERSIONED = /^(\d{14})(.*)\.sql$/
+const ADD_VALUE = /* @__PURE__ */ new RegExp(`^ALTER TYPE (?:IF EXISTS )?${QNAME} ADD VALUE\\b`, "i");
+const VERSIONED = /^(\d{14})(.*)\.sql$/;
 
 /** The files a migration becomes: itself, or its ADD VALUE statements first and the rest a version later */
 function splitEnumValues(name: string, file: string): Array<[string, string]> {
-	const [, version, suffix] = VERSIONED.exec(name) ?? []
-	const statements = pgStatements(file)
-	const values = statements.filter((stmt) => ADD_VALUE.test(codeOf(stmt, "postgres")))
-	const rest = statements.filter((stmt) => !values.includes(stmt))
-	if (version === undefined || values.length === 0 || rest.length === 0) return [[name, file]]
-	return [
-		[`${version}${suffix}_enum_values.sql`, atlasFile(values)],
-		/* database's file: its directives honored, a blank line after them (withDirectivesFirst) */
-		[`${nextVersion(version)}${suffix}.sql`, atlasFile(rest, withDirectivesFirst(atlasHeader(file).text, ""))],
-	]
+  const [, version, suffix] = VERSIONED.exec(name) ?? [];
+  const statements = pgStatements(file);
+  const values = statements.filter((stmt) => ADD_VALUE.test(codeOf(stmt, "postgres")));
+  const rest = statements.filter((stmt) => !values.includes(stmt));
+
+  if (version === undefined || values.length === 0 || rest.length === 0) return [[name, file]];
+
+  return [
+    [`${version}${suffix}_enum_values.sql`, atlasFile(values)],
+    // database's file: its directives honored, a blank line after them (withDirectivesFirst)
+    [`${nextVersion(version)}${suffix}.sql`, atlasFile(rest, withDirectivesFirst(atlasHeader(file).text, ""))],
+  ];
 }
 
-export { splitEnumValues }
+export { splitEnumValues };

@@ -2,101 +2,109 @@
  * The constraint map as the generated file writes it: tables, groups and columns sorted, each
  * constraint an `{ errorKey, cause, statusKey }` object, and a table's referenced columns a list.
  */
-import { commentText, dbIdentifiers, propertyName, stringLiteral } from "../utils/case.ts"
-import { byCodeUnit } from "../utils/order.ts"
+import { commentText, dbIdentifiers, propertyName, stringLiteral } from "../utils/case.ts";
+import { byCodeUnit } from "../utils/order.ts";
 
 export type Constraint = {
-	cause: string
-	errorKey: string
-	statusKey: string
-}
+  cause: string;
+  errorKey: string;
+  statusKey: string;
+};
 
 export type TableConstraints = {
-	check?: Record<string, Constraint> | undefined
-	foreignKey?: Record<string, Constraint> | undefined
-	partitions?: string[] | undefined
-	primaryKey?: Constraint | undefined
-	private?: string[] | undefined
-	referenced?: string[] | undefined
-	unique?: Record<string, Constraint> | undefined
-}
+  check?: Record<string, Constraint> | undefined;
+  foreignKey?: Record<string, Constraint> | undefined;
+  partitions?: string[] | undefined;
+  primaryKey?: Constraint | undefined;
+  private?: string[] | undefined;
+  referenced?: string[] | undefined;
+  unique?: Record<string, Constraint> | undefined;
+};
 
-export type ConstraintMap = Record<string, TableConstraints>
+export type ConstraintMap = Record<string, TableConstraints>;
 
 /** Entries in the order of their keys, by code unit */
-const byKey = ([a]: [string, unknown], [b]: [string, unknown]): number => byCodeUnit(a, b)
+const byKey = ([a]: [string, unknown], [b]: [string, unknown]): number => byCodeUnit(a, b);
 
 const GROUP_LABELS: Record<string, string> = {
-	check: "check constraints",
-	foreignKey: "foreign key constraints",
-	unique: "unique constraints",
-}
+  check: "check constraints",
+  foreignKey: "foreign key constraints",
+  unique: "unique constraints",
+};
 
 /** The lines of one `{ errorKey, cause, statusKey }` object at `indent` */
 function constraintLines(constraint: Constraint, indent: string): string[] {
-	return [
-		`${indent}errorKey: ${stringLiteral(constraint.errorKey)},`,
-		`${indent}cause: ${stringLiteral(constraint.cause)},`,
-		`${indent}statusKey: ${stringLiteral(constraint.statusKey)},`,
-	]
+  return [
+    `${indent}errorKey: ${stringLiteral(constraint.errorKey)},`,
+    `${indent}cause: ${stringLiteral(constraint.cause)},`,
+    `${indent}statusKey: ${stringLiteral(constraint.statusKey)},`,
+  ];
 }
 
 /** Entries joined the way the generated map writes them: a comma after every closing brace but the last */
 function joined(blocks: string[][]): string[] {
-	return blocks.flatMap((block, i) => (i < blocks.length - 1 ? [...block.slice(0, -1), `${block.at(-1)},`] : block))
+  return blocks.flatMap((block, i) => (i < blocks.length - 1 ? [...block.slice(0, -1), `${block.at(-1)},`] : block));
 }
 
-/* what each list of a table's columns is */
+// what each list of a table's columns is
 const LIST_LABELS: Record<string, string> = {
-	partitions: "partitions, whose violations Postgres reports in this table's place",
-	private: "private columns, which no error names",
-	referenced: "columns other tables' foreign keys reference",
-}
+  partitions: "partitions, whose violations Postgres reports in this table's place",
+  private: "private columns, which no error names",
+  referenced: "columns other tables' foreign keys reference",
+};
 
 function groupLines(type: string, group: Constraint | Record<string, Constraint> | string[]): string[] {
-	if (Array.isArray(group))
-		return [`\t\t/* ${LIST_LABELS[type]} */`, `\t\t${type}: [${group.map(stringLiteral).join(", ")}]`]
-	if (type === "primaryKey") {
-		return [
-			"\t\t/* primary key constraint */",
-			"\t\tprimaryKey: {",
-			...constraintLines(group as Constraint, "\t\t\t"),
-			"\t\t}",
-		]
-	}
-	const columns = Object.entries(group as Record<string, Constraint>).sort(byKey)
-	const blocks = columns.map(([column, constraint]) => [
-		`\t\t\t${propertyName(column)}: {`,
-		...constraintLines(constraint, "\t\t\t\t"),
-		"\t\t\t}",
-	])
-	return [`\t\t/* ${GROUP_LABELS[type]} */`, `\t\t${type}: {`, ...joined(blocks), "\t\t}"]
+  if (Array.isArray(group))
+    return [`\t\t/* ${LIST_LABELS[type]} */`, `\t\t${type}: [${group.map(stringLiteral).join(", ")}]`];
+
+  if (type === "primaryKey") {
+    return [
+      "\t\t/* primary key constraint */",
+      "\t\tprimaryKey: {",
+      ...constraintLines(group as Constraint, "\t\t\t"),
+      "\t\t}",
+    ];
+  }
+
+  const columns = Object.entries(group as Record<string, Constraint>).sort(byKey);
+
+  const blocks = columns.map(([column, constraint]) => [
+    `\t\t\t${propertyName(column)}: {`,
+    ...constraintLines(constraint, "\t\t\t\t"),
+    "\t\t\t}",
+  ]);
+
+  return [`\t\t/* ${GROUP_LABELS[type]} */`, `\t\t${type}: {`, ...joined(blocks), "\t\t}"];
 }
 
 /** Generate TypeScript constraint map code */
 export function generateConstraintMapCode(map: ConstraintMap, dbName: string): string {
-	const tables = Object.entries(map).sort(byKey)
-	const blocks = tables.map(([tableName, constraints]) => {
-		/* a group set to undefined is one left out */
-		const groups = Object.entries(constraints)
-			.filter(
-				(entry): entry is [string, NonNullable<TableConstraints[keyof TableConstraints]>] => entry[1] !== undefined,
-			)
-			.sort(byKey)
-		/* a table with no constraint is keyed still, so the handlers know it is the schema's */
-		if (groups.length === 0)
-			return [`\t/* ${commentText(tableName)} table: no constraints */`, `\t${propertyName(tableName)}: {}`]
-		return [
-			`\t/* ${commentText(tableName)} table constraints */`,
-			`\t${propertyName(tableName)}: {`,
-			...joined(groups.map(([type, group]) => groupLines(type, group))),
-			"\t}",
-		]
-	})
-	return [
-		`export const ${dbIdentifiers(dbName).constant}_DB_CONSTRAINT_MAP = {`,
-		...joined(blocks),
-		"} as const",
-		"",
-	].join("\n")
+  const tables = Object.entries(map).sort(byKey);
+
+  const blocks = tables.map(([tableName, constraints]) => {
+    // a group set to undefined is one left out
+    const groups = Object.entries(constraints)
+      .filter(
+        (entry): entry is [string, NonNullable<TableConstraints[keyof TableConstraints]>] => entry[1] !== undefined,
+      )
+      .sort(byKey);
+
+    // a table with no constraint is keyed still, so the handlers know it is the schema's
+    if (groups.length === 0)
+      return [`\t/* ${commentText(tableName)} table: no constraints */`, `\t${propertyName(tableName)}: {}`];
+
+    return [
+      `\t/* ${commentText(tableName)} table constraints */`,
+      `\t${propertyName(tableName)}: {`,
+      ...joined(groups.map(([type, group]) => groupLines(type, group))),
+      "\t}",
+    ];
+  });
+
+  return [
+    `export const ${dbIdentifiers(dbName).constant}_DB_CONSTRAINT_MAP = {`,
+    ...joined(blocks),
+    "} as const",
+    "",
+  ].join("\n");
 }

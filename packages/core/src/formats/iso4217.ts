@@ -4,7 +4,7 @@
 
 // lookup-table: the 178 alphabetic codes of the 2026-09-17 list, one line per first letter, read by isIso4217
 const CODES: ReadonlySet<string> = /* @__PURE__ */ new Set(
-	/* @__PURE__ */ `AED AFN ALL AMD AOA ARS AUD AWG AZN
+  /* @__PURE__ */ `AED AFN ALL AMD AOA ARS AUD AWG AZN
 BAM BBD BDT BHD BIF BMD BND BOB BOV BRL BSD BTN BWP BYN BZD
 CAD CDF CHE CHF CHW CLF CLP CNY COP COU CRC CUP CVE CZK
 DJF DKK DOP DZD
@@ -30,7 +30,7 @@ WST
 XAD XAF XAG XAU XBA XBB XBC XBD XCD XCG XDR XOF XPD XPF XPT XSU XTS XUA XXX
 YER
 ZAR ZMW ZWG`.split(/\s/u),
-)
+);
 
 /**
  * Whether `value` is a current ISO 4217 alphabetic currency code, exactly as written: uppercase, such as EUR or USD.
@@ -38,5 +38,5 @@ ZAR ZMW ZWG`.split(/\s/u),
  * a withdrawn code such as HRK is not one. Any string is taken; this never throws.
  */
 export function isIso4217(value: string): boolean {
-	return CODES.has(value)
+  return CODES.has(value);
 }

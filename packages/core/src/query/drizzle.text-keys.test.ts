@@ -1,77 +1,82 @@
-import { defineRelations, getTableColumns, type SQL } from "drizzle-orm"
-import { drizzle as pgDrizzle } from "drizzle-orm/node-postgres"
-import { integer as pgInteger, pgTable, timestamp as pgTimestamp } from "drizzle-orm/pg-core"
-import { integer, SQLiteDialect, sqliteTable, text } from "drizzle-orm/sqlite-core"
-import { describe, expect, it } from "vitest"
-import { queryHelpers } from "./drizzle.ts"
-import { SEALED } from "./__fixtures__/cursor-secret.ts"
+import { defineRelations, getTableColumns, type SQL } from "drizzle-orm";
+import { drizzle as pgDrizzle } from "drizzle-orm/node-postgres";
+import { integer as pgInteger, pgTable, timestamp as pgTimestamp } from "drizzle-orm/pg-core";
+import { integer, SQLiteDialect, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { describe, expect, it } from "vitest";
+
+import { SEALED } from "./__fixtures__/cursor-secret.ts";
+import { queryHelpers } from "./drizzle.ts";
 
 const dialect = new (SQLiteDialect as unknown as new () => {
-	sqlToQuery: (sql: SQL) => { params: unknown[]; sql: string }
-})()
+  sqlToQuery: (sql: SQL) => { params: unknown[]; sql: string };
+})();
 
 const sortedBy = (field: string, direction: "asc" | "desc") => ({
-	validated: true as const,
-	parsedSort: [{ direction, field }],
-})
+  parsedSort: [{ direction, field }],
+  validated: true as const,
+});
 
-/* B2-3, AB4-2 of area B: listOptions selects each SQLite key's stored value its mode reads as another, which paginate needs and strips */
+// B2-3, AB4-2 of area B: listOptions selects each SQLite key's stored value its mode reads as another, which paginate needs and strips
 describe("queryHelpers.listOptions' _cursorTextKeys (B2-3 of area B; sibling: _cursorKeyTexts on every sort)", () => {
-	const stamped = sqliteTable("stamped", {
-		at: integer("at", { mode: "timestamp" }),
-		id: integer("id").primaryKey(),
-		data: text("data", { mode: "json" }),
-		n: integer("n"),
-	})
-	const pgStamped = pgTable("pg_stamped", { at: pgTimestamp("at"), id: pgInteger("id").primaryKey() })
-	const byAt = { limit: 1, ...sortedBy("at", "asc") }
+  const stamped = sqliteTable("stamped", {
+    at: integer("at", { mode: "timestamp" }),
+    data: text("data", { mode: "json" }),
+    id: integer("id").primaryKey(),
+    n: integer("n"),
+  });
 
-	it("carries a SQLite key's stored value as a JSON array, null for a key with no set, and is empty with no such key", () => {
-		const options = queryHelpers.listOptions(
-			{ limit: 1, validated: true, parsedSort: [...byAt.parsedSort, { direction: "asc", field: "n" }] },
-			SEALED,
-		)
-		expect(options.pagination.expects).toContain("_cursorTextKeys")
-		const texts = options.extras["_cursorTextKeys"]!
-		expect(dialect.sqlToQuery(texts(getTableColumns(stamped))).sql).toMatch(
-			/^json_array\(case when .* then json_array\('text', "stamped"."at"\) .*, case when \(typeof\("stamped"."n"\) in \('null', 'integer', 'real'\)\) then null /,
-		)
-		const byData = queryHelpers.listOptions({ limit: 1, ...sortedBy("data", "asc") }, SEALED)
-		expect(dialect.sqlToQuery(byData.extras["_cursorTextKeys"]!(getTableColumns(stamped))).sql).toBe("''")
-	})
+  const pgStamped = pgTable("pg_stamped", { at: pgTimestamp("at"), id: pgInteger("id").primaryKey() });
+  const byAt = { limit: 1, ...sortedBy("at", "asc") };
 
-	it("renders an empty text on Postgres, no json_array, a timestamp key included", () => {
-		const db = pgDrizzle.mock({ relations: defineRelations({ pgStamped }) })
-		const rendered = db.query.pgStamped.findMany(queryHelpers.listOptions(byAt, SEALED) as never).toSQL().sql
-		expect(rendered).toContain(`('') as "_cursorTextKeys"`)
-		expect(rendered).not.toContain("json_array")
-	})
+  it("carries a SQLite key's stored value as a JSON array, null for a key with no set, and is empty with no such key", () => {
+    const options = queryHelpers.listOptions(
+      { limit: 1, parsedSort: [...byAt.parsedSort, { direction: "asc", field: "n" }], validated: true },
+      SEALED,
+    );
 
-	/* AB3-4 of area B: a Postgres time key carries its to_json text on the relational list too; SQLite has no to_json */
-	it("carries a Postgres timestamp key's to_json text, and nothing for a SQLite one", () => {
-		const options = queryHelpers.listOptions(byAt, SEALED)
-		const db = pgDrizzle.mock({ relations: defineRelations({ pgStamped }) })
-		expect(db.query.pgStamped.findMany(options as never).toSQL().sql).toContain(
-			`(coalesce((to_json("d0"."at") #>> '{}'), '')) as "_cursorKeyTexts"`,
-		)
-		expect(dialect.sqlToQuery(options.extras["_cursorKeyTexts"]!(getTableColumns(stamped))).sql).toBe("''")
-	})
+    expect(options.pagination.expects).toContain("_cursorTextKeys");
+    const texts = options.extras["_cursorTextKeys"]!;
+    expect(dialect.sqlToQuery(texts(getTableColumns(stamped))).sql).toMatch(
+      /^json_array\(case when .* then json_array\('text', "stamped"."at"\) .*, case when \(typeof\("stamped"."n"\) in \('null', 'integer', 'real'\)\) then null /,
+    );
+    const byData = queryHelpers.listOptions({ limit: 1, ...sortedBy("data", "asc") }, SEALED);
+    expect(dialect.sqlToQuery(byData.extras["_cursorTextKeys"]!(getTableColumns(stamped))).sql).toBe("''");
+  });
 
-	it("is stripped from the served rows, and a page whose rows lack it is a 500 page_not_wired naming it", () => {
-		const options = queryHelpers.listOptions(byAt, SEALED)
-		const row = {
-			_cursorId: 1,
-			_cursorKeyTexts: "",
-			_cursorTextKeys: '[["text","now"]]',
-			_total: 1,
-			at: new Date(Number.NaN),
-			id: 1,
-		}
-		const [items] = queryHelpers.paginate([row], options)
-		expect(items).toEqual([{ at: row.at, id: 1 }])
-		const { _cursorTextKeys: _, ...lacking } = row
-		expect(() => queryHelpers.paginate([lacking], options)).toThrow(
-			expect.objectContaining({ cause: expect.stringContaining("_cursorTextKeys"), errorKey: "page_not_wired" }),
-		)
-	})
-})
+  it("renders an empty text on Postgres, no json_array, a timestamp key included", () => {
+    const db = pgDrizzle.mock({ relations: defineRelations({ pgStamped }) });
+    const rendered = db.query.pgStamped.findMany(queryHelpers.listOptions(byAt, SEALED) as never).toSQL().sql;
+    expect(rendered).toContain(`('') as "_cursorTextKeys"`);
+    expect(rendered).not.toContain("json_array");
+  });
+
+  // AB3-4 of area B: a Postgres time key carries its to_json text on the relational list too; SQLite has no to_json
+  it("carries a Postgres timestamp key's to_json text, and nothing for a SQLite one", () => {
+    const options = queryHelpers.listOptions(byAt, SEALED);
+    const db = pgDrizzle.mock({ relations: defineRelations({ pgStamped }) });
+    expect(db.query.pgStamped.findMany(options as never).toSQL().sql).toContain(
+      `(coalesce((to_json("d0"."at") #>> '{}'), '')) as "_cursorKeyTexts"`,
+    );
+    expect(dialect.sqlToQuery(options.extras["_cursorKeyTexts"]!(getTableColumns(stamped))).sql).toBe("''");
+  });
+
+  it("is stripped from the served rows, and a page whose rows lack it is a 500 page_not_wired naming it", () => {
+    const options = queryHelpers.listOptions(byAt, SEALED);
+
+    const row = {
+      _cursorId: 1,
+      _cursorKeyTexts: "",
+      _cursorTextKeys: '[["text","now"]]',
+      _total: 1,
+      at: new Date(Number.NaN),
+      id: 1,
+    };
+
+    const [items] = queryHelpers.paginate([row], options);
+    expect(items).toEqual([{ at: row.at, id: 1 }]);
+    const { _cursorTextKeys: _, ...lacking } = row;
+    expect(() => queryHelpers.paginate([lacking], options)).toThrow(
+      expect.objectContaining({ cause: expect.stringContaining("_cursorTextKeys"), errorKey: "page_not_wired" }),
+    );
+  });
+});

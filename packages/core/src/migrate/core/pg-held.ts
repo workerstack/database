@@ -1,3 +1,14 @@
+import {
+  cascaded,
+  commandCascaded,
+  commandUnseen,
+  dropLocks,
+  ownedBy,
+  RELATIONS,
+  typedTables,
+  unseen,
+} from "./pg-drop.ts";
+import type { Calls, Locked } from "./pg-held-types.ts";
 /**
  * The locks a Postgres file's open transaction holds to its COMMIT that make another session wait:
  * Atlas runs a file in one transaction, so a lock any statement
@@ -8,31 +19,20 @@
  * sequence is the relation Postgres locks for another session's nextval, so it counts by its own name.
  */
 import {
-	changeLocks,
-	defaultOf,
-	EXCLUSIVE,
-	EXCLUSIVE_ALL,
-	indexLocks,
-	type Lock,
-	on,
-	partitionLocks,
-	reindexLocks,
-	SHARE,
-	SHARE_ALL,
-	truncateLocks,
-} from "./pg-lock.ts"
-import {
-	cascaded,
-	commandCascaded,
-	commandUnseen,
-	dropLocks,
-	ownedBy,
-	RELATIONS,
-	typedTables,
-	unseen,
-} from "./pg-drop.ts"
-import type { Calls, Locked } from "./pg-held-types.ts"
-import { type Facts, flag, keyOf, names, type Node, num, type Reads, tableOf } from "./pg-nodes.ts"
+  changeLocks,
+  defaultOf,
+  EXCLUSIVE,
+  EXCLUSIVE_ALL,
+  indexLocks,
+  type Lock,
+  on,
+  partitionLocks,
+  reindexLocks,
+  SHARE,
+  SHARE_ALL,
+  truncateLocks,
+} from "./pg-lock.ts";
+import { type Facts, flag, keyOf, names, type Node, num, type Reads, tableOf } from "./pg-nodes.ts";
 
 /**
  * The relations the open transaction holds locked, by key, each with whether reads wait too, the
@@ -42,222 +42,251 @@ import { type Facts, flag, keyOf, names, type Node, num, type Reads, tableOf } f
  * measure does not replace it (pg-drop.ts)
  */
 type Held = {
-	calls: Map<string, Calls>
-	cascades: Set<string>
-	locks: Map<string, boolean>
-	made: Set<string>
-	owners: Set<string>
-	/** the tables a statement's hidden code validated, as the replay measured, until that statement is rated */
-	scanned: string[]
-	unseen: Set<string>
-}
+  calls: Map<string, Calls>;
+  cascades: Set<string>;
+  locks: Map<string, boolean>;
+  made: Set<string>;
+  owners: Set<string>;
+  /** the tables a statement's hidden code validated, as the replay measured, until that statement is rated */
+  scanned: string[];
+  unseen: Set<string>;
+};
 
 /** A transaction's start: nothing held, nothing made */
 const heldStart = (): Held => ({
-	calls: new Map(),
-	cascades: new Set(),
-	locks: new Map(),
-	made: new Set(),
-	owners: new Set(),
-	scanned: [],
-	unseen: new Set(),
-})
+  calls: new Map(),
+  cascades: new Set(),
+  locks: new Map(),
+  made: new Set(),
+  owners: new Set(),
+  scanned: [],
+  unseen: new Set(),
+});
 
 /** `held` at a COMMIT, which releases every lock and shows what the file made to other sessions */
 function clearHeld(held: Held): void {
-	held.calls.clear()
-	held.cascades.clear()
-	held.locks.clear()
-	held.made.clear()
-	held.owners.clear()
-	held.unseen.clear()
+  held.calls.clear();
+  held.cascades.clear();
+  held.locks.clear();
+  held.made.clear();
+  held.owners.clear();
+  held.unseen.clear();
 }
 
 /** `held` as Postgres held it, `locked` read from pg_locks, in place of what the file's text says but what the replay left out */
 function measured(held: Held, locked: Locked): void {
-	held.locks.clear()
-	held.calls.clear()
-	held.cascades.clear()
-	held.unseen.clear()
-	for (const [key, reads] of locked.locks) held.locks.set(key, reads)
-	for (const [key, calls] of locked.calls) held.calls.set(key, calls)
-	held.scanned = [...(locked.validated ?? [])]
+  held.locks.clear();
+  held.calls.clear();
+  held.cascades.clear();
+  held.unseen.clear();
+
+  for (const [key, reads] of locked.locks) held.locks.set(key, reads);
+
+  for (const [key, calls] of locked.calls) held.calls.set(key, calls);
+  held.scanned = [...(locked.validated ?? [])];
 }
 
 /** `held` with `locks` taken, each but those on what the file made */
 function hold(held: Held, locks: readonly Lock[]): void {
-	for (const [key, reads] of locks) if (!held.made.has(key)) held.locks.set(key, reads || held.locks.get(key) === true)
+  for (const [key, reads] of locks) if (!held.made.has(key)) held.locks.set(key, reads || held.locks.get(key) === true);
 }
 
 /** The tables the foreign keys among `constraints` reference */
 const referenced = (constraints: unknown): unknown[] =>
-	((constraints as Array<{ Constraint: Node }> | undefined) ?? [])
-		.map((each) => each.Constraint)
-		.filter((constraint) => constraint["contype"] === "CONSTR_FOREIGN")
-		.map((constraint) => constraint["pktable"])
+  ((constraints as Array<{ Constraint: Node }> | undefined) ?? [])
+    .map((each) => each.Constraint)
+    .filter((constraint) => constraint["contype"] === "CONSTR_FOREIGN")
+    .map((constraint) => constraint["pktable"]);
 
-/* the ALTER TABLE commands that take SHARE UPDATE EXCLUSIVE or weaker, and the ones that block writes alone */
-const UNBLOCKING = /^AT_(?:SetStatistics|SetOptions|ResetOptions|ClusterOn|DropCluster|ValidateConstraint)$/
-const TRIGGER_STATE = /^AT_(?:Enable|Disable)\w*Trig/
+// the ALTER TABLE commands that take SHARE UPDATE EXCLUSIVE or weaker, and the ones that block writes alone
+const UNBLOCKING = /^AT_(?:SetStatistics|SetOptions|ResetOptions|ClusterOn|DropCluster|ValidateConstraint)$/;
+const TRIGGER_STATE = /^AT_(?:Enable|Disable)\w*Trig/;
 
 /** The locks one command of an ALTER TABLE, VIEW, MATERIALIZED VIEW, FOREIGN TABLE or SEQUENCE takes */
 function commandLocks(node: Node, cmd: Node, facts: Facts): Lock[] {
-	const table = node["relation"]
-	const subtype = cmd["subtype"] as string
-	const def = (cmd["def"] ?? {}) as Node
-	if (UNBLOCKING.test(subtype)) return []
-	if (subtype === "AT_SetRelOptions" || subtype === "AT_ResetRelOptions") {
-		const options = ((def["List"] as Node)["items"] as Array<{ DefElem: Node }>).map((each) => each.DefElem["defname"])
-		const exclusive = node["objtype"] === "OBJECT_VIEW" || options.includes("user_catalog_table")
-		return exclusive ? on(table, facts, EXCLUSIVE) : []
-	}
-	if (TRIGGER_STATE.test(subtype)) return on(table, facts, SHARE_ALL)
-	if (subtype === "AT_AttachPartition" || subtype === "AT_DetachPartition") {
-		const partition = on((def["PartitionCmd"] as Node)["name"], facts, EXCLUSIVE)
-		const parent = subtype === "AT_DetachPartition" ? on(table, facts, EXCLUSIVE) : []
-		return [...parent, ...partition, ...defaultOf(table, facts), ...partitionLocks(table, facts)]
-	}
-	const constraint = def["Constraint"] as Node | undefined
-	if (constraint?.["contype"] === "CONSTR_FOREIGN")
-		return [...on(table, facts, SHARE_ALL), ...on(constraint["pktable"], facts, SHARE)]
-	const column = def["ColumnDef"] as Node | undefined
-	return [
-		...on(table, facts, EXCLUSIVE_ALL),
-		...referenced(column?.["constraints"]).flatMap((pktable) => on(pktable, facts, SHARE)),
-		...changeLocks(table, cmd, facts),
-	]
+  const table = node["relation"];
+  const subtype = cmd["subtype"] as string;
+  const def = (cmd["def"] ?? {}) as Node;
+
+  if (UNBLOCKING.test(subtype)) return [];
+
+  if (subtype === "AT_SetRelOptions" || subtype === "AT_ResetRelOptions") {
+    const options = ((def["List"] as Node)["items"] as Array<{ DefElem: Node }>).map((each) => each.DefElem["defname"]);
+    const exclusive = node["objtype"] === "OBJECT_VIEW" || options.includes("user_catalog_table");
+
+    return exclusive ? on(table, facts, EXCLUSIVE) : [];
+  }
+
+  if (TRIGGER_STATE.test(subtype)) return on(table, facts, SHARE_ALL);
+
+  if (subtype === "AT_AttachPartition" || subtype === "AT_DetachPartition") {
+    const partition = on((def["PartitionCmd"] as Node)["name"], facts, EXCLUSIVE);
+    const parent = subtype === "AT_DetachPartition" ? on(table, facts, EXCLUSIVE) : [];
+
+    return [...parent, ...partition, ...defaultOf(table, facts), ...partitionLocks(table, facts)];
+  }
+
+  const constraint = def["Constraint"] as Node | undefined;
+
+  if (constraint?.["contype"] === "CONSTR_FOREIGN")
+    return [...on(table, facts, SHARE_ALL), ...on(constraint["pktable"], facts, SHARE)];
+  const column = def["ColumnDef"] as Node | undefined;
+
+  return [
+    ...on(table, facts, EXCLUSIVE_ALL),
+    ...referenced(column?.["constraints"]).flatMap((pktable) => on(pktable, facts, SHARE)),
+    ...changeLocks(table, cmd, facts),
+  ];
 }
 
 /** The locks an ALTER TABLE, INDEX, VIEW, MATERIALIZED VIEW, FOREIGN TABLE or SEQUENCE's command takes; none for any other ALTER */
 function alterLocks(node: Node, cmd: Node, facts: Facts): Lock[] {
-	if (node["objtype"] === "OBJECT_INDEX") return indexLocks(node, cmd, facts)
-	return RELATIONS.test(node["objtype"] as string) ? commandLocks(node, cmd, facts) : []
+  if (node["objtype"] === "OBJECT_INDEX") return indexLocks(node, cmd, facts);
+
+  return RELATIONS.test(node["objtype"] as string) ? commandLocks(node, cmd, facts) : [];
 }
 
 /** `held` after one command of an ALTER: its locks, the column or constraint a DROP … CASCADE of it drops, and what else it locks unnamed */
 function holdCommand(node: Node, cmd: Node, { facts, held }: { facts: Facts; held: Held }): void {
-	hold(held, alterLocks(node, cmd, facts))
-	const dropped = commandCascaded(node, cmd, facts.schema)
-	if (dropped !== undefined) held.cascades.add(dropped)
-	const other = commandUnseen(node, cmd, { facts, made: held.made })
-	if (other !== undefined) held.unseen.add(other)
+  hold(held, alterLocks(node, cmd, facts));
+  const dropped = commandCascaded(node, cmd, facts.schema);
+
+  if (dropped !== undefined) held.cascades.add(dropped);
+  const other = commandUnseen(node, cmd, { facts, made: held.made });
+
+  if (other !== undefined) held.unseen.add(other);
 }
 
 /** The locks a LOCK takes by its mode, on a view's every relation through its query too */
 function lockLocks(node: Node, facts: Facts): Lock[] {
-	const mode = num(node["mode"])
-	if (mode < 5) return []
-	return (node["relations"] as Array<{ RangeVar: Node }>).flatMap(({ RangeVar: relation }) => {
-		const reached = new Set<string>()
-		const reach = (key: string): void => {
-			/* a view's reads are recorded with it (pg-cascade.ts), and dropped with it (pg-names.ts) */
-			for (const read of facts.views.has(key) ? (facts.reads.get(key) as Reads).relations : []) {
-				if (reached.has(read)) continue
-				reached.add(read)
-				reach(read)
-			}
-		}
-		reach(tableOf(relation, facts.schema).key)
-		return [
-			...on(relation, facts, { reads: mode === 8, recurse: true }),
-			...[...reached].map((key): Lock => [key, mode === 8]),
-		]
-	})
+  const mode = num(node["mode"]);
+
+  if (mode < 5) return [];
+
+  return (node["relations"] as Array<{ RangeVar: Node }>).flatMap(({ RangeVar: relation }) => {
+    const reached = new Set<string>();
+
+    const reach = (key: string): void => {
+      // a view's reads are recorded with it (pg-cascade.ts), and dropped with it (pg-names.ts)
+      for (const read of facts.views.has(key) ? (facts.reads.get(key) as Reads).relations : []) {
+        if (reached.has(read)) continue;
+        reached.add(read);
+        reach(read);
+      }
+    };
+
+    reach(tableOf(relation, facts.schema).key);
+
+    return [
+      ...on(relation, facts, { reads: mode === 8, recurse: true }),
+      ...[...reached].map((key): Lock => [key, mode === 8]),
+    ];
+  });
 }
 
 /** The locks a CREATE TABLE takes: a partition's parent and DEFAULT partition, and each table its foreign keys reference */
 function createLocks(node: Node, facts: Facts): Lock[] {
-	const elements = (node["tableElts"] as Node[] | undefined) ?? []
-	const constraints = elements.flatMap((each) =>
-		"Constraint" in each
-			? [each]
-			: (((each["ColumnDef"] as Node | undefined)?.["constraints"] as Node[] | undefined) ?? []),
-	)
-	/* a partition's one parent */
-	const parent =
-		node["partbound"] === undefined ? undefined : (node["inhRelations"] as Array<{ RangeVar: Node }>)[0]?.RangeVar
-	return [
-		...(parent === undefined
-			? []
-			: [...on(parent, facts, EXCLUSIVE), ...defaultOf(parent, facts), ...partitionLocks(parent, facts)]),
-		...referenced(constraints).flatMap((pktable) => on(pktable, facts, SHARE)),
-	]
+  const elements = (node["tableElts"] as Node[] | undefined) ?? [];
+
+  const constraints = elements.flatMap((each) =>
+    "Constraint" in each
+      ? [each]
+      : (((each["ColumnDef"] as Node | undefined)?.["constraints"] as Node[] | undefined) ?? []),
+  );
+
+  // a partition's one parent
+  const parent =
+    node["partbound"] === undefined ? undefined : (node["inhRelations"] as Array<{ RangeVar: Node }>)[0]?.RangeVar;
+
+  return [
+    ...(parent === undefined
+      ? []
+      : [...on(parent, facts, EXCLUSIVE), ...defaultOf(parent, facts), ...partitionLocks(parent, facts)]),
+    ...referenced(constraints).flatMap((pktable) => on(pktable, facts, SHARE)),
+  ];
 }
 
-/* the renames that take ACCESS EXCLUSIVE on their table; an index's takes SHARE UPDATE EXCLUSIVE */
+// the renames that take ACCESS EXCLUSIVE on their table; an index's takes SHARE UPDATE EXCLUSIVE
 const EXCLUSIVE_RENAMES =
-	/^OBJECT_(?:TABLE|COLUMN|TABCONSTRAINT|TRIGGER|MATVIEW|VIEW|FOREIGN_TABLE|SEQUENCE|POLICY|RULE)$/
+  /^OBJECT_(?:TABLE|COLUMN|TABCONSTRAINT|TRIGGER|MATVIEW|VIEW|FOREIGN_TABLE|SEQUENCE|POLICY|RULE)$/;
 
 /** The locks a RENAME takes, through the table's descendants for a column's or constraint's */
 const renameLocks = (node: Node, facts: Facts): Lock[] =>
-	EXCLUSIVE_RENAMES.test(node["renameType"] as string) && node["relation"] !== undefined
-		? on(
-				node["relation"],
-				facts,
-				/^OBJECT_(?:COLUMN|TABCONSTRAINT)$/.test(node["renameType"] as string) ? EXCLUSIVE_ALL : EXCLUSIVE,
-			)
-		: []
+  EXCLUSIVE_RENAMES.test(node["renameType"] as string) && node["relation"] !== undefined
+    ? on(
+        node["relation"],
+        facts,
+        /^OBJECT_(?:COLUMN|TABCONSTRAINT)$/.test(node["renameType"] as string) ? EXCLUSIVE_ALL : EXCLUSIVE,
+      )
+    : [];
 
 /** The locks an ALTER DOMAIN that scans its columns takes on each table holding one: a validated constraint, NOT NULL, a VALIDATE */
 function domainLocks(node: Node, facts: Facts): Lock[] {
-	const constraint = (node["def"] as Node | undefined)?.["Constraint"] as Node | undefined
-	const subtype = node["subtype"]
-	const scans = subtype === "O" || subtype === "V" || (subtype === "C" && !flag(constraint?.["skip_validation"]))
-	return scans ? typedTables(keyOf(names(node["typeName"]), facts.schema), facts).map((table) => [table, false]) : []
+  const constraint = (node["def"] as Node | undefined)?.["Constraint"] as Node | undefined;
+  const subtype = node["subtype"];
+  const scans = subtype === "O" || subtype === "V" || (subtype === "C" && !flag(constraint?.["skip_validation"]));
+
+  return scans ? typedTables(keyOf(names(node["typeName"]), facts.schema), facts).map((table) => [table, false]) : [];
 }
 
 // lookup-table: each statement other than an ALTER TABLE that takes a lock blocking reads or writes, and the locks it takes
 const STATEMENTS: Readonly<Record<string, (node: Node, facts: Facts) => Lock[]>> = {
-	AlterDomainStmt: domainLocks,
-	AlterObjectSchemaStmt: (node, facts) =>
-		RELATIONS.test(node["objectType"] as string) ? on(node["relation"], facts, EXCLUSIVE) : [],
-	AlterPolicyStmt: (node, facts) => on(node["table"], facts, EXCLUSIVE),
-	/* every ALTER SEQUENCE but the ALTER TABLE forms takes SHARE ROW EXCLUSIVE, which another session's nextval waits on */
-	AlterSeqStmt: (node, facts) => on(node["sequence"], facts, SHARE),
-	ClusterStmt: (node, facts) => (node["relation"] === undefined ? [] : on(node["relation"], facts, EXCLUSIVE)),
-	CreatePolicyStmt: (node, facts) => on(node["table"], facts, EXCLUSIVE),
-	CreateStmt: createLocks,
-	CreateTrigStmt: (node, facts) => on(node["relation"], facts, SHARE_ALL),
-	DropStmt: dropLocks,
-	IndexStmt: (node, facts) => (flag(node["concurrent"]) ? [] : on(node["relation"], facts, SHARE_ALL)),
-	LockStmt: lockLocks,
-	RefreshMatViewStmt: (node, facts) => on(node["relation"], facts, flag(node["concurrent"]) ? SHARE : EXCLUSIVE),
-	ReindexStmt: reindexLocks,
-	RenameStmt: renameLocks,
-	RuleStmt: (node, facts) => on(node["relation"], facts, EXCLUSIVE),
-	TruncateStmt: truncateLocks,
-	ViewStmt: (node, facts) =>
-		facts.views.has(tableOf(node["view"], facts.schema).key) ? on(node["view"], facts, EXCLUSIVE) : [],
-}
+  AlterDomainStmt: domainLocks,
+  AlterObjectSchemaStmt: (node, facts) =>
+    RELATIONS.test(node["objectType"] as string) ? on(node["relation"], facts, EXCLUSIVE) : [],
+  AlterPolicyStmt: (node, facts) => on(node["table"], facts, EXCLUSIVE),
+  // every ALTER SEQUENCE but the ALTER TABLE forms takes SHARE ROW EXCLUSIVE, which another session's nextval waits on
+  AlterSeqStmt: (node, facts) => on(node["sequence"], facts, SHARE),
+  ClusterStmt: (node, facts) => (node["relation"] === undefined ? [] : on(node["relation"], facts, EXCLUSIVE)),
+  CreatePolicyStmt: (node, facts) => on(node["table"], facts, EXCLUSIVE),
+  CreateStmt: createLocks,
+  CreateTrigStmt: (node, facts) => on(node["relation"], facts, SHARE_ALL),
+  DropStmt: dropLocks,
+  IndexStmt: (node, facts) => (flag(node["concurrent"]) ? [] : on(node["relation"], facts, SHARE_ALL)),
+  LockStmt: lockLocks,
+  RefreshMatViewStmt: (node, facts) => on(node["relation"], facts, flag(node["concurrent"]) ? SHARE : EXCLUSIVE),
+  ReindexStmt: reindexLocks,
+  RenameStmt: renameLocks,
+  RuleStmt: (node, facts) => on(node["relation"], facts, EXCLUSIVE),
+  TruncateStmt: truncateLocks,
+  ViewStmt: (node, facts) =>
+    facts.views.has(tableOf(node["view"], facts.schema).key) ? on(node["view"], facts, EXCLUSIVE) : [],
+};
 
 /** The key a rename or a move to another schema gives a relation, undefined for any other statement */
 function movedTo(type: string, node: Node, facts: Facts): string | undefined {
-	const kind = node[type === "RenameStmt" ? "renameType" : "objectType"] as string
-	if ((type !== "RenameStmt" && type !== "AlterObjectSchemaStmt") || !RELATIONS.test(kind)) return undefined
-	const relation = node["relation"] as { relname: string; schemaname?: string | undefined }
-	if (type === "AlterObjectSchemaStmt") return keyOf([String(node["newschema"]), relation.relname], facts.schema)
-	return keyOf(
-		[...(relation.schemaname === undefined ? [] : [relation.schemaname]), String(node["newname"])],
-		facts.schema,
-	)
+  const kind = node[type === "RenameStmt" ? "renameType" : "objectType"] as string;
+
+  if ((type !== "RenameStmt" && type !== "AlterObjectSchemaStmt") || !RELATIONS.test(kind)) return undefined;
+  const relation = node["relation"] as { relname: string; schemaname?: string | undefined };
+
+  if (type === "AlterObjectSchemaStmt") return keyOf([String(node["newschema"]), relation.relname], facts.schema);
+
+  return keyOf(
+    [...(relation.schemaname === undefined ? [] : [relation.schemaname]), String(node["newname"])],
+    facts.schema,
+  );
 }
 
 /** The relation a statement makes that the history does not hold, undefined for any other statement */
 function madeBy(type: string, node: Node, facts: Facts): string | undefined {
-	/* the history's sequences are not read, so CREATE SEQUENCE IF NOT EXISTS may make none */
-	if (type === "CreateSeqStmt")
-		return flag(node["if_not_exists"]) ? undefined : tableOf(node["sequence"], facts.schema).key
-	const relation =
-		type === "CreateStmt"
-			? node["relation"]
-			: type === "ViewStmt"
-				? node["view"]
-				: type === "CreateTableAsStmt" || (type === "SelectStmt" && node["intoClause"] !== undefined)
-					? ((type === "SelectStmt" ? node["intoClause"] : node["into"]) as Node)["rel"]
-					: undefined
-	if (relation === undefined) return undefined
-	const { key } = tableOf(relation, facts.schema)
-	return facts.tables.has(key) || facts.views.has(key) || facts.reads.has(key) ? undefined : key
+  // the history's sequences are not read, so CREATE SEQUENCE IF NOT EXISTS may make none
+  if (type === "CreateSeqStmt")
+    return flag(node["if_not_exists"]) ? undefined : tableOf(node["sequence"], facts.schema).key;
+
+  const relation =
+    type === "CreateStmt"
+      ? node["relation"]
+      : type === "ViewStmt"
+        ? node["view"]
+        : type === "CreateTableAsStmt" || (type === "SelectStmt" && node["intoClause"] !== undefined)
+          ? ((type === "SelectStmt" ? node["intoClause"] : node["into"]) as Node)["rel"]
+          : undefined;
+
+  if (relation === undefined) return undefined;
+  const { key } = tableOf(relation, facts.schema);
+
+  return facts.tables.has(key) || facts.views.has(key) || facts.reads.has(key) ? undefined : key;
 }
 
 /**
@@ -265,35 +294,43 @@ function madeBy(type: string, node: Node, facts: Facts): string | undefined {
  * relation is named by the one name it has where the file reads it, as the file names it next
  */
 function carry(held: Held, from: string, to: string): void {
-	const reads = held.locks.get(from)
-	if (reads !== undefined) {
-		held.locks.delete(from)
-		held.locks.set(to, reads || held.locks.get(to) === true)
-	}
-	if (held.made.delete(from)) held.made.add(to)
+  const reads = held.locks.get(from);
+
+  if (reads !== undefined) {
+    held.locks.delete(from);
+    held.locks.set(to, reads || held.locks.get(to) === true);
+  }
+
+  if (held.made.delete(from)) held.made.add(to);
 }
 
 /** Each key `held` records in the schema a RENAME of it names, carried to the schema's new name */
 function carrySchema(node: Node, { facts, held }: { facts: Facts; held: Held }): void {
-	for (const key of [...held.locks.keys(), ...held.made]) {
-		const parts = key.split(".")
-		if ((parts.length > 1 ? parts[0] : facts.schema) === node["subname"])
-			carry(held, key, keyOf([String(node["newname"]), parts.at(-1) as string], facts.schema))
-	}
+  for (const key of [...held.locks.keys(), ...held.made]) {
+    const parts = key.split(".");
+
+    if ((parts.length > 1 ? parts[0] : facts.schema) === node["subname"])
+      carry(held, key, keyOf([String(node["newname"]), parts.at(-1) as string], facts.schema));
+  }
 }
 
 /** `held` after a top-level statement other than an ALTER TABLE, read before `facts` follow it */
 function holdStatement(type: string, node: Node, { facts, held }: { facts: Facts; held: Held }): void {
-	const made = madeBy(type, node, facts)
-	if (made !== undefined) held.made.add(made)
-	hold(held, STATEMENTS[type]?.(node, facts) ?? [])
-	if (type === "DropStmt") for (const object of cascaded(node, facts.schema)) held.cascades.add(object)
-	for (const other of unseen(type, node, { facts, made: held.made })) held.unseen.add(other)
-	for (const owned of ownedBy(type, node)) held.owners.add(owned)
-	/* what the file holds, and what it made, which no other session sees, follow a rename or a move */
-	const to = movedTo(type, node, facts)
-	if (to !== undefined) carry(held, tableOf(node["relation"], facts.schema).key, to)
-	else if (type === "RenameStmt" && node["renameType"] === "OBJECT_SCHEMA") carrySchema(node, { facts, held })
+  const made = madeBy(type, node, facts);
+
+  if (made !== undefined) held.made.add(made);
+  hold(held, STATEMENTS[type]?.(node, facts) ?? []);
+
+  if (type === "DropStmt") for (const object of cascaded(node, facts.schema)) held.cascades.add(object);
+
+  for (const other of unseen(type, node, { facts, made: held.made })) held.unseen.add(other);
+
+  for (const owned of ownedBy(type, node)) held.owners.add(owned);
+  // what the file holds, and what it made, which no other session sees, follow a rename or a move
+  const to = movedTo(type, node, facts);
+
+  if (to !== undefined) carry(held, tableOf(node["relation"], facts.schema).key, to);
+  else if (type === "RenameStmt" && node["renameType"] === "OBJECT_SCHEMA") carrySchema(node, { facts, held });
 }
 
-export { clearHeld, type Held, heldStart, holdCommand, holdStatement, type Lock, measured }
+export { clearHeld, type Held, heldStart, holdCommand, holdStatement, measured };

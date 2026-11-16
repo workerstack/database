@@ -1,11 +1,14 @@
-import { mkdirSync, writeFileSync } from "node:fs"
-import { join } from "node:path"
-import { afterEach, describe, expect, it } from "vitest"
-import { type FakeD1, fakeD1, LIVE_NOT_JSON, localD1, READS_LIVE_JSON, writeSum } from "./__fixtures__/d1.ts"
-import { makeIo, projects, runCliWithFakes } from "./__fixtures__/io.ts"
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
-const temp = projects()
-afterEach(temp.clean)
+import { afterEach, describe, expect, it } from "vitest";
+
+import { type FakeD1, fakeD1, LIVE_NOT_JSON, localD1, READS_LIVE_JSON, writeSum } from "./__fixtures__/d1.ts";
+import { makeIo, projects, runCliWithFakes } from "./__fixtures__/io.ts";
+
+const temp = projects();
+
+afterEach(temp.clean);
 
 const TOML = `name = "probe"
 compatibility_date = "2026-10-01"
@@ -15,297 +18,310 @@ binding = "CORE"
 database_name = "core"
 database_id = "00000000-0000-0000-0000-000000000000"
 migrations_dir = "atlas-migrations"
-`
+`;
 
 /** A worker project: its wrangler.toml, and these migrations in ./atlas-migrations with their sum */
 function worker(migrations: Record<string, string>, toml = TOML): string {
-	const dir = temp.make()
-	writeFileSync(join(dir, "wrangler.toml"), toml)
-	mkdirSync(join(dir, "atlas-migrations"))
-	for (const [name, sql] of Object.entries(migrations)) writeFileSync(join(dir, "atlas-migrations", name), sql)
-	writeSum(join(dir, "atlas-migrations"))
-	localD1(dir, { binding: "CORE", database_id: "00000000-0000-0000-0000-000000000000" })
-	return dir
+  const dir = temp.make();
+  writeFileSync(join(dir, "wrangler.toml"), toml);
+  mkdirSync(join(dir, "atlas-migrations"));
+
+  for (const [name, sql] of Object.entries(migrations)) writeFileSync(join(dir, "atlas-migrations", name), sql);
+  writeSum(join(dir, "atlas-migrations"));
+  localD1(dir, { binding: "CORE", database_id: "00000000-0000-0000-0000-000000000000" });
+
+  return dir;
 }
 
 const recorded = (d1: FakeD1, table = "d1_migrations") =>
-	d1.db
-		.prepare(`SELECT name FROM "${table}" ORDER BY id`)
-		.all()
-		.map((row) => row["name"])
+  d1.db
+    .prepare(`SELECT name FROM "${table}" ORDER BY id`)
+    .all()
+    .map((row) => row["name"]);
 
-const INIT = { "20260101000000_init.sql": "CREATE TABLE post (id TEXT);" }
+const INIT = { "20260101000000_init.sql": "CREATE TABLE post (id TEXT);" };
 
 describe("migrate apply on D1 without a migrate config", () => {
-	it("checks, then applies through wrangler into d1_migrations, and finds nothing pending the next time", async () => {
-		const dir = worker(INIT)
-		const d1 = fakeD1({ dir: join(dir, "atlas-migrations") })
-		const io = makeIo(dir, d1)
-		expect(await runCliWithFakes(["migrate", "apply", "core", "--local"], io)).toBe(0)
-		expect(io.outputs).toEqual([
-			"Empty target: no tables and no applied history, so nothing can be lost; 1 file applies without the unsafe gate",
-			"Apply: 20260101000000_init.sql",
-			"\nDone: 1 applied",
-		])
-		expect(recorded(d1)).toEqual(["20260101000000_init.sql"])
-		const apply = d1.calls.find((call) => call[2] === "migrations") as string[]
-		expect(apply).toEqual([
-			"wrangler",
-			"d1",
-			"migrations",
-			"apply",
-			"core",
-			"--local",
-			"--config",
-			join(dir, "wrangler.toml"),
-		])
-		expect(d1.db.prepare("SELECT name FROM sqlite_master WHERE name = '__drizzle_migrations'").all()).toEqual([])
-		const again = makeIo(dir, d1)
-		expect(await runCliWithFakes(["migrate", "apply", "core", "--local"], again)).toBe(0)
-		expect(again.outputs).toEqual(["No migrations to apply"])
-	})
+  it("checks, then applies through wrangler into d1_migrations, and finds nothing pending the next time", async () => {
+    const dir = worker(INIT);
+    const d1 = fakeD1({ dir: join(dir, "atlas-migrations") });
+    const io = makeIo(dir, d1);
+    expect(await runCliWithFakes(["migrate", "apply", "core", "--local"], io)).toBe(0);
+    expect(io.outputs).toEqual([
+      "Empty target: no tables and no applied history, so nothing can be lost; 1 file applies without the unsafe gate",
+      "Apply: 20260101000000_init.sql",
+      "\nDone: 1 applied",
+    ]);
+    expect(recorded(d1)).toEqual(["20260101000000_init.sql"]);
+    const apply = d1.calls.find((call) => call[2] === "migrations") as string[];
+    expect(apply).toEqual([
+      "wrangler",
+      "d1",
+      "migrations",
+      "apply",
+      "core",
+      "--local",
+      "--config",
+      join(dir, "wrangler.toml"),
+    ]);
+    expect(d1.db.prepare("SELECT name FROM sqlite_master WHERE name = '__drizzle_migrations'").all()).toEqual([]);
+    const again = makeIo(dir, d1);
+    expect(await runCliWithFakes(["migrate", "apply", "core", "--local"], again)).toBe(0);
+    expect(again.outputs).toEqual(["No migrations to apply"]);
+  });
 
-	it("runs every wrangler command remotely unless --local", async () => {
-		const dir = worker(INIT)
-		const d1 = fakeD1({ dir: join(dir, "atlas-migrations") })
-		expect(await runCliWithFakes(["migrate", "apply", "core"], makeIo(dir, d1))).toBe(0)
-		expect(d1.calls.filter(([cmd]) => cmd === "wrangler").every((call) => call.includes("--remote"))).toBe(true)
-	})
+  it("runs every wrangler command remotely unless --local", async () => {
+    const dir = worker(INIT);
+    const d1 = fakeD1({ dir: join(dir, "atlas-migrations") });
+    expect(await runCliWithFakes(["migrate", "apply", "core"], makeIo(dir, d1))).toBe(0);
+    expect(d1.calls.filter(([cmd]) => cmd === "wrangler").every((call) => call.includes("--remote"))).toBe(true);
+  });
 
-	it("refuses an unsafe pending file before wrangler runs, and checks without applying", async () => {
-		const dir = worker({ ...INIT, "20260102000000_drop.sql": "DROP TABLE post;" })
-		const d1 = fakeD1({ dir: join(dir, "atlas-migrations") })
-		d1.db.exec("CREATE TABLE keep (x)")
-		const io = makeIo(dir, d1)
-		expect(await runCliWithFakes(["migrate", "apply", "core", "--local"], io)).toBe(1)
-		expect(io.errors[0]).toMatch(/^20260102000000_drop\.sql is unsafe/)
-		expect(d1.calls.some((call) => call[2] === "migrations")).toBe(false)
-		const safe = worker(INIT)
-		const checked = fakeD1({ dir: join(safe, "atlas-migrations") })
-		checked.db.exec("CREATE TABLE keep (x)")
-		const check = makeIo(safe, checked)
-		expect(await runCliWithFakes(["migrate", "check", "core", "--local"], check)).toBe(0)
-		expect(check.outputs).toEqual(["\nCheck passed: 1 pending: 20260101000000_init.sql"])
-		/* a check never writes: no migrations table appears */
-		expect(checked.db.prepare("SELECT name FROM sqlite_master WHERE name = 'd1_migrations'").all()).toEqual([])
-	})
-})
+  it("refuses an unsafe pending file before wrangler runs, and checks without applying", async () => {
+    const dir = worker({ ...INIT, "20260102000000_drop.sql": "DROP TABLE post;" });
+    const d1 = fakeD1({ dir: join(dir, "atlas-migrations") });
+    d1.db.exec("CREATE TABLE keep (x)");
+    const io = makeIo(dir, d1);
+    expect(await runCliWithFakes(["migrate", "apply", "core", "--local"], io)).toBe(1);
+    expect(io.errors[0]).toMatch(/^20260102000000_drop\.sql is unsafe/);
+    expect(d1.calls.some((call) => call[2] === "migrations")).toBe(false);
+    const safe = worker(INIT);
+    const checked = fakeD1({ dir: join(safe, "atlas-migrations") });
+    checked.db.exec("CREATE TABLE keep (x)");
+    const check = makeIo(safe, checked);
+    expect(await runCliWithFakes(["migrate", "check", "core", "--local"], check)).toBe(0);
+    expect(check.outputs).toEqual(["\nCheck passed: 1 pending: 20260101000000_init.sql"]);
+    // a check never writes: no migrations table appears
+    expect(checked.db.prepare("SELECT name FROM sqlite_master WHERE name = 'd1_migrations'").all()).toEqual([]);
+  });
+});
 
 describe("migrate apply on D1 without a migrate config: a failed apply", () => {
-	it("fails when a file fails, which leaves no row for it, and when wrangler applies nothing", async () => {
-		const dir = worker({ "20260101000000_bad.sql": READS_LIVE_JSON })
-		const d1 = fakeD1({ dir: join(dir, "atlas-migrations") })
-		d1.db.exec(LIVE_NOT_JSON)
-		const io = makeIo(dir, d1)
-		expect(await runCliWithFakes(["migrate", "apply", "core", "--local"], io)).toBe(1)
-		expect(io.errors[0]).toMatch(/^wrangler d1 migrations apply failed: Migration 20260101000000_bad\.sql failed/)
-		expect(recorded(d1)).toEqual([])
-		const declined = worker(INIT)
-		const no = makeIo(declined, fakeD1({ declines: true, dir: join(declined, "atlas-migrations") }))
-		expect(await runCliWithFakes(["migrate", "apply", "core", "--local"], no)).toBe(1)
-		expect(no.errors).toEqual([
-			"wrangler recorded nothing in d1_migrations, where database checked 20260101000000_init.sql; wrangler said: About to apply… continue? no",
-		])
-	})
-})
+  it("fails when a file fails, which leaves no row for it, and when wrangler applies nothing", async () => {
+    const dir = worker({ "20260101000000_bad.sql": READS_LIVE_JSON });
+    const d1 = fakeD1({ dir: join(dir, "atlas-migrations") });
+    d1.db.exec(LIVE_NOT_JSON);
+    const io = makeIo(dir, d1);
+    expect(await runCliWithFakes(["migrate", "apply", "core", "--local"], io)).toBe(1);
+    expect(io.errors[0]).toMatch(/^wrangler d1 migrations apply failed: Migration 20260101000000_bad\.sql failed/);
+    expect(recorded(d1)).toEqual([]);
+    const declined = worker(INIT);
+    const no = makeIo(declined, fakeD1({ declines: true, dir: join(declined, "atlas-migrations") }));
+    expect(await runCliWithFakes(["migrate", "apply", "core", "--local"], no)).toBe(1);
+    expect(no.errors).toEqual([
+      "wrangler recorded nothing in d1_migrations, where database checked 20260101000000_init.sql; wrangler said: About to apply… continue? no",
+    ]);
+  });
+});
 
 describe("migrate apply on D1 without a migrate config: order and refusals", () => {
-	/* C8 of the 0.14.1 review: wrangler runs these by number, Atlas hashes and diffs them by name */
-	it("refuses, applying nothing, files whose prefixes differ in width so wrangler's order is not Atlas's", async () => {
-		const dir = worker({
-			"20250101000000_rebuild.sql":
-				"CREATE TABLE new_t (id TEXT, a TEXT);\nINSERT INTO new_t (id, a) SELECT id, a FROM t;\nDROP TABLE t;\nALTER TABLE new_t RENAME TO t;",
-			"20261020_init.sql": "CREATE TABLE t (id TEXT, a TEXT);",
-		})
-		const d1 = fakeD1({ dir: join(dir, "atlas-migrations") })
-		const io = makeIo(dir, d1)
-		expect(await runCliWithFakes(["migrate", "apply", "core", "--local", "--yes"], io)).toBe(1)
-		expect(io.errors[0]).toContain(
-			"20250101000000_rebuild.sql runs after 20261020_init.sql under wrangler, by number, but before it under Atlas, by name",
-		)
-		/* a refused apply makes no history table (S5 of the 0.15.0 review) */
-		expect(d1.db.prepare("SELECT name FROM sqlite_master WHERE name = 'd1_migrations'").all()).toEqual([])
-	})
+  // C8 of the 0.14.1 review: wrangler runs these by number, Atlas hashes and diffs them by name
+  it("refuses, applying nothing, files whose prefixes differ in width so wrangler's order is not Atlas's", async () => {
+    const dir = worker({
+      "20250101000000_rebuild.sql":
+        "CREATE TABLE new_t (id TEXT, a TEXT);\nINSERT INTO new_t (id, a) SELECT id, a FROM t;\nDROP TABLE t;\nALTER TABLE new_t RENAME TO t;",
+      "20261020_init.sql": "CREATE TABLE t (id TEXT, a TEXT);",
+    });
 
-	it("refuses --file, -e, a missing wrangler config, a binding it lacks, and another migrations directory", async () => {
-		const dir = worker(INIT)
-		const cases: Array<[string[], string, string]> = [
-			[["--file", "x.sql"], dir, "--file does not apply to a D1 database: wrangler applies its migrations directory"],
-			[["-e", "prod"], dir, "-e/--env needs database.migrate.config.ts to define environments"],
-			[["--local"], temp.make(), "no wrangler config in "],
-		]
-		for (const [flags, cwd, message] of cases) {
-			const io = makeIo(cwd, fakeD1({ dir }))
-			expect(await runCliWithFakes(["migrate", "apply", "core", ...flags], io)).toBe(1)
-			expect(io.errors[0]).toContain(message)
-		}
-		const bare = makeIo(dir)
-		expect(await runCliWithFakes(["migrate", "apply", "blog", "--local", "--dir", "nowhere"], bare)).toBe(1)
-		expect(bare.errors).toEqual([`Migrations dir not found: ${join(dir, "nowhere")}`])
-		/* AD10 of the area D review: a file --dir names, refused as a missing one is */
-		writeFileSync(join(dir, "afile.sql"), "")
-		const file = makeIo(dir)
-		expect(await runCliWithFakes(["migrate", "apply", "blog", "--local", "--dir", "afile.sql"], file)).toBe(1)
-		expect(file.errors).toEqual([`Migrations dir ${join(dir, "afile.sql")} is not a directory`])
-		/* without a runner given, database runs the real wrangler, which the refusal comes before */
-		const real = makeIo(dir)
-		expect(await runCliWithFakes(["migrate", "apply", "blog", "--local"], real)).toBe(1)
-		expect(real.errors).toEqual([`${join(dir, "wrangler.toml")} has no D1 database named or bound as blog`])
-		const unbound = makeIo(dir, fakeD1({ dir }))
-		expect(await runCliWithFakes(["migrate", "apply", "blog", "--local"], unbound)).toBe(1)
-		expect(unbound.errors).toEqual([`${join(dir, "wrangler.toml")} has no D1 database named or bound as blog`])
-		const elsewhere = worker(INIT, TOML.replace('migrations_dir = "atlas-migrations"', 'migrations_dir = "migrations"'))
-		const io = makeIo(elsewhere, fakeD1({ dir }))
-		expect(await runCliWithFakes(["migrate", "apply", "core", "--local"], io)).toBe(1)
-		expect(io.errors[0]).toContain(
-			`applies core's migrations from ${join(elsewhere, "migrations")}, but database reads them`,
-		)
-		const pattern = worker(
-			INIT,
-			TOML.replace("migrations_dir", 'migrations_pattern = "atlas-migrations/**/*.sql"\nmigrations_dir'),
-		)
-		const patterned = makeIo(pattern, fakeD1({ dir }))
-		expect(await runCliWithFakes(["migrate", "apply", "core", "--local"], patterned)).toBe(1)
-		expect(patterned.errors[0]).toContain("sets migrations_pattern atlas-migrations/**/*.sql")
-	})
-})
+    const d1 = fakeD1({ dir: join(dir, "atlas-migrations") });
+    const io = makeIo(dir, d1);
+    expect(await runCliWithFakes(["migrate", "apply", "core", "--local", "--yes"], io)).toBe(1);
+    expect(io.errors[0]).toContain(
+      "20250101000000_rebuild.sql runs after 20261020_init.sql under wrangler, by number, but before it under Atlas, by name",
+    );
+    // a refused apply makes no history table (S5 of the 0.15.0 review)
+    expect(d1.db.prepare("SELECT name FROM sqlite_master WHERE name = 'd1_migrations'").all()).toEqual([]);
+  });
+
+  it("refuses --file, -e, a missing wrangler config, a binding it lacks, and another migrations directory", async () => {
+    const dir = worker(INIT);
+
+    const cases: Array<[string[], string, string]> = [
+      [["--file", "x.sql"], dir, "--file does not apply to a D1 database: wrangler applies its migrations directory"],
+      [["-e", "prod"], dir, "-e/--env needs database.migrate.config.ts to define environments"],
+      [["--local"], temp.make(), "no wrangler config in "],
+    ];
+
+    for (const [flags, cwd, message] of cases) {
+      const io = makeIo(cwd, fakeD1({ dir }));
+      expect(await runCliWithFakes(["migrate", "apply", "core", ...flags], io)).toBe(1);
+      expect(io.errors[0]).toContain(message);
+    }
+
+    const bare = makeIo(dir);
+    expect(await runCliWithFakes(["migrate", "apply", "blog", "--local", "--dir", "nowhere"], bare)).toBe(1);
+    expect(bare.errors).toEqual([`Migrations dir not found: ${join(dir, "nowhere")}`]);
+    // AD10 of the area D review: a file --dir names, refused as a missing one is
+    writeFileSync(join(dir, "afile.sql"), "");
+    const file = makeIo(dir);
+    expect(await runCliWithFakes(["migrate", "apply", "blog", "--local", "--dir", "afile.sql"], file)).toBe(1);
+    expect(file.errors).toEqual([`Migrations dir ${join(dir, "afile.sql")} is not a directory`]);
+    // without a runner given, database runs the real wrangler, which the refusal comes before
+    const real = makeIo(dir);
+    expect(await runCliWithFakes(["migrate", "apply", "blog", "--local"], real)).toBe(1);
+    expect(real.errors).toEqual([`${join(dir, "wrangler.toml")} has no D1 database named or bound as blog`]);
+    const unbound = makeIo(dir, fakeD1({ dir }));
+    expect(await runCliWithFakes(["migrate", "apply", "blog", "--local"], unbound)).toBe(1);
+    expect(unbound.errors).toEqual([`${join(dir, "wrangler.toml")} has no D1 database named or bound as blog`]);
+
+    const elsewhere = worker(
+      INIT,
+      TOML.replace('migrations_dir = "atlas-migrations"', 'migrations_dir = "migrations"'),
+    );
+
+    const io = makeIo(elsewhere, fakeD1({ dir }));
+    expect(await runCliWithFakes(["migrate", "apply", "core", "--local"], io)).toBe(1);
+    expect(io.errors[0]).toContain(
+      `applies core's migrations from ${join(elsewhere, "migrations")}, but database reads them`,
+    );
+
+    const pattern = worker(
+      INIT,
+      TOML.replace("migrations_dir", 'migrations_pattern = "atlas-migrations/**/*.sql"\nmigrations_dir'),
+    );
+
+    const patterned = makeIo(pattern, fakeD1({ dir }));
+    expect(await runCliWithFakes(["migrate", "apply", "core", "--local"], patterned)).toBe(1);
+    expect(patterned.errors[0]).toContain("sets migrations_pattern atlas-migrations/**/*.sql");
+  });
+});
 
 /** A database that database 0.7 migrated: the init file recorded by hash in __drizzle_migrations */
 async function migratedBy07(dir: string, d1: FakeD1): Promise<void> {
-	d1.db.exec(
-		"CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY, hash TEXT NOT NULL UNIQUE, created_at INTEGER)",
-	)
-	const { generateMigrationHash } = await import("../migrate/core/parse.ts")
-	const hash = generateMigrationHash(INIT["20260101000000_init.sql"])
-	d1.db.exec(`CREATE TABLE post (id TEXT); INSERT INTO __drizzle_migrations (hash, created_at) VALUES ('${hash}', 1)`)
-	writeFileSync(join(dir, "atlas-migrations", "20260102000000_more.sql"), "CREATE TABLE tag (id TEXT);")
-	writeSum(join(dir, "atlas-migrations"))
+  d1.db.exec(
+    "CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY, hash TEXT NOT NULL UNIQUE, created_at INTEGER)",
+  );
+  const { generateMigrationHash } = await import("../migrate/core/parse.ts");
+  const hash = generateMigrationHash(INIT["20260101000000_init.sql"]);
+  d1.db.exec(`CREATE TABLE post (id TEXT); INSERT INTO __drizzle_migrations (hash, created_at) VALUES ('${hash}', 1)`);
+  writeFileSync(join(dir, "atlas-migrations", "20260102000000_more.sql"), "CREATE TABLE tag (id TEXT);");
+  writeSum(join(dir, "atlas-migrations"));
 }
 
 describe("migrate on D1: wrangler itself", () => {
-	it("lists nothing applied before the first apply, and nothing pending after it", async () => {
-		const dir = worker(INIT)
-		const d1 = fakeD1({ dir: join(dir, "atlas-migrations") })
-		const before = makeIo(dir, d1)
-		expect(await runCliWithFakes(["migrate", "status", "core", "--local"], before)).toBe(0)
-		expect(before.outputs).toEqual(["Applied: none", "Pending: 20260101000000_init.sql"])
-		expect(await runCliWithFakes(["migrate", "apply", "core", "--local"], makeIo(dir, d1))).toBe(0)
-		const after = makeIo(dir, d1)
-		expect(await runCliWithFakes(["migrate", "status", "core", "--local"], after)).toBe(0)
-		expect(after.outputs).toEqual(["Applied: 20260101000000_init.sql", "Pending: none"])
-		const baseline = makeIo(dir, d1)
-		d1.db.exec("CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY, hash TEXT, created_at INTEGER)")
-		expect(await runCliWithFakes(["migrate", "baseline", "core", "--local"], baseline)).toBe(0)
-		expect(baseline.outputs).toEqual(["\nBaseline done: 0 marked"])
-		const check = makeIo(dir, d1)
-		expect(await runCliWithFakes(["migrate", "check", "core", "--local"], check)).toBe(0)
-		expect(check.outputs).toEqual(["\nCheck passed: 0 pending"])
-	})
-})
+  it("lists nothing applied before the first apply, and nothing pending after it", async () => {
+    const dir = worker(INIT);
+    const d1 = fakeD1({ dir: join(dir, "atlas-migrations") });
+    const before = makeIo(dir, d1);
+    expect(await runCliWithFakes(["migrate", "status", "core", "--local"], before)).toBe(0);
+    expect(before.outputs).toEqual(["Applied: none", "Pending: 20260101000000_init.sql"]);
+    expect(await runCliWithFakes(["migrate", "apply", "core", "--local"], makeIo(dir, d1))).toBe(0);
+    const after = makeIo(dir, d1);
+    expect(await runCliWithFakes(["migrate", "status", "core", "--local"], after)).toBe(0);
+    expect(after.outputs).toEqual(["Applied: 20260101000000_init.sql", "Pending: none"]);
+    const baseline = makeIo(dir, d1);
+    d1.db.exec("CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY, hash TEXT, created_at INTEGER)");
+    expect(await runCliWithFakes(["migrate", "baseline", "core", "--local"], baseline)).toBe(0);
+    expect(baseline.outputs).toEqual(["\nBaseline done: 0 marked"]);
+    const check = makeIo(dir, d1);
+    expect(await runCliWithFakes(["migrate", "check", "core", "--local"], check)).toBe(0);
+    expect(check.outputs).toEqual(["\nCheck passed: 0 pending"]);
+  });
+});
 
 describe("migrate apply on D1: database's history before 0.8", () => {
-	it("refuses to apply until baseline copies the record, then applies only the rest", async () => {
-		const dir = worker(INIT)
-		const d1 = fakeD1({ dir: join(dir, "atlas-migrations") })
-		await migratedBy07(dir, d1)
-		const refused = makeIo(dir, d1)
-		expect(await runCliWithFakes(["migrate", "apply", "core", "--local"], refused)).toBe(1)
-		expect(refused.errors).toEqual([
-			"core records 20260101000000_init.sql in __drizzle_migrations, database's history before 0.8, but not in d1_migrations, wrangler's; run database migrate baseline once to copy the record",
-		])
-		const baseline = makeIo(dir, d1)
-		expect(await runCliWithFakes(["migrate", "baseline", "core", "--local"], baseline)).toBe(0)
-		expect(baseline.outputs).toEqual([
-			"Marked applied: 20260101000000_init.sql",
-			"Not marked: 20260102000000_more.sql (__drizzle_migrations has no record of it; database migrate apply runs it)",
-			"\nBaseline done: 1 marked",
-		])
-		const status = makeIo(dir, d1)
-		expect(await runCliWithFakes(["migrate", "status", "core", "--local"], status)).toBe(0)
-		expect(status.outputs).toEqual(["Applied: 20260101000000_init.sql", "Pending: 20260102000000_more.sql"])
-		expect(await runCliWithFakes(["migrate", "apply", "core", "--local"], makeIo(dir, d1))).toBe(0)
-		expect(recorded(d1)).toEqual(["20260101000000_init.sql", "20260102000000_more.sql"])
-	})
+  it("refuses to apply until baseline copies the record, then applies only the rest", async () => {
+    const dir = worker(INIT);
+    const d1 = fakeD1({ dir: join(dir, "atlas-migrations") });
+    await migratedBy07(dir, d1);
+    const refused = makeIo(dir, d1);
+    expect(await runCliWithFakes(["migrate", "apply", "core", "--local"], refused)).toBe(1);
+    expect(refused.errors).toEqual([
+      "core records 20260101000000_init.sql in __drizzle_migrations, database's history before 0.8, but not in d1_migrations, wrangler's; run database migrate baseline once to copy the record",
+    ]);
+    const baseline = makeIo(dir, d1);
+    expect(await runCliWithFakes(["migrate", "baseline", "core", "--local"], baseline)).toBe(0);
+    expect(baseline.outputs).toEqual([
+      "Marked applied: 20260101000000_init.sql",
+      "Not marked: 20260102000000_more.sql (__drizzle_migrations has no record of it; database migrate apply runs it)",
+      "\nBaseline done: 1 marked",
+    ]);
+    const status = makeIo(dir, d1);
+    expect(await runCliWithFakes(["migrate", "status", "core", "--local"], status)).toBe(0);
+    expect(status.outputs).toEqual(["Applied: 20260101000000_init.sql", "Pending: 20260102000000_more.sql"]);
+    expect(await runCliWithFakes(["migrate", "apply", "core", "--local"], makeIo(dir, d1))).toBe(0);
+    expect(recorded(d1)).toEqual(["20260101000000_init.sql", "20260102000000_more.sql"]);
+  });
 
-	/* M44: D1 keeps no time a hash was recorded; the pre-0.8 record still holding the pre-0.5.0 hash vouches for it */
-	it("copies the pre-0.5.0 hash database 0.7 recorded for a file, so check passes while that record holds it", async () => {
-		const sql = "INSERT INTO post VALUES ('a -- b\nc');"
-		const dir = worker({ ...INIT, "20260101000001_row.sql": sql })
-		const d1 = fakeD1({ dir: join(dir, "atlas-migrations") })
-		const { generateMigrationHash, legacyMigrationHash } = await import("../migrate/core/parse.ts")
-		d1.db.exec("CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY, hash TEXT, created_at INTEGER)")
-		d1.db.exec("CREATE TABLE post (id TEXT)")
-		const record = d1.db.prepare("INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, 1)")
-		for (const hash of [generateMigrationHash(INIT["20260101000000_init.sql"]), legacyMigrationHash(sql)])
-			record.run(hash)
-		expect(await runCliWithFakes(["migrate", "baseline", "core", "--local"], makeIo(dir, d1))).toBe(0)
-		const check = makeIo(dir, d1)
-		const checked = await runCliWithFakes(["migrate", "check", "core", "--local"], check)
-		expect([checked, check.errors]).toEqual([0, []])
-	})
+  // M44: D1 keeps no time a hash was recorded; the pre-0.8 record still holding the pre-0.5.0 hash vouches for it
+  it("copies the pre-0.5.0 hash database 0.7 recorded for a file, so check passes while that record holds it", async () => {
+    const sql = "INSERT INTO post VALUES ('a -- b\nc');";
+    const dir = worker({ ...INIT, "20260101000001_row.sql": sql });
+    const d1 = fakeD1({ dir: join(dir, "atlas-migrations") });
+    const { generateMigrationHash, legacyMigrationHash } = await import("../migrate/core/parse.ts");
+    d1.db.exec("CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY, hash TEXT, created_at INTEGER)");
+    d1.db.exec("CREATE TABLE post (id TEXT)");
+    const record = d1.db.prepare("INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, 1)");
 
-	it("refuses a baseline with no history to copy from", async () => {
-		const dir = worker(INIT)
-		const io = makeIo(dir, fakeD1({ dir: join(dir, "atlas-migrations") }))
-		expect(await runCliWithFakes(["migrate", "baseline", "core", "--local"], io)).toBe(1)
-		expect(io.errors).toEqual([
-			"core has no __drizzle_migrations to copy from; baseline records only what a history shows was applied",
-		])
-	})
-})
+    for (const hash of [generateMigrationHash(INIT["20260101000000_init.sql"]), legacyMigrationHash(sql)])
+      record.run(hash);
+    expect(await runCliWithFakes(["migrate", "baseline", "core", "--local"], makeIo(dir, d1))).toBe(0);
+    const check = makeIo(dir, d1);
+    const checked = await runCliWithFakes(["migrate", "check", "core", "--local"], check);
+    expect([checked, check.errors]).toEqual([0, []]);
+  });
+
+  it("refuses a baseline with no history to copy from", async () => {
+    const dir = worker(INIT);
+    const io = makeIo(dir, fakeD1({ dir: join(dir, "atlas-migrations") }));
+    expect(await runCliWithFakes(["migrate", "baseline", "core", "--local"], io)).toBe(1);
+    expect(io.errors).toEqual([
+      "core has no __drizzle_migrations to copy from; baseline records only what a history shows was applied",
+    ]);
+  });
+});
 
 /** A database that applied INIT and MORE before database recorded hashes */
 async function unhashed(): Promise<{ d1: FakeD1; dir: string }> {
-	const dir = worker({ ...INIT, "20260102000000_more.sql": "CREATE TABLE tag (id TEXT);" })
-	const d1 = fakeD1({ dir: join(dir, "atlas-migrations") })
-	expect(await runCliWithFakes(["migrate", "apply", "core", "--local"], makeIo(dir, d1))).toBe(0)
-	d1.db.exec("DELETE FROM _database_migration_hashes")
-	return { d1, dir }
+  const dir = worker({ ...INIT, "20260102000000_more.sql": "CREATE TABLE tag (id TEXT);" });
+  const d1 = fakeD1({ dir: join(dir, "atlas-migrations") });
+  expect(await runCliWithFakes(["migrate", "apply", "core", "--local"], makeIo(dir, d1))).toBe(0);
+  d1.db.exec("DELETE FROM _database_migration_hashes");
+
+  return { d1, dir };
 }
 
-/*
- * M1: a file applied before database recorded hashes has none, so database cannot tell whether it was edited
- * since; `baseline --hashes`, run once by an operator who checked the files against git, records them
- */
+// M1: a file applied before database recorded hashes has none, so database cannot tell whether it was edited
+// since; `baseline --hashes`, run once by an operator who checked the files against git, records them
 describe("migrate baseline --hashes on D1", () => {
-	it("records the current hash of each applied file that has none, and status then names none", async () => {
-		const { d1, dir } = await unhashed()
-		const before = makeIo(dir, d1)
-		expect(await runCliWithFakes(["migrate", "status", "core", "--local"], before)).toBe(0)
-		expect(before.outputs.at(-1)).toMatch(/^No hash recorded for 20260101000000_init.sql, 20260102000000_more.sql/)
-		const io = makeIo(dir, d1)
-		expect(await runCliWithFakes(["migrate", "baseline", "core", "--local", "--hashes"], io)).toBe(0)
-		expect(io.outputs).toEqual([
-			"Hash recorded: 20260101000000_init.sql",
-			"Hash recorded: 20260102000000_more.sql",
-			"\nBaseline done: 2 hashes recorded",
-		])
-		const { generateMigrationHash } = await import("../migrate/core/parse.ts")
-		expect(d1.db.prepare("SELECT name, hash FROM _database_migration_hashes ORDER BY name").all()).toEqual([
-			{ hash: generateMigrationHash(INIT["20260101000000_init.sql"]), name: "20260101000000_init.sql" },
-			{ hash: generateMigrationHash("CREATE TABLE tag (id TEXT);"), name: "20260102000000_more.sql" },
-		])
-		const after = makeIo(dir, d1)
-		expect(await runCliWithFakes(["migrate", "status", "core", "--local"], after)).toBe(0)
-		expect(after.outputs).toEqual(["Applied: 20260101000000_init.sql, 20260102000000_more.sql", "Pending: none"])
-		const again = makeIo(dir, d1)
-		expect(await runCliWithFakes(["migrate", "baseline", "core", "--local", "--hashes"], again)).toBe(0)
-		expect(again.outputs).toEqual(["\nBaseline done: 0 hashes recorded"])
-		d1.db.exec("DELETE FROM _database_migration_hashes WHERE name = '20260102000000_more.sql'")
-		const one = makeIo(dir, d1)
-		expect(await runCliWithFakes(["migrate", "baseline", "core", "--local", "--hashes"], one)).toBe(0)
-		expect(one.outputs).toEqual(["Hash recorded: 20260102000000_more.sql", "\nBaseline done: 1 hash recorded"])
-	})
+  it("records the current hash of each applied file that has none, and status then names none", async () => {
+    const { d1, dir } = await unhashed();
+    const before = makeIo(dir, d1);
+    expect(await runCliWithFakes(["migrate", "status", "core", "--local"], before)).toBe(0);
+    expect(before.outputs.at(-1)).toMatch(/^No hash recorded for 20260101000000_init.sql, 20260102000000_more.sql/);
+    const io = makeIo(dir, d1);
+    expect(await runCliWithFakes(["migrate", "baseline", "core", "--local", "--hashes"], io)).toBe(0);
+    expect(io.outputs).toEqual([
+      "Hash recorded: 20260101000000_init.sql",
+      "Hash recorded: 20260102000000_more.sql",
+      "\nBaseline done: 2 hashes recorded",
+    ]);
+    const { generateMigrationHash } = await import("../migrate/core/parse.ts");
+    expect(d1.db.prepare("SELECT name, hash FROM _database_migration_hashes ORDER BY name").all()).toEqual([
+      { hash: generateMigrationHash(INIT["20260101000000_init.sql"]), name: "20260101000000_init.sql" },
+      { hash: generateMigrationHash("CREATE TABLE tag (id TEXT);"), name: "20260102000000_more.sql" },
+    ]);
+    const after = makeIo(dir, d1);
+    expect(await runCliWithFakes(["migrate", "status", "core", "--local"], after)).toBe(0);
+    expect(after.outputs).toEqual(["Applied: 20260101000000_init.sql, 20260102000000_more.sql", "Pending: none"]);
+    const again = makeIo(dir, d1);
+    expect(await runCliWithFakes(["migrate", "baseline", "core", "--local", "--hashes"], again)).toBe(0);
+    expect(again.outputs).toEqual(["\nBaseline done: 0 hashes recorded"]);
+    d1.db.exec("DELETE FROM _database_migration_hashes WHERE name = '20260102000000_more.sql'");
+    const one = makeIo(dir, d1);
+    expect(await runCliWithFakes(["migrate", "baseline", "core", "--local", "--hashes"], one)).toBe(0);
+    expect(one.outputs).toEqual(["Hash recorded: 20260102000000_more.sql", "\nBaseline done: 1 hash recorded"]);
+  });
 
-	it("refuses, recording nothing, while the history names a file the directory lacks", async () => {
-		const { d1, dir } = await unhashed()
-		d1.db.exec("INSERT INTO d1_migrations (name) VALUES ('20251231000000_gone.sql')")
-		const io = makeIo(dir, d1)
-		expect(await runCliWithFakes(["migrate", "baseline", "core", "--local", "--hashes"], io)).toBe(1)
-		expect(io.errors[0]).toMatch(/^1 applied migration matches no file in .+ \(20251231000000_gone.sql\)/)
-		expect(d1.db.prepare("SELECT name FROM _database_migration_hashes").all()).toEqual([])
-	})
-})
+  it("refuses, recording nothing, while the history names a file the directory lacks", async () => {
+    const { d1, dir } = await unhashed();
+    d1.db.exec("INSERT INTO d1_migrations (name) VALUES ('20251231000000_gone.sql')");
+    const io = makeIo(dir, d1);
+    expect(await runCliWithFakes(["migrate", "baseline", "core", "--local", "--hashes"], io)).toBe(1);
+    expect(io.errors[0]).toMatch(/^1 applied migration matches no file in .+ \(20251231000000_gone.sql\)/);
+    expect(d1.db.prepare("SELECT name FROM _database_migration_hashes").all()).toEqual([]);
+  });
+});
 
 const ENV_ONLY = `name = "probe"
 compatibility_date = "2026-10-01"
@@ -320,181 +336,184 @@ migrations_table = "schema_history"
 
 [env.staging]
 vars = { STAGE = "staging" }
-`
+`;
 
 /** db/ holds database.migrate.config.ts and the migrations; worker/ holds the wrangler config that binds them */
 function split(): { db: string; root: string } {
-	const root = temp.make()
-	mkdirSync(join(root, "worker"))
-	writeFileSync(join(root, "worker", "wrangler.toml"), ENV_ONLY)
-	mkdirSync(join(root, "db", "atlas-migrations"), { recursive: true })
-	writeFileSync(join(root, "db", "atlas-migrations", "20260101000000_init.sql"), INIT["20260101000000_init.sql"])
-	writeSum(join(root, "db", "atlas-migrations"))
-	writeFileSync(
-		join(root, "db", "database.migrate.config.ts"),
-		`export default { databases: { core: { migrationsDir: "./atlas-migrations", environments: {
+  const root = temp.make();
+  mkdirSync(join(root, "worker"));
+  writeFileSync(join(root, "worker", "wrangler.toml"), ENV_ONLY);
+  mkdirSync(join(root, "db", "atlas-migrations"), { recursive: true });
+  writeFileSync(join(root, "db", "atlas-migrations", "20260101000000_init.sql"), INIT["20260101000000_init.sql"]);
+  writeSum(join(root, "db", "atlas-migrations"));
+  writeFileSync(
+    join(root, "db", "database.migrate.config.ts"),
+    `export default { databases: { core: { migrationsDir: "./atlas-migrations", environments: {
 prod: { name: "core-prod", provider: { type: "d1", databaseName: "core-prod", wranglerConfig: "../worker/wrangler.toml", wranglerEnv: "prod" } },
 staging: { name: "core-staging", provider: { type: "d1", databaseName: "core-staging", wranglerConfig: "../worker/wrangler.toml", wranglerEnv: "staging" } },
 } } } }\n`,
-	)
-	return { db: join(root, "db"), root }
+  );
+
+  return { db: join(root, "db"), root };
 }
 
 describe("migrate apply on D1 through database.migrate.config.ts", () => {
-	it("reads an env-only binding with a custom migrations table, and passes its config and env to wrangler", async () => {
-		const { db, root } = split()
-		const d1 = fakeD1({ dir: join(db, "atlas-migrations"), table: "schema_history" })
-		const io = makeIo(db, d1)
-		expect(await runCliWithFakes(["migrate", "apply", "core", "-e", "prod"], io)).toBe(0)
-		expect(recorded(d1, "schema_history")).toEqual(["20260101000000_init.sql"])
-		const config = join(root, "worker", "wrangler.toml")
-		const apply = d1.calls.find((call) => call[2] === "migrations")
-		expect(apply).toEqual([
-			"wrangler",
-			"d1",
-			"migrations",
-			"apply",
-			"core-prod",
-			"--remote",
-			"--config",
-			config,
-			"--env",
-			"prod",
-		])
-	})
+  it("reads an env-only binding with a custom migrations table, and passes its config and env to wrangler", async () => {
+    const { db, root } = split();
+    const d1 = fakeD1({ dir: join(db, "atlas-migrations"), table: "schema_history" });
+    const io = makeIo(db, d1);
+    expect(await runCliWithFakes(["migrate", "apply", "core", "-e", "prod"], io)).toBe(0);
+    expect(recorded(d1, "schema_history")).toEqual(["20260101000000_init.sql"]);
+    const config = join(root, "worker", "wrangler.toml");
+    const apply = d1.calls.find((call) => call[2] === "migrations");
+    expect(apply).toEqual([
+      "wrangler",
+      "d1",
+      "migrations",
+      "apply",
+      "core-prod",
+      "--remote",
+      "--config",
+      config,
+      "--env",
+      "prod",
+    ]);
+  });
 
-	it("refuses an environment whose wrangler env lacks the binding, and --local", async () => {
-		const { db, root } = split()
-		const io = makeIo(db, fakeD1({ dir: join(db, "atlas-migrations") }))
-		expect(await runCliWithFakes(["migrate", "apply", "core", "-e", "staging"], io)).toBe(1)
-		expect(io.errors).toEqual([
-			`${join(root, "worker", "wrangler.toml")} (env staging) has no D1 database named or bound as core-staging`,
-		])
-		const local = makeIo(db, fakeD1({ dir: join(db, "atlas-migrations") }))
-		expect(await runCliWithFakes(["migrate", "apply", "core", "-e", "prod", "--local"], local)).toBe(1)
-		expect(local.errors).toEqual([
-			"--local applies without database.migrate.config.ts; set local: true on its d1 provider",
-		])
-	})
-})
+  it("refuses an environment whose wrangler env lacks the binding, and --local", async () => {
+    const { db, root } = split();
+    const io = makeIo(db, fakeD1({ dir: join(db, "atlas-migrations") }));
+    expect(await runCliWithFakes(["migrate", "apply", "core", "-e", "staging"], io)).toBe(1);
+    expect(io.errors).toEqual([
+      `${join(root, "worker", "wrangler.toml")} (env staging) has no D1 database named or bound as core-staging`,
+    ]);
+    const local = makeIo(db, fakeD1({ dir: join(db, "atlas-migrations") }));
+    expect(await runCliWithFakes(["migrate", "apply", "core", "-e", "prod", "--local"], local)).toBe(1);
+    expect(local.errors).toEqual([
+      "--local applies without database.migrate.config.ts; set local: true on its d1 provider",
+    ]);
+  });
+});
 
 describe("migrate apply on D1 through database.migrate.config.ts: the database's name", () => {
-	it("names the database to wrangler by its provider's databaseName, not the environment's name", async () => {
-		const { db, root } = split()
-		writeFileSync(
-			join(db, "database.migrate.config.ts"),
-			`export default { databases: { core: { migrationsDir: "./atlas-migrations", environments: {
+  it("names the database to wrangler by its provider's databaseName, not the environment's name", async () => {
+    const { db, root } = split();
+    writeFileSync(
+      join(db, "database.migrate.config.ts"),
+      `export default { databases: { core: { migrationsDir: "./atlas-migrations", environments: {
 prod: { name: "prod", provider: { type: "d1", databaseName: "CORE_DB", wranglerConfig: "../worker/wrangler.toml", wranglerEnv: "prod" } },
 } } } }\n`,
-		)
-		const d1 = fakeD1({ dir: join(db, "atlas-migrations"), table: "schema_history" })
-		const io = makeIo(db, d1)
-		expect(await runCliWithFakes(["migrate", "apply", "core", "-e", "prod"], io), io.errors.join("\n")).toBe(0)
-		const apply = d1.calls.find((call) => call[2] === "migrations")
-		expect(apply?.slice(0, 5)).toEqual(["wrangler", "d1", "migrations", "apply", "CORE_DB"])
-		expect(join(root, "worker", "wrangler.toml")).toBe(apply?.[7])
-	})
-})
+    );
+    const d1 = fakeD1({ dir: join(db, "atlas-migrations"), table: "schema_history" });
+    const io = makeIo(db, d1);
+    expect(await runCliWithFakes(["migrate", "apply", "core", "-e", "prod"], io), io.errors.join("\n")).toBe(0);
+    const apply = d1.calls.find((call) => call[2] === "migrations");
+    expect(apply?.slice(0, 5)).toEqual(["wrangler", "d1", "migrations", "apply", "CORE_DB"]);
+    expect(join(root, "worker", "wrangler.toml")).toBe(apply?.[7]);
+  });
+});
 
 describe("migrate apply on D1 through database.migrate.config.ts: its wrangler config", () => {
-	it("takes the wrangler config beside database.migrate.config.ts when none is set, and refuses when there is none", async () => {
-		const dir = worker(INIT)
-		writeFileSync(
-			join(dir, "database.migrate.config.ts"),
-			'export default { databases: { core: { migrationsDir: "./atlas-migrations", name: "core", provider: { type: "d1", databaseName: "core", local: true } } } }\n',
-		)
-		const d1 = fakeD1({ dir: join(dir, "atlas-migrations") })
-		expect(await runCliWithFakes(["migrate", "apply", "core"], makeIo(dir, d1))).toBe(0)
-		expect(recorded(d1)).toEqual(["20260101000000_init.sql"])
-		const bare = temp.make()
-		writeFileSync(
-			join(bare, "database.migrate.config.ts"),
-			`export default { databases: { core: { migrationsDir: "./m", name: "core", provider: { type: "d1", databaseName: "core" } } } }\n`,
-		)
-		const io = makeIo(bare, fakeD1({ dir: bare }))
-		expect(await runCliWithFakes(["migrate", "apply", "core"], io)).toBe(1)
-		expect(io.errors).toEqual([
-			"no wrangler config next to database.migrate.config.ts; set wranglerConfig on core's d1 provider",
-		])
-	})
-})
+  it("takes the wrangler config beside database.migrate.config.ts when none is set, and refuses when there is none", async () => {
+    const dir = worker(INIT);
+    writeFileSync(
+      join(dir, "database.migrate.config.ts"),
+      'export default { databases: { core: { migrationsDir: "./atlas-migrations", name: "core", provider: { type: "d1", databaseName: "core", local: true } } } }\n',
+    );
+    const d1 = fakeD1({ dir: join(dir, "atlas-migrations") });
+    expect(await runCliWithFakes(["migrate", "apply", "core"], makeIo(dir, d1))).toBe(0);
+    expect(recorded(d1)).toEqual(["20260101000000_init.sql"]);
+    const bare = temp.make();
+    writeFileSync(
+      join(bare, "database.migrate.config.ts"),
+      `export default { databases: { core: { migrationsDir: "./m", name: "core", provider: { type: "d1", databaseName: "core" } } } }\n`,
+    );
+    const io = makeIo(bare, fakeD1({ dir: bare }));
+    expect(await runCliWithFakes(["migrate", "apply", "core"], io)).toBe(1);
+    expect(io.errors).toEqual([
+      "no wrangler config next to database.migrate.config.ts; set wranglerConfig on core's d1 provider",
+    ]);
+  });
+});
 
 /** The one JSON object a --json run printed as its stdout */
 function json(io: { outputs: string[] }): Record<string, unknown> {
-	expect(io.outputs).toHaveLength(1)
-	return JSON.parse(io.outputs[0] as string) as Record<string, unknown>
+  expect(io.outputs).toHaveLength(1);
+
+  return JSON.parse(io.outputs[0] as string) as Record<string, unknown>;
 }
 
 /** The JSON object of a run on core, with `files` set */
-const report = (files: object) => ({ applied: [], database: "core", pending: [], refused: [], unknown: [], ...files })
+const report = (files: object) => ({ applied: [], database: "core", pending: [], refused: [], unknown: [], ...files });
 
 describe("migrate apply, check and status --json on D1 (C5)", () => {
-	it("prints one JSON object as the only stdout, the human lines on stderr", async () => {
-		const dir = worker(INIT)
-		const d1 = fakeD1({ dir: join(dir, "atlas-migrations") })
-		const status = makeIo(dir, d1)
-		expect(await runCliWithFakes(["migrate", "status", "core", "--local", "--json"], status)).toBe(0)
-		expect(json(status)).toEqual(report({ pending: ["20260101000000_init.sql"] }))
-		const check = makeIo(dir, d1)
-		expect(await runCliWithFakes(["migrate", "check", "core", "--local", "--json"], check)).toBe(0)
-		expect(json(check)).toEqual(report({ pending: ["20260101000000_init.sql"] }))
-		const apply = makeIo(dir, d1)
-		expect(await runCliWithFakes(["migrate", "apply", "core", "--local", "--json"], apply)).toBe(0)
-		expect(json(apply)).toEqual(report({ applied: ["20260101000000_init.sql"] }))
-		expect(apply.errors).toContain("Apply: 20260101000000_init.sql")
-	})
+  it("prints one JSON object as the only stdout, the human lines on stderr", async () => {
+    const dir = worker(INIT);
+    const d1 = fakeD1({ dir: join(dir, "atlas-migrations") });
+    const status = makeIo(dir, d1);
+    expect(await runCliWithFakes(["migrate", "status", "core", "--local", "--json"], status)).toBe(0);
+    expect(json(status)).toEqual(report({ pending: ["20260101000000_init.sql"] }));
+    const check = makeIo(dir, d1);
+    expect(await runCliWithFakes(["migrate", "check", "core", "--local", "--json"], check)).toBe(0);
+    expect(json(check)).toEqual(report({ pending: ["20260101000000_init.sql"] }));
+    const apply = makeIo(dir, d1);
+    expect(await runCliWithFakes(["migrate", "apply", "core", "--local", "--json"], apply)).toBe(0);
+    expect(json(apply)).toEqual(report({ applied: ["20260101000000_init.sql"] }));
+    expect(apply.errors).toContain("Apply: 20260101000000_init.sql");
+  });
 
-	it("reports a refused file in the object, and exits 1", async () => {
-		const dir = worker({ ...INIT, "20260102000000_drop.sql": "DROP TABLE post;" })
-		const d1 = fakeD1({ dir: join(dir, "atlas-migrations") })
-		d1.db.exec("CREATE TABLE keep (x)")
-		const io = makeIo(dir, d1)
-		expect(await runCliWithFakes(["migrate", "apply", "core", "--local", "--json"], io)).toBe(1)
-		const out = json(io)
-		/* a refusal names every file that was pending (M16) */
-		expect(out).toMatchObject({
-			applied: [],
-			database: "core",
-			pending: ["20260101000000_init.sql", "20260102000000_drop.sql"],
-		})
-		expect((out["refused"] as string[])[0]).toMatch(/^20260102000000_drop\.sql is unsafe/)
-	})
-})
+  it("reports a refused file in the object, and exits 1", async () => {
+    const dir = worker({ ...INIT, "20260102000000_drop.sql": "DROP TABLE post;" });
+    const d1 = fakeD1({ dir: join(dir, "atlas-migrations") });
+    d1.db.exec("CREATE TABLE keep (x)");
+    const io = makeIo(dir, d1);
+    expect(await runCliWithFakes(["migrate", "apply", "core", "--local", "--json"], io)).toBe(1);
+    const out = json(io);
+    // a refusal names every file that was pending (M16)
+    expect(out).toMatchObject({
+      applied: [],
+      database: "core",
+      pending: ["20260101000000_init.sql", "20260102000000_drop.sql"],
+    });
+    expect((out["refused"] as string[])[0]).toMatch(/^20260102000000_drop\.sql is unsafe/);
+  });
+});
 
 /** wrangler on a database holding the live row READS_LIVE_JSON fails on */
 function liveD1(dir: string): FakeD1 {
-	const d1 = fakeD1({ dir: join(dir, "atlas-migrations") })
-	d1.db.exec(LIVE_NOT_JSON)
-	return d1
+  const d1 = fakeD1({ dir: join(dir, "atlas-migrations") });
+  d1.db.exec(LIVE_NOT_JSON);
+
+  return d1;
 }
 
-/* C4 of the 0.14.1 review: a wrangler run that fails partway reports what it applied */
+// C4 of the 0.14.1 review: a wrangler run that fails partway reports what it applied
 describe("migrate apply on D1 when wrangler fails partway", () => {
-	const files = {
-		...INIT,
-		"20260102000000_b.sql": "CREATE TABLE b (id TEXT);",
-		"20260103000000_c.sql": READS_LIVE_JSON,
-	}
+  const files = {
+    ...INIT,
+    "20260102000000_b.sql": "CREATE TABLE b (id TEXT);",
+    "20260103000000_c.sql": READS_LIVE_JSON,
+  };
 
-	it("puts the files applied before the failure, and those still pending, in --json's object", async () => {
-		const dir = worker(files)
-		const io = makeIo(dir, liveD1(dir))
-		expect(await runCliWithFakes(["migrate", "apply", "core", "--local", "--yes", "--json"], io)).toBe(1)
-		expect(json(io)).toEqual(
-			report({
-				applied: ["20260101000000_init.sql", "20260102000000_b.sql"],
-				pending: ["20260103000000_c.sql"],
-				refused: [
-					expect.stringContaining("wrangler d1 migrations apply failed: Migration 20260103000000_c.sql failed"),
-				],
-			}),
-		)
-	})
+  it("puts the files applied before the failure, and those still pending, in --json's object", async () => {
+    const dir = worker(files);
+    const io = makeIo(dir, liveD1(dir));
+    expect(await runCliWithFakes(["migrate", "apply", "core", "--local", "--yes", "--json"], io)).toBe(1);
+    expect(json(io)).toEqual(
+      report({
+        applied: ["20260101000000_init.sql", "20260102000000_b.sql"],
+        pending: ["20260103000000_c.sql"],
+        refused: [
+          expect.stringContaining("wrangler d1 migrations apply failed: Migration 20260103000000_c.sql failed"),
+        ],
+      }),
+    );
+  });
 
-	it("says which files applied before the failure", async () => {
-		const dir = worker(files)
-		const io = makeIo(dir, liveD1(dir))
-		expect(await runCliWithFakes(["migrate", "apply", "core", "--local", "--yes"], io)).toBe(1)
-		expect(io.outputs).toContain("Applied before the failure: 20260101000000_init.sql, 20260102000000_b.sql")
-	})
-})
+  it("says which files applied before the failure", async () => {
+    const dir = worker(files);
+    const io = makeIo(dir, liveD1(dir));
+    expect(await runCliWithFakes(["migrate", "apply", "core", "--local", "--yes"], io)).toBe(1);
+    expect(io.outputs).toContain("Applied before the failure: 20260101000000_init.sql, 20260102000000_b.sql");
+  });
+});

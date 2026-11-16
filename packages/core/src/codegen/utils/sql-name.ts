@@ -3,6 +3,6 @@
  * (sqlIdentifier). Plain text: a name may hold any character, and no RegExp is built
  * from it.
  */
-import { sqlIdentifier } from "./case.ts"
+import { sqlIdentifier } from "./case.ts";
 
-export const namesColumn = (sql: string, sqlName: string): boolean => sql.includes(sqlIdentifier(sqlName))
+export const namesColumn = (sql: string, sqlName: string): boolean => sql.includes(sqlIdentifier(sqlName));

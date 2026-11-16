@@ -8,39 +8,44 @@
  * pid still names a process that started then. tests/structure/test-pids.test.ts holds the tests
  * to signalling recorded pids only through here.
  */
-import type { ChildProcess } from "node:child_process"
-import { spawnSync } from "node:child_process"
-import { readFileSync } from "node:fs"
+import type { ChildProcess } from "node:child_process";
+import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 
 /** A process a test saw run: its pid and when it started, which no later process given the pid shares */
-export type Seen = { readonly pid: number; readonly started: string }
+export type Seen = { readonly pid: number; readonly started: string };
 
-/* process.kill as the OS answers it, bound before any test stubs it */
-const realKill = process.kill.bind(process)
+// process.kill as the OS answers it, bound before any test stubs it
+const realKill = process.kill.bind(process);
 
-/* the platform as this loads, before a test stands in another (process.stop.test.ts's Windows), so a process seen reads the same after */
-const LINUX = process.platform === "linux"
+// the platform as this loads, before a test stands in another (process.stop.test.ts's Windows), so a process seen reads the same after
+const LINUX = process.platform === "linux";
 
 /**
  * `pid`'s parent and start time as the OS reads them now, or undefined when no process has the pid:
  * on Linux /proc's start time in clock ticks since boot, elsewhere ps's start to the second
  */
 function stat(pid: number): { parent: number; started: string } | undefined {
-	if (LINUX) {
-		let text: string
-		try {
-			text = readFileSync(`/proc/${pid}/stat`, "utf8")
-		} catch {
-			return undefined
-		}
-		/* the fields after the command's name, which may itself hold spaces and parentheses: state, ppid, … starttime (field 22) */
-		const fields = text.slice(text.lastIndexOf(")") + 2).split(" ")
-		return { parent: Number(fields[1]), started: String(fields[19]) }
-	}
-	const read = /^\s*(\d+)\s+(\S.*?)\s*$/.exec(
-		spawnSync("ps", ["-o", "ppid=,lstart=", "-p", String(pid)], { encoding: "utf8" }).stdout,
-	)
-	return read === null ? undefined : { parent: Number(read[1]), started: String(read[2]) }
+  if (LINUX) {
+    let text: string;
+
+    try {
+      text = readFileSync(`/proc/${pid}/stat`, "utf8");
+    } catch {
+      return undefined;
+    }
+
+    // the fields after the command's name, which may itself hold spaces and parentheses: state, ppid, … starttime (field 22)
+    const fields = text.slice(text.lastIndexOf(")") + 2).split(" ");
+
+    return { parent: Number(fields[1]), started: String(fields[19]) };
+  }
+
+  const read = /^\s*(\d+)\s+(\S.*?)\s*$/.exec(
+    spawnSync("ps", ["-o", "ppid=,lstart=", "-p", String(pid)], { encoding: "utf8" }).stdout,
+  );
+
+  return read === null ? undefined : { parent: Number(read[1]), started: String(read[2]) };
 }
 
 /**
@@ -49,18 +54,23 @@ function stat(pid: number): { parent: number; started: string } | undefined {
  * child's parent holds it, so it names that process and no later one
  */
 export function see(pid: number, parent?: number): Seen | undefined {
-	/* pid 0 or 1, or no number, would name this test's own group, init, or nothing */
-	if (!Number.isInteger(pid) || pid <= 1) return undefined
-	const now = stat(pid)
-	if (now === undefined || (parent !== undefined && now.parent !== parent)) return undefined
-	return { pid, started: now.started }
+  // pid 0 or 1, or no number, would name this test's own group, init, or nothing
+  if (!Number.isInteger(pid) || pid <= 1) return undefined;
+  const now = stat(pid);
+
+  if (now === undefined || (parent !== undefined && now.parent !== parent)) return undefined;
+
+  return { pid, started: now.started };
 }
 
 /** The process `pid` names now, as `see` reads it, or an error naming the pid when none runs as it says */
 export function running(pid: number, parent?: number): Seen {
-	const seen = see(pid, parent)
-	if (seen === undefined) throw new Error(`no process ${pid}${parent === undefined ? "" : ` of parent ${parent}`} runs`)
-	return seen
+  const seen = see(pid, parent);
+
+  if (seen === undefined)
+    throw new Error(`no process ${pid}${parent === undefined ? "" : ` of parent ${parent}`} runs`);
+
+  return seen;
 }
 
 /**
@@ -68,7 +78,7 @@ export function running(pid: number, parent?: number): Seen {
  * when it did; undefined, a process `see` found gone, runs no more
  */
 export function runs(seen: Seen | undefined): boolean {
-	return seen !== undefined && stat(seen.pid)?.started === seen.started
+  return seen !== undefined && stat(seen.pid)?.started === seen.started;
 }
 
 /**
@@ -81,19 +91,22 @@ export function runs(seen: Seen | undefined): boolean {
  * file only through here: test-pids.test.ts fails a writeFileSync of a pid anywhere else.
  */
 export function recordWhole(file: string | { readonly expression: string }, text: string): string {
-	const at = typeof file === "string" ? JSON.stringify(file) : file.expression
-	return `{ const fs = process.getBuiltinModule("node:fs"); const at = ${at}; fs.writeFileSync(at + ".part", ${text}); fs.renameSync(at + ".part", at) }`
+  const at = typeof file === "string" ? JSON.stringify(file) : file.expression;
+
+  return `{ const fs = process.getBuiltinModule("node:fs"); const at = ${at}; fs.writeFileSync(at + ".part", ${text}); fs.renameSync(at + ".part", at) }`;
 }
 
 /** Sends `signal` to `seen` while it runs, and answers whether it did; a later process given its pid gets nothing */
 export function send(seen: Seen | undefined, signal: NodeJS.Signals): boolean {
-	if (seen === undefined || !runs(seen)) return false
-	try {
-		realKill(seen.pid, signal)
-		return true
-	} catch {
-		return false
-	}
+  if (seen === undefined || !runs(seen)) return false;
+
+  try {
+    realKill(seen.pid, signal);
+
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -101,7 +114,8 @@ export function send(seen: Seen | undefined, signal: NodeJS.Signals): boolean {
  * child only on its own event loop, so a child it holds unreaped still owns its pid and its group's
  */
 export function sendGroup(child: ChildProcess, signal: NodeJS.Signals): boolean {
-	if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) return false
-	realKill(-child.pid, signal)
-	return true
+  if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) return false;
+  realKill(-child.pid, signal);
+
+  return true;
 }

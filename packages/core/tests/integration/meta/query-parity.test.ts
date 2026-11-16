@@ -5,243 +5,250 @@
  * would only prove two constants are equal. They drive the real schema with
  * real query strings and assert the parser agrees with what was published.
  */
-import { describe, expect, it } from "vitest"
-import * as z from "zod"
-import { readQueryMeta } from "../../../src/meta.ts"
-import { createListQuerySchema } from "../../../src/query/schema.ts"
+import { describe, expect, it } from "vitest";
+import * as z from "zod";
+
+import { readQueryMeta } from "../../../src/meta.ts";
+import { createListQuerySchema } from "../../../src/query/schema.ts";
 
 const schema = createListQuerySchema({
-	fields: {
-		relationFields: { author: ["name"] },
-		relations: ["author"],
-		scalars: ["id", "status", "title", "created_at"],
-	},
-	filter: { created_at: "date", status: "enum", title: "string" },
-	pagination: { defaultLimit: 10, maxLimit: 50 },
-	sort: ["created_at", "title", "status", "id"],
-})
+  fields: {
+    relationFields: { author: ["name"] },
+    relations: ["author"],
+    scalars: ["id", "status", "title", "created_at"],
+  },
+  filter: { created_at: "date", status: "enum", title: "string" },
+  pagination: { defaultLimit: 10, maxLimit: 50 },
+  sort: ["created_at", "title", "status", "id"],
+});
 
 /** A value a client reading the published type would send for it */
-const SAMPLE: Record<string, string> = { boolean: "true", date: "1700000000000", enum: "x", number: "7", string: "x" }
+const SAMPLE: Record<string, string> = { boolean: "true", date: "1700000000000", enum: "x", number: "7", string: "x" };
 
 function sampleFor(field: string): string {
-	const type = meta().filterFields?.find((entry) => entry.field === field)?.type
-	if (type === undefined || !Object.hasOwn(SAMPLE, type)) throw new Error(`no published type for ${field}`)
-	return SAMPLE[type] as string
+  const type = meta().filterFields?.find((entry) => entry.field === field)?.type;
+
+  if (type === undefined || !Object.hasOwn(SAMPLE, type)) throw new Error(`no published type for ${field}`);
+
+  return SAMPLE[type] as string;
 }
 
 function meta() {
-	const published = readQueryMeta(z.toJSONSchema(schema, { io: "input", unrepresentable: "any" }))
-	if (!published) throw new Error("createListQuerySchema did not stamp query meta")
-	return published
+  const published = readQueryMeta(z.toJSONSchema(schema, { io: "input", unrepresentable: "any" }));
+
+  if (!published) throw new Error("createListQuerySchema did not stamp query meta");
+
+  return published;
 }
 
 describe("published query meta is present on both io views", () => {
-	it("survives the transform/pipe on the output view too", () => {
-		/* Stamping the base instead of the returned pipe passes the input view
-		   and silently loses the output view — see docs/meta-contract.md §3.1. */
-		const output = readQueryMeta(z.toJSONSchema(schema, { io: "output", unrepresentable: "any" }))
-		expect(output).toEqual(meta())
-	})
-})
+  it("survives the transform/pipe on the output view too", () => {
+    // Stamping the base instead of the returned pipe passes the input view
+    // and silently loses the output view — see docs/meta-contract.md §3.1.
+    const output = readQueryMeta(z.toJSONSchema(schema, { io: "output", unrepresentable: "any" }));
+    expect(output).toEqual(meta());
+  });
+});
 
 describe("filterable matches the parser", () => {
-	it("accepts every declared filterable field", () => {
-		for (const field of meta().filterable) {
-			const result = schema.safeParse({ filter: `${field}.eq.${sampleFor(field)}` })
-			expect(result.success, `declared filterable but rejected: ${field}`).toBe(true)
-		}
-	})
+  it("accepts every declared filterable field", () => {
+    for (const field of meta().filterable) {
+      const result = schema.safeParse({ filter: `${field}.eq.${sampleFor(field)}` });
+      expect(result.success, `declared filterable but rejected: ${field}`).toBe(true);
+    }
+  });
 
-	it("rejects a field that was not declared", () => {
-		expect(meta().filterable).not.toContain("secret")
-		expect(schema.safeParse({ filter: "secret.eq.x" }).success).toBe(false)
-	})
-})
+  it("rejects a field that was not declared", () => {
+    expect(meta().filterable).not.toContain("secret");
+    expect(schema.safeParse({ filter: "secret.eq.x" }).success).toBe(false);
+  });
+});
 
 describe("sortable matches the parser", () => {
-	it("accepts every declared sortable field, in both directions", () => {
-		for (const field of meta().sortable) {
-			for (const dir of ["asc", "desc"]) {
-				const result = schema.safeParse({ order: `${field}.${dir}` })
-				expect(result.success, `declared sortable but rejected: ${field}.${dir}`).toBe(true)
-			}
-		}
-	})
+  it("accepts every declared sortable field, in both directions", () => {
+    for (const field of meta().sortable) {
+      for (const dir of ["asc", "desc"]) {
+        const result = schema.safeParse({ order: `${field}.${dir}` });
+        expect(result.success, `declared sortable but rejected: ${field}.${dir}`).toBe(true);
+      }
+    }
+  });
 
-	it("rejects a field that was not declared", () => {
-		expect(meta().sortable).not.toContain("title_length")
-		expect(schema.safeParse({ order: "title_length.asc" }).success).toBe(false)
-	})
-})
+  it("rejects a field that was not declared", () => {
+    expect(meta().sortable).not.toContain("title_length");
+    expect(schema.safeParse({ order: "title_length.asc" }).success).toBe(false);
+  });
+});
 
 describe("selectable matches the parser", () => {
-	it("accepts every declared selectable field", () => {
-		for (const field of meta().selectable) {
-			const result = schema.safeParse({ select: field })
-			expect(result.success, `declared selectable but rejected: ${field}`).toBe(true)
-		}
-	})
+  it("accepts every declared selectable field", () => {
+    for (const field of meta().selectable) {
+      const result = schema.safeParse({ select: field });
+      expect(result.success, `declared selectable but rejected: ${field}`).toBe(true);
+    }
+  });
 
-	it("rejects a field that was not declared", () => {
-		expect(meta().selectable).not.toContain("internal_note")
-		expect(schema.safeParse({ select: "internal_note" }).success).toBe(false)
-	})
+  it("rejects a field that was not declared", () => {
+    expect(meta().selectable).not.toContain("internal_note");
+    expect(schema.safeParse({ select: "internal_note" }).success).toBe(false);
+  });
 
-	it("omits relation names, which are selectable only in the author(field) form", () => {
-		/* A bare relation name parses as a scalar and is rejected. Publishing it
-		   would invite a consumer to send select=author and read the 400 as a bug. */
-		expect(meta().selectable).not.toContain("author")
-		expect(schema.safeParse({ select: "author" }).success).toBe(false)
-		expect(schema.safeParse({ select: "author(name)" }).success).toBe(true)
-	})
-})
+  it("omits relation names, which are selectable only in the author(field) form", () => {
+    // A bare relation name parses as a scalar and is rejected. Publishing it
+    // would invite a consumer to send select=author and read the 400 as a bug.
+    expect(meta().selectable).not.toContain("author");
+    expect(schema.safeParse({ select: "author" }).success).toBe(false);
+    expect(schema.safeParse({ select: "author(name)" }).success).toBe(true);
+  });
+});
 
 describe("maxLimit matches the parser", () => {
-	it("accepts the published maximum and rejects one past it", () => {
-		const { maxLimit } = meta()
-		expect(schema.safeParse({ limit: maxLimit }).success).toBe(true)
-		expect(schema.safeParse({ limit: maxLimit + 1 }).success).toBe(false)
-	})
-})
+  it("accepts the published maximum and rejects one past it", () => {
+    const { maxLimit } = meta();
+    expect(schema.safeParse({ limit: maxLimit }).success).toBe(true);
+    expect(schema.safeParse({ limit: maxLimit + 1 }).success).toBe(false);
+  });
+});
 
 describe("maxPage matches the parser (Q13)", () => {
-	it("accepts the published last page and answers the one after it page_too_deep", () => {
-		const { maxPage } = meta()
-		expect(maxPage).toBeDefined()
-		expect(schema.safeParse({ page: maxPage }).success).toBe(true)
-		expect(() => schema.safeParse({ page: (maxPage ?? 0) + 1 })).toThrow(
-			expect.objectContaining({ errorKey: "page_too_deep" }),
-		)
-	})
-})
+  it("accepts the published last page and answers the one after it page_too_deep", () => {
+    const { maxPage } = meta();
+    expect(maxPage).toBeDefined();
+    expect(schema.safeParse({ page: maxPage }).success).toBe(true);
+    expect(() => schema.safeParse({ page: (maxPage ?? 0) + 1 })).toThrow(
+      expect.objectContaining({ errorKey: "page_too_deep" }),
+    );
+  });
+});
 
 describe("defaultOrder matches what the parser applies", () => {
-	it("names the sort actually used when the request specifies none", () => {
-		const parsed = schema.parse({})
-		const [field, direction] = meta().defaultOrder.split(".")
+  it("names the sort actually used when the request specifies none", () => {
+    const parsed = schema.parse({});
+    const [field, direction] = meta().defaultOrder.split(".");
 
-		expect(parsed.parsedSort[0]?.field).toBe(field)
-		expect(parsed.parsedSort[0]?.direction).toBe(direction)
-	})
-})
+    expect(parsed.parsedSort[0]?.field).toBe(field);
+    expect(parsed.parsedSort[0]?.direction).toBe(direction);
+  });
+});
 
 describe("searchable matches whether the parser takes q", () => {
-	it("publishes [] and rejects q when no search is declared", () => {
-		expect(meta().searchable).toEqual([])
-		expect(schema.safeParse({ q: "anything" }).success).toBe(false)
-	})
+  it("publishes [] and rejects q when no search is declared", () => {
+    expect(meta().searchable).toEqual([]);
+    expect(schema.safeParse({ q: "anything" }).success).toBe(false);
+  });
 
-	it("publishes the declared fields and accepts q when search is declared", () => {
-		const searchable = createListQuerySchema({ search: ["title"], sort: ["created_at"] })
-		const published = readQueryMeta(z.toJSONSchema(searchable, { io: "input", unrepresentable: "any" }))
-		expect(published?.searchable).toEqual(["title"])
-		expect(searchable.safeParse({ q: "anything" }).success).toBe(true)
-	})
-})
+  it("publishes the declared fields and accepts q when search is declared", () => {
+    const searchable = createListQuerySchema({ search: ["title"], sort: ["created_at"] });
+    const published = readQueryMeta(z.toJSONSchema(searchable, { io: "input", unrepresentable: "any" }));
+    expect(published?.searchable).toEqual(["title"]);
+    expect(searchable.safeParse({ q: "anything" }).success).toBe(true);
+  });
+});
 
 describe("caps match the parser", () => {
-	it("accepts exactly maxFilterConditions conditions", () => {
-		const max = meta().maxFilterConditions ?? 0
-		const at = Array.from({ length: max }, (_, i) => `title.neq.t${i}`).join(",")
-		expect(schema.safeParse({ filter: at }).success).toBe(true)
-		expect(schema.safeParse({ filter: `${at},title.neq.over` }).success).toBe(false)
-	})
+  it("accepts exactly maxFilterConditions conditions", () => {
+    const max = meta().maxFilterConditions ?? 0;
+    const at = Array.from({ length: max }, (_, i) => `title.neq.t${i}`).join(",");
+    expect(schema.safeParse({ filter: at }).success).toBe(true);
+    expect(schema.safeParse({ filter: `${at},title.neq.over` }).success).toBe(false);
+  });
 
-	it("accepts exactly maxSortKeys keys", () => {
-		const max = meta().maxSortKeys ?? 0
-		/* each key a distinct field: a field named twice is refused on its own (AB9 of area B) */
-		const keys = meta().sortable.map((field, i) => `${field}.${i % 2 === 0 ? "asc" : "desc"}`)
-		expect(max).toBeLessThan(keys.length)
-		expect(schema.safeParse({ order: keys.slice(0, max).join(",") }).success).toBe(true)
-		expect(schema.safeParse({ order: keys.slice(0, max + 1).join(",") }).success).toBe(false)
-	})
+  it("accepts exactly maxSortKeys keys", () => {
+    const max = meta().maxSortKeys ?? 0;
+    // each key a distinct field: a field named twice is refused on its own (AB9 of area B)
+    const keys = meta().sortable.map((field, i) => `${field}.${i % 2 === 0 ? "asc" : "desc"}`);
+    expect(max).toBeLessThan(keys.length);
+    expect(schema.safeParse({ order: keys.slice(0, max).join(",") }).success).toBe(true);
+    expect(schema.safeParse({ order: keys.slice(0, max + 1).join(",") }).success).toBe(false);
+  });
 
-	it("refuses a field named twice, within maxSortKeys", () => {
-		const max = meta().maxSortKeys ?? 0
-		const [field] = meta().sortable
-		expect(max).toBeGreaterThan(1)
-		expect(schema.safeParse({ order: `${field}.asc,${field}.desc` }).success).toBe(false)
-	})
+  it("refuses a field named twice, within maxSortKeys", () => {
+    const max = meta().maxSortKeys ?? 0;
+    const [field] = meta().sortable;
+    expect(max).toBeGreaterThan(1);
+    expect(schema.safeParse({ order: `${field}.asc,${field}.desc` }).success).toBe(false);
+  });
 
-	it("every filterFields operator is accepted for its field", () => {
-		for (const { field, ops } of meta().filterFields ?? []) {
-			for (const op of ops) {
-				const sample = sampleFor(field)
-				const value = op === "in" || op === "nin" ? `(${sample})` : op === "is" ? "null" : sample
-				const result = schema.safeParse({ filter: `${field}.${op}.${value}` })
-				expect(result.success, `published ${field}.${op} but rejected`).toBe(true)
-			}
-		}
-	})
-})
+  it("every filterFields operator is accepted for its field", () => {
+    for (const { field, ops } of meta().filterFields ?? []) {
+      for (const op of ops) {
+        const sample = sampleFor(field);
+        const value = op === "in" || op === "nin" ? `(${sample})` : op === "is" ? "null" : sample;
+        const result = schema.safeParse({ filter: `${field}.${op}.${value}` });
+        expect(result.success, `published ${field}.${op} but rejected`).toBe(true);
+      }
+    }
+  });
+});
 
 describe("stableTiebreak matches the column the SQL builder uses", () => {
-	it("names the shared constant, not an independently written string", async () => {
-		const { CURSOR_TIEBREAK_COLUMN } = await import("../../../src/query/cursor.ts")
-		expect(meta().stableTiebreak).toBe(CURSOR_TIEBREAK_COLUMN)
-	})
-})
+  it("names the shared constant, not an independently written string", async () => {
+    const { CURSOR_TIEBREAK_COLUMN } = await import("../../../src/query/cursor.ts");
+    expect(meta().stableTiebreak).toBe(CURSOR_TIEBREAK_COLUMN);
+  });
+});
 
 describe("a config change moves the published facts with it", () => {
-	it("tracks sort, filter and pagination without a second declaration", () => {
-		const other = createListQuerySchema({
-			fields: { scalars: ["id"] },
-			filter: { archived: "boolean" },
-			pagination: { defaultLimit: 5, maxLimit: 5 },
-			sort: ["archived"],
-		})
-		const published = readQueryMeta(z.toJSONSchema(other, { io: "input", unrepresentable: "any" }))
+  it("tracks sort, filter and pagination without a second declaration", () => {
+    const other = createListQuerySchema({
+      fields: { scalars: ["id"] },
+      filter: { archived: "boolean" },
+      pagination: { defaultLimit: 5, maxLimit: 5 },
+      sort: ["archived"],
+    });
 
-		expect(published).toMatchObject({
-			defaultOrder: "archived.desc",
-			filterable: ["archived"],
-			maxLimit: 5,
-			selectable: ["id"],
-			sortable: ["archived"],
-		})
-	})
-})
+    const published = readQueryMeta(z.toJSONSchema(other, { io: "input", unrepresentable: "any" }));
+
+    expect(published).toMatchObject({
+      defaultOrder: "archived.desc",
+      filterable: ["archived"],
+      maxLimit: 5,
+      selectable: ["id"],
+      sortable: ["archived"],
+    });
+  });
+});
 
 /** `head` and CJK characters (nine bytes each once percent-encoded), then ASCII, to exactly `bytes` encoded */
 function encodedTo(head: string, bytes: number): string {
-	const room = bytes - encodeURIComponent(head).length
-	return `${head}${"長".repeat(Math.floor(room / 9))}${"x".repeat(room % 9)}`
+  const room = bytes - encodeURIComponent(head).length;
+
+  return `${head}${"長".repeat(Math.floor(room / 9))}${"x".repeat(room % 9)}`;
 }
 
-/* U11 of the 0.12 round: the byte caps a client reads match the ones the parser enforces */
+// U11 of the 0.12 round: the byte caps a client reads match the ones the parser enforces
 describe("maxFilterBytes and maxSearchBytes match the parser", () => {
-	it("accepts a filter of the published bytes, and refuses one byte more", () => {
-		const { maxFilterBytes } = meta()
-		expect(maxFilterBytes).toBeDefined()
-		const filter = encodedTo("title.eq.", maxFilterBytes as number)
-		expect(encodeURIComponent(filter).length).toBe(maxFilterBytes)
-		expect(schema.safeParse({ filter }).success).toBe(true)
-		expect(schema.safeParse({ filter: `${filter}x` }).success).toBe(false)
-	})
+  it("accepts a filter of the published bytes, and refuses one byte more", () => {
+    const { maxFilterBytes } = meta();
+    expect(maxFilterBytes).toBeDefined();
+    const filter = encodedTo("title.eq.", maxFilterBytes as number);
+    expect(encodeURIComponent(filter).length).toBe(maxFilterBytes);
+    expect(schema.safeParse({ filter }).success).toBe(true);
+    expect(schema.safeParse({ filter: `${filter}x` }).success).toBe(false);
+  });
 
-	it("accepts a search of the published bytes, and refuses one byte more", () => {
-		const searched = createListQuerySchema({ search: ["title"], sort: ["created_at"] })
-		const published = readQueryMeta(z.toJSONSchema(searched, { io: "input", unrepresentable: "any" }))
-		const bytes = published?.maxSearchBytes as number
-		const q = encodedTo("", bytes)
-		expect(searched.safeParse({ q }).success).toBe(true)
-		expect(searched.safeParse({ q: `${q}x` }).success).toBe(false)
-	})
-})
+  it("accepts a search of the published bytes, and refuses one byte more", () => {
+    const searched = createListQuerySchema({ search: ["title"], sort: ["created_at"] });
+    const published = readQueryMeta(z.toJSONSchema(searched, { io: "input", unrepresentable: "any" }));
+    const bytes = published?.maxSearchBytes as number;
+    const q = encodedTo("", bytes);
+    expect(searched.safeParse({ q }).success).toBe(true);
+    expect(searched.safeParse({ q: `${q}x` }).success).toBe(false);
+  });
+});
 
-/* Q8 of the 0.14.1 review: the pattern cap a client reads is the one the parser enforces, in UTF-8 bytes of the escaped pattern */
+// Q8 of the 0.14.1 review: the pattern cap a client reads is the one the parser enforces, in UTF-8 bytes of the escaped pattern
 describe("maxPatternBytes matches the parser", () => {
-	it("accepts a like pattern of the published bytes once escaped, and refuses one byte more", () => {
-		const bytes = meta().maxPatternBytes as number
-		expect(bytes).toBeDefined()
-		/* each [ escapes to the three bytes [[], each 東 is three bytes, and the * stays one */
-		const at = `${"[".repeat((bytes - 2) / 3)}*x`
-		expect(at.length).toBeLessThan(bytes)
-		expect(schema.safeParse({ filter: `title.like.${at}` }).success).toBe(true)
-		expect(schema.safeParse({ filter: `title.like.${at}x` }).success).toBe(false)
-		const wide = `${"東".repeat((bytes - 2) / 3)}*x`
-		expect(schema.safeParse({ filter: `title.like.${wide}` }).success).toBe(true)
-		expect(schema.safeParse({ filter: `title.like.${wide}x` }).success).toBe(false)
-	})
-})
+  it("accepts a like pattern of the published bytes once escaped, and refuses one byte more", () => {
+    const bytes = meta().maxPatternBytes as number;
+    expect(bytes).toBeDefined();
+    // each [ escapes to the three bytes [[], each 東 is three bytes, and the * stays one
+    const at = `${"[".repeat((bytes - 2) / 3)}*x`;
+    expect(at.length).toBeLessThan(bytes);
+    expect(schema.safeParse({ filter: `title.like.${at}` }).success).toBe(true);
+    expect(schema.safeParse({ filter: `title.like.${at}x` }).success).toBe(false);
+    const wide = `${"東".repeat((bytes - 2) / 3)}*x`;
+    expect(schema.safeParse({ filter: `title.like.${wide}` }).success).toBe(true);
+    expect(schema.safeParse({ filter: `title.like.${wide}x` }).success).toBe(false);
+  });
+});

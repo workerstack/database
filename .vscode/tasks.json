@@ -52,9 +52,9 @@
       }
     },
     {
-      "label": "prepare",
+      "label": "registries",
       "type": "shell",
-      "command": "bun run prepare",
+      "command": "bun run registries",
       "problemMatcher": [],
       "presentation": {
         "panel": "new",

@@ -1,148 +1,151 @@
-import { describe, expect, it } from "vitest"
-import { parseOrder } from "./filter.ts"
+import { describe, expect, it } from "vitest";
+
+import { parseOrder } from "./filter.ts";
 
 describe("parseOrder", () => {
-	/* empty-input parity */
-	it("returns empty for null", () => {
-		expect(parseOrder(null)).toEqual([])
-	})
+  // empty-input parity
+  it("returns empty for null", () => {
+    expect(parseOrder(null)).toEqual([]);
+  });
 
-	it("returns empty for undefined", () => {
-		expect(parseOrder(undefined)).toEqual([])
-	})
+  it("returns empty for undefined", () => {
+    expect(parseOrder(undefined)).toEqual([]);
+  });
 
-	it("returns empty for empty string", () => {
-		expect(parseOrder("")).toEqual([])
-	})
+  it("returns empty for empty string", () => {
+    expect(parseOrder("")).toEqual([]);
+  });
 
-	/* AB9 of area B: an entry with whitespace around it is malformed, as the published pattern says */
-	it("refuses whitespace-only, as an entry naming no field", () => {
-		expect(parseOrder("   ")).toBeNull()
-	})
+  // AB9 of area B: an entry with whitespace around it is malformed, as the published pattern says
+  it("refuses whitespace-only, as an entry naming no field", () => {
+    expect(parseOrder("   ")).toBeNull();
+  });
 
-	/* single-field direction */
-	it("parses bare field as asc default", () => {
-		expect(parseOrder("name")).toEqual([{ direction: "asc", field: "name" }])
-	})
+  // single-field direction
+  it("parses bare field as asc default", () => {
+    expect(parseOrder("name")).toEqual([{ direction: "asc", field: "name" }]);
+  });
 
-	it("parses field.asc explicitly", () => {
-		expect(parseOrder("name.asc")).toEqual([{ direction: "asc", field: "name" }])
-	})
+  it("parses field.asc explicitly", () => {
+    expect(parseOrder("name.asc")).toEqual([{ direction: "asc", field: "name" }]);
+  });
 
-	it("parses field.desc", () => {
-		expect(parseOrder("createdAt.desc")).toEqual([{ direction: "desc", field: "createdAt" }])
-	})
-})
+  it("parses field.desc", () => {
+    expect(parseOrder("createdAt.desc")).toEqual([{ direction: "desc", field: "createdAt" }]);
+  });
+});
 
 describe("parseOrder — null ordering", () => {
-	/* null ordering */
-	it("parses field.nullsfirst (asc default)", () => {
-		expect(parseOrder("name.nullsfirst")).toEqual([{ direction: "asc", field: "name", nulls: "first" }])
-	})
+  // null ordering
+  it("parses field.nullsfirst (asc default)", () => {
+    expect(parseOrder("name.nullsfirst")).toEqual([{ direction: "asc", field: "name", nulls: "first" }]);
+  });
 
-	it("parses field.nullslast (asc default)", () => {
-		expect(parseOrder("name.nullslast")).toEqual([{ direction: "asc", field: "name", nulls: "last" }])
-	})
+  it("parses field.nullslast (asc default)", () => {
+    expect(parseOrder("name.nullslast")).toEqual([{ direction: "asc", field: "name", nulls: "last" }]);
+  });
 
-	it("parses field.asc.nullsfirst", () => {
-		expect(parseOrder("name.asc.nullsfirst")).toEqual([{ direction: "asc", field: "name", nulls: "first" }])
-	})
+  it("parses field.asc.nullsfirst", () => {
+    expect(parseOrder("name.asc.nullsfirst")).toEqual([{ direction: "asc", field: "name", nulls: "first" }]);
+  });
 
-	it("parses field.asc.nullslast", () => {
-		expect(parseOrder("name.asc.nullslast")).toEqual([{ direction: "asc", field: "name", nulls: "last" }])
-	})
+  it("parses field.asc.nullslast", () => {
+    expect(parseOrder("name.asc.nullslast")).toEqual([{ direction: "asc", field: "name", nulls: "last" }]);
+  });
 
-	it("parses field.desc.nullsfirst", () => {
-		expect(parseOrder("createdAt.desc.nullsfirst")).toEqual([{ direction: "desc", field: "createdAt", nulls: "first" }])
-	})
+  it("parses field.desc.nullsfirst", () => {
+    expect(parseOrder("createdAt.desc.nullsfirst")).toEqual([
+      { direction: "desc", field: "createdAt", nulls: "first" },
+    ]);
+  });
 
-	it("parses field.desc.nullslast", () => {
-		expect(parseOrder("createdAt.desc.nullslast")).toEqual([{ direction: "desc", field: "createdAt", nulls: "last" }])
-	})
-})
+  it("parses field.desc.nullslast", () => {
+    expect(parseOrder("createdAt.desc.nullslast")).toEqual([{ direction: "desc", field: "createdAt", nulls: "last" }]);
+  });
+});
 
 describe("parseOrder — multiple and computed fields", () => {
-	/* multi-field */
-	it("parses comma-separated fields", () => {
-		expect(parseOrder("col1.desc,col2.asc")).toEqual([
-			{ direction: "desc", field: "col1" },
-			{ direction: "asc", field: "col2" },
-		])
-	})
+  // multi-field
+  it("parses comma-separated fields", () => {
+    expect(parseOrder("col1.desc,col2.asc")).toEqual([
+      { direction: "desc", field: "col1" },
+      { direction: "asc", field: "col2" },
+    ]);
+  });
 
-	it("parses mixed with nulls", () => {
-		expect(parseOrder("col1.desc,col2.asc.nullsfirst")).toEqual([
-			{ direction: "desc", field: "col1" },
-			{ direction: "asc", field: "col2", nulls: "first" },
-		])
-	})
+  it("parses mixed with nulls", () => {
+    expect(parseOrder("col1.desc,col2.asc.nullsfirst")).toEqual([
+      { direction: "desc", field: "col1" },
+      { direction: "asc", field: "col2", nulls: "first" },
+    ]);
+  });
 
-	it("refuses empty comma parts (QL7 of r22b)", () => {
-		expect(parseOrder(",name.asc,,")).toBeNull()
-	})
+  it("refuses empty comma parts (QL7 of r22b)", () => {
+    expect(parseOrder(",name.asc,,")).toBeNull();
+  });
 
-	it("refuses whitespace around a part, and a field named twice (AB9 of area B)", () => {
-		expect(parseOrder(" col1.desc , col2.asc ")).toBeNull()
-		expect(parseOrder("col1.desc,\tcol2.asc")).toBeNull()
-		expect(parseOrder("col1.desc,col1.asc")).toBeNull()
-	})
+  it("refuses whitespace around a part, and a field named twice (AB9 of area B)", () => {
+    expect(parseOrder(" col1.desc , col2.asc ")).toBeNull();
+    expect(parseOrder("col1.desc,\tcol2.asc")).toBeNull();
+    expect(parseOrder("col1.desc,col1.asc")).toBeNull();
+  });
 
-	/* computed fields (anyrow @ prefix) */
-	it("preserves @ prefix on computed fields", () => {
-		expect(parseOrder("@totalPrice.desc")).toEqual([{ direction: "desc", field: "@totalPrice" }])
-	})
+  // computed fields (anyrow @ prefix)
+  it("preserves @ prefix on computed fields", () => {
+    expect(parseOrder("@totalPrice.desc")).toEqual([{ direction: "desc", field: "@totalPrice" }]);
+  });
 
-	it("computed field with nulls suffix", () => {
-		expect(parseOrder("@score.desc.nullslast")).toEqual([{ direction: "desc", field: "@score", nulls: "last" }])
-	})
-})
+  it("computed field with nulls suffix", () => {
+    expect(parseOrder("@score.desc.nullslast")).toEqual([{ direction: "desc", field: "@score", nulls: "last" }]);
+  });
+});
 
 describe("parseOrder — edge cases and field names", () => {
-	/* edge cases / malformed input */
-	it("rejects JSON:API '-' prefix (no longer supported)", () => {
-		/* '-' is not a known suffix token — parser emits literal field name */
-		expect(parseOrder("-name")).toEqual([{ direction: "asc", field: "-name" }])
-	})
+  // edge cases / malformed input
+  it("rejects JSON:API '-' prefix (no longer supported)", () => {
+    // '-' is not a known suffix token — parser emits literal field name
+    expect(parseOrder("-name")).toEqual([{ direction: "asc", field: "-name" }]);
+  });
 
-	it("rejects JSON:API '+' prefix (no longer supported)", () => {
-		/* '+' is not a known suffix token — parser emits literal field name */
-		expect(parseOrder("+name")).toEqual([{ direction: "asc", field: "+name" }])
-	})
+  it("rejects JSON:API '+' prefix (no longer supported)", () => {
+    // '+' is not a known suffix token — parser emits literal field name
+    expect(parseOrder("+name")).toEqual([{ direction: "asc", field: "+name" }]);
+  });
 
-	it("ignores unknown direction token", () => {
-		/* 'foo' not a known suffix — stays joined as literal field name */
-		expect(parseOrder("name.foo")).toEqual([{ direction: "asc", field: "name.foo" }])
-	})
+  it("ignores unknown direction token", () => {
+    // 'foo' not a known suffix — stays joined as literal field name
+    expect(parseOrder("name.foo")).toEqual([{ direction: "asc", field: "name.foo" }]);
+  });
 
-	/* field name integrity */
-	it("handles dotted relation field path", () => {
-		/* right-to-left peel: 'asc' consumed, remainder 'author.name' is the field */
-		expect(parseOrder("author.name.asc")).toEqual([{ direction: "asc", field: "author.name" }])
-	})
-})
+  // field name integrity
+  it("handles dotted relation field path", () => {
+    // right-to-left peel: 'asc' consumed, remainder 'author.name' is the field
+    expect(parseOrder("author.name.asc")).toEqual([{ direction: "asc", field: "author.name" }]);
+  });
+});
 
 describe("parseOrder — malformed input", () => {
-	it("returns nothing for empty or absent input", () => {
-		expect(parseOrder("")).toEqual([])
-		expect(parseOrder(null)).toEqual([])
-		expect(parseOrder(undefined)).toEqual([])
-	})
+  it("returns nothing for empty or absent input", () => {
+    expect(parseOrder("")).toEqual([]);
+    expect(parseOrder(null)).toEqual([]);
+    expect(parseOrder(undefined)).toEqual([]);
+  });
 
-	/* QL7 of r22b: the parser refuses rather than widen, as parseFilter does; a dropped entry let
-	   `order=asc` sort by the default, descending */
-	it.each(["asc", "desc", ".desc", ",", "title.asc,", "created_at.desc,,title.asc", " , title"])(
-		"refuses %j, an entry empty or naming no field, as null",
-		(order) => {
-			expect(parseOrder(order)).toBeNull()
-		},
-	)
+  // QL7 of r22b: the parser refuses rather than widen, as parseFilter does; a dropped entry let
+  // `order=asc` sort by the default, descending
+  it.each(["asc", "desc", ".desc", ",", "title.asc,", "created_at.desc,,title.asc", " , title"])(
+    "refuses %j, an entry empty or naming no field, as null",
+    (order) => {
+      expect(parseOrder(order)).toBeNull();
+    },
+  );
 
-	it("defaults to ascending when no direction is given", () => {
-		expect(parseOrder("title")).toEqual([{ direction: "asc", field: "title" }])
-	})
+  it("defaults to ascending when no direction is given", () => {
+    expect(parseOrder("title")).toEqual([{ direction: "asc", field: "title" }]);
+  });
 
-	it("reads null placement off the end of the segment", () => {
-		expect(parseOrder("title.desc.nullslast")).toEqual([{ direction: "desc", field: "title", nulls: "last" }])
-		expect(parseOrder("title.nullsfirst")).toEqual([{ direction: "asc", field: "title", nulls: "first" }])
-	})
-})
+  it("reads null placement off the end of the segment", () => {
+    expect(parseOrder("title.desc.nullslast")).toEqual([{ direction: "desc", field: "title", nulls: "last" }]);
+    expect(parseOrder("title.nullsfirst")).toEqual([{ direction: "asc", field: "title", nulls: "first" }]);
+  });
+});

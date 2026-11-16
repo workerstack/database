@@ -4,4 +4,4 @@
  * under node (Danish sorts `aa` after `z`), so two developers would regenerate different files
  * from one tables file; database/no-locale-compare refuses it in src.
  */
-export const byCodeUnit = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
+export const byCodeUnit = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);

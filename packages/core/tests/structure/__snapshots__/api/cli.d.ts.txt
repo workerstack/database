@@ -6,13 +6,13 @@ export type { CliTerminal } from "./output.ts";
 export type { BinPeer, MigrateRun, RunOptions, RunResult } from "../migrate/core/process.ts";
 
 // cli/output.d.ts
+import type { LiveRead } from "../migrate/core/pg-live-types.ts";
+import type { replayCatalog } from "../migrate/core/pg-replay.ts";
 /**
  * Where the CLI meets the process: the IO it writes and asks through, and the error it reports
  * as a message and an exit code. The only CLI module that touches the console.
  */
 import type { MigrateRun, RunResult } from "../migrate/core/process.ts";
-import type { LiveRead } from "../migrate/core/pg-live-types.ts";
-import type { replayCatalog } from "../migrate/core/pg-replay.ts";
 /** Where the CLI reads its working directory, writes its output, asks, and starts processes. */
 export type CliIo = {
     /** The folder the CLI finds database.config.ts, database.migrate.config.ts and their files in, and resolves relative paths against */
@@ -349,8 +349,6 @@ declare const atlasUrls: (target: PgTarget) => {
     devUrl: string;
     url: string;
 };
-/** The atlas.hcl for `needs`: getenv for each URL, and the history pinned to `revisions` */
-declare function atlasConfig(needs: AtlasNeeds, revisions: string): string;
 /** Refuse `target` as pgUrlProblems does for `needs`, before anything reaches a database */
 declare function refuseUrlProblems(target: PgTarget, needs: AtlasNeeds): void;
 /**
@@ -363,7 +361,7 @@ declare function withAtlasEnv<T>(target: PgTarget, needs: AtlasNeeds, body: (atl
  * OSS may say it left part of a schema out of what it compared
  */
 declare const atlasNotices: (stderr: string) => string[];
-export { atlasConfig, type AtlasEnv, type AtlasNeeds, atlasNotices, atlasUrls, pgUrlProblems, type PgTarget, refuseUrlProblems, revisionsSchema, SHARED_REVISIONS, withAtlasEnv, };
+export { atlasNotices, atlasUrls, pgUrlProblems, type PgTarget, refuseUrlProblems, revisionsSchema, SHARED_REVISIONS, withAtlasEnv, };
 
 // migrate/core/pg-live-objects.d.ts
 import { COMPARED } from "./pg-live-catalog.ts";
@@ -617,8 +615,8 @@ export type { Calls, Locked };
 
 // migrate/core/pg-replay-roles.d.ts
 import { type Sql } from "./pg-replay-database.ts";
-import { type Rows, type Writes } from "./pg-server-writes.ts";
 import type { Snapshot } from "./pg-server-snapshot.ts";
+import { type Rows, type Writes } from "./pg-server-writes.ts";
 /**
  * One replay's state: its connection, the server as committed (`admin`), its database, the backend
  * that owns it, its role (`role`, which CURRENT_USER and its kin name in a file), whether that role
@@ -701,6 +699,47 @@ declare class ReplayFailed extends Error {
 }
 export { ReplayFailed };
 
+// migrate/core/pg-server-snapshot.d.ts
+/**
+ * The server's shared catalogs read as committed, in one query: what a bare
+ * statement changed, which no transaction counts, and what a second connection committed, which this
+ * backend's counts never see (pg-server-writes.ts). The read is the server's, another session's work
+ * in it too, so each row carries the names of the objects it is about: a change is a file's when it
+ * is to the replay's own database, or to a name the file spells (namesIn in sql-code.ts) beside a
+ * statement that can run code database cannot read (pg-replay-hidden.ts). A replay's own rows are left out, but
+ * for the fields of its own database's row that keep the cleanup from dropping it, which only that
+ * replay changes. Beside the catalogs, the server's replication slots, which no catalog
+ * holds.
+ */
+import type { Sql } from "./pg-replay-database.ts";
+/**
+ * The server's shared catalogs as committed, a replay's own rows left out: each row's JSON by its
+ * subject, with the names of the roles, databases or other objects the row is about, as stored
+ */
+type Snapshot = Map<string, {
+    names: readonly string[];
+    row: Record<string, unknown>;
+}>;
+/**
+ * The read prepared on `admin` for snapshot, as its role reads it, with the replay's own
+ * `database`'s row: planning it is half its time, and a replay reads it around every file and bare
+ * statement
+ */
+declare function prepareSnapshot(admin: Sql, { database, superuser }: {
+    database: string;
+    superuser: boolean;
+}): Promise<void>;
+/** The shared catalogs as `admin`, a connection with no transaction open that prepareSnapshot prepared, reads them committed */
+declare function snapshot(admin: Sql): Promise<Snapshot>;
+/**
+ * What changed from `before` to `after`, one change per subject, in order: of a subject about a
+ * name in `names`, the names a file spells, when given
+ */
+declare function snapshotChanges(before: Snapshot, after: Snapshot, names?: ReadonlySet<string>): string[];
+/** The subscriptions `after` holds in `database` and `before` does not, by subject: its drop takes them */
+declare const subscriptionsIn: (before: Snapshot, after: Snapshot, database: string) => string[];
+export { prepareSnapshot, type Snapshot, snapshot, snapshotChanges, subscriptionsIn };
+
 // migrate/core/pg-server-writes.d.ts
 /**
  * What a replayed transaction wrote past its database, read from Postgres, never from the
@@ -779,44 +818,3 @@ declare function refusedChanges(byCatalog: ReadonlyMap<string, Change[]>, own: O
 /** Refuses a devUrl whose server keeps no counts for its role: the replay would read every file's writes as none */
 declare function refuseUncounted(sql: Sql, stops: string): Promise<void>;
 export { addWrites, CATALOGS, type Catalog, catalogsOf, type Change, changedFields, counts, refusedChanges, refuseUncounted, type Own, rowChanges, type Rows, subjectRows, type Writes, writesSince, };
-
-// migrate/core/pg-server-snapshot.d.ts
-/**
- * The server's shared catalogs read as committed, in one query: what a bare
- * statement changed, which no transaction counts, and what a second connection committed, which this
- * backend's counts never see (pg-server-writes.ts). The read is the server's, another session's work
- * in it too, so each row carries the names of the objects it is about: a change is a file's when it
- * is to the replay's own database, or to a name the file spells (namesIn in sql-code.ts) beside a
- * statement that can run code database cannot read (pg-replay-hidden.ts). A replay's own rows are left out, but
- * for the fields of its own database's row that keep the cleanup from dropping it, which only that
- * replay changes. Beside the catalogs, the server's replication slots, which no catalog
- * holds.
- */
-import type { Sql } from "./pg-replay-database.ts";
-/**
- * The server's shared catalogs as committed, a replay's own rows left out: each row's JSON by its
- * subject, with the names of the roles, databases or other objects the row is about, as stored
- */
-type Snapshot = Map<string, {
-    names: readonly string[];
-    row: Record<string, unknown>;
-}>;
-/**
- * The read prepared on `admin` for snapshot, as its role reads it, with the replay's own
- * `database`'s row: planning it is half its time, and a replay reads it around every file and bare
- * statement
- */
-declare function prepareSnapshot(admin: Sql, { database, superuser }: {
-    database: string;
-    superuser: boolean;
-}): Promise<void>;
-/** The shared catalogs as `admin`, a connection with no transaction open that prepareSnapshot prepared, reads them committed */
-declare function snapshot(admin: Sql): Promise<Snapshot>;
-/**
- * What changed from `before` to `after`, one change per subject, in order: of a subject about a
- * name in `names`, the names a file spells, when given
- */
-declare function snapshotChanges(before: Snapshot, after: Snapshot, names?: ReadonlySet<string>): string[];
-/** The subscriptions `after` holds in `database` and `before` does not, by subject: its drop takes them */
-declare const subscriptionsIn: (before: Snapshot, after: Snapshot, database: string) => string[];
-export { prepareSnapshot, type Snapshot, snapshot, snapshotChanges, subscriptionsIn };

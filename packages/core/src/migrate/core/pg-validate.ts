@@ -6,27 +6,29 @@
  * what the NOT VALID recipe exists to avoid. Probed on Postgres 17
  * (tests/integration/postgres/lock-oracle-held.test.ts).
  */
-import type { Finding } from "./classify-alter.ts"
-import type { Calls } from "./pg-held-types.ts"
-import { type Held, holdCommand } from "./pg-held.ts"
-import { type Facts, type Node, tableOf, written } from "./pg-nodes.ts"
+import type { Finding } from "./classify-alter.ts";
+import type { Calls } from "./pg-held-types.ts";
+import { type Held, holdCommand } from "./pg-held.ts";
+import { type Facts, type Node, tableOf, written } from "./pg-nodes.ts";
 
 /** "a", "a and b", "a, b and c" */
 function listed(names: readonly string[]): string {
-	return names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1) as string}`
+  return names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1) as string}`;
 }
 
 /** " (a's default calls it)", " (the defaults of a and b, and g's identity call it)"; nothing without a caller */
 function called(calls: Calls | undefined): string {
-	if (calls === undefined) return ""
-	const { defaults, identity } = calls
-	const by = [
-		...(defaults.length === 0
-			? []
-			: [defaults.length === 1 ? `${defaults[0] as string}'s default` : `the defaults of ${listed(defaults)}`]),
-		...(identity === undefined ? [] : [`${identity}'s identity`]),
-	]
-	return ` (${by.join(", and ")} ${by.length === 1 && defaults.length < 2 ? "calls" : "call"} it)`
+  if (calls === undefined) return "";
+  const { defaults, identity } = calls;
+
+  const by = [
+    ...(defaults.length === 0
+      ? []
+      : [defaults.length === 1 ? `${defaults[0] as string}'s default` : `the defaults of ${listed(defaults)}`]),
+    ...(identity === undefined ? [] : [`${identity}'s identity`]),
+  ];
+
+  return ` (${by.join(", and ")} ${by.length === 1 && defaults.length < 2 ? "calls" : "call"} it)`;
 }
 
 /**
@@ -34,17 +36,20 @@ function called(calls: Calls | undefined): string {
  * a sequence named with the tables Postgres said call it
  */
 function named({ calls, locks }: Held, key: string): string {
-	const scanned = locks.get(key)
-	if (locks.size === 1 && scanned !== undefined) return `it locked against ${scanned ? "reads and writes" : "writes"}`
-	const sorted = [...locks.keys()].toSorted()
-	const said = (names: readonly string[]): string => listed(names.map((name) => `${name}${called(calls.get(name))}`))
-	const reads = sorted.filter((name) => locks.get(name) === true)
-	const writes = sorted.filter((name) => locks.get(name) === false)
-	const groups = [
-		...(reads.length > 0 ? [`${said(reads)} locked against reads and writes`] : []),
-		...(writes.length > 0 ? [`${said(writes)}${reads.length > 0 ? "" : " locked"} against writes`] : []),
-	]
-	return groups.join(", and ")
+  const scanned = locks.get(key);
+
+  if (locks.size === 1 && scanned !== undefined) return `it locked against ${scanned ? "reads and writes" : "writes"}`;
+  const sorted = [...locks.keys()].toSorted();
+  const said = (names: readonly string[]): string => listed(names.map((name) => `${name}${called(calls.get(name))}`));
+  const reads = sorted.filter((name) => locks.get(name) === true);
+  const writes = sorted.filter((name) => locks.get(name) === false);
+
+  const groups = [
+    ...(reads.length > 0 ? [`${said(reads)} locked against reads and writes`] : []),
+    ...(writes.length > 0 ? [`${said(writes)}${reads.length > 0 ? "" : " locked"} against writes`] : []),
+  ];
+
+  return groups.join(", and ");
 }
 
 /**
@@ -53,24 +58,26 @@ function named({ calls, locks }: Held, key: string): string {
  * DROP or REASSIGN OWNED locks, which the replay leaves out
  */
 function holding(held: Held, key: string): string {
-	const [objects, others, owners] = [held.cascades, held.unseen, held.owners].map((set) => [...set].toSorted()) as [
-		string[],
-		string[],
-		string[],
-	]
-	const unnamed = [
-		...(objects.length > 0 ? [`this file's DROP … CASCADE locks what depends on ${listed(objects)}`] : []),
-		...(others.length > 0 ? [`this file ${objects.length > 0 ? "also " : ""}locks ${listed(others)}`] : []),
-	]
-	return [
-		...(held.locks.size > 0 ? [`this file holds ${named(held, key)}`] : []),
-		...unnamed.map((clause, i) =>
-			i === unnamed.length - 1 ? `${clause}, which only check on a postgres:// devUrl names` : clause,
-		),
-		...(owners.length > 0
-			? [`this file ${unnamed.length > 0 ? "also " : ""}locks ${listed(owners)}, which database cannot name`]
-			: []),
-	].join(", and ")
+  const [objects, others, owners] = [held.cascades, held.unseen, held.owners].map((set) => [...set].toSorted()) as [
+    string[],
+    string[],
+    string[],
+  ];
+
+  const unnamed = [
+    ...(objects.length > 0 ? [`this file's DROP … CASCADE locks what depends on ${listed(objects)}`] : []),
+    ...(others.length > 0 ? [`this file ${objects.length > 0 ? "also " : ""}locks ${listed(others)}`] : []),
+  ];
+
+  return [
+    ...(held.locks.size > 0 ? [`this file holds ${named(held, key)}`] : []),
+    ...unnamed.map((clause, i) =>
+      i === unnamed.length - 1 ? `${clause}, which only check on a postgres:// devUrl names` : clause,
+    ),
+    ...(owners.length > 0
+      ? [`this file ${unnamed.length > 0 ? "also " : ""}locks ${listed(owners)}, which database cannot name`]
+      : []),
+  ].join(", and ");
 }
 
 /**
@@ -78,22 +85,26 @@ function holding(held: Held, key: string): string {
  * locks then held, command by command, so an ADD and a VALIDATE in one statement count
  */
 function heldScans(node: Node, { facts, held }: { facts: Facts; held: Held }): Finding[] {
-	const table = written(node["relation"])
-	return (node["cmds"] as Node[]).flatMap((each): Finding[] => {
-		const cmd = each["AlterTableCmd"] as Node
-		const scans = node["objtype"] === "OBJECT_TABLE" && cmd["subtype"] === "AT_ValidateConstraint"
-		const found: Finding[] =
-			scans && (held.locks.size > 0 || held.cascades.size > 0 || held.unseen.size > 0 || held.owners.size > 0)
-				? [
-						{
-							level: "lock",
-							note: `scans ${table} while ${holding(held, tableOf(node["relation"], facts.schema).key)}; those locks last to the file's COMMIT; validate in a later file`,
-						},
-					]
-				: []
-		holdCommand(node, cmd, { facts, held })
-		return found
-	})
+  const table = written(node["relation"]);
+
+  return (node["cmds"] as Node[]).flatMap((each): Finding[] => {
+    const cmd = each["AlterTableCmd"] as Node;
+    const scans = node["objtype"] === "OBJECT_TABLE" && cmd["subtype"] === "AT_ValidateConstraint";
+
+    const found: Finding[] =
+      scans && (held.locks.size > 0 || held.cascades.size > 0 || held.unseen.size > 0 || held.owners.size > 0)
+        ? [
+            {
+              level: "lock",
+              note: `scans ${table} while ${holding(held, tableOf(node["relation"], facts.schema).key)}; those locks last to the file's COMMIT; validate in a later file`,
+            },
+          ]
+        : [];
+
+    holdCommand(node, cmd, { facts, held });
+
+    return found;
+  });
 }
 
 /**
@@ -102,17 +113,19 @@ function heldScans(node: Node, { facts, held }: { facts: Facts; held: Held }): F
  * this says more than the code held at its scan, never less. Read once, by the statement measured
  */
 function hiddenScans(held: Held): Finding[] {
-	const scanned = held.scanned
-	held.scanned = []
-	if (scanned.length === 0 || [held.locks, held.cascades, held.unseen, held.owners].every((each) => each.size === 0))
-		return []
-	const key = scanned.length === 1 ? (scanned[0] as string) : ""
-	return [
-		{
-			level: "lock",
-			note: `scans ${listed(scanned)} while ${holding(held, key)}; those locks last to the file's COMMIT; validate in a later file`,
-		},
-	]
+  const scanned = held.scanned;
+  held.scanned = [];
+
+  if (scanned.length === 0 || [held.locks, held.cascades, held.unseen, held.owners].every((each) => each.size === 0))
+    return [];
+  const key = scanned.length === 1 ? (scanned[0] as string) : "";
+
+  return [
+    {
+      level: "lock",
+      note: `scans ${listed(scanned)} while ${holding(held, key)}; those locks last to the file's COMMIT; validate in a later file`,
+    },
+  ];
 }
 
-export { heldScans, hiddenScans }
+export { heldScans, hiddenScans };

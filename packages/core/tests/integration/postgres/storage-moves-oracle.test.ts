@@ -6,97 +6,106 @@
  * access method and tablespace each relation has (heap, pg_default), as database reads them only where it
  * does (classify.pg-moves.test.ts).
  */
-import pg from "pg"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { classifyMigration } from "../../../src/migrate/core/classify.ts"
-import { loadPostgresParser } from "../../../src/migrate/core/pg-parser.ts"
-import { extractSchema } from "../../../src/migrate/core/schema.ts"
-import { pgUrl, withScratchDb } from "../support/pg.ts"
-import { unique } from "../support/pg-roles.ts"
+import pg from "pg";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-beforeAll(loadPostgresParser)
+import { classifyMigration } from "../../../src/migrate/core/classify.ts";
+import { loadPostgresParser } from "../../../src/migrate/core/pg-parser.ts";
+import { extractSchema } from "../../../src/migrate/core/schema.ts";
+import { unique } from "../support/pg-roles.ts";
+import { pgUrl, withScratchDb } from "../support/pg.ts";
 
-const PLACED = "CREATE TABLE t (id int) USING heap TABLESPACE pg_default;"
-const UNLOGGED = "CREATE UNLOGGED TABLE t (id int) USING heap TABLESPACE pg_default;"
-const VIEW = "CREATE MATERIALIZED VIEW t USING heap TABLESPACE pg_default AS SELECT 1 AS id;"
-const INDEXED = "CREATE TABLE b (id int);\nCREATE INDEX t ON b (id) TABLESPACE pg_default;"
+beforeAll(loadPostgresParser);
+
+const PLACED = "CREATE TABLE t (id int) USING heap TABLESPACE pg_default;";
+const UNLOGGED = "CREATE UNLOGGED TABLE t (id int) USING heap TABLESPACE pg_default;";
+const VIEW = "CREATE MATERIALIZED VIEW t USING heap TABLESPACE pg_default AS SELECT 1 AS id;";
+const INDEXED = "CREATE TABLE b (id int);\nCREATE INDEX t ON b (id) TABLESPACE pg_default;";
 
 // lookup-table: each history, the move run after it, and whether Postgres rewrites the relation t for it
 const MOVES: ReadonlyArray<readonly [string, string, boolean]> = [
-	[PLACED, "ALTER TABLE t SET LOGGED", false],
-	[PLACED, "ALTER TABLE t SET ACCESS METHOD heap", false],
-	[PLACED, "ALTER TABLE t SET TABLESPACE pg_default", false],
-	[UNLOGGED, "ALTER TABLE t SET UNLOGGED", false],
-	[VIEW, "ALTER MATERIALIZED VIEW t SET ACCESS METHOD heap", false],
-	[VIEW, "ALTER MATERIALIZED VIEW t SET TABLESPACE pg_default", false],
-	[INDEXED, "ALTER INDEX t SET TABLESPACE pg_default", false],
-	[`${PLACED}\nALTER TABLE t SET UNLOGGED;`, "ALTER TABLE t SET UNLOGGED", false],
-	[UNLOGGED, "ALTER TABLE t SET LOGGED", true],
-	[PLACED, "ALTER TABLE t SET UNLOGGED", true],
-]
+  [PLACED, "ALTER TABLE t SET LOGGED", false],
+  [PLACED, "ALTER TABLE t SET ACCESS METHOD heap", false],
+  [PLACED, "ALTER TABLE t SET TABLESPACE pg_default", false],
+  [UNLOGGED, "ALTER TABLE t SET UNLOGGED", false],
+  [VIEW, "ALTER MATERIALIZED VIEW t SET ACCESS METHOD heap", false],
+  [VIEW, "ALTER MATERIALIZED VIEW t SET TABLESPACE pg_default", false],
+  [INDEXED, "ALTER INDEX t SET TABLESPACE pg_default", false],
+  [`${PLACED}\nALTER TABLE t SET UNLOGGED;`, "ALTER TABLE t SET UNLOGGED", false],
+  [UNLOGGED, "ALTER TABLE t SET LOGGED", true],
+  [PLACED, "ALTER TABLE t SET UNLOGGED", true],
+];
 
 /** t's relfilenode after `history`, a statement a line, and after `move` on top of it */
 function files(history: string, move: string): Promise<[string, string]> {
-	return withScratchDb(async (url) => {
-		const client = new pg.Client({ connectionString: url })
-		await client.connect()
-		try {
-			/* one statement a line, each its own query, as a REINDEX SCHEMA runs outside a transaction block */
-			for (const statement of history.split("\n")) await client.query(statement)
-			const read = async () =>
-				(await client.query<{ f: string }>("SELECT relfilenode::text AS f FROM pg_class WHERE relname = 't'")).rows[0]
-					?.f as string
-			const before = await read()
-			await client.query(move)
-			return [before, await read()]
-		} finally {
-			await client.end()
-		}
-	})
+  return withScratchDb(async (url) => {
+    const client = new pg.Client({ connectionString: url });
+    await client.connect();
+
+    try {
+      // one statement a line, each its own query, as a REINDEX SCHEMA runs outside a transaction block
+      for (const statement of history.split("\n")) await client.query(statement);
+
+      const read = async () =>
+        (await client.query<{ f: string }>("SELECT relfilenode::text AS f FROM pg_class WHERE relname = 't'")).rows[0]
+          ?.f as string;
+
+      const before = await read();
+      await client.query(move);
+
+      return [before, await read()];
+    } finally {
+      await client.end();
+    }
+  });
 }
 
 describe("a move back of an index a REINDEX rebuilt in a tablespace, against Postgres 17 (AE2-4 of r22)", () => {
-	/* a database_t_fast_* tablespace made in place on the test server, dropped once the cases ran */
-	const fast = unique("database_t_fast")
-	const admin = new pg.Client({ connectionString: pgUrl() })
-	beforeAll(async () => {
-		await admin.connect()
-		await admin.query("SET allow_in_place_tablespaces = on")
-		process.stderr.write(`[database] AE2-4 catalog: CREATE TABLESPACE ${fast} LOCATION ''\n`)
-		await admin.query(`CREATE TABLESPACE ${fast} LOCATION ''`)
-	})
-	afterAll(async () => {
-		process.stderr.write(`[database] AE2-4 catalog: DROP TABLESPACE IF EXISTS ${fast}\n`)
-		await admin.query(`DROP TABLESPACE IF EXISTS ${fast}`)
-		await admin.end()
-	})
+  // a database_t_fast_* tablespace made in place on the test server, dropped once the cases ran
+  const fast = unique("database_t_fast");
+  const admin = new pg.Client({ connectionString: pgUrl() });
+  beforeAll(async () => {
+    await admin.connect();
+    await admin.query("SET allow_in_place_tablespaces = on");
+    process.stderr.write(`[database] AE2-4 catalog: CREATE TABLESPACE ${fast} LOCATION ''\n`);
+    await admin.query(`CREATE TABLESPACE ${fast} LOCATION ''`);
+  });
+  afterAll(async () => {
+    process.stderr.write(`[database] AE2-4 catalog: DROP TABLESPACE IF EXISTS ${fast}\n`);
+    await admin.query(`DROP TABLESPACE IF EXISTS ${fast}`);
+    await admin.end();
+  });
 
-	it.each(["INDEX t", "TABLE b", "SCHEMA public"])(
-		"rewrites t back to pg_default after REINDEX (TABLESPACE …) %s, and database warns of it",
-		async (target) => {
-			const history = `${INDEXED}\nREINDEX (TABLESPACE ${fast}) ${target};`
-			const [before, after] = await files(history, "ALTER INDEX t SET TABLESPACE pg_default")
-			expect(before).not.toBe(after)
-			const rated = classifyMigration("ALTER INDEX t SET TABLESPACE pg_default;", {
-				before: extractSchema(history, undefined, "postgres"),
-				dialect: "postgres",
-			})
-			expect(rated.lockWarnings.length).toBeGreaterThan(0)
-		},
-	)
-})
+  it.each(["INDEX t", "TABLE b", "SCHEMA public"])(
+    "rewrites t back to pg_default after REINDEX (TABLESPACE …) %s, and database warns of it",
+    async (target) => {
+      const history = `${INDEXED}\nREINDEX (TABLESPACE ${fast}) ${target};`;
+      const [before, after] = await files(history, "ALTER INDEX t SET TABLESPACE pg_default");
+      expect(before).not.toBe(after);
+
+      const rated = classifyMigration("ALTER INDEX t SET TABLESPACE pg_default;", {
+        before: extractSchema(history, undefined, "postgres"),
+        dialect: "postgres",
+      });
+
+      expect(rated.lockWarnings.length).toBeGreaterThan(0);
+    },
+  );
+});
 
 describe("a move of a relation against Postgres 17 (PA17 of r22b)", () => {
-	it.each(MOVES)(
-		"after %j, %j rewrites t: %s, and database warns of it exactly then",
-		async (history, move, rewrites) => {
-			const [before, after] = await files(history, move)
-			expect(before !== after).toBe(rewrites)
-			const rated = classifyMigration(`${move};`, {
-				before: extractSchema(history, undefined, "postgres"),
-				dialect: "postgres",
-			})
-			expect(rated.lockWarnings.length > 0).toBe(rewrites)
-		},
-	)
-})
+  it.each(MOVES)(
+    "after %j, %j rewrites t: %s, and database warns of it exactly then",
+    async (history, move, rewrites) => {
+      const [before, after] = await files(history, move);
+      expect(before !== after).toBe(rewrites);
+
+      const rated = classifyMigration(`${move};`, {
+        before: extractSchema(history, undefined, "postgres"),
+        dialect: "postgres",
+      });
+
+      expect(rated.lockWarnings.length > 0).toBe(rewrites);
+    },
+  );
+});

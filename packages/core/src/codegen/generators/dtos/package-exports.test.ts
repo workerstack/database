@@ -1,89 +1,95 @@
-import { fixtureRoot } from "../../__fixtures__/temp.ts"
-import fs from "node:fs"
-import path from "node:path"
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { testContext } from "../__fixtures__/context.ts"
-import { updatePackageJson } from "./package-exports.ts"
+import fs from "node:fs";
+import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { fixtureRoot } from "../../__fixtures__/temp.ts";
+import { testContext } from "../__fixtures__/context.ts";
+import { updatePackageJson } from "./package-exports.ts";
 
 describe("updatePackageJson", () => {
-	let dir: string
-	let lines: string[]
+  let dir: string;
+  let lines: string[];
 
-	beforeEach(() => {
-		dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-pkg-exports-"))
-		lines = []
-	})
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-pkg-exports-"));
+    lines = [];
+  });
 
-	afterEach(() => fs.rmSync(dir, { force: true, recursive: true }))
+  afterEach(() => fs.rmSync(dir, { force: true, recursive: true }));
 
-	function run(exports: unknown, filePrefix?: string): Record<string, unknown> {
-		const file = path.join(dir, "package.json")
-		fs.writeFileSync(file, JSON.stringify({ exports, name: "app" }))
-		const ctx = testContext([], { cwd: dir, dbName: "blog", tablesPath: path.join(dir, "src/db.blog.tables.ts") })
-		updatePackageJson(file, { config: { filePrefix, output: "src/dtos" }, ctx, entities: ["post", "blogAuthor"] })
-		lines = ctx.logged
-		return (JSON.parse(fs.readFileSync(file, "utf8")) as { exports: Record<string, unknown> }).exports
-	}
+  function run(exports: unknown, filePrefix?: string): Record<string, unknown> {
+    const file = path.join(dir, "package.json");
+    fs.writeFileSync(file, JSON.stringify({ exports, name: "app" }));
+    const ctx = testContext([], { cwd: dir, dbName: "blog", tablesPath: path.join(dir, "src/db.blog.tables.ts") });
+    updatePackageJson(file, { config: { filePrefix, output: "src/dtos" }, ctx, entities: ["post", "blogAuthor"] });
+    lines = ctx.logged;
 
-	it("keeps . first, then the generated subpaths, then what the package already had", () => {
-		const exports = run({
-			".": "./index.ts",
-			"./dtos/old": "./src/dtos/old/index.gen.ts",
-			"./tables": "./old.ts",
-			"./x": "./x.ts",
-		})
-		expect(Object.entries(exports)).toEqual([
-			[".", "./index.ts"],
-			["./dtos/_shared", "./src/dtos/_shared/index.gen.ts"],
-			["./dtos/blog-author", "./src/dtos/blog-author/index.gen.ts"],
-			["./dtos/post", "./src/dtos/post/index.gen.ts"],
-			["./relations", "./src/db.blog.relations.gen.ts"],
-			["./tables", "./src/db.blog.tables.ts"],
-			["./x", "./x.ts"],
-		])
-		expect(lines).toEqual(["Updated package.json exports with 2 entities"])
-	})
+    return (JSON.parse(fs.readFileSync(file, "utf8")) as { exports: Record<string, unknown> }).exports;
+  }
 
-	it("keeps a package's single-target or condition-map exports as its . export (S-13)", () => {
-		expect(run("./index.ts")["."]).toBe("./index.ts")
-		expect(run({ default: "./index.ts", types: "./index.d.ts" })["."]).toEqual({
-			default: "./index.ts",
-			types: "./index.d.ts",
-		})
-	})
+  it("keeps . first, then the generated subpaths, then what the package already had", () => {
+    const exports = run({
+      ".": "./index.ts",
+      "./dtos/old": "./src/dtos/old/index.gen.ts",
+      "./tables": "./old.ts",
+      "./x": "./x.ts",
+    });
 
-	it("uses the file prefix for every generated file, and adds no . when the package had none", () => {
-		const exports = run(undefined, "db.blog")
-		expect(exports["."]).toBeUndefined()
-		expect(exports["./dtos/post"]).toBe("./src/dtos/post/db.blog.post.gen.ts")
-		expect(exports["./dtos/_shared"]).toBe("./src/dtos/_shared/db.blog._shared.gen.ts")
-		expect(exports["./relations"]).toBe("./src/db.blog.relations.gen.ts")
-	})
-})
+    expect(Object.entries(exports)).toEqual([
+      [".", "./index.ts"],
+      ["./dtos/_shared", "./src/dtos/_shared/index.gen.ts"],
+      ["./dtos/blog-author", "./src/dtos/blog-author/index.gen.ts"],
+      ["./dtos/post", "./src/dtos/post/index.gen.ts"],
+      ["./relations", "./src/db.blog.relations.gen.ts"],
+      ["./tables", "./src/db.blog.tables.ts"],
+      ["./x", "./x.ts"],
+    ]);
+    expect(lines).toEqual(["Updated package.json exports with 2 entities"]);
+  });
+
+  it("keeps a package's single-target or condition-map exports as its . export (S-13)", () => {
+    expect(run("./index.ts")["."]).toBe("./index.ts");
+    expect(run({ default: "./index.ts", types: "./index.d.ts" })["."]).toEqual({
+      default: "./index.ts",
+      types: "./index.d.ts",
+    });
+  });
+
+  it("uses the file prefix for every generated file, and adds no . when the package had none", () => {
+    const exports = run(undefined, "db.blog");
+    expect(exports["."]).toBeUndefined();
+    expect(exports["./dtos/post"]).toBe("./src/dtos/post/db.blog.post.gen.ts");
+    expect(exports["./dtos/_shared"]).toBe("./src/dtos/_shared/db.blog._shared.gen.ts");
+    expect(exports["./relations"]).toBe("./src/db.blog.relations.gen.ts");
+  });
+});
 
 describe("updatePackageJson: the subpaths codegen owns (F19)", () => {
-	let dir: string
-	beforeEach(() => {
-		dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-pkg-owned-"))
-	})
-	afterEach(() => fs.rmSync(dir, { force: true, recursive: true }))
+  let dir: string;
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-pkg-owned-"));
+  });
+  afterEach(() => fs.rmSync(dir, { force: true, recursive: true }));
 
-	function run(exports: unknown): Record<string, unknown> {
-		const file = path.join(dir, "package.json")
-		fs.writeFileSync(file, JSON.stringify({ exports, name: "app" }))
-		const ctx = testContext([], { cwd: dir, dbName: "blog", tablesPath: path.join(dir, "src/db.blog.tables.ts") })
-		updatePackageJson(file, { config: { output: "src/dtos" }, ctx, entities: ["post"] })
-		return (JSON.parse(fs.readFileSync(file, "utf8")) as { exports: Record<string, unknown> }).exports
-	}
+  function run(exports: unknown): Record<string, unknown> {
+    const file = path.join(dir, "package.json");
+    fs.writeFileSync(file, JSON.stringify({ exports, name: "app" }));
+    const ctx = testContext([], { cwd: dir, dbName: "blog", tablesPath: path.join(dir, "src/db.blog.tables.ts") });
+    updatePackageJson(file, { config: { output: "src/dtos" }, ctx, entities: ["post"] });
 
-	it("owns only the subpaths whose target it writes, and leaves the package's own ./dtos entries (F19)", () => {
-		const exports = run({
-			"./dtos/gone": "./src/dtos/gone/index.gen.ts",
-			"./dtos/search": "./src/api/search-dto.ts",
-			"./dtos/nested": { import: "./src/dtos/nested/index.gen.ts" },
-		})
-		expect(exports["./dtos/search"]).toBe("./src/api/search-dto.ts")
-		expect(exports["./dtos/nested"]).toEqual({ import: "./src/dtos/nested/index.gen.ts" })
-		expect(exports["./dtos/gone"]).toBeUndefined()
-	})
-})
+    return (JSON.parse(fs.readFileSync(file, "utf8")) as { exports: Record<string, unknown> }).exports;
+  }
+
+  it("owns only the subpaths whose target it writes, and leaves the package's own ./dtos entries (F19)", () => {
+    const exports = run({
+      "./dtos/gone": "./src/dtos/gone/index.gen.ts",
+      "./dtos/nested": { import: "./src/dtos/nested/index.gen.ts" },
+      "./dtos/search": "./src/api/search-dto.ts",
+    });
+
+    expect(exports["./dtos/search"]).toBe("./src/api/search-dto.ts");
+    expect(exports["./dtos/nested"]).toEqual({ import: "./src/dtos/nested/index.gen.ts" });
+    expect(exports["./dtos/gone"]).toBeUndefined();
+  });
+});

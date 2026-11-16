@@ -4,328 +4,359 @@
  * a row naming no file here is another schema's. Once the schema's own history records a file,
  * the shared history is never read again.
  */
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
-import { join } from "node:path"
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { adopted, adopts, holdsNothing, proveAdoption, proven, settable, sharedPrefix, theirs } from "./atlas-adopt.ts"
-import { applyWithAtlas, statusWithAtlas } from "./atlas-apply.ts"
-import { sqlFiles } from "./atlas-dir.ts"
-import type { AtlasRevision, AtlasStatus } from "./atlas-history.ts"
-import type { LiveRead } from "./pg-live-types.ts"
-import type { MigrateRun, RunResult } from "./process.ts"
-import { noLive, replaying } from "../__fixtures__/live-objects.ts"
-import { UNCOMPARED } from "./baseline-compare.ts"
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-let dir = ""
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { noLive, replaying } from "../__fixtures__/live-objects.ts";
+import { adopted, adopts, holdsNothing, proveAdoption, proven, settable, sharedPrefix, theirs } from "./atlas-adopt.ts";
+import { applyWithAtlas, statusWithAtlas } from "./atlas-apply.ts";
+import { sqlFiles } from "./atlas-dir.ts";
+import type { AtlasRevision, AtlasStatus } from "./atlas-history.ts";
+import { UNCOMPARED } from "./baseline-compare.ts";
+import type { LiveRead } from "./pg-live-types.ts";
+import type { MigrateRun, RunResult } from "./process.ts";
+
+let dir = "";
+
 /** A print that keeps nothing */
-const print = () => undefined
+const print = () => {};
+
 /** `files` as the snapshot, its sum hashed as `h1:<name length>=` for each */
 function snapshot(files: Record<string, string>): void {
-	for (const [name, sql] of Object.entries(files)) writeFileSync(join(dir, name), sql)
-	const lines = sqlFiles(dir).map((name) => `${name} h1:${name.length}=`)
-	writeFileSync(join(dir, "atlas.sum"), `h1:x=\n${lines.join("\n")}\n`)
+  for (const [name, sql] of Object.entries(files)) writeFileSync(join(dir, name), sql);
+  const lines = sqlFiles(dir).map((name) => `${name} h1:${name.length}=`);
+  writeFileSync(join(dir, "atlas.sum"), `h1:x=\n${lines.join("\n")}\n`);
 }
+
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "database-atlas-adopt-"))
-	snapshot({ "1_a.sql": "SELECT 1;\n", "2_b.sql": "SELECT 2;\n", "3_c.sql": "SELECT 3;\n" })
-})
-afterEach(() => rmSync(dir, { force: true, recursive: true }))
+  dir = mkdtempSync(join(tmpdir(), "database-atlas-adopt-"));
+  snapshot({ "1_a.sql": "SELECT 1;\n", "2_b.sql": "SELECT 2;\n", "3_c.sql": "SELECT 3;\n" });
+});
+
+afterEach(() => rmSync(dir, { force: true, recursive: true }));
 
 /** Atlas's `migrate hash` of the directory `args` name, as the fixture hashes one */
 function hashed(args: readonly string[]): RunResult {
-	const at = (args[args.indexOf("--dir") + 1] as string).replace("file://", "")
-	const lines = sqlFiles(at).map((name) => `${name} h1:${name.length}=`)
-	writeFileSync(join(at, "atlas.sum"), `h1:x=\n${lines.join("\n")}\n`)
-	return { code: 0, stderr: "", stdout: "" }
+  const at = (args[args.indexOf("--dir") + 1] as string).replace("file://", "");
+  const lines = sqlFiles(at).map((name) => `${name} h1:${name.length}=`);
+  writeFileSync(join(at, "atlas.sum"), `h1:x=\n${lines.join("\n")}\n`);
+
+  return { code: 0, stderr: "", stdout: "" };
 }
 
 /** Atlas on a database with objects whose own history is empty: every status refused as not clean */
 const notClean: MigrateRun = async (_cmd, args) =>
-	args[1] === "hash"
-		? hashed(args)
-		: {
-				code: 1,
-				stderr: 'Error: sql/migrate: connected database is not clean: found table "t" in schema "app".',
-				stdout: "",
-			}
+  args[1] === "hash"
+    ? hashed(args)
+    : {
+        code: 1,
+        stderr: 'Error: sql/migrate: connected database is not clean: found table "t" in schema "app".',
+        stdout: "",
+      };
 
 /** A row of the shared history for `name`, whole and with the snapshot's hash unless `more` says otherwise */
 function row(name: string, more: Partial<AtlasRevision> = {}): AtlasRevision {
-	const [version = "", description = ""] = name.replace(/\.sql$/, "").split(/_(.*)/s)
-	return {
-		applied: 1,
-		description,
-		error: "",
-		errorStmt: "",
-		hash: `${name.length}=`,
-		total: 1,
-		type: "applied",
-		version,
-		...more,
-	}
+  const [version = "", description = ""] = name.replace(/\.sql$/, "").split(/_(.*)/s);
+
+  return {
+    applied: 1,
+    description,
+    error: "",
+    errorStmt: "",
+    hash: `${name.length}=`,
+    total: 1,
+    type: "applied",
+    version,
+    ...more,
+  };
 }
 
 const shared = (applied: AtlasRevision[]): AtlasStatus => ({
-	applied,
-	available: [],
-	current: "",
-	error: "",
-	pending: [],
-	status: "OK",
-})
+  applied,
+  available: [],
+  current: "",
+  error: "",
+  pending: [],
+  status: "OK",
+});
 
-/* what status and check say of the files 0.12 ran, which they do not prove (P2) */
+// what status and check say of the files 0.12 ran, which they do not prove (P2)
 const PENDING =
-	"ran under 0.12's shared history; apply would adopt them, pending proof that the schema holds what they leave"
+  "ran under 0.12's shared history; apply would adopt them, pending proof that the schema holds what they leave";
 
 describe("sharedPrefix: the files 0.12's shared history ran", () => {
-	it("takes the rows naming this directory's files as its prefix, and skips another schema's", () => {
-		expect(sharedPrefix(shared([row("0_public.sql"), row("1_a.sql"), row("2_b.sql"), row("9_x.sql")]), dir)).toEqual([
-			"1_a.sql",
-			"2_b.sql",
-		])
-		expect(sharedPrefix(shared([row("0_public.sql")]), dir)).toEqual([])
-	})
+  it("takes the rows naming this directory's files as its prefix, and skips another schema's", () => {
+    expect(sharedPrefix(shared([row("0_public.sql"), row("1_a.sql"), row("2_b.sql"), row("9_x.sql")]), dir)).toEqual([
+      "1_a.sql",
+      "2_b.sql",
+    ]);
+    expect(sharedPrefix(shared([row("0_public.sql")]), dir)).toEqual([]);
+  });
 
-	it("refuses a skipped file, a file run halfway or failed, and a file that changed, naming it", () => {
-		expect(() => sharedPrefix(shared([row("2_b.sql")]), dir)).toThrow(
-			"0.12's shared history records 2_b.sql but not 1_a.sql, which comes before it, so database cannot tell what ran; record it by hand",
-		)
-		for (const halfway of [{ applied: 1, total: 2 }, { error: "pq: boom" }])
-			expect(() => sharedPrefix(shared([row("1_a.sql", halfway)]), dir)).toThrow(
-				"1_a.sql ran halfway under 0.12; finish or revert it by hand",
-			)
-		expect(() => sharedPrefix(shared([row("1_a.sql"), row("2_b.sql", { hash: "other=" })]), dir)).toThrow(
-			"2_b.sql is not the file 0.12 ran: its hash is not the one the shared history recorded; restore it, and apply adopts it",
-		)
-	})
+  it("refuses a skipped file, a file run halfway or failed, and a file that changed, naming it", () => {
+    expect(() => sharedPrefix(shared([row("2_b.sql")]), dir)).toThrow(
+      "0.12's shared history records 2_b.sql but not 1_a.sql, which comes before it, so database cannot tell what ran; record it by hand",
+    );
 
-	/* exo/probe6.log: set records by name until a version above its argument, so a lower one after them too */
-	it("refuses a file after them whose version set would record with them, and passes one above them", () => {
-		snapshot({ "20260101000000_b.sql": "SELECT 1;\n", "20260101_a.sql": "SELECT 1;\n" })
-		expect(() => settable(dir, ["1_a.sql", "20260101000000_b.sql"])).toThrow(
-			"20260101_a.sql sorts after the files 0.12 ran, yet its version sorts below 20260101000000_b.sql's, so atlas migrate set would record it with them, though it never ran; rename it so its version sorts above 20260101000000 and run atlas migrate hash",
-		)
-		const below = ["1_a.sql", "20260101000000_b.sql", "20260101_a.sql", "2_b.sql"]
-		expect(settable(dir, below)).toEqual(below)
-	})
+    for (const halfway of [{ applied: 1, total: 2 }, { error: "pq: boom" }]) {
+      expect(() => sharedPrefix(shared([row("1_a.sql", halfway)]), dir)).toThrow(
+        "1_a.sql ran halfway under 0.12; finish or revert it by hand",
+      );
+    }
 
-	it("says how many files ran, and which it recorded", () => {
-		expect(adopts(["1_a.sql"])).toBe(`1 file ${PENDING}`)
-		expect(adopts(["1_a.sql", "2_b.sql"])).toBe(`2 files ${PENDING}`)
-		expect(adopted(["1_a.sql", "2_b.sql"])).toBe("Adopted from 0.12's shared history: 1_a.sql, 2_b.sql")
-	})
-})
+    expect(() => sharedPrefix(shared([row("1_a.sql"), row("2_b.sql", { hash: "other=" })]), dir)).toThrow(
+      "2_b.sql is not the file 0.12 ran: its hash is not the one the shared history recorded; restore it, and apply adopts it",
+    );
+  });
+
+  // exo/probe6.log: set records by name until a version above its argument, so a lower one after them too
+  it("refuses a file after them whose version set would record with them, and passes one above them", () => {
+    snapshot({ "20260101000000_b.sql": "SELECT 1;\n", "20260101_a.sql": "SELECT 1;\n" });
+    expect(() => settable(dir, ["1_a.sql", "20260101000000_b.sql"])).toThrow(
+      "20260101_a.sql sorts after the files 0.12 ran, yet its version sorts below 20260101000000_b.sql's, so atlas migrate set would record it with them, though it never ran; rename it so its version sorts above 20260101000000 and run atlas migrate hash",
+    );
+    const below = ["1_a.sql", "20260101000000_b.sql", "20260101_a.sql", "2_b.sql"];
+    expect(settable(dir, below)).toEqual(below);
+  });
+
+  it("says how many files ran, and which it recorded", () => {
+    expect(adopts(["1_a.sql"])).toBe(`1 file ${PENDING}`);
+    expect(adopts(["1_a.sql", "2_b.sql"])).toBe(`2 files ${PENDING}`);
+    expect(adopted(["1_a.sql", "2_b.sql"])).toBe("Adopted from 0.12's shared history: 1_a.sql, 2_b.sql");
+  });
+});
 
 describe("adoption: read once, while the schema's own history is empty", () => {
-	it("never reads the shared history once the schema's own records a file", async () => {
-		const histories: string[] = []
-		const exec: MigrateRun = async (_cmd, args) => {
-			if (args[1] === "hash") return hashed(args)
-			const config = readFileSync((args[args.indexOf("--config") + 1] as string).replace("file://", ""), "utf8")
-			histories.push(/revisions_schema = "([^"]+)"/.exec(config)?.[1] ?? "")
-			const status = { ...shared([row("1_a.sql"), row("2_b.sql"), row("3_c.sql")]), current: "3" }
-			return { code: 0, stderr: "", stdout: JSON.stringify(status) }
-		}
-		const target = {
-			devUrl: "postgres://localhost/dev",
-			lockTimeout: "5s",
-			schema: "app",
-			url: "postgres://localhost/app",
-		}
-		expect(await applyWithAtlas({ approve: async () => ({ ok: true }), dir, exec, print, target })).toEqual([])
-		expect(histories).toEqual(["atlas_schema_revisions_app"])
-	})
+  it("never reads the shared history once the schema's own records a file", async () => {
+    const histories: string[] = [];
 
-	/* the report's M77 case: an earlier refused apply left the own history empty, so Atlas calls the database not clean */
-	it("refuses a database with objects, an empty own history and no shared rows, in status and apply alike", async () => {
-		const target = {
-			devUrl: "postgres://localhost/dev",
-			lockTimeout: "5s",
-			schema: "app",
-			url: "postgres://localhost/app",
-		}
-		const refusal = /^atlas migrate status: the database has objects but no migration history/
-		await expect(statusWithAtlas({ dir, exec: notClean, print, target })).rejects.toThrow(refusal)
-		await expect(
-			applyWithAtlas({ approve: async () => ({ ok: true }), dir, exec: notClean, print, target }),
-		).rejects.toThrow(refusal)
-	})
+    const exec: MigrateRun = async (_cmd, args) => {
+      if (args[1] === "hash") return hashed(args);
+      const config = readFileSync((args[args.indexOf("--config") + 1] as string).replace("file://", ""), "utf8");
+      histories.push(/revisions_schema = "([^"]+)"/.exec(config)?.[1] ?? "");
+      const status = { ...shared([row("1_a.sql"), row("2_b.sql"), row("3_c.sql")]), current: "3" };
 
-	it("says nothing is pending when 0.12 ran every file in a schema holding something, and writes nothing", async () => {
-		const calls: string[][] = []
-		const allRan: MigrateRun = async (_cmd, args) => {
-			calls.push([...args])
-			if (args[1] === "hash") return hashed(args)
-			const config = readFileSync((args[args.indexOf("--config") + 1] as string).replace("file://", ""), "utf8")
-			const rows = config.includes('"atlas_schema_revisions"') ? [row("1_a.sql"), row("2_b.sql"), row("3_c.sql")] : []
-			return { code: 0, stderr: "", stdout: JSON.stringify(shared(rows)) }
-		}
-		const out: string[] = []
-		const target = {
-			devUrl: "postgres://localhost/dev",
-			lockTimeout: "5s",
-			schema: "app",
-			url: "postgres://localhost/app",
-		}
-		const status = { dir, exec: allRan, print: (line: string) => out.push(line), readHeld: async () => true, target }
-		expect(await statusWithAtlas(status)).toEqual({
-			applied: [],
-			pending: [],
-		})
-		expect(out).toEqual(["Applied: 0", "Pending: none", `3 files ${PENDING}`])
-		expect(calls.map((args) => args[1])).toEqual(["hash", "status", "status"])
-	})
-})
+      return { code: 0, stderr: "", stdout: JSON.stringify(status) };
+    };
+
+    const target = {
+      devUrl: "postgres://localhost/dev",
+      lockTimeout: "5s",
+      schema: "app",
+      url: "postgres://localhost/app",
+    };
+
+    expect(await applyWithAtlas({ approve: async () => ({ ok: true }), dir, exec, print, target })).toEqual([]);
+    expect(histories).toEqual(["atlas_schema_revisions_app"]);
+  });
+
+  // the report's M77 case: an earlier refused apply left the own history empty, so Atlas calls the database not clean
+  it("refuses a database with objects, an empty own history and no shared rows, in status and apply alike", async () => {
+    const target = {
+      devUrl: "postgres://localhost/dev",
+      lockTimeout: "5s",
+      schema: "app",
+      url: "postgres://localhost/app",
+    };
+
+    const refusal = /^atlas migrate status: the database has objects but no migration history/;
+    await expect(statusWithAtlas({ dir, exec: notClean, print, target })).rejects.toThrow(refusal);
+    await expect(
+      applyWithAtlas({ approve: async () => ({ ok: true }), dir, exec: notClean, print, target }),
+    ).rejects.toThrow(refusal);
+  });
+
+  it("says nothing is pending when 0.12 ran every file in a schema holding something, and writes nothing", async () => {
+    const calls: string[][] = [];
+
+    const allRan: MigrateRun = async (_cmd, args) => {
+      calls.push([...args]);
+
+      if (args[1] === "hash") return hashed(args);
+      const config = readFileSync((args[args.indexOf("--config") + 1] as string).replace("file://", ""), "utf8");
+      const rows = config.includes('"atlas_schema_revisions"') ? [row("1_a.sql"), row("2_b.sql"), row("3_c.sql")] : [];
+
+      return { code: 0, stderr: "", stdout: JSON.stringify(shared(rows)) };
+    };
+
+    const out: string[] = [];
+
+    const target = {
+      devUrl: "postgres://localhost/dev",
+      lockTimeout: "5s",
+      schema: "app",
+      url: "postgres://localhost/app",
+    };
+
+    const status = { dir, exec: allRan, print: (line: string) => out.push(line), readHeld: async () => true, target };
+    expect(await statusWithAtlas(status)).toEqual({
+      applied: [],
+      pending: [],
+    });
+    expect(out).toEqual(["Applied: 0", "Pending: none", `3 files ${PENDING}`]);
+    expect(calls.map((args) => args[1])).toEqual(["hash", "status", "status"]);
+  });
+});
 
 /** Atlas's inspect of the target, its schema holding `tables` */
 const inspected = (tables: unknown[]): RunResult => ({
-	code: 0,
-	stderr: "",
-	stdout: JSON.stringify({ schemas: [{ name: "app", tables }] }),
-})
+  code: 0,
+  stderr: "",
+  stdout: JSON.stringify({ schemas: [{ name: "app", tables }] }),
+});
 
 /** Atlas on an app schema 0.12's shared history ran 1_a and 2_b for, its own history empty and the schema holding nothing */
 const sharingPublic: MigrateRun = async (_cmd, args) => {
-	if (args[1] === "hash") return hashed(args)
-	if (args[1] === "inspect") return inspected([])
-	const config = readFileSync((args[args.indexOf("--config") + 1] as string).replace("file://", ""), "utf8")
-	const isShared = config.includes('"atlas_schema_revisions"')
-	const rows = isShared ? [row("1_a.sql"), row("2_b.sql")] : []
-	const pending = isShared ? [] : ["1_a.sql", "2_b.sql", "3_c.sql"].map((Name) => ({ Name }))
-	return { code: 0, stderr: "", stdout: JSON.stringify({ ...shared(rows), pending }) }
-}
+  if (args[1] === "hash") return hashed(args);
 
-/* PA6 of r22b: public's own rows match a schema sharing its directory by version and hash alone */
+  if (args[1] === "inspect") return inspected([]);
+  const config = readFileSync((args[args.indexOf("--config") + 1] as string).replace("file://", ""), "utf8");
+  const isShared = config.includes('"atlas_schema_revisions"');
+  const rows = isShared ? [row("1_a.sql"), row("2_b.sql")] : [];
+  const pending = isShared ? [] : ["1_a.sql", "2_b.sql", "3_c.sql"].map((Name) => ({ Name }));
+
+  return { code: 0, stderr: "", stdout: JSON.stringify({ ...shared(rows), pending }) };
+};
+
+// PA6 of r22b: public's own rows match a schema sharing its directory by version and hash alone
 describe("adoption: a schema sharing public's directory and holding nothing (PA6)", () => {
-	it("lists every file as pending, saying the matching rows are another schema's", async () => {
-		const out: string[] = []
-		const target = {
-			devUrl: "postgres://localhost/dev",
-			lockTimeout: "5s",
-			schema: "app",
-			url: "postgres://localhost/app",
-		}
-		const status = await statusWithAtlas({
-			dir,
-			exec: sharingPublic,
-			print: (line) => out.push(line),
-			readHeld: async () => false,
-			target,
-		})
-		expect(status).toEqual({ applied: [], pending: ["1_a.sql", "2_b.sql", "3_c.sql"] })
-		expect(out[0]).toBe(theirs("app", ["1_a.sql", "2_b.sql"]))
-	})
-})
+  it("lists every file as pending, saying the matching rows are another schema's", async () => {
+    const out: string[] = [];
+
+    const target = {
+      devUrl: "postgres://localhost/dev",
+      lockTimeout: "5s",
+      schema: "app",
+      url: "postgres://localhost/app",
+    };
+
+    const status = await statusWithAtlas({
+      dir,
+      exec: sharingPublic,
+      print: (line) => out.push(line),
+      readHeld: async () => false,
+      target,
+    });
+
+    expect(status).toEqual({ applied: [], pending: ["1_a.sql", "2_b.sql", "3_c.sql"] });
+    expect(out[0]).toBe(theirs("app", ["1_a.sql", "2_b.sql"]));
+  });
+});
 
 describe("holdsNothing: no object of any kind in the schema (PA6)", () => {
-	const target = { devUrl: "postgres://dev/dev", lockTimeout: "5s", schema: "app", url: "postgres://db/db" }
-	it("is true when the read finds nothing in the schema, and false when it finds anything", async () => {
-		const asked: unknown[] = []
-		const read = (held: boolean) => async (live: unknown) => {
-			asked.push(live)
-			return held
-		}
-		expect(await holdsNothing({ readHeld: read(false), target })).toBe(true)
-		expect(await holdsNothing({ readHeld: read(true), target })).toBe(false)
-		expect(asked).toEqual([target, target])
-	})
-})
+  const target = { devUrl: "postgres://dev/dev", lockTimeout: "5s", schema: "app", url: "postgres://db/db" };
+  it("is true when the read finds nothing in the schema, and false when it finds anything", async () => {
+    const asked: unknown[] = [];
 
-/* P2 of the 0.14.1 review: a matching prefix is adopted only once the schema holds what replaying it leaves */
+    const read = (held: boolean) => async (live: unknown) => {
+      asked.push(live);
+
+      return held;
+    };
+
+    expect(await holdsNothing({ readHeld: read(false), target })).toBe(true);
+    expect(await holdsNothing({ readHeld: read(true), target })).toBe(false);
+    expect(asked).toEqual([target, target]);
+  });
+});
+
+// P2 of the 0.14.1 review: a matching prefix is adopted only once the schema holds what replaying it leaves
 /** A database with no function, procedure or trigger */
 const noObjects: LiveRead = async () => ({
-	...noLive(),
-	policies: new Map(),
-	relations: new Map(),
-	routines: new Map(),
-	triggers: new Map(),
-})
+  ...noLive(),
+  policies: new Map(),
+  relations: new Map(),
+  routines: new Map(),
+  triggers: new Map(),
+});
 
 /** atlas, its schema diff answering `stdout` and `stderr` */
 const diffing =
-	(stdout: string, stderr = ""): MigrateRun =>
-	async (_cmd, args) =>
-		args[0] === "schema" ? { code: 0, stderr, stdout } : { code: 0, stderr: "", stdout: "" }
+  (stdout: string, stderr = ""): MigrateRun =>
+  async (_cmd, args) =>
+    args[0] === "schema" ? { code: 0, stderr, stdout } : { code: 0, stderr: "", stdout: "" };
 
 /** atlas, its schema diff failing to reach the dev database */
 const unreachable: MigrateRun = async (_cmd, args) =>
-	args[0] === "schema"
-		? { code: 1, stderr: "Error: dial tcp: lookup dev: no such host", stdout: "" }
-		: { code: 0, stderr: "", stdout: "" }
+  args[0] === "schema"
+    ? { code: 1, stderr: "Error: dial tcp: lookup dev: no such host", stdout: "" }
+    : { code: 0, stderr: "", stdout: "" };
 
-const target = { devUrl: "postgres://dev/dev", lockTimeout: "5s", schema: "app", url: "postgres://db/db" }
-/* the catalog reads and the dev schema, faked: the database and the history's replay hold nothing (P5 of r19) */
-const fakes = { readLive: noObjects, readReplay: replaying(noObjects), readyDev: async () => undefined }
+const target = { devUrl: "postgres://dev/dev", lockTimeout: "5s", schema: "app", url: "postgres://db/db" };
+
+// the catalog reads and the dev schema, faked: the database and the history's replay hold nothing (P5 of r19)
+const fakes = { readLive: noObjects, readReplay: replaying(noObjects), readyDev: async () => {} };
 
 describe("proveAdoption", () => {
-	it("passes a schema that holds what the files leave, passing Atlas's notices on", async () => {
-		const copy = mkdtempSync(join(tmpdir(), "database-prove-"))
-		writeFileSync(join(copy, "1_a.sql"), 'CREATE TABLE "a" ("id" integer);\n')
-		const out: string[] = []
-		const exec = diffing("Schemas are synced, no changes to be made.", "views are not inspected")
-		await proveAdoption(
-			{
-				exec,
-				print: (line) => out.push(line),
-				...fakes,
-				target,
-			},
-			copy,
-			["1_a.sql"],
-		)
-		expect(out).toEqual(["Warning: Atlas: views are not inspected", UNCOMPARED])
-		rmSync(copy, { force: true, recursive: true })
-	})
+  it("passes a schema that holds what the files leave, passing Atlas's notices on", async () => {
+    const copy = mkdtempSync(join(tmpdir(), "database-prove-"));
+    writeFileSync(join(copy, "1_a.sql"), 'CREATE TABLE "a" ("id" integer);\n');
+    const out: string[] = [];
+    const exec = diffing("Schemas are synced, no changes to be made.", "views are not inspected");
+    await proveAdoption(
+      {
+        exec,
+        print: (line) => out.push(line),
+        ...fakes,
+        target,
+      },
+      copy,
+      ["1_a.sql"],
+    );
+    expect(out).toEqual(["Warning: Atlas: views are not inspected", UNCOMPARED]);
+    rmSync(copy, { force: true, recursive: true });
+  });
 
-	it("is what check says once it holds", () => {
-		expect(proven(["1_a.sql"])).toBe(
-			"1 file ran under 0.12's shared history, and the schema holds what they leave; apply would adopt them",
-		)
-		expect(proven(["1_a.sql", "2_b.sql"])).toMatch(/^2 files ran/)
-	})
-})
+  it("is what check says once it holds", () => {
+    expect(proven(["1_a.sql"])).toBe(
+      "1 file ran under 0.12's shared history, and the schema holds what they leave; apply would adopt them",
+    );
+    expect(proven(["1_a.sql", "2_b.sql"])).toMatch(/^2 files ran/);
+  });
+});
 
 describe("proveAdoption: what it refuses", () => {
-	it("refuses, naming devUrl, when Atlas cannot replay the files on the dev database", async () => {
-		const copy = mkdtempSync(join(tmpdir(), "database-prove-"))
-		writeFileSync(join(copy, "1_a.sql"), 'CREATE TABLE "a" ("id" integer);\n')
-		await expect(
-			proveAdoption(
-				{
-					exec: unreachable,
-					print: () => undefined,
-					...fakes,
-					target,
-				},
-				copy,
-				["1_a.sql"],
-			),
-		).rejects.toThrow(
-			"adopting 0.12's shared history needs devUrl, an empty Postgres database Atlas can reach, to prove app holds what it ran (1_a.sql); devUrl could not be used: atlas schema diff: Error: dial tcp: lookup dev: no such host",
-		)
-		rmSync(copy, { force: true, recursive: true })
-	})
+  it("refuses, naming devUrl, when Atlas cannot replay the files on the dev database", async () => {
+    const copy = mkdtempSync(join(tmpdir(), "database-prove-"));
+    writeFileSync(join(copy, "1_a.sql"), 'CREATE TABLE "a" ("id" integer);\n');
+    await expect(
+      proveAdoption(
+        {
+          exec: unreachable,
+          print: () => {},
+          ...fakes,
+          target,
+        },
+        copy,
+        ["1_a.sql"],
+      ),
+    ).rejects.toThrow(
+      "adopting 0.12's shared history needs devUrl, an empty Postgres database Atlas can reach, to prove app holds what it ran (1_a.sql); devUrl could not be used: atlas schema diff: Error: dial tcp: lookup dev: no such host",
+    );
+    rmSync(copy, { force: true, recursive: true });
+  });
 
-	it("refuses one that does not, naming the schema and the files, with the difference", async () => {
-		const copy = mkdtempSync(join(tmpdir(), "database-prove-"))
-		writeFileSync(join(copy, "1_a.sql"), 'CREATE TABLE "a" ("id" integer);\n')
-		const exec = diffing('-- Create "a" table\nCREATE TABLE "a" ("id" integer);')
-		await expect(
-			proveAdoption(
-				{
-					exec,
-					print: () => undefined,
-					...fakes,
-					target,
-				},
-				copy,
-				["1_a.sql"],
-			),
-		).rejects.toThrow(
-			"app does not hold what 0.12's shared history ran (1_a.sql), so database adopts none of it; the difference:\n-- Create",
-		)
-		rmSync(copy, { force: true, recursive: true })
-	})
-})
+  it("refuses one that does not, naming the schema and the files, with the difference", async () => {
+    const copy = mkdtempSync(join(tmpdir(), "database-prove-"));
+    writeFileSync(join(copy, "1_a.sql"), 'CREATE TABLE "a" ("id" integer);\n');
+    const exec = diffing('-- Create "a" table\nCREATE TABLE "a" ("id" integer);');
+    await expect(
+      proveAdoption(
+        {
+          exec,
+          print: () => {},
+          ...fakes,
+          target,
+        },
+        copy,
+        ["1_a.sql"],
+      ),
+    ).rejects.toThrow(
+      "app does not hold what 0.12's shared history ran (1_a.sql), so database adopts none of it; the difference:\n-- Create",
+    );
+    rmSync(copy, { force: true, recursive: true });
+  });
+});

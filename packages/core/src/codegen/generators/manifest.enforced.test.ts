@@ -3,268 +3,291 @@
  * with it takes what the server takes: each column's `min`, `max`, `patterns` and `maxBytes` are
  * read here against the bounds the create DTO publishes, on both dialects.
  */
-import fs from "node:fs"
-import path from "node:path"
-import { RE2JS } from "re2js"
-import { afterAll, describe, expect, it } from "vitest"
-import * as z from "zod"
-import { tableOf } from "../__fixtures__/runtime.ts"
-import type { FieldMeta, ImportsMeta } from "../analyzer-types.ts"
-import { isStorableText } from "../../storable-text.ts"
-import { elementNullsOf } from "../runtime/element-types.ts"
-import { snapshotOf } from "../runtime/read-tables.ts"
-import { toAnalysis } from "../runtime/to-meta.ts"
-import { generateFieldSchema } from "./dtos/field-schema.ts"
-import { buildManifest, type ManifestColumn } from "./manifest.ts"
+import fs from "node:fs";
+import path from "node:path";
 
-/* the shared example meta a generated schema names, which says nothing of its bounds */
-const META = new Proxy({}, { get: () => ({}) })
+import { RE2JS } from "re2js";
+import { afterAll, describe, expect, it } from "vitest";
+import * as z from "zod";
 
-/* a schema a c.json column names, as an app exports it */
-const Profile = z.object({ bio: z.string() })
+import { isStorableText } from "../../storable-text.ts";
+import { tableOf } from "../__fixtures__/runtime.ts";
+import type { FieldMeta, ImportsMeta } from "../analyzer-types.ts";
+import { elementNullsOf } from "../runtime/element-types.ts";
+import { snapshotOf } from "../runtime/read-tables.ts";
+import { toAnalysis } from "../runtime/to-meta.ts";
+import { generateFieldSchema } from "./dtos/field-schema.ts";
+import { buildManifest, type ManifestColumn } from "./manifest.ts";
 
-/* every text kind, a declared pattern beside a kind's own, a required text, an id reference, a c.json under a byte limit and a bounded integer */
+// the shared example meta a generated schema names, which says nothing of its bounds
+const META = new Proxy({}, { get: () => ({}) });
+
+// a schema a c.json column names, as an app exports it
+const Profile = z.object({ bio: z.string() });
+
+// every text kind, a declared pattern beside a kind's own, a required text, an id reference, a c.json under a byte limit and a bounded integer
 const COLUMNS: Record<string, string> = {
-	bounded: 'c.text("bounded", { min: 2, max: 9, pattern: "/^a/" })',
-	count: 'c.integer("count", { min: 0, max: 9 })',
-	doc: 'c.json("doc", Profile, { maxBytes: 16 })',
-	email: 'c.text("email", { email: true })',
-	image: 'c.text("image", { imageUri: true })',
-	name: 'c.text("name", { name: true })',
-	owner: 'c.ref("owner_id").references(() => owner.id)',
-	plain: 'c.json("plain", Profile)',
-	pw: 'c.text("pw", { password: true, max: 255 })',
-	pw_pattern: 'c.text("pw_pattern", { password: true, pattern: "/[0-9]/" })',
-	required: 'c.text("required").notNull()',
-	url: 'c.text("url", { url: true, pattern: "/\\\\.com/" })',
-}
+  bounded: 'c.text("bounded", { min: 2, max: 9, pattern: "/^a/" })',
+  count: 'c.integer("count", { min: 0, max: 9 })',
+  doc: 'c.json("doc", Profile, { maxBytes: 16 })',
+  email: 'c.text("email", { email: true })',
+  image: 'c.text("image", { imageUri: true })',
+  name: 'c.text("name", { name: true })',
+  owner: 'c.ref("owner_id").references(() => owner.id)',
+  plain: 'c.json("plain", Profile)',
+  pw: 'c.text("pw", { password: true, max: 255 })',
+  pw_pattern: 'c.text("pw_pattern", { password: true, pattern: "/[0-9]/" })',
+  required: 'c.text("required").notNull()',
+  url: 'c.text("url", { url: true, pattern: "/\\\\.com/" })',
+};
 
-/* what one dialect has alone: a boolean SQLite stores as an integer, a Postgres array, and plain Postgres types with a rule of their own */
+// what one dialect has alone: a boolean SQLite stores as an integer, a Postgres array, and plain Postgres types with a rule of their own
 const ONLY: Record<"postgres" | "sqlite", Record<string, string>> = {
-	postgres: { real: 'real("real")', tags: 'c.text("tags", { max: 5 }).array()', uid: 'uuid("uid")' },
-	/* CS4 of r23: a plain numeric, which the DTO holds to the digits SQLite's NUMERIC reads back as sent */
-	sqlite: { flag: 'integer("flag", { mode: "boolean" })', p_num: 'numeric("p_num")' },
-}
+  postgres: { real: 'real("real")', tags: 'c.text("tags", { max: 5 }).array()', uid: 'uuid("uid")' },
+  // CS4 of r23: a plain numeric, which the DTO holds to the digits SQLite's NUMERIC reads back as sent
+  sqlite: { flag: 'integer("flag", { mode: "boolean" })', p_num: 'numeric("p_num")' },
+};
 
-/* the plain Postgres columns whose rule is their type's, which `kind` names: none is stated, as an inet's union or a numeric's exclusive bounds fit no field */
-const TYPED = new Set(["real", "uid"])
+// the plain Postgres columns whose rule is their type's, which `kind` names: none is stated, as an inet's union or a numeric's exclusive bounds fit no field
+const TYPED = new Set(["real", "uid"]);
 
-type Published = Record<string, unknown> & { allOf?: Published[]; anyOf?: Published[] }
+type Published = Record<string, unknown> & { allOf?: Published[]; anyOf?: Published[] };
 
 /** What the create DTO publishes for `field`: its value's member, not the null beside it, and an array's element */
 function publishedOf(field: FieldMeta, dialect: "postgres" | "sqlite"): Published {
-	const imports: ImportsMeta = { enumImports: new Map(), identifiers: new Map(), jsonSchemaImports: new Set() }
-	const code = generateFieldSchema({ ...field, jsonSchemaName: "Profile" }, "create", { dialect, imports }) as string
-	const schema = new Function("z", "database", "_m", "Profile", "jsonValueSchema", `return ${code}`)(
-		z,
-		{ isStorableText },
-		META,
-		Profile,
-		z.json(),
-	) as z.ZodType
-	const document = z.toJSONSchema(z.object({ f: schema }), { io: "input", unrepresentable: "any" }) as unknown as {
-		properties: { f: Published }
-	}
-	const property = document.properties.f
-	const value = { ...property, ...property.anyOf?.find((each) => each["type"] !== "null") }
-	if (value["type"] !== "array") return value
-	/* an array's rules are each element's */
-	const items = value["items"] as Published
-	return { ...items, ...items.anyOf?.find((each) => each["type"] !== "null") }
+  const imports: ImportsMeta = { enumImports: new Map(), identifiers: new Map(), jsonSchemaImports: new Set() };
+  const code = generateFieldSchema({ ...field, jsonSchemaName: "Profile" }, "create", { dialect, imports }) as string;
+
+  const schema = new Function("z", "database", "_m", "Profile", "jsonValueSchema", `return ${code}`)(
+    z,
+    { isStorableText },
+    META,
+    Profile,
+    z.json(),
+  ) as z.ZodType;
+
+  const document = z.toJSONSchema(z.object({ f: schema }), { io: "input", unrepresentable: "any" }) as unknown as {
+    properties: { f: Published };
+  };
+
+  const property = document.properties.f;
+  const value = { ...property, ...property.anyOf?.find((each) => each["type"] !== "null") };
+
+  if (value["type"] !== "array") return value;
+  // an array's rules are each element's
+  const items = value["items"] as Published;
+
+  return { ...items, ...items.anyOf?.find((each) => each["type"] !== "null") };
 }
 
 /** The regexes a published schema holds, its own and each allOf member's, as their sources */
 const patternsOf = (published: Published): string[] =>
-	[published, ...(published.allOf ?? [])].flatMap((each) =>
-		typeof each["pattern"] === "string" ? [each["pattern"]] : [],
-	)
+  [published, ...(published.allOf ?? [])].flatMap((each) =>
+    typeof each["pattern"] === "string" ? [each["pattern"]] : [],
+  );
 
 /** A manifest pattern, a regex literal, as its source */
-const sourceOf = (literal: string): string => literal.slice(1, literal.lastIndexOf("/"))
+const sourceOf = (literal: string): string => literal.slice(1, literal.lastIndexOf("/"));
 
 /** The bounds a published schema enforces, as a manifest column states them */
 function enforced(published: Published): Pick<ManifestColumn, "max" | "maxBytes" | "min"> & { patterns: string[] } {
-	const bound = (key: string) => (typeof published[key] === "number" ? (published[key] as number) : null)
-	const number = published["type"] === "integer" || published["type"] === "number"
-	return {
-		max: bound(number ? "maximum" : "maxLength"),
-		maxBytes: bound("x-database-maxBytes"),
-		min: bound(number ? "minimum" : "minLength"),
-		/* an email's own check is zod's email pattern, which textKind names, published alone (A2-8 of r22) */
-		patterns: patternsOf(published).filter((pattern) => pattern !== z.regexes.email.source),
-	}
+  const bound = (key: string) => (typeof published[key] === "number" ? published[key] : null);
+  const number = published["type"] === "integer" || published["type"] === "number";
+
+  return {
+    max: bound(number ? "maximum" : "maxLength"),
+    maxBytes: bound("x-database-maxBytes"),
+    min: bound(number ? "minimum" : "minLength"),
+    // an email's own check is zod's email pattern, which textKind names, published alone (A2-8 of r22)
+    patterns: patternsOf(published).filter((pattern) => pattern !== z.regexes.email.source),
+  };
 }
 
 describe("the manifest states what the DTO enforces (C2 of r20)", () => {
-	it.each(["sqlite", "postgres"] as const)(
-		"on %s, each column's bounds and patterns as the create DTO's",
-		(dialect) => {
-			const table = tableOf("kinds", { ...COLUMNS, ...ONLY[dialect] }, { dialect, scope: { Profile } })
-			const [entity] = buildManifest([table], "test", dialect).entities
-			const stated = Object.fromEntries(
-				(entity?.columns ?? []).map((column) => [
-					column.name,
-					{ max: column.max, maxBytes: column.maxBytes, min: column.min, patterns: column.patterns.map(sourceOf) },
-				]),
-			)
-			/* an id's length is its pattern's, {1,48}, which the DTO publishes without a minLength or maxLength */
-			const { owner: id, ...rest } = stated
-			const published = Object.fromEntries(
-				table.fields
-					.filter((field) => field.name !== "owner" && !TYPED.has(field.name))
-					.map((field) => [field.name, enforced(publishedOf(field, dialect))]),
-			)
-			const of = (typed: boolean) =>
-				Object.fromEntries(Object.entries(rest).filter(([name]) => TYPED.has(name) === typed))
-			expect(of(false)).toEqual(published)
-			const none = { max: null, maxBytes: null, min: null, patterns: [] }
-			expect(of(true)).toEqual(dialect === "postgres" ? { real: none, uid: none } : {})
-			/* CS5 of r23: the id's pattern as the DTO publishes it, its blanks as characters, which RE2 reads */
-			const owner = table.fields.find((field) => field.name === "owner") as FieldMeta
-			expect(id).toEqual({ max: 48, maxBytes: null, min: 1, patterns: enforced(publishedOf(owner, dialect)).patterns })
-			/* the cases the review named, stated outright */
-			/* a password column holds the hash: its declared bounds and pattern, none of database's own (C1 of r21) */
-			expect(stated["pw"]).toEqual({ max: 255, maxBytes: null, min: null, patterns: [] })
-			expect(stated["pw_pattern"]).toEqual({ max: null, maxBytes: null, min: null, patterns: ["[0-9]"] })
-			expect([stated["email"]?.min, stated["required"]?.min, stated["doc"]?.maxBytes]).toEqual([6, 1, 16])
-		},
-	)
-})
+  it.each(["sqlite", "postgres"] as const)(
+    "on %s, each column's bounds and patterns as the create DTO's",
+    (dialect) => {
+      const table = tableOf("kinds", { ...COLUMNS, ...ONLY[dialect] }, { dialect, scope: { Profile } });
+      const [entity] = buildManifest([table], "test", dialect).entities;
 
-/* CS5 of r23: an RE2 reader (Go's regexp, Rust's regex) refused the id pattern's \u escapes on every table */
+      const stated = Object.fromEntries(
+        (entity?.columns ?? []).map((column) => [
+          column.name,
+          { max: column.max, maxBytes: column.maxBytes, min: column.min, patterns: column.patterns.map(sourceOf) },
+        ]),
+      );
+
+      // an id's length is its pattern's, {1,48}, which the DTO publishes without a minLength or maxLength
+      const { owner: id, ...rest } = stated;
+
+      const published = Object.fromEntries(
+        table.fields
+          .filter((field) => field.name !== "owner" && !TYPED.has(field.name))
+          .map((field) => [field.name, enforced(publishedOf(field, dialect))]),
+      );
+
+      const of = (typed: boolean) =>
+        Object.fromEntries(Object.entries(rest).filter(([name]) => TYPED.has(name) === typed));
+
+      expect(of(false)).toEqual(published);
+      const none = { max: null, maxBytes: null, min: null, patterns: [] };
+      expect(of(true)).toEqual(dialect === "postgres" ? { real: none, uid: none } : {});
+      // CS5 of r23: the id's pattern as the DTO publishes it, its blanks as characters, which RE2 reads
+      const owner = table.fields.find((field) => field.name === "owner") as FieldMeta;
+      expect(id).toEqual({ max: 48, maxBytes: null, min: 1, patterns: enforced(publishedOf(owner, dialect)).patterns });
+      // the cases the review named, stated outright
+      // a password column holds the hash: its declared bounds and pattern, none of database's own (C1 of r21)
+      expect(stated["pw"]).toEqual({ max: 255, maxBytes: null, min: null, patterns: [] });
+      expect(stated["pw_pattern"]).toEqual({ max: null, maxBytes: null, min: null, patterns: ["[0-9]"] });
+      expect([stated["email"]?.min, stated["required"]?.min, stated["doc"]?.maxBytes]).toEqual([6, 1, 16]);
+    },
+  );
+});
+
+// CS5 of r23: an RE2 reader (Go's regexp, Rust's regex) refused the id pattern's \u escapes on every table
 describe("every manifest pattern compiles under RE2 (CS5 of r23)", () => {
-	it.each(["sqlite", "postgres"] as const)("on %s, with no \\u escape", (dialect) => {
-		const table = tableOf("kinds", { ...COLUMNS, ...ONLY[dialect] }, { dialect, scope: { Profile } })
-		const patterns = (buildManifest([table], "test", dialect).entities[0]?.columns ?? []).flatMap((column) =>
-			column.patterns.map(sourceOf),
-		)
-		expect(patterns.length).toBeGreaterThan(0)
-		for (const pattern of patterns) {
-			expect(pattern).not.toContain("\\u")
-			expect(() => RE2JS.compile(pattern), pattern).not.toThrow()
-		}
-	})
-})
+  it.each(["sqlite", "postgres"] as const)("on %s, with no \\u escape", (dialect) => {
+    const table = tableOf("kinds", { ...COLUMNS, ...ONLY[dialect] }, { dialect, scope: { Profile } });
 
-/*
- * CD8 of r22b: a bound declared past a JS number's exact range is clamped to it, as the column
- * holds no other integer, so the manifest, the generated chain and the published schema all state
- * ±(2^53 − 1) where 0.20 stated the declared ±1e20 beside a DTO that, through `.int()`, enforced the range
- */
+    const patterns = (buildManifest([table], "test", dialect).entities[0]?.columns ?? []).flatMap((column) =>
+      column.patterns.map(sourceOf),
+    );
+
+    expect(patterns.length).toBeGreaterThan(0);
+
+    for (const pattern of patterns) {
+      expect(pattern).not.toContain("\\u");
+      expect(() => RE2JS.compile(pattern), pattern).not.toThrow();
+    }
+  });
+});
+
+// CD8 of r22b: a bound declared past a JS number's exact range is clamped to it, as the column
+// holds no other integer, so the manifest, the generated chain and the published schema all state
+// ±(2^53 − 1) where 0.20 stated the declared ±1e20 beside a DTO that, through `.int()`, enforced the range
 describe("a bound past a JS number's exact range is clamped to it (CD8 of r22b; siblings: int4, a timestamp)", () => {
-	const PAST: Record<string, string> = {
-		at: 'c.timestamp("at", { max: 1e20 }).notNull()',
-		before: 'c.timestamp("before", { min: -1e20 }).notNull()',
-	}
-	const ONLY_SQLITE: Record<string, string> = {
-		big: 'c.integer("big", { max: 1e20 }).notNull()',
-		neg: 'c.integer("neg", { min: -1e20 }).notNull()',
-	}
-	const SAFE = { max: Number.MAX_SAFE_INTEGER, min: Number.MIN_SAFE_INTEGER }
+  const PAST: Record<string, string> = {
+    at: 'c.timestamp("at", { max: 1e20 }).notNull()',
+    before: 'c.timestamp("before", { min: -1e20 }).notNull()',
+  };
 
-	/* Postgres holds c.timestamp in a bigint and c.integer in int4, which clamps it already */
-	it.each(["sqlite", "postgres"] as const)("on %s, in the manifest, the chain and the published schema", (dialect) => {
-		const columns = dialect === "sqlite" ? { ...PAST, ...ONLY_SQLITE } : PAST
-		const table = tableOf("past", columns, { dialect })
-		const [entity] = buildManifest([table], "test", dialect).entities
-		for (const name of Object.keys(columns)) {
-			const field = table.fields.find((each) => each.name === name) as FieldMeta
-			const column = entity?.columns.find((each) => each.name === name)
-			expect({ max: column?.max, min: column?.min }, `${name} in the manifest`).toEqual(SAFE)
-			const imports: ImportsMeta = { enumImports: new Map(), identifiers: new Map(), jsonSchemaImports: new Set() }
-			expect(generateFieldSchema(field, "create", { dialect, imports }), `${name}'s chain`).toContain(
-				".min(globalThis.Number.MIN_SAFE_INTEGER).max(globalThis.Number.MAX_SAFE_INTEGER)",
-			)
-			const published = publishedOf(field, dialect)
-			expect({ max: published["maximum"], min: published["minimum"] }, `${name} published`).toEqual(SAFE)
-		}
-	})
-})
+  const ONLY_SQLITE: Record<string, string> = {
+    big: 'c.integer("big", { max: 1e20 }).notNull()',
+    neg: 'c.integer("neg", { min: -1e20 }).notNull()',
+  };
 
-/*
- * AA8 of r22: a plain Postgres column's rule is its type's, and CD5 and CD6 made that rule read the
- * modifier, so a reader tells each type's check by `kind` and `sqlType` together: drizzle's own SQL
- * type, modifier and all, which no two columns of different rules share
- */
+  const SAFE = { max: Number.MAX_SAFE_INTEGER, min: Number.MIN_SAFE_INTEGER };
+
+  // Postgres holds c.timestamp in a bigint and c.integer in int4, which clamps it already
+  it.each(["sqlite", "postgres"] as const)("on %s, in the manifest, the chain and the published schema", (dialect) => {
+    const columns = dialect === "sqlite" ? { ...PAST, ...ONLY_SQLITE } : PAST;
+    const table = tableOf("past", columns, { dialect });
+    const [entity] = buildManifest([table], "test", dialect).entities;
+
+    for (const name of Object.keys(columns)) {
+      const field = table.fields.find((each) => each.name === name) as FieldMeta;
+      const column = entity?.columns.find((each) => each.name === name);
+      expect({ max: column?.max, min: column?.min }, `${name} in the manifest`).toEqual(SAFE);
+      const imports: ImportsMeta = { enumImports: new Map(), identifiers: new Map(), jsonSchemaImports: new Set() };
+      expect(generateFieldSchema(field, "create", { dialect, imports }), `${name}'s chain`).toContain(
+        ".min(globalThis.Number.MIN_SAFE_INTEGER).max(globalThis.Number.MAX_SAFE_INTEGER)",
+      );
+      const published = publishedOf(field, dialect);
+      expect({ max: published["maximum"], min: published["minimum"] }, `${name} published`).toEqual(SAFE);
+    }
+  });
+});
+
+// AA8 of r22: a plain Postgres column's rule is its type's, and CD5 and CD6 made that rule read the
+// modifier, so a reader tells each type's check by `kind` and `sqlType` together: drizzle's own SQL
+// type, modifier and all, which no two columns of different rules share
 describe("the manifest names a plain Postgres column's SQL type (AA8 of r22)", () => {
-	const TYPES: Record<string, [source: string, sqlType: string]> = {
-		ivDay: ['interval("iv_day", { fields: "day" })', "interval day"],
-		iv: ['interval("iv")', "interval"],
-		n52: ['numeric("n52", { precision: 5, scale: 2 })', "numeric(5, 2)"],
-		nNeg: ['numeric("n_neg", { precision: 3, scale: -2 })', "numeric(3, -2)"],
-		t: ['time("t")', "time"],
-		ts: ['timestamp("ts", { mode: "string" })', "timestamp"],
-		tstz3: ['timestamp("tstz3", { mode: "string", withTimezone: true, precision: 3 })', "timestamp(3) with time zone"],
-		ttz0: ['time("ttz0", { withTimezone: true, precision: 0 })', "time(0) with time zone"],
-	}
+  const TYPES: Record<string, [source: string, sqlType: string]> = {
+    iv: ['interval("iv")', "interval"],
+    ivDay: ['interval("iv_day", { fields: "day" })', "interval day"],
+    n52: ['numeric("n52", { precision: 5, scale: 2 })', "numeric(5, 2)"],
+    nNeg: ['numeric("n_neg", { precision: 3, scale: -2 })', "numeric(3, -2)"],
+    t: ['time("t")', "time"],
+    ts: ['timestamp("ts", { mode: "string" })', "timestamp"],
+    tstz3: ['timestamp("tstz3", { mode: "string", withTimezone: true, precision: 3 })', "timestamp(3) with time zone"],
+    ttz0: ['time("ttz0", { withTimezone: true, precision: 0 })', "time(0) with time zone"],
+  };
 
-	it("states each column's sqlType, and no two columns of different DTO rules share kind and sqlType", () => {
-		const columns = Object.fromEntries(Object.entries(TYPES).map(([name, [source]]) => [name, source]))
-		const table = tableOf("typed", columns, { dialect: "postgres" })
-		const [entity] = buildManifest([table], "test", "postgres").entities
-		const stated = Object.fromEntries((entity?.columns ?? []).map((column) => [column.name, column.sqlType]))
-		expect(stated).toEqual(Object.fromEntries(Object.entries(TYPES).map(([name, [, sqlType]]) => [name, sqlType])))
-		const imports: ImportsMeta = { enumImports: new Map(), identifiers: new Map(), jsonSchemaImports: new Set() }
-		const ruleOf = new Map<string, string>()
-		for (const column of entity?.columns ?? []) {
-			const field = table.fields.find((each) => each.name === column.name) as FieldMeta
-			const rule = generateFieldSchema(field, "create", { dialect: "postgres", imports }) as string
-			const named = `${column.kind} ${column.sqlType}`
-			expect(ruleOf.get(named) ?? rule, `${column.name}: ${named}`).toBe(rule)
-			ruleOf.set(named, rule)
-		}
-	})
+  it("states each column's sqlType, and no two columns of different DTO rules share kind and sqlType", () => {
+    const columns = Object.fromEntries(Object.entries(TYPES).map(([name, [source]]) => [name, source]));
+    const table = tableOf("typed", columns, { dialect: "postgres" });
+    const [entity] = buildManifest([table], "test", "postgres").entities;
+    const stated = Object.fromEntries((entity?.columns ?? []).map((column) => [column.name, column.sqlType]));
+    expect(stated).toEqual(Object.fromEntries(Object.entries(TYPES).map(([name, [, sqlType]]) => [name, sqlType])));
+    const imports: ImportsMeta = { enumImports: new Map(), identifiers: new Map(), jsonSchemaImports: new Set() };
+    const ruleOf = new Map<string, string>();
 
-	/* A2-5 of r22: an array's sqlType is its element's, so its dimensions tell `text[]` from `text` */
-	it("states an array column's dimensions, which tell it from its scalar twin", () => {
-		const columns = {
-			grid: 'integer("grid").array("[][]")',
-			n: 'integer("n")',
-			tag: 'text("tag")',
-			tags: 'text("tags").array()',
-		}
-		const [entity] = buildManifest([tableOf("arrays", columns, { dialect: "postgres" })], "test", "postgres").entities
-		const stated = Object.fromEntries(
-			(entity?.columns ?? []).map(({ dimensions, kind, name, sqlType }) => [name, { dimensions, kind, sqlType }]),
-		)
-		expect(stated).toEqual({
-			grid: { dimensions: 2, kind: "PgInteger", sqlType: "integer" },
-			n: { dimensions: 0, kind: "PgInteger", sqlType: "integer" },
-			tag: { dimensions: 0, kind: "PgText", sqlType: "text" },
-			tags: { dimensions: 1, kind: "PgText", sqlType: "text" },
-		})
-	})
+    for (const column of entity?.columns ?? []) {
+      const field = table.fields.find((each) => each.name === column.name) as FieldMeta;
+      const rule = generateFieldSchema(field, "create", { dialect: "postgres", imports }) as string;
+      const named = `${column.kind} ${column.sqlType}`;
+      expect(ruleOf.get(named) ?? rule, `${column.name}: ${named}`).toBe(rule);
+      ruleOf.set(named, rule);
+    }
+  });
 
-	it("states 0 for a column whose FieldMeta, built by hand, leaves its dimensions out", () => {
-		const table = tableOf("plain", { tag: 'text("tag")' }, { dialect: "postgres" })
-		const fields = table.fields.map((field) => {
-			const copy = { ...field }
-			delete copy.dimensions
-			return copy
-		})
-		const [entity] = buildManifest([{ ...table, fields }], "test", "postgres").entities
-		expect(entity?.columns.map((column) => column.dimensions)).toEqual([0])
-	})
-})
+  // A2-5 of r22: an array's sqlType is its element's, so its dimensions tell `text[]` from `text`
+  it("states an array column's dimensions, which tell it from its scalar twin", () => {
+    const columns = {
+      grid: 'integer("grid").array("[][]")',
+      n: 'integer("n")',
+      tag: 'text("tag")',
+      tags: 'text("tags").array()',
+    };
 
-/* inside the package, so the tables file's drizzle import resolves as an app's does */
-const DIR = fs.mkdtempSync(path.join(import.meta.dirname, "../../../.tmp-manifest-elements-"))
-afterAll(() => fs.rmSync(DIR, { force: true, recursive: true }))
+    const [entity] = buildManifest([tableOf("arrays", columns, { dialect: "postgres" })], "test", "postgres").entities;
 
-/* A3-5 of r23: the element type TypeScript reads from the tables file, carried to the manifest */
+    const stated = Object.fromEntries(
+      (entity?.columns ?? []).map(({ dimensions, kind, name, sqlType }) => [name, { dimensions, kind, sqlType }]),
+    );
+
+    expect(stated).toEqual({
+      grid: { dimensions: 2, kind: "PgInteger", sqlType: "integer" },
+      n: { dimensions: 0, kind: "PgInteger", sqlType: "integer" },
+      tag: { dimensions: 0, kind: "PgText", sqlType: "text" },
+      tags: { dimensions: 1, kind: "PgText", sqlType: "text" },
+    });
+  });
+
+  it("states 0 for a column whose FieldMeta, built by hand, leaves its dimensions out", () => {
+    const table = tableOf("plain", { tag: 'text("tag")' }, { dialect: "postgres" });
+
+    const fields = table.fields.map((field) => {
+      const copy = { ...field };
+      delete copy.dimensions;
+
+      return copy;
+    });
+
+    const [entity] = buildManifest([{ ...table, fields }], "test", "postgres").entities;
+    expect(entity?.columns.map((column) => column.dimensions)).toEqual([0]);
+  });
+});
+
+// inside the package, so the tables file's drizzle import resolves as an app's does
+const DIR = fs.mkdtempSync(path.join(import.meta.dirname, "../../../.tmp-manifest-elements-"));
+
+afterAll(() => fs.rmSync(DIR, { force: true, recursive: true }));
+
+// A3-5 of r23: the element type TypeScript reads from the tables file, carried to the manifest
 describe("the manifest states an array element's null as the tables file's type declares it", () => {
-	it("states nullElements true for a $type<string | null>() array, and false for a plain one", async () => {
-		const file = path.join(DIR, "db.core.tables.ts")
-		fs.writeFileSync(
-			file,
-			`import { pgTable, text } from "drizzle-orm/pg-core"
+  it("states nullElements true for a $type<string | null>() array, and false for a plain one", async () => {
+    const file = path.join(DIR, "db.core.tables.ts");
+    fs.writeFileSync(
+      file,
+      `import { pgTable, text } from "drizzle-orm/pg-core"
 export const row = pgTable("row", { id: text("id").primaryKey(), open: text("open").array().$type<string | null>(), tags: text("tags").array() })
 `,
-		)
-		const namespace = (await import(file)) as Record<string, unknown>
-		const snapshot = snapshotOf([{ external: false, module: file, namespace }], elementNullsOf(file))
-		const [entity] = buildManifest(toAnalysis(snapshot, file).tables, "test", "postgres").entities
-		const stated = Object.fromEntries((entity?.columns ?? []).map((column) => [column.name, column.nullElements]))
-		expect(stated).toEqual({ id: false, open: true, tags: false })
-	})
-})
+    );
+    const namespace = (await import(file)) as Record<string, unknown>;
+    const snapshot = snapshotOf([{ external: false, module: file, namespace }], elementNullsOf(file));
+    const [entity] = buildManifest(toAnalysis(snapshot, file).tables, "test", "postgres").entities;
+    const stated = Object.fromEntries((entity?.columns ?? []).map((column) => [column.name, column.nullElements]));
+    expect(stated).toEqual({ id: false, open: true, tags: false });
+  });
+});

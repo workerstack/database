@@ -1,3 +1,9 @@
+import { type LocalDb, openScratch, type ScratchEngine } from "../drivers/local-db.ts";
+import type { MigrateConnection } from "../types.ts";
+import { notEngineTables } from "./engine-tables.ts";
+import { compare, type Shape } from "./proof-compare.ts";
+import { type Copy, copyOf, buildCopy, creatable, jsonColumns, type LiveObject, liveObjects } from "./proof-copy.ts";
+import { applyToCopy, engineFindings } from "./proof-engine.ts";
 /**
  * The proof run, on the SQLite family (bun:sqlite, libsql, D1): before a check or an apply, each
  * pending file runs on a private scratch copy of what the pending files can observe of the target's
@@ -15,72 +21,73 @@
  * file's own columns is cautious. A file the copy cannot run is unproven, and unproven is unsafe. A
  * file that leaves a view or trigger unable to run is refused outright (proof-readers.ts).
  */
-import { isMirror, mirrorFindings, mirrorRows } from "./proof-mirror.ts"
-import { type LocalDb, openScratch, type ScratchEngine } from "../drivers/local-db.ts"
-import type { MigrateConnection } from "../types.ts"
-import { notEngineTables } from "./engine-tables.ts"
-import { compare, type Shape } from "./proof-compare.ts"
-import { type Copy, copyOf, buildCopy, creatable, jsonColumns, type LiveObject, liveObjects } from "./proof-copy.ts"
-import { applyToCopy, engineFindings } from "./proof-engine.ts"
-import { refuseBrokenReaders, schemaOf } from "./proof-readers.ts"
-import { quote } from "./proof-seed.ts"
-import { observable } from "./proof-scope.ts"
-import { asciiFold } from "./sql-code.ts"
+import { isMirror, mirrorFindings, mirrorRows } from "./proof-mirror.ts";
+import { refuseBrokenReaders, schemaOf } from "./proof-readers.ts";
+import { observable } from "./proof-scope.ts";
+import { quote } from "./proof-seed.ts";
+import { asciiFold } from "./sql-code.ts";
 
 /** What the proof run found for one file */
 type Proof = {
-	cautious: string[]
-	/** why the file did not apply to the copy, so nothing about it is proven */
-	failed?: string | undefined
-	/** the tables database could not seed, which nothing here proves, each with why */
-	unproven: Array<{ table: string; why: string }>
-	unsafe: string[]
-}
+  cautious: string[];
+  /** why the file did not apply to the copy, so nothing about it is proven */
+  failed?: string | undefined;
+  /** the tables database could not seed, which nothing here proves, each with why */
+  unproven: Array<{ table: string; why: string }>;
+  unsafe: string[];
+};
 
 /** Every table of the copy but a mirror FTS table, each with its stored columns and rows (each value as SQLite quotes it) */
 function snapshot(db: LocalDb): Map<string, Shape> {
-	const out = new Map<string, Shape>()
-	/* main's own: a temp table of the same name would answer for a bare name */
-	const tables = db.all(
-		"SELECT name, sql FROM main.sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'",
-	)
-	const live = creatable(
-		tables.map((row) => ({
-			name: String(row["name"]),
-			sql: String(row["sql"]),
-			table: String(row["name"]),
-			type: "table",
-		})),
-	)
-	for (const { name } of live.filter((object) => !isMirror(object)))
-		out.set(
-			asciiFold(name),
-			named(name, () => shapeOf(db, name)),
-		)
-	return out
+  const out = new Map<string, Shape>();
+
+  // main's own: a temp table of the same name would answer for a bare name
+  const tables = db.all(
+    "SELECT name, sql FROM main.sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'",
+  );
+
+  const live = creatable(
+    tables.map((row) => ({
+      name: String(row["name"]),
+      sql: String(row["sql"]),
+      table: String(row["name"]),
+      type: "table",
+    })),
+  );
+
+  for (const { name } of live.filter((object) => !isMirror(object))) {
+    out.set(
+      asciiFold(name),
+      named(name, () => shapeOf(db, name)),
+    );
+  }
+
+  return out;
 }
 
 /** Table `name`'s stored columns and rows; throws what SQLite answers when it cannot read them */
 function shapeOf(db: LocalDb, name: string): Shape {
-	const info = db.all(`PRAGMA main.table_xinfo(${quote(name)})`).filter((row) => row["hidden"] === 0)
-	const columns = info.map((row) => String(row["name"]))
-	const rows = db
-		.all(
-			`SELECT ${columns.map((column) => `quote(${quote(column)}) AS ${quote(column)}`).join(", ")} FROM main.${quote(name)}`,
-		)
-		.map((row) => columns.map((column) => String(row[column])))
-	return {
-		columns,
-		defaults: new Map(
-			info.map((row) => [String(row["name"]), row["dflt_value"] === null ? null : String(row["dflt_value"])]),
-		),
-		nullable: new Set(info.filter((row) => row["notnull"] === 0 && row["pk"] === 0).map((row) => String(row["name"]))),
-		rows,
-	}
+  const info = db.all(`PRAGMA main.table_xinfo(${quote(name)})`).filter((row) => row["hidden"] === 0);
+  const columns = info.map((row) => String(row["name"]));
+
+  const rows = db
+    .all(
+      `SELECT ${columns.map((column) => `quote(${quote(column)}) AS ${quote(column)}`).join(", ")} FROM main.${quote(name)}`,
+    )
+    .map((row) => columns.map((column) => String(row[column])));
+
+  return {
+    columns,
+    defaults: new Map(
+      info.map((row) => [String(row["name"]), row["dflt_value"] === null ? null : String(row["dflt_value"])]),
+    ),
+    nullable: new Set(info.filter((row) => row["notnull"] === 0 && row["pk"] === 0).map((row) => String(row["name"]))),
+    rows,
+  };
 }
 
 /** What a copy of `objects` is made on: the engine, the pending files, and the columns they read as JSON */
-type Making = { engine: ScratchEngine; files: ReadonlyArray<{ sql: string }>; json: ReadonlySet<string> }
+type Making = { engine: ScratchEngine; files: ReadonlyArray<{ sql: string }>; json: ReadonlySet<string> };
 
 /**
  * A copy of `objects` seeded as `variant`, holding only what the pending files can observe, the D1 proof's
@@ -88,12 +95,13 @@ type Making = { engine: ScratchEngine; files: ReadonlyArray<{ sql: string }>; js
  * through a view. Every pending file's names count, so one copy serves them all in order
  */
 async function scopedCopy(
-	objects: readonly LiveObject[],
-	variant: number,
-	{ engine, files, json }: Making,
+  objects: readonly LiveObject[],
+  variant: number,
+  { engine, files, json }: Making,
 ): Promise<Copy> {
-	const scope = observable(objects, files)
-	return await copyOf(scope.objects, { json, rows: scope.seeded, variant }, engine)
+  const scope = observable(objects, files);
+
+  return await copyOf(scope.objects, { json, rows: scope.seeded, variant }, engine);
 }
 
 /**
@@ -101,14 +109,16 @@ async function scopedCopy(
  * replayed on it; undefined, and closed, when one of them no longer applies
  */
 async function reseeded(
-	objects: readonly LiveObject[],
-	applied: readonly string[],
-	making: Making,
+  objects: readonly LiveObject[],
+  applied: readonly string[],
+  making: Making,
 ): Promise<Copy | undefined> {
-	const copy = await scopedCopy(objects, 1, making)
-	if (applied.every((sql) => applyToCopy(copy.db, sql).error === undefined)) return copy
-	copy.db.close()
-	return undefined
+  const copy = await scopedCopy(objects, 1, making);
+
+  if (applied.every((sql) => applyToCopy(copy.db, sql).error === undefined)) return copy;
+  copy.db.close();
+
+  return undefined;
 }
 
 /**
@@ -118,38 +128,41 @@ async function reseeded(
  * files can be proven on.
  */
 async function schemaAfter(
-	objects: readonly LiveObject[],
-	files: readonly string[],
-	{ engine, engineTables }: { engine: ScratchEngine; engineTables: string },
+  objects: readonly LiveObject[],
+  files: readonly string[],
+  { engine, engineTables }: { engine: ScratchEngine; engineTables: string },
 ): Promise<LiveObject[] | undefined> {
-	const db = await openScratch(engine)
-	try {
-		buildCopy(db, objects, undefined)
-		if (!files.every((sql) => applyToCopy(db, sql).error === undefined)) return undefined
-		return creatable(
-			db
-				.all(
-					`SELECT type, name, sql, tbl_name FROM main.sqlite_master WHERE sql IS NOT NULL${engineTables} ORDER BY rowid`,
-				)
-				.map((row) => ({
-					name: String(row["name"]),
-					sql: String(row["sql"]),
-					table: String(row["tbl_name"]),
-					type: String(row["type"]),
-				})),
-		)
-	} finally {
-		db.close()
-	}
+  const db = await openScratch(engine);
+
+  try {
+    buildCopy(db, objects, undefined);
+
+    if (!files.every((sql) => applyToCopy(db, sql).error === undefined)) return undefined;
+
+    return creatable(
+      db
+        .all(
+          `SELECT type, name, sql, tbl_name FROM main.sqlite_master WHERE sql IS NOT NULL${engineTables} ORDER BY rowid`,
+        )
+        .map((row) => ({
+          name: String(row["name"]),
+          sql: String(row["sql"]),
+          table: String(row["tbl_name"]),
+          type: String(row["type"]),
+        })),
+    );
+  } finally {
+    db.close();
+  }
 }
 
 /** `work`, its refusal named for the file `name`: what the proof refuses outright, no approval overrides, so the file is named where it stops */
 function named<T>(name: string, work: () => T): T {
-	try {
-		return work()
-	} catch (error) {
-		throw new Error(`${name}: ${(error as Error).message}`, { cause: error })
-	}
+  try {
+    return work();
+  } catch (error) {
+    throw new Error(`${name}: ${(error as Error).message}`, { cause: error });
+  }
 }
 
 /**
@@ -157,10 +170,10 @@ function named<T>(name: string, work: () => T): T {
  * proof runs synchronously, so without one a Ctrl-C would wait out the whole proof
  */
 async function* turns<T>(files: readonly T[]): AsyncGenerator<T> {
-	for (const file of files) {
-		await new Promise((resolve) => setImmediate(resolve))
-		yield file
-	}
+  for (const file of files) {
+    await new Promise((resolve) => setImmediate(resolve));
+    yield file;
+  }
 }
 
 /**
@@ -169,11 +182,11 @@ async function* turns<T>(files: readonly T[]): AsyncGenerator<T> {
  * first read
  */
 function snapshotAfter(db: Copy["db"]): Map<string, Shape> | string {
-	try {
-		return snapshot(db)
-	} catch (error) {
-		return (error as Error).message
-	}
+  try {
+    return snapshot(db);
+  } catch (error) {
+    return (error as Error).message;
+  }
 }
 
 /**
@@ -181,39 +194,40 @@ function snapshotAfter(db: Copy["db"]): Map<string, Shape> | string {
  * tables after; throws, naming the file, when it leaves a view or trigger unable to run, which no approval overrides
  */
 function appliedProof(
-	copy: Copy,
-	run: ReturnType<typeof applyToCopy>,
-	{
-		after,
-		before,
-		mirrors,
-		name,
-		schema,
-	}: {
-		after: Map<string, Shape>
-		before: Map<string, Shape>
-		mirrors: ReturnType<typeof mirrorRows>
-		name: string
-		schema: ReturnType<typeof schemaOf>
-	},
+  copy: Copy,
+  run: ReturnType<typeof applyToCopy>,
+  {
+    after,
+    before,
+    mirrors,
+    name,
+    schema,
+  }: {
+    after: Map<string, Shape>;
+    before: Map<string, Shape>;
+    mirrors: ReturnType<typeof mirrorRows>;
+    name: string;
+    schema: ReturnType<typeof schemaOf>;
+  },
 ): Proof {
-	named(name, () => refuseBrokenReaders(copy.db, schema))
-	const found = compare(copy.db, new Map([...before].filter(([table]) => !copy.unproven.has(table))), after)
-	const steps = engineFindings(run.steps, run.start)
-	return {
-		cautious: [...steps.cautious, ...found.cautious],
-		unproven: unprovenOf(copy),
-		unsafe: [...steps.unsafe, ...found.unsafe, ...mirrorFindings(mirrors, mirrorRows(copy.db))],
-	}
+  named(name, () => refuseBrokenReaders(copy.db, schema));
+  const found = compare(copy.db, new Map([...before].filter(([table]) => !copy.unproven.has(table))), after);
+  const steps = engineFindings(run.steps, run.start);
+
+  return {
+    cautious: [...steps.cautious, ...found.cautious],
+    unproven: unprovenOf(copy),
+    unsafe: [...steps.unsafe, ...found.unsafe, ...mirrorFindings(mirrors, mirrorRows(copy.db))],
+  };
 }
 
 /** A file's proof that failed for `why`, which is unsafe */
 const failedProof = (copy: Copy, why: string): Proof => ({
-	cautious: [],
-	failed: why,
-	unproven: unprovenOf(copy),
-	unsafe: [why],
-})
+  cautious: [],
+  failed: why,
+  unproven: unprovenOf(copy),
+  unsafe: [why],
+});
 
 /**
  * Prove each pending file, in order, on a seeded scratch copy of the database `conn` reaches;
@@ -225,67 +239,77 @@ const failedProof = (copy: Copy, why: string): Proof => ({
  * read of a schema, the target's and the copy's.
  */
 async function provePending(
-	conn: MigrateConnection,
-	files: ReadonlyArray<{ name: string; sql: string }>,
-	{ engine = "runtime", live }: { engine?: ScratchEngine | undefined; live?: readonly LiveObject[] | undefined } = {},
+  conn: MigrateConnection,
+  files: ReadonlyArray<{ name: string; sql: string }>,
+  { engine = "runtime", live }: { engine?: ScratchEngine | undefined; live?: readonly LiveObject[] | undefined } = {},
 ): Promise<Map<string, Proof>> {
-	const engineTables = notEngineTables(conn)
-	let objects = live === undefined ? creatable(await liveObjects(conn, engineTables)) : [...live]
-	const making: Making = { engine, files, json: jsonColumns(files) }
-	let copy = await scopedCopy(objects, 0, making)
-	const proofs = new Map<string, Proof>()
-	let applied: string[] = []
-	let failed: string | undefined
-	try {
-		for await (const { name, sql } of turns(files)) {
-			if (failed !== undefined) {
-				proofs.set(name, failedProof(copy, failed))
-				continue
-			}
-			let [before, mirrors, schema] = [snapshot(copy.db), mirrorRows(copy.db), schemaOf(copy.db)]
-			let run = named(name, () => applyToCopy(copy.db, sql))
-			const retry = run.error === undefined ? undefined : await reseeded(objects, applied, making)
-			if (retry !== undefined) {
-				copy.db.close()
-				copy = retry
-				;[before, mirrors] = [snapshot(copy.db), mirrorRows(copy.db)]
-				run = applyToCopy(copy.db, sql)
-			}
-			if (run.error !== undefined) {
-				proofs.set(
-					name,
-					failedProof(copy, `database could not run this in the proof copy on ${copy.db.engine}: ${run.error}`),
-				)
-				/* the later files are proven on the schema this one leaves, seeded fresh */
-				const after = await schemaAfter(objects, [...applied, sql], { engine, engineTables })
-				if (after === undefined) {
-					failed = `an earlier pending file, ${name}, could not run in the proof copy, so this one is unproven`
-					continue
-				}
-				copy.db.close()
-				;[objects, applied] = [after, []]
-				copy = await scopedCopy(objects, 0, making)
-				continue
-			}
-			applied.push(sql)
-			const after = snapshotAfter(copy.db)
-			if (typeof after === "string") {
-				proofs.set(
-					name,
-					failedProof(copy, `this applies in the proof copy on ${copy.db.engine}, then SQLite cannot read ${after}`),
-				)
-				failed = `an earlier pending file, ${name}, left a table SQLite cannot read, so this one is unproven`
-				continue
-			}
-			proofs.set(name, appliedProof(copy, run, { after, before, mirrors, name, schema }))
-		}
-	} finally {
-		copy.db.close()
-	}
-	return proofs
+  const engineTables = notEngineTables(conn);
+  let objects = live === undefined ? creatable(await liveObjects(conn, engineTables)) : [...live];
+  const making: Making = { engine, files, json: jsonColumns(files) };
+  let copy = await scopedCopy(objects, 0, making);
+  const proofs = new Map<string, Proof>();
+  let applied: string[] = [];
+  let failed: string | undefined;
+
+  try {
+    for await (const { name, sql } of turns(files)) {
+      if (failed !== undefined) {
+        proofs.set(name, failedProof(copy, failed));
+        continue;
+      }
+
+      let [before, mirrors, schema] = [snapshot(copy.db), mirrorRows(copy.db), schemaOf(copy.db)];
+      let run = named(name, () => applyToCopy(copy.db, sql));
+      const retry = run.error === undefined ? undefined : await reseeded(objects, applied, making);
+
+      if (retry !== undefined) {
+        copy.db.close();
+        copy = retry;
+        [before, mirrors] = [snapshot(copy.db), mirrorRows(copy.db)];
+        run = applyToCopy(copy.db, sql);
+      }
+
+      if (run.error !== undefined) {
+        proofs.set(
+          name,
+          failedProof(copy, `database could not run this in the proof copy on ${copy.db.engine}: ${run.error}`),
+        );
+        // the later files are proven on the schema this one leaves, seeded fresh
+        const after = await schemaAfter(objects, [...applied, sql], { engine, engineTables });
+
+        if (after === undefined) {
+          failed = `an earlier pending file, ${name}, could not run in the proof copy, so this one is unproven`;
+          continue;
+        }
+
+        copy.db.close();
+        [objects, applied] = [after, []];
+        copy = await scopedCopy(objects, 0, making);
+        continue;
+      }
+
+      applied.push(sql);
+      const after = snapshotAfter(copy.db);
+
+      if (typeof after === "string") {
+        proofs.set(
+          name,
+          failedProof(copy, `this applies in the proof copy on ${copy.db.engine}, then SQLite cannot read ${after}`),
+        );
+        failed = `an earlier pending file, ${name}, left a table SQLite cannot read, so this one is unproven`;
+        continue;
+      }
+
+      proofs.set(name, appliedProof(copy, run, { after, before, mirrors, name, schema }));
+    }
+  } finally {
+    copy.db.close();
+  }
+
+  return proofs;
 }
 
 /** The tables a copy could not seed, as a proof lists them */
-const unprovenOf = (copy: Copy) => [...copy.unproven].map(([table, why]) => ({ table, why }))
+const unprovenOf = (copy: Copy) => [...copy.unproven].map(([table, why]) => ({ table, why }));
 
-export { type Proof, provePending }
+export { type Proof, provePending };

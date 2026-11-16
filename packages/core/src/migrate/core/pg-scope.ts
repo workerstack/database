@@ -4,21 +4,22 @@
  * file's. A txmode none file commits each statement outside its own BEGIN, and the
  * locks it took with it, so the locks any of them holds end there.
  */
-import type { ReadStatement } from "./classify-file.ts"
-import { type Facts, tableOf } from "./pg-history.ts"
-import { insideOnly } from "./pg-inside-transaction.ts"
-import { blockAfter, nodeOf, outsideOnly, transactionControl } from "./pg-outside-transaction.ts"
-import { copyRefusal } from "./pg-copy.ts"
-import { partitionedRefusal, unsureRefusal } from "./pg-partitioned.ts"
-import { clearHeld, type Held } from "./pg-held.ts"
+import type { ReadStatement } from "./classify-file.ts";
+import { copyRefusal } from "./pg-copy.ts";
+import { clearHeld, type Held } from "./pg-held.ts";
+import { type Facts, tableOf } from "./pg-history.ts";
+import { insideOnly } from "./pg-inside-transaction.ts";
+import { blockAfter, nodeOf, outsideOnly, transactionControl } from "./pg-outside-transaction.ts";
+import { partitionedRefusal, unsureRefusal } from "./pg-partitioned.ts";
 
 /** Whether a table, or an index, the history `facts` follow is partitioned */
 const partitionedIn =
-	(facts: Facts) =>
-	(relation: unknown, index: boolean): boolean => {
-		const { key } = tableOf(relation, facts.schema)
-		return facts.partitioned.has(index ? (facts.indexes.get(key)?.table ?? "") : key)
-	}
+  (facts: Facts) =>
+  (relation: unknown, index: boolean): boolean => {
+    const { key } = tableOf(relation, facts.schema);
+
+    return facts.partitioned.has(index ? (facts.indexes.get(key)?.table ?? "") : key);
+  };
 
 /**
  * A reader of a file's statements in order, the file outside a transaction when `bare`; one check
@@ -26,29 +27,31 @@ const partitionedIn =
  * block, as the history's text cannot show what a DO block partitions (pg-replay-statement.ts)
  */
 function scopeReader(
-	bare: boolean,
-	{ facts, held }: { facts: Facts; held: Held },
-	replays = false,
+  bare: boolean,
+  { facts, held }: { facts: Facts; held: Held },
+  replays = false,
 ): (tree: unknown) => Pick<ReadStatement, "control" | "inside" | "outside" | "refused"> {
-	let block = false
-	const partitioned = replays ? () => false : partitionedIn(facts)
-	return (tree) => {
-		if (bare && !block) clearHeld(held)
-		const parsed = nodeOf(tree)
-		const transaction = !bare || block
-		const inside = block ? undefined : insideOnly(...parsed)
-		block = blockAfter(block, ...parsed)
-		/* before the statement's findings follow what it makes: a table partitioned so far */
-		return {
-			control: transactionControl(...parsed),
-			inside,
-			outside: outsideOnly(...parsed, partitioned),
-			refused:
-				(replays ? undefined : unsureRefusal(...parsed, { facts, transaction })) ??
-				partitionedRefusal(...parsed, facts) ??
-				copyRefusal(...parsed),
-		}
-	}
+  let block = false;
+  const partitioned = replays ? () => false : partitionedIn(facts);
+
+  return (tree) => {
+    if (bare && !block) clearHeld(held);
+    const parsed = nodeOf(tree);
+    const transaction = !bare || block;
+    const inside = block ? undefined : insideOnly(...parsed);
+    block = blockAfter(block, ...parsed);
+
+    // before the statement's findings follow what it makes: a table partitioned so far
+    return {
+      control: transactionControl(...parsed),
+      inside,
+      outside: outsideOnly(...parsed, partitioned),
+      refused:
+        (replays ? undefined : unsureRefusal(...parsed, { facts, transaction })) ??
+        partitionedRefusal(...parsed, facts) ??
+        copyRefusal(...parsed),
+    };
+  };
 }
 
-export { scopeReader }
+export { scopeReader };

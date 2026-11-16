@@ -8,10 +8,11 @@
  */
 /** The warning for `admin`'s server when its fsync is on, undefined when it is off */
 export async function fsyncWarning(admin: {
-	query: (sql: string) => Promise<{ rows: Array<{ fsync?: unknown }> }>
+  query: (sql: string) => Promise<{ rows: Array<{ fsync?: unknown }> }>;
 }): Promise<string | undefined> {
-	const { rows } = await admin.query("SHOW fsync")
-	return rows[0]?.fsync === "off"
-		? undefined
-		: "[database] the test server runs with fsync on: each DROP DATABASE waits on a checkpoint's fsync, and the Postgres suites run several times slower; set fsync = off (ALTER SYSTEM SET fsync = off; SELECT pg_reload_conf())"
+  const { rows } = await admin.query("SHOW fsync");
+
+  return rows[0]?.fsync === "off"
+    ? undefined
+    : "[database] the test server runs with fsync on: each DROP DATABASE waits on a checkpoint's fsync, and the Postgres suites run several times slower; set fsync = off (ALTER SYSTEM SET fsync = off; SELECT pg_reload_conf())";
 }

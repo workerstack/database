@@ -1,0 +1,8 @@
+{
+  "compilerOptions": {
+    "noPropertyAccessFromIndexSignature": true
+  },
+  "exclude": ["src/**/*.test.ts", "src/**/__fixtures__/**"],
+  "extends": ["./tsconfig.json", "@workerstack/repo/tsconfig/strict"],
+  "include": ["src/**/*"]
+}

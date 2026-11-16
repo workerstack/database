@@ -7,37 +7,47 @@
  * however long it takes. The log's order is the windows': a peer that starts between a start and
  * its end ran beside it.
  */
-import { appendFileSync, readFileSync } from "node:fs"
+import { appendFileSync, readFileSync } from "node:fs";
 
 type Window = {
-	hold: number
-	log: string
-	name: string
-	peer: string
-	projects: number
-	settle?: number
-	setup: string
-}
+  hold: number;
+  log: string;
+  name: string;
+  peer: string;
+  projects: number;
+  settle?: number;
+  setup: string;
+};
 
-const { hold, log, name, peer, projects, settle = 0, setup } = JSON.parse(process.argv[2] as string) as Window
+const { hold, log, name, peer, projects, settle = 0, setup } = JSON.parse(process.argv[2] as string) as Window;
 
 /** Whether `name`'s start is in the log */
-const started = (who: string): boolean => readFileSync(log, "utf8").split("\n").includes(`start ${who}`)
+const started = (who: string): boolean => readFileSync(log, "utf8").split("\n").includes(`start ${who}`);
 
 /** Until `peer` started, or `ms` passed (0: for good) */
 async function awaitPeer(ms: number): Promise<void> {
-	const until = ms === 0 ? Number.POSITIVE_INFINITY : Date.now() + ms
-	while (!started(peer) && Date.now() < until) await new Promise((done) => setTimeout(done, 20))
+  const until = ms === 0 ? Number.POSITIVE_INFINITY : Date.now() + ms;
+
+  while (!started(peer) && Date.now() < until) await new Promise((done) => setTimeout(done, 20));
 }
 
-const { default: run } = (await import(setup)) as { default: () => unknown }
-const teardowns: unknown[] = []
-for (let project = 0; project < projects; project += 1) teardowns.push(await run())
-await new Promise((done) => setTimeout(done, settle))
-appendFileSync(log, `start ${name}\n`)
-await awaitPeer(hold)
-appendFileSync(log, `end ${name}\n`)
-for (const teardown of teardowns.toReversed()) if (typeof teardown === "function") await teardown()
-await awaitPeer(0)
-appendFileSync(log, `exit ${name}\n`)
-process.exit(0)
+const { default: run } = (await import(setup)) as { default: () => unknown };
+const teardowns: unknown[] = [];
+
+for (let project = 0; project < projects; project += 1) teardowns.push(await run());
+
+await new Promise((done) => setTimeout(done, settle));
+
+appendFileSync(log, `start ${name}\n`);
+
+await awaitPeer(hold);
+
+appendFileSync(log, `end ${name}\n`);
+
+for (const teardown of teardowns.toReversed()) if (typeof teardown === "function") await teardown();
+
+await awaitPeer(0);
+
+appendFileSync(log, `exit ${name}\n`);
+
+process.exit(0);

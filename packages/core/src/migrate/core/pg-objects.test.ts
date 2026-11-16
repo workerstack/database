@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest"
-import { devPrelude, pgDelta, separatePgObjects, withDirectivesFirst, wrapAtlasFile } from "./pg-objects.ts"
+import { describe, expect, it } from "vitest";
 
-/* drizzle-kit 1.0.0-rc.4's export of a table with a policy, a view, a materialized view, a sequence and a role */
+import { devPrelude, pgDelta, separatePgObjects, withDirectivesFirst, wrapAtlasFile } from "./pg-objects.ts";
+
+// drizzle-kit 1.0.0-rc.4's export of a table with a policy, a view, a materialized view, a sequence and a role
 const EXPORT = `CREATE TYPE "status" AS ENUM('draft', 'published');
 CREATE SEQUENCE "public"."counter" INCREMENT BY 2 MINVALUE 1 MAXVALUE 9223372036854775807 START WITH 10 CACHE 1;
 CREATE ROLE "reader";
@@ -15,228 +16,235 @@ CREATE TABLE "post" (
 ALTER TABLE "post" ENABLE ROW LEVEL SECURITY;
 CREATE VIEW "published" AS (select "id", "title", "status", "owner" from "post" where "post"."status" = 'published');
 CREATE MATERIALIZED VIEW "titles" AS (select "title" from "post");
-CREATE POLICY "post_owner" ON "post" AS PERMISSIVE FOR SELECT TO "reader" USING ("post"."owner" = current_user);`
+CREATE POLICY "post_owner" ON "post" AS PERMISSIVE FOR SELECT TO "reader" USING ("post"."owner" = current_user);`;
 
-const target = (sql = EXPORT) => separatePgObjects(sql)
+const target = (sql = EXPORT) => separatePgObjects(sql);
 
 describe("separatePgObjects", () => {
-	it("keeps what Atlas diffs and takes out every object Atlas OSS refuses", () => {
-		const { objects, plain } = target()
-		expect(plain.map((stmt) => stmt.split("\n")[0])).toEqual([
-			`CREATE TYPE "status" AS ENUM('draft', 'published')`,
-			'CREATE TABLE "post" (',
-		])
-		expect(objects.map((o) => `${o.kind} ${o.key}`)).toEqual([
-			"sequence counter",
-			"role reader",
-			"view published",
-			"materialized view titles",
-			"policy post_owner on post",
-		])
-	})
+  it("keeps what Atlas diffs and takes out every object Atlas OSS refuses", () => {
+    const { objects, plain } = target();
+    expect(plain.map((stmt) => stmt.split("\n")[0])).toEqual([
+      `CREATE TYPE "status" AS ENUM('draft', 'published')`,
+      'CREATE TABLE "post" (',
+    ]);
+    expect(objects.map((o) => `${o.kind} ${o.key}`)).toEqual([
+      "sequence counter",
+      "role reader",
+      "view published",
+      "materialized view titles",
+      "policy post_owner on post",
+    ]);
+  });
 
-	it("follows a history: drops remove, an ALTER SEQUENCE updates, an extension and a refresh are taken out", () => {
-		const history = target().state
-		const next = separatePgObjects(
-			`CREATE EXTENSION IF NOT EXISTS citext;
+  it("follows a history: drops remove, an ALTER SEQUENCE updates, an extension and a refresh are taken out", () => {
+    const history = target().state;
+
+    const next = separatePgObjects(
+      `CREATE EXTENSION IF NOT EXISTS citext;
 DROP VIEW IF EXISTS "published";
 DROP POLICY IF EXISTS "post_owner" ON "post";
 ALTER SEQUENCE "public"."counter" INCREMENT BY 5;
 REFRESH MATERIALIZED VIEW "titles";
 DROP MATERIALIZED VIEW "titles", "gone";
 ALTER SEQUENCE "other_seq" RESTART;`,
-			history,
-		)
-		expect([...next.state.objects.keys()]).toEqual(["sequence counter", "role reader", "extension citext"])
-		expect(next.state.objects.get("sequence counter")?.sql).toBe('CREATE SEQUENCE "public"."counter" INCREMENT BY 5')
-		expect(next.plain).toEqual(['ALTER SEQUENCE "other_seq" RESTART'])
-	})
+      history,
+    );
 
-	it("reads a CREATE OR REPLACE VIEW as the view's definition", () => {
-		const { state } = separatePgObjects('CREATE OR REPLACE VIEW "v" AS (select 1)')
-		expect(state.objects.get("view v")?.name).toBe('"v"')
-	})
+    expect([...next.state.objects.keys()]).toEqual(["sequence counter", "role reader", "extension citext"]);
+    expect(next.state.objects.get("sequence counter")?.sql).toBe('CREATE SEQUENCE "public"."counter" INCREMENT BY 5');
+    expect(next.plain).toEqual(['ALTER SEQUENCE "other_seq" RESTART']);
+  });
 
-	it("follows a dropped table, clearing its flags and policies, and a renamed one, moving them", () => {
-		const history = target().state
-		separatePgObjects('ALTER TABLE "post" RENAME TO "article";', history)
-		expect([...history.rls]).toEqual([["article", { enabled: true, forced: false, name: '"article"' }]])
-		expect(history.objects.get("policy post_owner on article")).toMatchObject({
-			on: '"article"',
-			sql: 'CREATE POLICY "post_owner" ON "article" AS PERMISSIVE FOR SELECT TO "reader" USING ("post"."owner" = current_user)',
-		})
-		separatePgObjects('ALTER TABLE "other" RENAME TO "else";', history)
-		const { plain } = separatePgObjects('DROP TABLE IF EXISTS "x", "article" CASCADE;', history)
-		expect(plain).toEqual(['DROP TABLE IF EXISTS "x", "article" CASCADE'])
-		expect(history.rls.size).toBe(0)
-		expect([...history.objects.keys()].some((key) => key.startsWith("policy"))).toBe(false)
-	})
-})
+  it("reads a CREATE OR REPLACE VIEW as the view's definition", () => {
+    const { state } = separatePgObjects('CREATE OR REPLACE VIEW "v" AS (select 1)');
+    expect(state.objects.get("view v")?.name).toBe('"v"');
+  });
+
+  it("follows a dropped table, clearing its flags and policies, and a renamed one, moving them", () => {
+    const history = target().state;
+    separatePgObjects('ALTER TABLE "post" RENAME TO "article";', history);
+    expect([...history.rls]).toEqual([["article", { enabled: true, forced: false, name: '"article"' }]]);
+    expect(history.objects.get("policy post_owner on article")).toMatchObject({
+      on: '"article"',
+      sql: 'CREATE POLICY "post_owner" ON "article" AS PERMISSIVE FOR SELECT TO "reader" USING ("post"."owner" = current_user)',
+    });
+    separatePgObjects('ALTER TABLE "other" RENAME TO "else";', history);
+    const { plain } = separatePgObjects('DROP TABLE IF EXISTS "x", "article" CASCADE;', history);
+    expect(plain).toEqual(['DROP TABLE IF EXISTS "x", "article" CASCADE']);
+    expect(history.rls.size).toBe(0);
+    expect([...history.objects.keys()].some((key) => key.startsWith("policy"))).toBe(false);
+  });
+});
 
 describe("pgDelta", () => {
-	const from = target().state
-	const to = target()
-	const delta = (atlasSql: string, next = to) => pgDelta({ atlasSql, from, to: next })
+  const from = target().state;
+  const to = target();
+  const delta = (atlasSql: string, next = to) => pgDelta({ atlasSql, from, to: next });
 
-	it("is empty when nothing changed and Atlas touches no table under a view or policy", () => {
-		expect(delta('CREATE TABLE "other" ("id" integer);')).toEqual({ after: [], before: [] })
-	})
+  it("is empty when nothing changed and Atlas touches no table under a view or policy", () => {
+    expect(delta('CREATE TABLE "other" ("id" integer);')).toEqual({ after: [], before: [] });
+  });
 
-	it("drops the views and policies over a table Atlas alters before its statements, and recreates them after", () => {
-		const { after, before } = delta('ALTER TABLE "post" ALTER COLUMN "title" TYPE character varying(50);')
-		expect(before).toEqual([
-			'DROP POLICY IF EXISTS "post_owner" ON "post"',
-			'DROP MATERIALIZED VIEW IF EXISTS "titles"',
-			'DROP VIEW IF EXISTS "published"',
-		])
-		expect(after.map((stmt) => stmt.split(" AS ")[0])).toEqual([
-			'CREATE VIEW "published"',
-			'CREATE MATERIALIZED VIEW "titles"',
-			'CREATE POLICY "post_owner" ON "post"',
-		])
-	})
+  it("drops the views and policies over a table Atlas alters before its statements, and recreates them after", () => {
+    const { after, before } = delta('ALTER TABLE "post" ALTER COLUMN "title" TYPE character varying(50);');
+    expect(before).toEqual([
+      'DROP POLICY IF EXISTS "post_owner" ON "post"',
+      'DROP MATERIALIZED VIEW IF EXISTS "titles"',
+      'DROP VIEW IF EXISTS "published"',
+    ]);
+    expect(after.map((stmt) => stmt.split(" AS ")[0])).toEqual([
+      'CREATE VIEW "published"',
+      'CREATE MATERIALIZED VIEW "titles"',
+      'CREATE POLICY "post_owner" ON "post"',
+    ]);
+  });
 
-	it("drops a view that reads a dropped view first, and recreates both in the target's order", () => {
-		const chain = separatePgObjects(`CREATE VIEW "a" AS (select 1 as x);\nCREATE VIEW "b" AS (select "x" from "a");`)
-		const changed = separatePgObjects(`CREATE VIEW "a" AS (select 2 as x);\nCREATE VIEW "b" AS (select "x" from "a");`)
-		const result = pgDelta({ atlasSql: "", from: chain.state, to: changed })
-		expect(result.before).toEqual(['DROP VIEW IF EXISTS "b"', 'DROP VIEW IF EXISTS "a"'])
-		expect(result.after).toEqual(['CREATE VIEW "a" AS (select 2 as x)', 'CREATE VIEW "b" AS (select "x" from "a")'])
-	})
+  it("drops a view that reads a dropped view first, and recreates both in the target's order", () => {
+    const chain = separatePgObjects(`CREATE VIEW "a" AS (select 1 as x);\nCREATE VIEW "b" AS (select "x" from "a");`);
+    const changed = separatePgObjects(`CREATE VIEW "a" AS (select 2 as x);\nCREATE VIEW "b" AS (select "x" from "a");`);
+    const result = pgDelta({ atlasSql: "", from: chain.state, to: changed });
+    expect(result.before).toEqual(['DROP VIEW IF EXISTS "b"', 'DROP VIEW IF EXISTS "a"']);
+    expect(result.after).toEqual(['CREATE VIEW "a" AS (select 2 as x)', 'CREATE VIEW "b" AS (select "x" from "a")']);
+  });
 
-	it("creates new objects, alters a changed sequence, drops removed ones, and never drops a role or an extension", () => {
-		const next = separatePgObjects(
-			`CREATE EXTENSION citext;
+  it("creates new objects, alters a changed sequence, drops removed ones, and never drops a role or an extension", () => {
+    const next = separatePgObjects(
+      `CREATE EXTENSION citext;
 CREATE ROLE "writer";
 CREATE SEQUENCE "public"."counter" INCREMENT BY 3 START WITH 10;
 CREATE SEQUENCE "fresh" START WITH 1;
 CREATE VIEW "published" AS (select "id", "title", "status", "owner" from "post" where "post"."status" = 'published');`,
-		)
-		const { after, before } = delta("", next)
-		expect(before).toEqual([
-			"CREATE EXTENSION IF NOT EXISTS citext",
-			"DO $database$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'writer') THEN CREATE ROLE \"writer\"; END IF; END $database$",
-			'ALTER SEQUENCE "public"."counter" INCREMENT BY 3 START WITH 10',
-			'CREATE SEQUENCE "fresh" START WITH 1',
-			'DROP POLICY IF EXISTS "post_owner" ON "post"',
-			'DROP MATERIALIZED VIEW IF EXISTS "titles"',
-		])
-		expect(after).toEqual(['ALTER TABLE "post" DISABLE ROW LEVEL SECURITY'])
-	})
+    );
 
-	it("drops a table's policies before Atlas drops the table, and does not recreate them", () => {
-		const gone = separatePgObjects(EXPORT.replace(/CREATE POLICY[^\n]*/, ""))
-		const { after, before } = delta('DROP TABLE "post";', gone)
-		expect(before[0]).toBe('DROP POLICY IF EXISTS "post_owner" ON "post"')
-		expect(after.some((stmt) => stmt.startsWith("CREATE POLICY"))).toBe(false)
-	})
-})
+    const { after, before } = delta("", next);
+    expect(before).toEqual([
+      "CREATE EXTENSION IF NOT EXISTS citext",
+      "DO $database$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'writer') THEN CREATE ROLE \"writer\"; END IF; END $database$",
+      'ALTER SEQUENCE "public"."counter" INCREMENT BY 3 START WITH 10',
+      'CREATE SEQUENCE "fresh" START WITH 1',
+      'DROP POLICY IF EXISTS "post_owner" ON "post"',
+      'DROP MATERIALIZED VIEW IF EXISTS "titles"',
+    ]);
+    expect(after).toEqual(['ALTER TABLE "post" DISABLE ROW LEVEL SECURITY']);
+  });
+
+  it("drops a table's policies before Atlas drops the table, and does not recreate them", () => {
+    const gone = separatePgObjects(EXPORT.replace(/CREATE POLICY[^\n]*/, ""));
+    const { after, before } = delta('DROP TABLE "post";', gone);
+    expect(before[0]).toBe('DROP POLICY IF EXISTS "post_owner" ON "post"');
+    expect(after.some((stmt) => stmt.startsWith("CREATE POLICY"))).toBe(false);
+  });
+});
 
 describe("wrapAtlasFile", () => {
-	it("puts database's statements around Atlas's, under Atlas's directives", () => {
-		const file = '-- atlas:txmode none\n\n-- Modify "post" table\nALTER TABLE "post" ADD COLUMN "x" text;\n'
-		expect(wrapAtlasFile(file, { after: ['CREATE VIEW "v" AS (select 1)'], before: ['DROP VIEW IF EXISTS "v"'] })).toBe(
-			'-- atlas:txmode none\n\nDROP VIEW IF EXISTS "v";\n\n-- Modify "post" table\nALTER TABLE "post" ADD COLUMN "x" text;\n\nCREATE VIEW "v" AS (select 1);\n',
-		)
-	})
+  it("puts database's statements around Atlas's, under Atlas's directives", () => {
+    const file = '-- atlas:txmode none\n\n-- Modify "post" table\nALTER TABLE "post" ADD COLUMN "x" text;\n';
+    expect(wrapAtlasFile(file, { after: ['CREATE VIEW "v" AS (select 1)'], before: ['DROP VIEW IF EXISTS "v"'] })).toBe(
+      '-- atlas:txmode none\n\nDROP VIEW IF EXISTS "v";\n\n-- Modify "post" table\nALTER TABLE "post" ADD COLUMN "x" text;\n\nCREATE VIEW "v" AS (select 1);\n',
+    );
+  });
 
-	it("leaves a file alone when database adds nothing, and writes database's part alone when Atlas wrote nothing", () => {
-		expect(wrapAtlasFile("SELECT 1;\n", { after: [], before: [] })).toBe("SELECT 1;\n")
-		expect(wrapAtlasFile("", { after: ["SELECT 2"], before: ["SELECT 1"] })).toBe("SELECT 1;\n\nSELECT 2;\n")
-	})
-})
+  it("leaves a file alone when database adds nothing, and writes database's part alone when Atlas wrote nothing", () => {
+    expect(wrapAtlasFile("SELECT 1;\n", { after: [], before: [] })).toBe("SELECT 1;\n");
+    expect(wrapAtlasFile("", { after: ["SELECT 2"], before: ["SELECT 1"] })).toBe("SELECT 1;\n\nSELECT 2;\n");
+  });
+});
 
 describe("withDirectivesFirst", () => {
-	it("puts the directive lines first with one blank line after them, which Atlas needs to honor them", () => {
-		expect(withDirectivesFirst("-- atlas:txmode none\n", "CREATE INDEX CONCURRENTLY i ON t (a);\n")).toBe(
-			"-- atlas:txmode none\n\nCREATE INDEX CONCURRENTLY i ON t (a);\n",
-		)
-		expect(withDirectivesFirst("-- atlas:txmode none\n\n\n", "\n\nSELECT 1;\n")).toBe(
-			"-- atlas:txmode none\n\nSELECT 1;\n",
-		)
-		expect(withDirectivesFirst("", "SELECT 1;\n")).toBe("SELECT 1;\n")
-	})
+  it("puts the directive lines first with one blank line after them, which Atlas needs to honor them", () => {
+    expect(withDirectivesFirst("-- atlas:txmode none\n", "CREATE INDEX CONCURRENTLY i ON t (a);\n")).toBe(
+      "-- atlas:txmode none\n\nCREATE INDEX CONCURRENTLY i ON t (a);\n",
+    );
+    expect(withDirectivesFirst("-- atlas:txmode none\n\n\n", "\n\nSELECT 1;\n")).toBe(
+      "-- atlas:txmode none\n\nSELECT 1;\n",
+    );
+    expect(withDirectivesFirst("", "SELECT 1;\n")).toBe("SELECT 1;\n");
+  });
 
-	it("keeps a directive with no blank line after it in the body, which Atlas reads as no header (PA3 of r22b)", () => {
-		const file = '-- atlas:txmode none\nCREATE INDEX CONCURRENTLY "i" ON "post" ("x");\n'
-		expect(wrapAtlasFile(file, { after: [], before: ["SELECT 1"] })).toBe(
-			'SELECT 1;\n\n-- atlas:txmode none\nCREATE INDEX CONCURRENTLY "i" ON "post" ("x");\n',
-		)
-	})
-})
+  it("keeps a directive with no blank line after it in the body, which Atlas reads as no header (PA3 of r22b)", () => {
+    const file = '-- atlas:txmode none\nCREATE INDEX CONCURRENTLY "i" ON "post" ("x");\n';
+    expect(wrapAtlasFile(file, { after: [], before: ["SELECT 1"] })).toBe(
+      'SELECT 1;\n\n-- atlas:txmode none\nCREATE INDEX CONCURRENTLY "i" ON "post" ("x");\n',
+    );
+  });
+});
 
-/* M75: one Postgres split, over the whole file, so a delimiter directive and a chunk of many statements are read */
+// M75: one Postgres split, over the whole file, so a delimiter directive and a chunk of many statements are read
 describe("separatePgObjects: a file Atlas splits by its own delimiter", () => {
-	it("reads each statement of it, a chunk of several among them", () => {
-		for (const file of [
-			"-- atlas:delimiter GO\n\nCREATE ROLE r\nGO\nCREATE TABLE t (id int)\nGO\n",
-			"-- atlas:delimiter GO\n\nCREATE ROLE r; CREATE TABLE t (id int);\nGO\n",
-		]) {
-			const { objects, plain } = separatePgObjects(file)
-			expect(objects.map((o) => `${o.kind} ${o.key}`)).toEqual(["role r"])
-			expect(plain).toEqual(["CREATE TABLE t (id int)"])
-		}
-	})
-})
+  it("reads each statement of it, a chunk of several among them", () => {
+    for (const file of [
+      "-- atlas:delimiter GO\n\nCREATE ROLE r\nGO\nCREATE TABLE t (id int)\nGO\n",
+      "-- atlas:delimiter GO\n\nCREATE ROLE r; CREATE TABLE t (id int);\nGO\n",
+    ]) {
+      const { objects, plain } = separatePgObjects(file);
+      expect(objects.map((o) => `${o.kind} ${o.key}`)).toEqual(["role r"]);
+      expect(plain).toEqual(["CREATE TABLE t (id int)"]);
+    }
+  });
+});
 
 describe("devPrelude", () => {
-	it("creates each extension, then each sequence, the states hold, once and only where missing", () => {
-		const history = separatePgObjects('CREATE EXTENSION citext;\nCREATE SEQUENCE "public"."n" START WITH 5;').state
-		const next = separatePgObjects('CREATE SEQUENCE "public"."n" START WITH 9;\nCREATE SEQUENCE "m";').state
-		expect(devPrelude(history, next)).toBe(
-			'DO $database$ BEGIN CREATE EXTENSION IF NOT EXISTS citext; CREATE SEQUENCE IF NOT EXISTS "public"."n"; CREATE SEQUENCE IF NOT EXISTS "m"; END $database$;\n',
-		)
-		expect(devPrelude(separatePgObjects('CREATE VIEW "v" AS (select 1)').state)).toBe("")
-	})
-})
+  it("creates each extension, then each sequence, the states hold, once and only where missing", () => {
+    const history = separatePgObjects('CREATE EXTENSION citext;\nCREATE SEQUENCE "public"."n" START WITH 5;').state;
+    const next = separatePgObjects('CREATE SEQUENCE "public"."n" START WITH 9;\nCREATE SEQUENCE "m";').state;
+    expect(devPrelude(history, next)).toBe(
+      'DO $database$ BEGIN CREATE EXTENSION IF NOT EXISTS citext; CREATE SEQUENCE IF NOT EXISTS "public"."n"; CREATE SEQUENCE IF NOT EXISTS "m"; END $database$;\n',
+    );
+    expect(devPrelude(separatePgObjects('CREATE VIEW "v" AS (select 1)').state)).toBe("");
+  });
+});
 
 describe("roles and policies over other tables", () => {
-	it("reads database's guarded CREATE ROLE back as the role it creates", () => {
-		const guarded = pgDelta({ atlasSql: "", from: target().state, to: separatePgObjects('CREATE ROLE "w" WITH LOGIN') })
-			.before[0] as string
-		const { objects, state } = separatePgObjects(`${guarded};`)
-		expect(objects.map((o) => o.sql)).toEqual(['CREATE ROLE "w" WITH LOGIN'])
-		expect(state.objects.get("role w")?.sql).toBe('CREATE ROLE "w" WITH LOGIN')
-	})
+  it("reads database's guarded CREATE ROLE back as the role it creates", () => {
+    const guarded = pgDelta({ atlasSql: "", from: target().state, to: separatePgObjects('CREATE ROLE "w" WITH LOGIN') })
+      .before[0] as string;
 
-	it("drops a policy whose USING reads a table Atlas alters, and not one that reads none", () => {
-		const team =
-			'CREATE POLICY "p" ON "post" USING (team_id IN (SELECT id FROM team));\nCREATE POLICY "q" ON "post" FOR INSERT TO public;'
-		const history = separatePgObjects(team).state
-		const delta = pgDelta({
-			atlasSql: 'ALTER TABLE "team" ALTER COLUMN "id" TYPE bigint;',
-			from: history,
-			to: separatePgObjects(team),
-		})
-		expect(delta.before).toEqual(['DROP POLICY IF EXISTS "p" ON "post"'])
-	})
-})
+    const { objects, state } = separatePgObjects(`${guarded};`);
+    expect(objects.map((o) => o.sql)).toEqual(['CREATE ROLE "w" WITH LOGIN']);
+    expect(state.objects.get("role w")?.sql).toBe('CREATE ROLE "w" WITH LOGIN');
+  });
 
-/* r18 P5: a statement is about the object it names, whatever its keyword, so a replay that leaves out a view leaves it out too */
+  it("drops a policy whose USING reads a table Atlas alters, and not one that reads none", () => {
+    const team =
+      'CREATE POLICY "p" ON "post" USING (team_id IN (SELECT id FROM team));\nCREATE POLICY "q" ON "post" FOR INSERT TO public;';
+
+    const history = separatePgObjects(team).state;
+
+    const delta = pgDelta({
+      atlasSql: 'ALTER TABLE "team" ALTER COLUMN "id" TYPE bigint;',
+      from: history,
+      to: separatePgObjects(team),
+    });
+
+    expect(delta.before).toEqual(['DROP POLICY IF EXISTS "p" ON "post"']);
+  });
+});
+
+// r18 P5: a statement is about the object it names, whatever its keyword, so a replay that leaves out a view leaves it out too
 describe("separatePgObjects on a statement about a view by another keyword", () => {
-	const VIEW = "CREATE TABLE t (id int);\nCREATE VIEW v AS SELECT id FROM t;\n"
-	const TRIGGER = "CREATE TRIGGER tr INSTEAD OF INSERT ON v FOR EACH ROW EXECUTE FUNCTION f();"
+  const VIEW = "CREATE TABLE t (id int);\nCREATE VIEW v AS SELECT id FROM t;\n";
+  const TRIGGER = "CREATE TRIGGER tr INSTEAD OF INSERT ON v FOR EACH ROW EXECUTE FUNCTION f();";
 
-	it("keeps a trigger on a view with the view, and takes it off with DROP TRIGGER", () => {
-		const made = separatePgObjects(`${VIEW}${TRIGGER}`)
-		expect(made.plain).toEqual(["CREATE TABLE t (id int)"])
-		expect(made.state.objects.get("view v")?.extras).toEqual([TRIGGER.slice(0, -1)])
-		separatePgObjects("COMMENT ON VIEW v IS 'x';", made.state)
-		separatePgObjects("DROP TRIGGER IF EXISTS tr ON v;", made.state)
-		expect(made.state.objects.get("view v")?.extras).toEqual(["COMMENT ON VIEW v IS 'x'"])
-		expect(separatePgObjects("DROP TRIGGER tr ON t;", made.state).plain).toEqual(["DROP TRIGGER tr ON t"])
-		expect(
-			separatePgObjects("CREATE TRIGGER tr AFTER INSERT ON t EXECUTE FUNCTION f();", made.state).plain,
-		).toHaveLength(1)
-	})
+  it("keeps a trigger on a view with the view, and takes it off with DROP TRIGGER", () => {
+    const made = separatePgObjects(`${VIEW}${TRIGGER}`);
+    expect(made.plain).toEqual(["CREATE TABLE t (id int)"]);
+    expect(made.state.objects.get("view v")?.extras).toEqual([TRIGGER.slice(0, -1)]);
+    separatePgObjects("COMMENT ON VIEW v IS 'x';", made.state);
+    separatePgObjects("DROP TRIGGER IF EXISTS tr ON v;", made.state);
+    expect(made.state.objects.get("view v")?.extras).toEqual(["COMMENT ON VIEW v IS 'x'"]);
+    expect(separatePgObjects("DROP TRIGGER tr ON t;", made.state).plain).toEqual(["DROP TRIGGER tr ON t"]);
+    expect(
+      separatePgObjects("CREATE TRIGGER tr AFTER INSERT ON t EXECUTE FUNCTION f();", made.state).plain,
+    ).toHaveLength(1);
+  });
 
-	it("reads ALTER TABLE on a view as ALTER VIEW: a SET kept with it, a RENAME refused as database's own", () => {
-		const { state } = separatePgObjects(VIEW)
-		expect(separatePgObjects("ALTER TABLE v SET (security_barrier = true);", state).plain).toEqual([])
-		expect(state.objects.get("view v")?.extras).toEqual(["ALTER TABLE v SET (security_barrier = true)"])
-		expect(() => separatePgObjects("ALTER TABLE v RENAME TO w;", state, "1_v.sql")).toThrow(
-			"1_v.sql: ALTER TABLE v RENAME TO w changes an object database writes itself",
-		)
-		expect(separatePgObjects("ALTER TABLE t RENAME TO t2;", state).plain).toHaveLength(1)
-	})
-})
+  it("reads ALTER TABLE on a view as ALTER VIEW: a SET kept with it, a RENAME refused as database's own", () => {
+    const { state } = separatePgObjects(VIEW);
+    expect(separatePgObjects("ALTER TABLE v SET (security_barrier = true);", state).plain).toEqual([]);
+    expect(state.objects.get("view v")?.extras).toEqual(["ALTER TABLE v SET (security_barrier = true)"]);
+    expect(() => separatePgObjects("ALTER TABLE v RENAME TO w;", state, "1_v.sql")).toThrow(
+      "1_v.sql: ALTER TABLE v RENAME TO w changes an object database writes itself",
+    );
+    expect(separatePgObjects("ALTER TABLE t RENAME TO t2;", state).plain).toHaveLength(1);
+  });
+});

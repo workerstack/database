@@ -1,3 +1,8 @@
+import { maskSecrets } from "./atlas-secrets.ts";
+import { pastStop } from "./cleanup.ts";
+import { optionalPeer } from "./optional-peer.ts";
+import { CATALOG, COMPARED } from "./pg-live-catalog.ts";
+import type { LiveObjects, LiveTarget } from "./pg-live-types.ts";
 /**
  * What a Postgres baseline compares itself, which Atlas OSS leaves out of its comparison without a
  * word: the functions, triggers, views, sequences, policies, types, rules,
@@ -9,35 +14,31 @@
  * database has no Postgres client of its own; these reads take postgres.js, an optional peer, loaded
  * only here. Its specifier is a variable, so a project without it still compiles database's source.
  */
-import { systemCas } from "./pg-system-ca.ts"
-import { postgresOptionsOf, queryParams } from "./pg-url.ts"
-import { maskSecrets } from "./atlas-secrets.ts"
-import { CATALOG, COMPARED } from "./pg-live-catalog.ts"
-import type { LiveObjects, LiveTarget } from "./pg-live-types.ts"
-import { pastStop } from "./cleanup.ts"
-import { optionalPeer } from "./optional-peer.ts"
+import { systemCas } from "./pg-system-ca.ts";
+import { postgresOptionsOf, queryParams } from "./pg-url.ts";
 
 /** The postgres.js client, as far as database uses it */
 type Sql = {
-	end(options?: { timeout?: number | undefined }): Promise<void>
-	unsafe(query: string, params: unknown[]): Promise<Array<Record<string, unknown>>>
-}
-type Connect = (options: Record<string, unknown>) => Sql
+  end(options?: { timeout?: number | undefined }): Promise<void>;
+  unsafe(query: string, params: unknown[]): Promise<Array<Record<string, unknown>>>;
+};
 
-/* the optional peer, named by a string so a consumer without it still type-checks database */
-const PEER: string = "postgres"
+type Connect = (options: Record<string, unknown>) => Sql;
+
+// the optional peer, named by a string so a consumer without it still type-checks database
+const PEER: string = "postgres";
 
 // lookup-table: the codes Node gives a server certificate no trusted CA vouches for
 const UNVERIFIED: ReadonlySet<unknown> = /* @__PURE__ */ new Set([
-	"DEPTH_ZERO_SELF_SIGNED_CERT",
-	"SELF_SIGNED_CERT_IN_CHAIN",
-	"UNABLE_TO_GET_ISSUER_CERT",
-	"UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
-	"UNABLE_TO_VERIFY_LEAF_SIGNATURE",
-])
+  "DEPTH_ZERO_SELF_SIGNED_CERT",
+  "SELF_SIGNED_CERT_IN_CHAIN",
+  "UNABLE_TO_GET_ISSUER_CERT",
+  "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
+  "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+]);
 
 /** Where a postgres.js failure came from: the field whose URL database connected to, and every URL whose secrets it may hold */
-type FailedAt = { field: "devUrl" | "url"; url: string; urls: readonly string[] }
+type FailedAt = { field: "devUrl" | "url"; url: string; urls: readonly string[] };
 
 /**
  * What a postgres.js failure on `at.field` says: its message, or, for the AggregateError it throws
@@ -46,19 +47,24 @@ type FailedAt = { field: "devUrl" | "url"; url: string; urls: readonly string[] 
  * database's own words follow the mask, so a password that is one of them stays out of them
  */
 function failureOf(error: unknown, at: FailedAt): string {
-	const { code, errors, message } = error as { code?: unknown; errors?: unknown; message?: unknown }
-	const raw =
-		typeof message === "string" && message !== ""
-			? message
-			: Array.isArray(errors)
-				? errors.map((each) => String((each as { message?: unknown }).message)).join("; ")
-				: ""
-	const said = maskSecrets(raw, at.urls)
-	if (UNVERIFIED.has(code) && queryParams(at.url).get("sslrootcert") === "system")
-		return `${said}; database verified the server against ${systemCas().source}`
-	/* A server without TLS ends the handshake database's require starts */
-	if (!raw.includes("before secure TLS connection was established")) return said
-	return `${said}: the server takes no TLS, which database and Atlas require where ${at.field} names no sslmode; set sslmode=disable on ${at.field} for a server without TLS`
+  const { code, errors, message } = error as { code?: unknown; errors?: unknown; message?: unknown };
+
+  const raw =
+    typeof message === "string" && message !== ""
+      ? message
+      : Array.isArray(errors)
+        ? errors.map((each) => String((each as { message?: unknown }).message)).join("; ")
+        : "";
+
+  const said = maskSecrets(raw, at.urls);
+
+  if (UNVERIFIED.has(code) && queryParams(at.url).get("sslrootcert") === "system")
+    return `${said}; database verified the server against ${systemCas().source}`;
+
+  // A server without TLS ends the handshake database's require starts
+  if (!raw.includes("before secure TLS connection was established")) return said;
+
+  return `${said}: the server takes no TLS, which database and Atlas require where ${at.field} names no sslmode; set sslmode=disable on ${at.field} for a server without TLS`;
 }
 
 /**
@@ -67,57 +73,66 @@ function failureOf(error: unknown, at: FailedAt): string {
  * work on one, that its cleanup would miss, while the cleanup's own queries go on
  */
 function pastStops(connect: Connect): Connect {
-	return (options) => {
-		const sql = connect(options)
-		const unsafe = sql.unsafe.bind(sql)
-		return Object.assign(sql, {
-			unsafe: async (query: string, params: unknown[]) => {
-				await pastStop()
-				return unsafe(query, params)
-			},
-		})
-	}
+  return (options) => {
+    const sql = connect(options);
+    const unsafe = sql.unsafe.bind(sql);
+
+    return Object.assign(sql, {
+      unsafe: async (query: string, params: unknown[]) => {
+        await pastStop();
+
+        return unsafe(query, params);
+      },
+    });
+  };
 }
 
 /** postgres.js, every query past a stop (pastStops), or the refusal naming it, its range and `why` database needs it here */
 async function loadPostgres(why: string): Promise<Connect> {
-	return pastStops(
-		(await optionalPeer({ peer: "postgres", why }, async () => (await import(PEER)) as { default: Connect })).default,
-	)
+  return pastStops(
+    (await optionalPeer({ peer: "postgres", why }, async () => (await import(PEER)) as { default: Connect })).default,
+  );
 }
 
-/* why a baseline loads it: it cannot vouch for the database without it */
-const COMPARES = `compare the database's ${COMPARED}, which Atlas OSS does not, in a baseline`
+// why a baseline loads it: it cannot vouch for the database without it
+const COMPARES = `compare the database's ${COMPARED}, which Atlas OSS does not, in a baseline`;
 
 // lookup-table: the catalog arms that name a kind by one label each, and the set each goes into
 const NAMED: Readonly<Record<string, "extensions" | "others" | "platform">> = {
-	extension: "extensions",
-	other: "others",
-	platform: "platform",
-}
+  extension: "extensions",
+  other: "others",
+  platform: "platform",
+};
 
 /** `row` of the catalog read, into `live` */
 function readRow(row: Record<string, unknown>, live: LiveObjects): void {
-	const [name, table, how] = [String(row["name"]), String(row["on_table"]), String(row["how"])]
-	const what = row["what"]
-	if (what === "relation") {
-		live.relations.set(name, row["kind"] as "materialized view" | "sequence" | "view")
-		if (row["kind"] === "sequence") live.sequences.set(name, how)
-	} else if (what === "policy") live.policies.set(table, (live.policies.get(table) ?? new Map()).set(name, how))
-	else if (what === "routine") {
-		const kind = row["kind"] as "function" | "procedure"
-		const routine = live.routines.get(name) ?? { kind, signatures: new Set<string>() }
-		live.routines.set(name, { kind, signatures: routine.signatures.add(String(row["signature"])) })
-	} else if (what === "kind")
-		live.kinds.set(name, row["kind"] as "collation" | "composite type" | "domain" | "range type")
-	else if (what === "rule") live.rules.set(table, (live.rules.get(table) ?? new Set()).add(name))
-	else if (what === "rls") live.rls.set(name, how)
-	else if (typeof what === "string" && what in NAMED) live[NAMED[what] as "extensions"].add(name)
-	else if (what === "user") live.user = name
-	else {
-		const fired = { enabled: row["enabled"] === true, type: Number(row["tgtype"]) }
-		live.triggers.set(table, (live.triggers.get(table) ?? new Map()).set(name, fired))
-	}
+  const [name, table, how] = [String(row["name"]), String(row["on_table"]), String(row["how"])];
+  const what = row["what"];
+
+  if (what === "relation") {
+    live.relations.set(name, row["kind"] as "materialized view" | "sequence" | "view");
+
+    if (row["kind"] === "sequence") live.sequences.set(name, how);
+  } else if (what === "policy") {
+    live.policies.set(table, (live.policies.get(table) ?? new Map()).set(name, how));
+  } else if (what === "routine") {
+    const kind = row["kind"] as "function" | "procedure";
+    const routine = live.routines.get(name) ?? { kind, signatures: new Set<string>() };
+    live.routines.set(name, { kind, signatures: routine.signatures.add(String(row["signature"])) });
+  } else if (what === "kind") {
+    live.kinds.set(name, row["kind"] as "collation" | "composite type" | "domain" | "range type");
+  } else if (what === "rule") {
+    live.rules.set(table, (live.rules.get(table) ?? new Set()).add(name));
+  } else if (what === "rls") {
+    live.rls.set(name, how);
+  } else if (typeof what === "string" && what in NAMED) {
+    live[NAMED[what] as "extensions"].add(name);
+  } else if (what === "user") {
+    live.user = name;
+  } else {
+    const fired = { enabled: row["enabled"] === true, type: Number(row["tgtype"]) };
+    live.triggers.set(table, (live.triggers.get(table) ?? new Map()).set(name, fired));
+  }
 }
 
 /**
@@ -126,60 +141,66 @@ function readRow(row: Record<string, unknown>, live: LiveObjects): void {
  * cannot be read two ways
  */
 async function readCatalog(sql: Pick<Sql, "unsafe">, schema: string): Promise<LiveObjects> {
-	const rows = await sql.unsafe(CATALOG, [schema])
-	const live: LiveObjects = {
-		extensions: new Set(),
-		kinds: new Map(),
-		others: new Set(),
-		platform: new Set(),
-		policies: new Map(),
-		relations: new Map(),
-		rls: new Map(),
-		routines: new Map(),
-		rules: new Map(),
-		sequences: new Map(),
-		triggers: new Map(),
-		user: "",
-	}
-	for (const row of rows) readRow(row, live)
-	return live
+  const rows = await sql.unsafe(CATALOG, [schema]);
+
+  const live: LiveObjects = {
+    extensions: new Set(),
+    kinds: new Map(),
+    others: new Set(),
+    platform: new Set(),
+    policies: new Map(),
+    relations: new Map(),
+    rls: new Map(),
+    routines: new Map(),
+    rules: new Map(),
+    sequences: new Map(),
+    triggers: new Map(),
+    user: "",
+  };
+
+  for (const row of rows) readRow(row, live);
+
+  return live;
 }
 
 /** What the target schema of `target`'s database holds of what Atlas OSS does not compare; it writes nothing */
 async function readLiveObjects(
-	target: LiveTarget,
-	load: () => Promise<Connect> = () => loadPostgres(COMPARES),
+  target: LiveTarget,
+  load: () => Promise<Connect> = () => loadPostgres(COMPARES),
 ): Promise<LiveObjects> {
-	const connect = await load()
-	let sql: ReturnType<Connect> | undefined
-	try {
-		sql = connect({ ...postgresOptionsOf(target.url, "url"), max: 1 })
-		return await readCatalog(sql, target.schema)
-	} catch (error) {
-		throw new Error(
-			`database could not read the database's ${COMPARED}: ${failureOf(error, { field: "url", url: target.url, urls: [target.url] })}`,
-			{
-				cause: error,
-			},
-		)
-	} finally {
-		await sql?.end()
-	}
+  const connect = await load();
+  let sql: ReturnType<Connect> | undefined;
+
+  try {
+    sql = connect({ ...postgresOptionsOf(target.url, "url"), max: 1 });
+
+    return await readCatalog(sql, target.schema);
+  } catch (error) {
+    throw new Error(
+      `database could not read the database's ${COMPARED}: ${failureOf(error, { field: "url", url: target.url, urls: [target.url] })}`,
+      {
+        cause: error,
+      },
+    );
+  } finally {
+    await sql?.end();
+  }
 }
 
 // lookup-table: tgtype's event bits, in the order Postgres writes them
 const EVENT_BITS: ReadonlyArray<[number, string]> = [
-	[4, "insert"],
-	[8, "delete"],
-	[16, "update"],
-	[32, "truncate"],
-]
+  [4, "insert"],
+  [8, "delete"],
+  [16, "update"],
+  [32, "truncate"],
+];
 
 /** When and for what a trigger of `type` (tgtype) fires, and whether it does: `before insert, for each row` */
 function fires({ enabled, type }: { enabled: boolean; type: number }): string {
-	const timing = (type & 2) !== 0 ? "before" : (type & 64) !== 0 ? "instead of" : "after"
-	const events = EVENT_BITS.filter(([bit]) => (type & bit) !== 0).map(([, event]) => event)
-	return `${timing} ${events.join(" or ")}, for each ${(type & 1) !== 0 ? "row" : "statement"}${enabled ? "" : ", disabled"}`
+  const timing = (type & 2) === 0 ? ((type & 64) === 0 ? "after" : "instead of") : "before";
+  const events = EVENT_BITS.filter(([bit]) => (type & bit) !== 0).map(([, event]) => event);
+
+  return `${timing} ${events.join(" or ")}, for each ${(type & 1) === 0 ? "statement" : "row"}${enabled ? "" : ", disabled"}`;
 }
 
 /**
@@ -187,27 +208,36 @@ function fires({ enabled, type }: { enabled: boolean; type: number }): string {
  * table's row level security, by what it is, its name, and its settings where database compares them
  */
 function labels(live: LiveObjects): { objects: Set<string>; triggers: Set<string> } {
-	const out = { objects: new Set<string>(), triggers: new Set<string>() }
-	for (const [table, each] of live.triggers)
-		for (const [name, how] of each) out.triggers.add(`trigger ${name} on ${table} (${fires(how)})`)
-	for (const [name, kind] of live.relations)
-		out.objects.add(
-			kind === "sequence" ? `sequence ${name} (${live.sequences.get(name) as string})` : `${kind} ${name}`,
-		)
-	for (const [table, each] of live.policies)
-		for (const [name, how] of each) out.objects.add(`policy ${name} on ${table} (${how})`)
-	for (const [name, kind] of live.kinds) out.objects.add(`${kind} ${name}`)
-	for (const [table, each] of live.rules) for (const name of each) out.objects.add(`rule ${name} on ${table}`)
-	for (const [table, how] of live.rls) out.objects.add(`row level security on ${table} (${how})`)
-	for (const label of live.others) out.objects.add(label)
-	return out
+  const out = { objects: new Set<string>(), triggers: new Set<string>() };
+
+  for (const [table, each] of live.triggers)
+    for (const [name, how] of each) out.triggers.add(`trigger ${name} on ${table} (${fires(how)})`);
+
+  for (const [name, kind] of live.relations) {
+    out.objects.add(
+      kind === "sequence" ? `sequence ${name} (${live.sequences.get(name) as string})` : `${kind} ${name}`,
+    );
+  }
+
+  for (const [table, each] of live.policies)
+    for (const [name, how] of each) out.objects.add(`policy ${name} on ${table} (${how})`);
+
+  for (const [name, kind] of live.kinds) out.objects.add(`${kind} ${name}`);
+
+  for (const [table, each] of live.rules) for (const name of each) out.objects.add(`rule ${name} on ${table}`);
+
+  for (const [table, how] of live.rls) out.objects.add(`row level security on ${table} (${how})`);
+
+  for (const label of live.others) out.objects.add(label);
+
+  return out;
 }
 
 /** The labels only one side has, each saying which */
 const onlyIn = (database: ReadonlySet<string>, migrations: ReadonlySet<string>): string[] => [
-	...[...database].filter((label) => !migrations.has(label)).map((label) => `${label}: only in the database`),
-	...[...migrations].filter((label) => !database.has(label)).map((label) => `${label}: only in the migrations`),
-]
+  ...[...database].filter((label) => !migrations.has(label)).map((label) => `${label}: only in the database`),
+  ...[...migrations].filter((label) => !database.has(label)).map((label) => `${label}: only in the migrations`),
+];
 
 /**
  * What the database and the history disagree on, both read by readCatalog, the history's
@@ -215,49 +245,60 @@ const onlyIn = (database: ReadonlySet<string>, migrations: ReadonlySet<string>):
  * fires, and how many of each kind they share, whose bodies neither read
  */
 function liveDrift(
-	history: LiveObjects,
-	live: LiveObjects,
+  history: LiveObjects,
+  live: LiveObjects,
 ): { matched: { routines: number; triggers: number; views: number }; only: string[] } {
-	const routines = routineDrift(live.routines, history.routines)
-	const [database, migrations] = [labels(live), labels(history)]
-	/* an extension, event trigger or publication the database alone has may be the platform's own: only a missing one refuses */
-	const extensions = [
-		...[...history.extensions].filter((name) => !live.extensions.has(name)).map((name) => `extension ${name}`),
-		...[...history.platform].filter((label) => !live.platform.has(label)),
-	].map((label) => `${label}: only in the migrations`)
-	const only = [
-		...routines.only,
-		...onlyIn(database.triggers, migrations.triggers),
-		...onlyIn(database.objects, migrations.objects),
-		...extensions,
-	]
-	const triggers = [...database.triggers].filter((label) => migrations.triggers.has(label)).length
-	const views = [...live.relations.entries()].filter(
-		([name, kind]) => kind !== "sequence" && history.relations.get(name) === kind,
-	).length
-	return { matched: { routines: routines.matched, triggers, views }, only: only.sort() }
+  const routines = routineDrift(live.routines, history.routines);
+  const [database, migrations] = [labels(live), labels(history)];
+
+  // an extension, event trigger or publication the database alone has may be the platform's own: only a missing one refuses
+  const extensions = [
+    ...[...history.extensions].filter((name) => !live.extensions.has(name)).map((name) => `extension ${name}`),
+    ...[...history.platform].filter((label) => !live.platform.has(label)),
+  ].map((label) => `${label}: only in the migrations`);
+
+  const only = [
+    ...routines.only,
+    ...onlyIn(database.triggers, migrations.triggers),
+    ...onlyIn(database.objects, migrations.objects),
+    ...extensions,
+  ];
+
+  const triggers = [...database.triggers].filter((label) => migrations.triggers.has(label)).length;
+
+  const views = [...live.relations.entries()].filter(
+    ([name, kind]) => kind !== "sequence" && history.relations.get(name) === kind,
+  ).length;
+
+  return { matched: { routines: routines.matched, triggers, views }, only: only.sort() };
 }
 
 /** Each routine's overloads paired across the two sides by kind and signature, as `function f(int4)` labels the rest */
 function routineDrift(
-	database: LiveObjects["routines"],
-	migrations: LiveObjects["routines"],
+  database: LiveObjects["routines"],
+  migrations: LiveObjects["routines"],
 ): { matched: number; only: string[] } {
-	const out = { matched: 0, only: [] as string[] }
-	for (const name of new Set([...database.keys(), ...migrations.keys()])) {
-		const [ours, theirs] = [database.get(name), migrations.get(name)]
-		const left = ours === undefined ? [] : [...ours.signatures]
-		for (const signature of theirs?.signatures ?? []) {
-			const at = ours?.kind === theirs?.kind ? left.indexOf(signature) : -1
-			if (at === -1) out.only.push(`${theirs?.kind} ${name}(${signature}): only in the migrations`)
-			else {
-				left.splice(at, 1)
-				out.matched++
-			}
-		}
-		for (const signature of left) out.only.push(`${ours?.kind} ${name}(${signature}): only in the database`)
-	}
-	return out
+  const out = { matched: 0, only: [] as string[] };
+
+  for (const name of new Set([...database.keys(), ...migrations.keys()])) {
+    const [ours, theirs] = [database.get(name), migrations.get(name)];
+    const left = ours === undefined ? [] : [...ours.signatures];
+
+    for (const signature of theirs?.signatures ?? []) {
+      const at = ours?.kind === theirs?.kind ? left.indexOf(signature) : -1;
+
+      if (at === -1) {
+        out.only.push(`${theirs?.kind} ${name}(${signature}): only in the migrations`);
+      } else {
+        left.splice(at, 1);
+        out.matched++;
+      }
+    }
+
+    for (const signature of left) out.only.push(`${ours?.kind} ${name}(${signature}): only in the database`);
+  }
+
+  return out;
 }
 
-export { COMPARED, type Connect, failureOf, liveDrift, loadPostgres, pastStops, readCatalog, readLiveObjects }
+export { COMPARED, type Connect, failureOf, liveDrift, loadPostgres, pastStops, readCatalog, readLiveObjects };

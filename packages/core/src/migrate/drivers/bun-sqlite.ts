@@ -2,47 +2,47 @@
  * The bun:sqlite migration driver. Bun's APIs live in this file alone (database/boundaries), and
  * bun:sqlite is imported on connect, so the module loads under Node too.
  */
-import { BUSY_TIMEOUT } from "../core/apply.ts"
-import { pastStop } from "../core/cleanup.ts"
-import { openFileDatabase } from "./file-open.ts"
-import type { Open } from "./local-db.ts"
+import { BUSY_TIMEOUT } from "../core/apply.ts";
+import { pastStop } from "../core/cleanup.ts";
 import type {
-	BunSqliteProviderConfig,
-	MigrateConnection,
-	ConnectionProvider,
-	QueryResult,
-	ResolvedDatabaseConfig,
-} from "../types.ts"
+  BunSqliteProviderConfig,
+  MigrateConnection,
+  ConnectionProvider,
+  QueryResult,
+  ResolvedDatabaseConfig,
+} from "../types.ts";
+import { openFileDatabase } from "./file-open.ts";
+import type { Open } from "./local-db.ts";
 
-/* a specifier TypeScript does not resolve: a Node consumer compiles this without bun-types */
-const BUN_SQLITE = "bun:sqlite"
+// a specifier TypeScript does not resolve: a Node consumer compiles this without bun-types
+const BUN_SQLITE = "bun:sqlite";
 
-type SqliteParam = string | number | bigint | boolean | null | Uint8Array
+type SqliteParam = string | number | bigint | boolean | null | Uint8Array;
 
 /** The part of bun:sqlite's Database a private database uses */
 type BunLocal = {
-	close(): void
-	exec(sql: string): unknown
-	prepare(sql: string): {
-		all(...params: SqliteParam[]): unknown[]
-		finalize(): void
-		run(...params: SqliteParam[]): unknown
-		/** the statement's SQL as SQLite compiled it, each parameter as bound */
-		toString(): string
-	}
-}
+  close(): void;
+  exec(sql: string): unknown;
+  prepare(sql: string): {
+    all(...params: SqliteParam[]): unknown[];
+    finalize(): void;
+    run(...params: SqliteParam[]): unknown;
+    /** the statement's SQL as SQLite compiled it, each parameter as bound */
+    toString(): string;
+  };
+};
 
 /** The part of bun:sqlite's Database a migration connection uses */
 type BunDatabase = {
-	close(): void
-	prepare(sql: string): { all(...params: SqliteParam[]): unknown[] }
-	run(sql: string, params?: SqliteParam[]): unknown
-	transaction(run: () => void): { immediate(): void }
-}
+  close(): void;
+  prepare(sql: string): { all(...params: SqliteParam[]): unknown[] };
+  run(sql: string, params?: SqliteParam[]): unknown;
+  transaction(run: () => void): { immediate(): void };
+};
 
 /** The refusal a process that cannot load bun:sqlite meets, Node among them */
 const NEEDS_BUN =
-	"The bun-sqlite provider needs Bun: bun:sqlite loads under Bun alone, and this process cannot load it. Run this command under bun, or set the provider to libsql or turso."
+  "The bun-sqlite provider needs Bun: bun:sqlite loads under Bun alone, and this process cannot load it. Run this command under bun, or set the provider to libsql or turso.";
 
 /**
  * bun:sqlite's module, or the refusal naming Bun with the loader's error as its cause: Node's
@@ -50,34 +50,35 @@ const NEEDS_BUN =
  * Node and vitest each answer with an error code of their own
  */
 async function loadBunSqlite(load: () => Promise<unknown> = () => import(BUN_SQLITE)): Promise<{ Database: unknown }> {
-	try {
-		return (await load()) as { Database: unknown }
-	} catch (cause) {
-		throw new Error(NEEDS_BUN, { cause })
-	}
+  try {
+    return (await load()) as { Database: unknown };
+  } catch (cause) {
+    throw new Error(NEEDS_BUN, { cause });
+  }
 }
 
 function bunSqliteConnection(db: BunDatabase): MigrateConnection {
-	return {
-		/* async, so a failing statement rejects the promise instead of throwing past it */
-		async batch(statements: Array<{ sql: string; params?: unknown[] | undefined }>): Promise<void> {
-			/* one transaction: every statement applies, or none does; it takes the write lock as it begins */
-			db.transaction(() => {
-				for (const { params, sql } of statements) db.run(sql, (params ?? []) as SqliteParam[])
-			}).immediate()
-		},
+  return {
+    // async, so a failing statement rejects the promise instead of throwing past it
+    async batch(statements: Array<{ sql: string; params?: unknown[] | undefined }>): Promise<void> {
+      // one transaction: every statement applies, or none does; it takes the write lock as it begins
+      db.transaction(() => {
+        for (const { params, sql } of statements) db.run(sql, (params ?? []) as SqliteParam[]);
+      }).immediate();
+    },
 
-		async close(): Promise<void> {
-			db.close()
-		},
-		dialect: "sqlite",
+    async close(): Promise<void> {
+      db.close();
+    },
+    dialect: "sqlite",
 
-		async execute(sql: string, params?: unknown[]): Promise<QueryResult> {
-			const rows = db.prepare(sql).all(...((params ?? []) as SqliteParam[])) as Array<Record<string, unknown>>
-			const columns = Object.keys(rows[0] ?? {})
-			return { columns, rows: rows.map((row) => columns.map((col) => row[col])) }
-		},
-	}
+    async execute(sql: string, params?: unknown[]): Promise<QueryResult> {
+      const rows = db.prepare(sql).all(...((params ?? []) as SqliteParam[])) as Array<Record<string, unknown>>;
+      const columns = Object.keys(rows[0] ?? {});
+
+      return { columns, rows: rows.map((row) => columns.map((col) => row[col])) };
+    },
+  };
 }
 
 /**
@@ -86,55 +87,63 @@ function bunSqliteConnection(db: BunDatabase): MigrateConnection {
  * missing, except by a reader, which opens it read-only and throws `DatabaseMissing` when it is not there
  */
 export function createBunSqliteProvider(config: BunSqliteProviderConfig): ConnectionProvider {
-	return {
-		async connect(dbConfig?: ResolvedDatabaseConfig): Promise<MigrateConnection> {
-			await pastStop()
-			/* an in-memory database holds nothing to protect, and bun opens none read-only */
-			const readonly = dbConfig?.readonly === true && config.path !== ":memory:"
-			const { Database } = (await loadBunSqlite()) as {
-				Database: new (path: string, options?: { readonly?: boolean | undefined }) => BunDatabase
-			}
-			const open = () => {
-				const db = readonly ? new Database(config.path, { readonly }) : new Database(config.path)
-				/* SQLite opens with foreign keys off; the proof run, libsql and D1 apply with them on */
-				db.run("PRAGMA foreign_keys = ON")
-				db.run(BUSY_TIMEOUT)
-				return db
-			}
-			const memory = config.path === ":memory:"
-			return bunSqliteConnection(memory ? open() : await openFileDatabase(config.path, readonly, open))
-		},
-		dialect: "sqlite",
-	}
+  return {
+    async connect(dbConfig?: ResolvedDatabaseConfig): Promise<MigrateConnection> {
+      await pastStop();
+      // an in-memory database holds nothing to protect, and bun opens none read-only
+      const readonly = dbConfig?.readonly === true && config.path !== ":memory:";
+
+      const { Database } = (await loadBunSqlite()) as {
+        Database: new (path: string, options?: { readonly?: boolean | undefined }) => BunDatabase;
+      };
+
+      const open = () => {
+        const db = readonly ? new Database(config.path, { readonly }) : new Database(config.path);
+        // SQLite opens with foreign keys off; the proof run, libsql and D1 apply with them on
+        db.run("PRAGMA foreign_keys = ON");
+        db.run(BUSY_TIMEOUT);
+
+        return db;
+      };
+
+      const memory = config.path === ":memory:";
+
+      return bunSqliteConnection(memory ? open() : await openFileDatabase(config.path, readonly, open));
+    },
+    dialect: "sqlite",
+  };
 }
 
 /** `use` on `sql` prepared, the statement finalized whatever `use` does */
 function once<T>(db: BunLocal, sql: string, use: (stmt: ReturnType<BunLocal["prepare"]>) => T): T {
-	const stmt = db.prepare(sql)
-	try {
-		return use(stmt)
-	} finally {
-		stmt.finalize()
-	}
+  const stmt = db.prepare(sql);
+
+  try {
+    return use(stmt);
+  } finally {
+    stmt.finalize();
+  }
 }
 
 /** How bun:sqlite opens a private database file, or `:memory:`; with `create` false, only a file that is there (local-db.ts) */
 async function bunLocal(): Promise<Open> {
-	const { Database } = (await loadBunSqlite()) as {
-		Database: new (path: string, options?: { create: boolean; readwrite: boolean }) => BunLocal
-	}
-	return (file, create) => {
-		const db = create === false ? new Database(file, { create: false, readwrite: true }) : new Database(file)
-		return {
-			/* each statement finalized at once: one left open (an EXPLAIN DROP TABLE among them) keeps its table locked */
-			all: (sql, params = []) =>
-				once(db, sql, (stmt) => stmt.all(...(params as SqliteParam[]))) as Array<Record<string, unknown>>,
-			close: () => db.close(),
-			exec: (sql) => void db.exec(sql),
-			firstStatement: (sql) => once(db, sql, (stmt) => stmt.toString()),
-			run: (sql, params = []) => void once(db, sql, (stmt) => stmt.run(...(params as SqliteParam[]))),
-		}
-	}
+  const { Database } = (await loadBunSqlite()) as {
+    Database: new (path: string, options?: { create: boolean; readwrite: boolean }) => BunLocal;
+  };
+
+  return (file, create) => {
+    const db = create === false ? new Database(file, { create: false, readwrite: true }) : new Database(file);
+
+    return {
+      // each statement finalized at once: one left open (an EXPLAIN DROP TABLE among them) keeps its table locked
+      all: (sql, params = []) =>
+        once(db, sql, (stmt) => stmt.all(...(params as SqliteParam[]))) as Array<Record<string, unknown>>,
+      close: () => db.close(),
+      exec: (sql) => void db.exec(sql),
+      firstStatement: (sql) => once(db, sql, (stmt) => stmt.toString()),
+      run: (sql, params = []) => void once(db, sql, (stmt) => stmt.run(...(params as SqliteParam[]))),
+    };
+  };
 }
 
-export { bunLocal, loadBunSqlite }
+export { bunLocal, loadBunSqlite };

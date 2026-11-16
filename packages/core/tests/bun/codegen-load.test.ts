@@ -5,49 +5,50 @@
  * bunfig.toml, so a secret in them never reaches the module, nor a preload the bunfig names (F41
  * of the 0.13.0 round); the child runs where database runs (F58), so the project is the cwd here.
  */
-import { afterEach, beforeEach, describe, expect, it } from "bun:test"
-import fs from "node:fs"
-import path from "node:path"
-import { fixtureRoot } from "../../src/codegen/__fixtures__/temp.ts"
-import { loadSnapshot } from "../../src/codegen/runtime/load.ts"
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import fs from "node:fs";
+import path from "node:path";
 
-let dir: string
+import { fixtureRoot } from "../../src/codegen/__fixtures__/temp.ts";
+import { loadSnapshot } from "../../src/codegen/runtime/load.ts";
+
+let dir: string;
 
 beforeEach(() => {
-	dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-load-bun-"))
-})
+  dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-load-bun-"));
+});
 
 afterEach(() => {
-	fs.rmSync(dir, { force: true, recursive: true })
-})
+  fs.rmSync(dir, { force: true, recursive: true });
+});
 
 describe("loadSnapshot on bun with dotenv files beside the tables module (F41)", () => {
-	it("loads the module with none of their variables, a bunfig preload included", async () => {
-		fs.writeFileSync(path.join(dir, ".env"), "DATABASE_F41_SECRET=leaked\n")
-		fs.writeFileSync(path.join(dir, ".env.local"), "DATABASE_F41_LOCAL=leaked\n")
-		const seen = path.join(dir, "preload-saw.json")
-		fs.writeFileSync(
-			path.join(dir, "preload.ts"),
-			`import fs from "node:fs"\nfs.writeFileSync(${JSON.stringify(seen)}, JSON.stringify(Object.keys(process.env).filter((name) => name.startsWith("DATABASE_F41"))))\n`,
-		)
-		fs.writeFileSync(path.join(dir, "bunfig.toml"), 'preload = ["./preload.ts"]\n')
-		const tables = path.join(dir, "db.core.tables.ts")
-		fs.writeFileSync(
-			tables,
-			'const leaked = Object.keys(process.env).filter((name) => name.startsWith("DATABASE_F41"))\nif (leaked.length > 0) throw new Error(`the module saw ${leaked.join(", ")}`)\nexport {}\n',
-		)
-		expect(await loadSnapshot(tables, { cwd: dir })).toMatchObject({ tables: [] })
-		expect(JSON.parse(fs.readFileSync(seen, "utf8"))).toEqual([])
-	})
-})
+  it("loads the module with none of their variables, a bunfig preload included", async () => {
+    fs.writeFileSync(path.join(dir, ".env"), "DATABASE_F41_SECRET=leaked\n");
+    fs.writeFileSync(path.join(dir, ".env.local"), "DATABASE_F41_LOCAL=leaked\n");
+    const seen = path.join(dir, "preload-saw.json");
+    fs.writeFileSync(
+      path.join(dir, "preload.ts"),
+      `import fs from "node:fs"\nfs.writeFileSync(${JSON.stringify(seen)}, JSON.stringify(Object.keys(process.env).filter((name) => name.startsWith("DATABASE_F41"))))\n`,
+    );
+    fs.writeFileSync(path.join(dir, "bunfig.toml"), 'preload = ["./preload.ts"]\n');
+    const tables = path.join(dir, "db.core.tables.ts");
+    fs.writeFileSync(
+      tables,
+      'const leaked = Object.keys(process.env).filter((name) => name.startsWith("DATABASE_F41"))\nif (leaked.length > 0) throw new Error(`the module saw ${leaked.join(", ")}`)\nexport {}\n',
+    );
+    expect(await loadSnapshot(tables, { cwd: dir })).toMatchObject({ tables: [] });
+    expect(JSON.parse(fs.readFileSync(seen, "utf8"))).toEqual([]);
+  });
+});
 
-/* F42 on bun: a module's timer keeps no child alive once the snapshot is written */
+// F42 on bun: a module's timer keeps no child alive once the snapshot is written
 describe("loadSnapshot on bun with a module that holds the event loop open (F42)", () => {
-	it("reads the snapshot without waiting for the module's timer", async () => {
-		const tables = path.join(dir, "db.core.tables.ts")
-		fs.writeFileSync(tables, "setInterval(() => {}, 1000)\nexport {}\n")
-		const started = Date.now()
-		expect(await loadSnapshot(tables, { timeoutMs: 8000 })).toMatchObject({ tables: [] })
-		expect(Date.now() - started).toBeLessThan(8000)
-	})
-})
+  it("reads the snapshot without waiting for the module's timer", async () => {
+    const tables = path.join(dir, "db.core.tables.ts");
+    fs.writeFileSync(tables, "setInterval(() => {}, 1000)\nexport {}\n");
+    const started = Date.now();
+    expect(await loadSnapshot(tables, { timeoutMs: 8000 })).toMatchObject({ tables: [] });
+    expect(Date.now() - started).toBeLessThan(8000);
+  });
+});

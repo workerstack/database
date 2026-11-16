@@ -1,122 +1,127 @@
-import { describe, expect, it } from "vitest"
-import type * as z from "zod"
-import { createListQuerySchema } from "./list-schema.ts"
-import { createRetrieveQuerySchema } from "./retrieve-schema.ts"
-import { validateSelectWithConfig } from "./select-validate.ts"
+import { describe, expect, it } from "vitest";
+import type * as z from "zod";
+
+import { createListQuerySchema } from "./list-schema.ts";
+import { createRetrieveQuerySchema } from "./retrieve-schema.ts";
+import { validateSelectWithConfig } from "./select-validate.ts";
 
 describe("select names that are Object.prototype members (Q-M2)", () => {
-	const list = createListQuerySchema({
-		fields: { relationFields: { author: ["name"] }, relations: ["author"], scalars: ["id"] },
-		sort: ["id"],
-	})
-	const retrieve = createRetrieveQuerySchema({ fields: { relations: ["author"], scalars: ["id"] } })
+  const list = createListQuerySchema({
+    fields: { relationFields: { author: ["name"] }, relations: ["author"], scalars: ["id"] },
+    sort: ["id"],
+  });
 
-	it.each([
-		"__proto__(id)",
-		"constructor(id)",
-		"toString(name)",
-		"author(__proto__(x))",
-		"author(secret(x))",
-		"valueOf",
-	])("%s is an issue, not a thrown TypeError", (select) => {
-		expect(list.safeParse({ select }).success).toBe(false)
-		expect(retrieve.safeParse({ select }).success).toBe(false)
-	})
-})
+  const retrieve = createRetrieveQuerySchema({ fields: { relations: ["author"], scalars: ["id"] } });
+
+  it.each([
+    "__proto__(id)",
+    "constructor(id)",
+    "toString(name)",
+    "author(__proto__(x))",
+    "author(secret(x))",
+    "valueOf",
+  ])("%s is an issue, not a thrown TypeError", (select) => {
+    expect(list.safeParse({ select }).success).toBe(false);
+    expect(retrieve.safeParse({ select }).success).toBe(false);
+  });
+});
 
 describe("select with an embed that has no name", () => {
-	it("is a 400 and returns", () => {
-		const schema = createListQuerySchema({ fields: { scalars: ["id"] }, sort: ["id"] })
-		expect(schema.safeParse({ select: "id,(x)" }).success).toBe(false)
-	})
-})
+  it("is a 400 and returns", () => {
+    const schema = createListQuerySchema({ fields: { scalars: ["id"] }, sort: ["id"] });
+    expect(schema.safeParse({ select: "id,(x)" }).success).toBe(false);
+  });
+});
 
 describe("validateSelectWithConfig", () => {
-	const config = {
-		relationFields: { author: ["name", "bio"] },
-		relations: ["author", "tags"],
-		scalars: ["id", "title"],
-	}
+  const config = {
+    relationFields: { author: ["name", "bio"] },
+    relations: ["author", "tags"],
+    scalars: ["id", "title"],
+  };
 
-	/** The parsed selection and the issue messages it raised */
-	function run(select: string | undefined) {
-		const issues: string[] = []
-		const ctx = { addIssue: (issue: { message: string }) => issues.push(issue.message) } as unknown as z.RefinementCtx
-		return { issues, parsed: validateSelectWithConfig(select, config, ctx) }
-	}
+  /** The parsed selection and the issue messages it raised */
+  function run(select: string | undefined) {
+    const issues: string[] = [];
+    const ctx = { addIssue: (issue: { message: string }) => issues.push(issue.message) } as unknown as z.RefinementCtx;
 
-	it("is null with no issue for no select, or only whitespace", () => {
-		expect(run(undefined)).toEqual({ issues: [], parsed: null })
-		expect(run("  ")).toEqual({ issues: [], parsed: null })
-	})
+    return { issues, parsed: validateSelectWithConfig(select, config, ctx) };
+  }
 
-	it("reports a select that does not parse", () => {
-		expect(run("(x)")).toEqual({ issues: ["Invalid select syntax"], parsed: null })
-	})
+  it("is null with no issue for no select, or only whitespace", () => {
+    expect(run(undefined)).toEqual({ issues: [], parsed: null });
+    expect(run("  ")).toEqual({ issues: [], parsed: null });
+  });
 
-	it("expands wildcards to what the config declares, at the root and in a relation", () => {
-		const { issues, parsed } = run("*,author(*)")
-		expect(issues).toEqual([])
-		expect(parsed?.root.scalars).toEqual(["id", "title"])
-		expect(parsed?.root.relations["author"]?.scalars).toEqual(["name", "bio"])
-	})
+  it("reports a select that does not parse", () => {
+    expect(run("(x)")).toEqual({ issues: ["Invalid select syntax"], parsed: null });
+  });
 
-	it("treats every relation as undeclared when the config names none", () => {
-		const issues: string[] = []
-		const ctx = { addIssue: (issue: { message: string }) => issues.push(issue.message) } as unknown as z.RefinementCtx
-		validateSelectWithConfig("id,author(name)", { scalars: ["id"] }, ctx)
-		expect(issues).toEqual(["Unknown relation: author"])
-	})
+  it("expands wildcards to what the config declares, at the root and in a relation", () => {
+    const { issues, parsed } = run("*,author(*)");
+    expect(issues).toEqual([]);
+    expect(parsed?.root.scalars).toEqual(["id", "title"]);
+    expect(parsed?.root.relations["author"]?.scalars).toEqual(["name", "bio"]);
+  });
 
-	it("lets computed fields through and reports every undeclared name", () => {
-		expect(run("id,@score,nope,author(name,@rank,age),tags(anything),posts(id),author(books(id))").issues).toEqual([
-			"Unknown field: nope",
-			"Unknown author relation: books",
-			"Unknown author field: age",
-			"Unknown tags field: anything",
-			"Unknown relation: posts",
-		])
-	})
+  it("treats every relation as undeclared when the config names none", () => {
+    const issues: string[] = [];
+    const ctx = { addIssue: (issue: { message: string }) => issues.push(issue.message) } as unknown as z.RefinementCtx;
+    validateSelectWithConfig("id,author(name)", { scalars: ["id"] }, ctx);
+    expect(issues).toEqual(["Unknown relation: author"]);
+  });
 
-	it("lets a relation that declares no fields select none: its wildcard expands to nothing (Q-S2)", () => {
-		expect(run("id,tags(password_hash)").issues).toEqual(["Unknown tags field: password_hash"])
-		const { issues, parsed } = run("id,tags(*)")
-		expect(issues).toEqual([])
-		expect(parsed?.root.relations["tags"]?.scalars).toEqual([])
-	})
-})
+  it("lets computed fields through and reports every undeclared name", () => {
+    expect(run("id,@score,nope,author(name,@rank,age),tags(anything),posts(id),author(books(id))").issues).toEqual([
+      "Unknown field: nope",
+      "Unknown author relation: books",
+      "Unknown author field: age",
+      "Unknown tags field: anything",
+      "Unknown relation: posts",
+    ]);
+  });
+
+  it("lets a relation that declares no fields select none: its wildcard expands to nothing (Q-S2)", () => {
+    expect(run("id,tags(password_hash)").issues).toEqual(["Unknown tags field: password_hash"]);
+    const { issues, parsed } = run("id,tags(*)");
+    expect(issues).toEqual([]);
+    expect(parsed?.root.relations["tags"]?.scalars).toEqual([]);
+  });
+});
 
 describe("select nested past the parser's depth bound (S-L2)", () => {
-	it("is a 400 issue on select, not a thrown error", () => {
-		const schema = createRetrieveQuerySchema({ fields: { relations: ["a"], scalars: ["id"] } })
-		const select = `${"a(".repeat(30)}id${")".repeat(30)}`
-		const result = schema.safeParse({ select })
-		expect(result.success).toBe(false)
-		expect(result.error?.issues).toEqual([
-			expect.objectContaining({ message: expect.stringContaining("deeper than 8 levels"), path: ["select"] }),
-		])
-	})
-})
+  it("is a 400 issue on select, not a thrown error", () => {
+    const schema = createRetrieveQuerySchema({ fields: { relations: ["a"], scalars: ["id"] } });
+    const select = `${"a(".repeat(30)}id${")".repeat(30)}`;
+    const result = schema.safeParse({ select });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toEqual([
+      expect.objectContaining({ message: expect.stringContaining("deeper than 8 levels"), path: ["select"] }),
+    ]);
+  });
+});
 
-/* QL13: a wildcard expanded before the check dropped the unknown field beside it, and the select answered 200 */
+// QL13: a wildcard expanded before the check dropped the unknown field beside it, and the select answered 200
 describe("an undeclared field beside a wildcard", () => {
-	const config = { relationFields: { author: ["name"] }, relations: ["author"], scalars: ["id", "title"] }
-	const issuesOf = (select: string) => {
-		const issues: string[] = []
-		const ctx = { addIssue: (issue: { message: string }) => issues.push(issue.message) } as unknown as z.RefinementCtx
-		validateSelectWithConfig(select, config, ctx)
-		return issues
-	}
+  const config = { relationFields: { author: ["name"] }, relations: ["author"], scalars: ["id", "title"] };
 
-	it("is reported at the root and in a relation, as it is alone", () => {
-		expect(issuesOf("secret")).toEqual(["Unknown field: secret"])
-		expect(issuesOf("*,secret")).toEqual(["Unknown field: secret"])
-		expect(issuesOf("secret,*")).toEqual(["Unknown field: secret"])
-		expect(issuesOf("author(*,age)")).toEqual(["Unknown author field: age"])
-		expect(issuesOf("*,nope,author(*,age,name)")).toEqual(["Unknown field: nope", "Unknown author field: age"])
-	})
+  const issuesOf = (select: string) => {
+    const issues: string[] = [];
+    const ctx = { addIssue: (issue: { message: string }) => issues.push(issue.message) } as unknown as z.RefinementCtx;
+    validateSelectWithConfig(select, config, ctx);
 
-	it("leaves a declared or computed name beside a wildcard alone", () => {
-		expect(issuesOf("*,id,@score,author(*,name,@rank)")).toEqual([])
-	})
-})
+    return issues;
+  };
+
+  it("is reported at the root and in a relation, as it is alone", () => {
+    expect(issuesOf("secret")).toEqual(["Unknown field: secret"]);
+    expect(issuesOf("*,secret")).toEqual(["Unknown field: secret"]);
+    expect(issuesOf("secret,*")).toEqual(["Unknown field: secret"]);
+    expect(issuesOf("author(*,age)")).toEqual(["Unknown author field: age"]);
+    expect(issuesOf("*,nope,author(*,age,name)")).toEqual(["Unknown field: nope", "Unknown author field: age"]);
+  });
+
+  it("leaves a declared or computed name beside a wildcard alone", () => {
+    expect(issuesOf("*,id,@score,author(*,name,@rank)")).toEqual([]);
+  });
+});

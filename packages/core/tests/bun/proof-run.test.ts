@@ -3,151 +3,163 @@
  * The proof run under Bun, where its scratch copy is bun:sqlite (local-db.ts picks it): the target
  * is a bun:sqlite database too, read only for its schema.
  */
-import { Database } from "bun:sqlite"
-import { describe, expect, it } from "bun:test"
-import fs from "node:fs"
-import os from "node:os"
-import path from "node:path"
-import { FILE, START, stateOf } from "../../src/migrate/__fixtures__/apply-parity.ts"
-import { applyToCopy } from "../../src/migrate/core/proof-engine.ts"
-import { provePending } from "../../src/migrate/core/proof-run.ts"
-import { splitSqlStatements } from "../../src/migrate/core/sql-scan.ts"
-import { createBunSqliteProvider } from "../../src/migrate/drivers/bun-sqlite.ts"
-import { openScratch } from "../../src/migrate/drivers/local-db.ts"
+import { Database } from "bun:sqlite";
+import { describe, expect, it } from "bun:test";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
-const DB = { migrationsDir: "m", name: "local", provider: { path: ":memory:", type: "bun-sqlite" as const } }
+import { FILE, START, stateOf } from "../../src/migrate/__fixtures__/apply-parity.ts";
+import { applyToCopy } from "../../src/migrate/core/proof-engine.ts";
+import { provePending } from "../../src/migrate/core/proof-run.ts";
+import { splitSqlStatements } from "../../src/migrate/core/sql-scan.ts";
+import { createBunSqliteProvider } from "../../src/migrate/drivers/bun-sqlite.ts";
+import { openScratch } from "../../src/migrate/drivers/local-db.ts";
+
+const DB = { migrationsDir: "m", name: "local", provider: { path: ":memory:", type: "bun-sqlite" as const } };
 
 describe("provePending on bun:sqlite", () => {
-	it("catches a copy that drops rows, and proves a lossless one clean", async () => {
-		const conn = await createBunSqliteProvider({ path: ":memory:", type: "bun-sqlite" }).connect(DB)
-		await conn.batch([{ sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT)" }])
-		const copy = (where: string) =>
-			`CREATE TABLE new_users (id INTEGER PRIMARY KEY, email TEXT);\nINSERT INTO new_users (id, email) SELECT id, email FROM users${where};\nDROP TABLE users;\nALTER TABLE new_users RENAME TO users;`
-		const proofs = await provePending(conn, [
-			{ name: "1_clean.sql", sql: copy("") },
-			{ name: "2_filtered.sql", sql: copy(" WHERE id > 7") },
-		])
-		expect(proofs.get("1_clean.sql")).toEqual({ cautious: [], unproven: [], unsafe: [] })
-		expect(proofs.get("2_filtered.sql")?.unsafe.join("\n")).toContain("loses")
-		await conn.close()
-	})
+  it("catches a copy that drops rows, and proves a lossless one clean", async () => {
+    const conn = await createBunSqliteProvider({ path: ":memory:", type: "bun-sqlite" }).connect(DB);
+    await conn.batch([{ sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT)" }]);
 
-	it("reads the copy by SQLite's default column names after a file's PRAGMA full_column_names = 1", async () => {
-		const conn = await createBunSqliteProvider({ path: ":memory:", type: "bun-sqlite" }).connect(DB)
-		await conn.batch([{ sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT)" }])
-		const proofs = await provePending(conn, [
-			{ name: "1_names.sql", sql: "PRAGMA full_column_names = 1;\nUPDATE users SET email = 'x';" },
-		])
-		expect(proofs.get("1_names.sql")).toEqual({
-			cautious: [],
-			unproven: [],
-			unsafe: ["UPDATE users SET email = 'x': updates existing rows of users (email)", "changes values of users.email"],
-		})
-		await conn.close()
-	})
-})
+    const copy = (where: string) =>
+      `CREATE TABLE new_users (id INTEGER PRIMARY KEY, email TEXT);\nINSERT INTO new_users (id, email) SELECT id, email FROM users${where};\nDROP TABLE users;\nALTER TABLE new_users RENAME TO users;`;
+
+    const proofs = await provePending(conn, [
+      { name: "1_clean.sql", sql: copy("") },
+      { name: "2_filtered.sql", sql: copy(" WHERE id > 7") },
+    ]);
+
+    expect(proofs.get("1_clean.sql")).toEqual({ cautious: [], unproven: [], unsafe: [] });
+    expect(proofs.get("2_filtered.sql")?.unsafe.join("\n")).toContain("loses");
+    await conn.close();
+  });
+
+  it("reads the copy by SQLite's default column names after a file's PRAGMA full_column_names = 1", async () => {
+    const conn = await createBunSqliteProvider({ path: ":memory:", type: "bun-sqlite" }).connect(DB);
+    await conn.batch([{ sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT)" }]);
+
+    const proofs = await provePending(conn, [
+      { name: "1_names.sql", sql: "PRAGMA full_column_names = 1;\nUPDATE users SET email = 'x';" },
+    ]);
+
+    expect(proofs.get("1_names.sql")).toEqual({
+      cautious: [],
+      unproven: [],
+      unsafe: ["UPDATE users SET email = 'x': updates existing rows of users (email)", "changes values of users.email"],
+    });
+    await conn.close();
+  });
+});
 
 describe("the proof's engine pass on bun:sqlite", () => {
-	it("leaves the copy as the target's own apply leaves a bun:sqlite target", async () => {
-		const target = await createBunSqliteProvider({ path: ":memory:", type: "bun-sqlite" }).connect(DB)
-		await target.batch(splitSqlStatements(START).map((sql) => ({ sql })))
-		await target.batch(splitSqlStatements(FILE).map((sql) => ({ sql })))
-		const copy = await openScratch()
-		copy.exec(START)
-		expect(applyToCopy(copy, FILE).error).toBeUndefined()
-		const read = async (sql: string) => {
-			const { columns, rows } = await target.execute(sql)
-			return rows.map((row) => Object.fromEntries(columns.map((column, i) => [column, row[i]])))
-		}
-		expect(await stateOf(async (sql) => copy.all(sql))).toEqual(await stateOf(read))
-		copy.close()
-		await target.close()
-	})
-})
+  it("leaves the copy as the target's own apply leaves a bun:sqlite target", async () => {
+    const target = await createBunSqliteProvider({ path: ":memory:", type: "bun-sqlite" }).connect(DB);
+    await target.batch(splitSqlStatements(START).map((sql) => ({ sql })));
+    await target.batch(splitSqlStatements(FILE).map((sql) => ({ sql })));
+    const copy = await openScratch();
+    copy.exec(START);
+    expect(applyToCopy(copy, FILE).error).toBeUndefined();
 
-/* M40 on bun:sqlite: the copy never runs a statement that reaches outside it, so a file that attaches
-   another database to delete its rows leaves them, and a VACUUM INTO writes no file */
+    const read = async (sql: string) => {
+      const { columns, rows } = await target.execute(sql);
+
+      return rows.map((row) => Object.fromEntries(columns.map((column, i) => [column, row[i]])));
+    };
+
+    expect(await stateOf(async (sql) => copy.all(sql))).toEqual(await stateOf(read));
+    copy.close();
+    await target.close();
+  });
+});
+
+// M40 on bun:sqlite: the copy never runs a statement that reaches outside it, so a file that attaches
+// another database to delete its rows leaves them, and a VACUUM INTO writes no file
 describe("the proof's copy on bun:sqlite never reaches outside itself", () => {
-	it("refuses an ATTACH before it runs, and the attached database keeps its rows", async () => {
-		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "database-outside-bun-"))
-		const victim = new Database(path.join(dir, "live.db"))
-		victim.exec(
-			"CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT); INSERT INTO users VALUES (1, 'a@x.io'), (2, 'b@x.io');",
-		)
-		victim.close()
-		const conn = await createBunSqliteProvider({ path: ":memory:", type: "bun-sqlite" }).connect(DB)
-		await conn.batch([{ sql: "CREATE TABLE t (id INTEGER PRIMARY KEY)" }])
-		const file = `ATTACH '${path.join(dir, "live.db")}' AS live;\nDELETE FROM live.users;`
-		await expect(provePending(conn, [{ name: "1_attach.sql", sql: file }])).rejects.toThrow(
-			"database never runs ATTACH",
-		)
-		const after = new Database(path.join(dir, "live.db"), { readonly: true })
-		expect(after.query("SELECT id FROM users ORDER BY id").values()).toEqual([[1], [2]])
-		after.close()
-		await conn.close()
-		fs.rmSync(dir, { force: true, recursive: true })
-	})
+  it("refuses an ATTACH before it runs, and the attached database keeps its rows", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "database-outside-bun-"));
+    const victim = new Database(path.join(dir, "live.db"));
+    victim.exec(
+      "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT); INSERT INTO users VALUES (1, 'a@x.io'), (2, 'b@x.io');",
+    );
+    victim.close();
+    const conn = await createBunSqliteProvider({ path: ":memory:", type: "bun-sqlite" }).connect(DB);
+    await conn.batch([{ sql: "CREATE TABLE t (id INTEGER PRIMARY KEY)" }]);
+    const file = `ATTACH '${path.join(dir, "live.db")}' AS live;\nDELETE FROM live.users;`;
+    await expect(provePending(conn, [{ name: "1_attach.sql", sql: file }])).rejects.toThrow(
+      "database never runs ATTACH",
+    );
+    const after = new Database(path.join(dir, "live.db"), { readonly: true });
+    expect(after.query("SELECT id FROM users ORDER BY id").values()).toEqual([[1], [2]]);
+    after.close();
+    await conn.close();
+    fs.rmSync(dir, { force: true, recursive: true });
+  });
 
-	it("refuses a VACUUM INTO before it runs, and writes no file", async () => {
-		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "database-outside-bun-"))
-		const copy = await openScratch()
-		copy.exec("CREATE TABLE t (id INTEGER PRIMARY KEY)")
-		expect(() => applyToCopy(copy, `VACUUM INTO '${path.join(dir, "copy.db")}'`)).toThrow(
-			"database never runs VACUUM INTO",
-		)
-		copy.close()
-		expect(fs.readdirSync(dir)).toEqual([])
-		fs.rmSync(dir, { force: true, recursive: true })
-	})
-})
+  it("refuses a VACUUM INTO before it runs, and writes no file", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "database-outside-bun-"));
+    const copy = await openScratch();
+    copy.exec("CREATE TABLE t (id INTEGER PRIMARY KEY)");
+    expect(() => applyToCopy(copy, `VACUUM INTO '${path.join(dir, "copy.db")}'`)).toThrow(
+      "database never runs VACUUM INTO",
+    );
+    copy.close();
+    expect(fs.readdirSync(dir)).toEqual([]);
+    fs.rmSync(dir, { force: true, recursive: true });
+  });
+});
 
 describe("the proof's copy on bun:sqlite reads a statement's end as SQLite does (SL2 of r22)", () => {
-	it("gives the first statement SQLite compiles, a trigger's body whole, up to the ; that ends it", async () => {
-		const copy = await openScratch()
-		try {
-			copy.exec("CREATE TABLE a (begin INTEGER)")
-			const trigger = "CREATE TRIGGER t AFTER INSERT ON a BEGIN SELECT new.begin; END;"
-			expect(copy.firstStatement(`${trigger}\nINSERT INTO a VALUES (1)`)).toBe(trigger)
-			expect(copy.firstStatement("INSERT INTO a VALUES (1) -- a note")).toBe("INSERT INTO a VALUES (1) -- a note")
-		} finally {
-			copy.close()
-		}
-	})
-})
+  it("gives the first statement SQLite compiles, a trigger's body whole, up to the ; that ends it", async () => {
+    const copy = await openScratch();
 
-/* SL1 of r23: a view, a trigger's body or a DEFAULT the file makes is compiled on bun:sqlite's copy too */
+    try {
+      copy.exec("CREATE TABLE a (begin INTEGER)");
+      const trigger = "CREATE TRIGGER t AFTER INSERT ON a BEGIN SELECT new.begin; END;";
+      expect(copy.firstStatement(`${trigger}\nINSERT INTO a VALUES (1)`)).toBe(trigger);
+      expect(copy.firstStatement("INSERT INTO a VALUES (1) -- a note")).toBe("INSERT INTO a VALUES (1) -- a note");
+    } finally {
+      copy.close();
+    }
+  });
+});
+
+// SL1 of r23: a view, a trigger's body or a DEFAULT the file makes is compiled on bun:sqlite's copy too
 describe("provePending on bun:sqlite refuses a file that makes a view, trigger or DEFAULT unable to run (SL1 of r23)", () => {
-	/** The proof of `file` over a bun:sqlite database holding `CREATE TABLE t (v INTEGER)` */
-	async function proveOverT(file: string): Promise<unknown> {
-		const conn = await createBunSqliteProvider({ path: ":memory:", type: "bun-sqlite" }).connect(DB)
-		await conn.batch([{ sql: "CREATE TABLE t (v INTEGER)" }])
-		try {
-			return await provePending(conn, [{ name: "2_file.sql", sql: file }])
-		} finally {
-			await conn.close()
-		}
-	}
+  /** The proof of `file` over a bun:sqlite database holding `CREATE TABLE t (v INTEGER)` */
+  async function proveOverT(file: string): Promise<unknown> {
+    const conn = await createBunSqliteProvider({ path: ":memory:", type: "bun-sqlite" }).connect(DB);
+    await conn.batch([{ sql: "CREATE TABLE t (v INTEGER)" }]);
 
-	it.each([
-		["CREATE VIEW vw AS SELECT nope FROM t;", "view vw cannot be read: no such column: nope"],
-		[
-			"CREATE TRIGGER tr AFTER INSERT ON t BEGIN INSERT INTO audit VALUES (new.v); END;",
-			"every INSERT on t fails, as a trigger it fires cannot compile: no such table: main.audit",
-		],
-		[
-			"CREATE TABLE n (id INTEGER PRIMARY KEY, v TEXT DEFAULT (lowr('A')));",
-			"an insert into n that leaves a column to its default cannot compile: unknown function: lowr()",
-		],
-	])("refuses %s, naming it and SQLite's error", async (file, refused) => {
-		await expect(proveOverT(file)).rejects.toThrow(
-			`2_file.sql: after this file, ${refused}; drop or change it in this file, or keep what it uses`,
-		)
-	})
+    try {
+      return await provePending(conn, [{ name: "2_file.sql", sql: file }]);
+    } finally {
+      await conn.close();
+    }
+  }
 
-	it("proves a new view that compiles and a new FTS5 table clean", async () => {
-		const proofs = (await proveOverT(
-			"CREATE VIEW good AS SELECT v FROM t;\nCREATE VIRTUAL TABLE doc USING fts5(body);",
-		)) as Map<string, { failed?: unknown }>
-		expect(proofs.get("2_file.sql")?.failed).toBeUndefined()
-	})
-})
+  it.each([
+    ["CREATE VIEW vw AS SELECT nope FROM t;", "view vw cannot be read: no such column: nope"],
+    [
+      "CREATE TRIGGER tr AFTER INSERT ON t BEGIN INSERT INTO audit VALUES (new.v); END;",
+      "every INSERT on t fails, as a trigger it fires cannot compile: no such table: main.audit",
+    ],
+    [
+      "CREATE TABLE n (id INTEGER PRIMARY KEY, v TEXT DEFAULT (lowr('A')));",
+      "an insert into n that leaves a column to its default cannot compile: unknown function: lowr()",
+    ],
+  ])("refuses %s, naming it and SQLite's error", async (file, refused) => {
+    await expect(proveOverT(file)).rejects.toThrow(
+      `2_file.sql: after this file, ${refused}; drop or change it in this file, or keep what it uses`,
+    );
+  });
+
+  it("proves a new view that compiles and a new FTS5 table clean", async () => {
+    const proofs = (await proveOverT(
+      "CREATE VIEW good AS SELECT v FROM t;\nCREATE VIRTUAL TABLE doc USING fts5(body);",
+    )) as Map<string, { failed?: unknown }>;
+
+    expect(proofs.get("2_file.sql")?.failed).toBeUndefined();
+  });
+});

@@ -6,35 +6,39 @@
  * scratch left. The Atlas here is the real one behind a stand-in that holds the second apply call
  * until a signal ends it, so the stop lands between the two files' calls.
  */
-import { spawn, spawnSync } from "node:child_process"
+import { spawn, spawnSync } from "node:child_process";
 import {
-	chmodSync,
-	existsSync,
-	mkdirSync,
-	mkdtempSync,
-	readdirSync,
-	readFileSync,
-	rmSync,
-	writeFileSync,
-} from "node:fs"
-import { constants, tmpdir } from "node:os"
-import { join } from "node:path"
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { hashDir } from "../../../src/migrate/core/atlas-dir.ts"
-import { STOP_SIGNALS } from "../../../src/migrate/core/cleanup.ts"
-import { run } from "../../../src/migrate/core/process.ts"
-import { recordWhole, running, runs, type Seen, see, send } from "../../support/pid.ts"
-import { withScratchDb } from "../support/pg.ts"
-import { query } from "../support/pg-roles.ts"
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { constants, tmpdir } from "node:os";
+import { join } from "node:path";
 
-let root = ""
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { hashDir } from "../../../src/migrate/core/atlas-dir.ts";
+import { STOP_SIGNALS } from "../../../src/migrate/core/cleanup.ts";
+import { run } from "../../../src/migrate/core/process.ts";
+import { recordWhole, running, runs, type Seen, see, send } from "../../support/pid.ts";
+import { query } from "../support/pg-roles.ts";
+import { withScratchDb } from "../support/pg.ts";
+
+let root = "";
+
 beforeEach(() => {
-	root = mkdtempSync(join(tmpdir(), "database-apply-interrupt-"))
-})
-afterEach(() => rmSync(root, { force: true, recursive: true }))
+  root = mkdtempSync(join(tmpdir(), "database-apply-interrupt-"));
+});
 
-/* the real Atlas, which the stand-in runs for every call but the held one */
-const REAL_ATLAS = spawnSync("sh", ["-c", "command -v atlas"], { encoding: "utf8" }).stdout.trim()
+afterEach(() => rmSync(root, { force: true, recursive: true }));
+
+// the real Atlas, which the stand-in runs for every call but the held one
+const REAL_ATLAS = spawnSync("sh", ["-c", "command -v atlas"], { encoding: "utf8" }).stdout.trim();
 
 /**
  * An `atlas` that runs the real one, except the second `migrate apply` call that is no dry run: that
@@ -55,58 +59,63 @@ if (call === 2) {
 	const real = spawnSync(process.env.DATABASE_REAL_ATLAS, args, { stdio: "inherit" })
 	process.exit(real.status ?? 1)
 }
-`
+`;
 
 /** Two files: the first ends its session run with a SET, so the second gets an Atlas call of its own (PA1 of r22b) */
 const FILES = [
-	"CREATE TABLE a (id int PRIMARY KEY);\nSET statement_timeout = 0;\n",
-	"CREATE TABLE b (id int PRIMARY KEY);\n",
-]
-const NAMES = ["20260101000000_a.sql", "20260101000001_b.sql"]
+  "CREATE TABLE a (id int PRIMARY KEY);\nSET statement_timeout = 0;\n",
+  "CREATE TABLE b (id int PRIMARY KEY);\n",
+];
+
+const NAMES = ["20260101000000_a.sql", "20260101000001_b.sql"];
 
 /**
  * The apply of `dir` in a child under a shell that says how it ended; `database` is the apply, seen as
  * the shell's child as soon as it writes its pid, and `kill` signals it alone
  */
 function childApply(env: NodeJS.ProcessEnv, target: { devUrl: string; dir: string; url: string }) {
-	const child = spawn(
-		"sh",
-		[
-			"-c",
-			/* no core file: SIGQUIT's default action dumps one as the process ends, and a bun process's dump, its
-			   address space reserved in terabytes, outlasts STOP_WITHIN_MS on a runner that writes it (CI's did,
-			   on the first run of PA3), though the stop it measures has ended; the shell still reports 128 + 3 */
-			'ulimit -c 0; bun "$0" "$1"; echo "exit $?"',
-			join(import.meta.dirname, "../support/apply-child.ts"),
-			JSON.stringify(target),
-		],
-		{
-			env,
-			stdio: ["ignore", "pipe", "inherit"],
-		},
-	)
-	let said = ""
-	let database: Seen | undefined
-	child.stdout.on("data", (chunk: Buffer) => {
-		said += chunk.toString()
-		/* read as the line comes, while the shell, which Node has not reaped, holds the apply as its child */
-		database ??= see(Number(/^pid (\d+)$/m.exec(said)?.[1]), child.pid)
-	})
-	const ended = new Promise<string[]>((done) => child.on("close", () => done(said.trim().split("\n"))))
-	const seen = (): Seen => {
-		if (database === undefined) throw new Error(`the apply never wrote its pid as the shell's child: ${said}`)
-		return database
-	}
-	return {
-		database: seen,
-		ended,
-		kill: (sent: NodeJS.Signals) => expect(send(seen(), sent)).toBe(true),
-		said: () => said,
-	}
+  const child = spawn(
+    "sh",
+    [
+      "-c",
+      // no core file: SIGQUIT's default action dumps one as the process ends, and a bun process's dump, its
+      // address space reserved in terabytes, outlasts STOP_WITHIN_MS on a runner that writes it (CI's did,
+      // on the first run of PA3), though the stop it measures has ended; the shell still reports 128 + 3
+      'ulimit -c 0; bun "$0" "$1"; echo "exit $?"',
+      join(import.meta.dirname, "../support/apply-child.ts"),
+      JSON.stringify(target),
+    ],
+    {
+      env,
+      stdio: ["ignore", "pipe", "inherit"],
+    },
+  );
+
+  let said = "";
+  let database: Seen | undefined;
+  child.stdout.on("data", (chunk: Buffer) => {
+    said += chunk.toString();
+    // read as the line comes, while the shell, which Node has not reaped, holds the apply as its child
+    database ??= see(Number(/^pid (\d+)$/m.exec(said)?.[1]), child.pid);
+  });
+  const ended = new Promise<string[]>((done) => child.on("close", () => done(said.trim().split("\n"))));
+
+  const seen = (): Seen => {
+    if (database === undefined) throw new Error(`the apply never wrote its pid as the shell's child: ${said}`);
+
+    return database;
+  };
+
+  return {
+    database: seen,
+    ended,
+    kill: (sent: NodeJS.Signals) => expect(send(seen(), sent)).toBe(true),
+    said: () => said,
+  };
 }
 
-/* how long database has to end once signalled, well under the case's timeout, so withScratchDb still drops its databases */
-const STOP_WITHIN_MS = 20_000
+// how long database has to end once signalled, well under the case's timeout, so withScratchDb still drops its databases
+const STOP_WITHIN_MS = 20_000;
 
 /**
  * What database said, once it ended after the signal; if it has not ended within STOP_WITHIN_MS, database
@@ -114,87 +123,96 @@ const STOP_WITHIN_MS = 20_000
  * nothing running and nothing on the server
  */
 async function endedWithin(child: ReturnType<typeof childApply>, atlas: Seen): Promise<string[]> {
-	let timer: NodeJS.Timeout | undefined
-	const late = new Promise<"late">((done) => {
-		timer = setTimeout(() => done("late"), STOP_WITHIN_MS)
-	})
-	const end = await Promise.race([child.ended, late])
-	clearTimeout(timer)
-	if (end !== "late") return end
-	const database = child.database()
-	const state = { atlasRunning: runs(atlas), databaseRunning: runs(database), said: child.said().trim().split("\n") }
-	for (const each of [database, atlas]) send(each, "SIGKILL")
-	await child.ended
-	throw new Error(
-		`database ${database.pid} (Atlas ${atlas.pid}) had not ended ${STOP_WITHIN_MS} ms after the signal: ${JSON.stringify(state)}`,
-	)
+  let timer: NodeJS.Timeout | undefined;
+
+  const late = new Promise<"late">((done) => {
+    timer = setTimeout(() => done("late"), STOP_WITHIN_MS);
+  });
+
+  const end = await Promise.race([child.ended, late]);
+  clearTimeout(timer);
+
+  if (end !== "late") return end;
+  const database = child.database();
+  const state = { atlasRunning: runs(atlas), databaseRunning: runs(database), said: child.said().trim().split("\n") };
+
+  for (const each of [database, atlas]) send(each, "SIGKILL");
+  await child.ended;
+  throw new Error(
+    `database ${database.pid} (Atlas ${atlas.pid}) had not ended ${STOP_WITHIN_MS} ms after the signal: ${JSON.stringify(state)}`,
+  );
 }
 
 /** Until `done` holds, at most 60 s */
 async function until(done: () => boolean, what: string): Promise<void> {
-	for (let tries = 0; !done(); tries++) {
-		if (tries > 1200) throw new Error(`never: ${what}`)
-		await new Promise((resolve) => setTimeout(resolve, 50))
-	}
+  for (let tries = 0; !done(); tries++) {
+    if (tries > 1200) throw new Error(`never: ${what}`);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
 }
 
 describe("a Postgres apply stopped by a signal while Atlas applies (PA4 of r22, PA3 of r23)", () => {
-	/* a shell reports a process a signal ended as 128 plus its number */
-	it.each(STOP_SIGNALS.map((signal) => [signal, 128 + constants.signals[signal]] as const))(
-		"on %s passes it to Atlas, says once what was applied, records nothing after, and ends as the signal would",
-		async (signal, code) => {
-			const [dir, bin, tmp] = [join(root, "m"), join(root, "bin"), join(root, "tmp")]
-			for (const each of [dir, bin, tmp]) mkdirSync(each)
-			FILES.forEach((sql, i) => writeFileSync(join(dir, NAMES[i] as string), sql))
-			await hashDir(run, dir)
-			writeFileSync(join(bin, "atlas"), STAND_IN)
-			chmodSync(join(bin, "atlas"), 0o755)
-			const state = join(root, "state")
-			await withScratchDb((devUrl) =>
-				withScratchDb(async (url) => {
-					const env = {
-						...process.env,
-						DATABASE_REAL_ATLAS: REAL_ATLAS,
-						DATABASE_STAND_IN_STATE: state,
-						PATH: `${bin}:${process.env["PATH"] ?? ""}`,
-						TMPDIR: tmp,
-					}
-					const child = childApply(env, { devUrl, dir, url })
-					await until(() => existsSync(`${state}.pid`), "the held apply call")
-					/* the held Atlas call, seen as database's child while it waits for the signal */
-					const atlas = running(Number(readFileSync(`${state}.pid`, "utf8")), child.database().pid)
-					child.kill(signal)
-					const said = await endedWithin(child, atlas)
-					const revisions = await query(
-						url,
-						"SELECT version FROM atlas_schema_revisions.atlas_schema_revisions ORDER BY version",
-					)
-					const tables = await query(
-						url,
-						"SELECT to_regclass('public.a') IS NOT NULL AS a, to_regclass('public.b') IS NOT NULL AS b",
-					)
-					expect({
-						atlasRunning: runs(atlas),
-						end: said.at(-1),
-						left: readdirSync(tmp),
-						recorded: revisions.map((row) => String(row["version"])),
-						stopped: said.filter((line) => line.startsWith("Stopped by ")),
-						tables: tables[0],
-					}).toEqual({
-						atlasRunning: false,
-						end: `exit ${code}`,
-						left: [],
-						recorded: ["20260101000000"],
-						stopped: [`Stopped by ${signal}: applied ${NAMES[0]}; not applied ${NAMES[1]}`],
-						tables: { a: true, b: false },
-					})
-				}),
-			)
-		},
-		// room for until's 60 s wait for the held Atlas call, then STOP_WITHIN_MS's 20 s for the stop
-		90_000,
-	)
-})
+  // a shell reports a process a signal ended as 128 plus its number
+  it.each(STOP_SIGNALS.map((signal) => [signal, 128 + constants.signals[signal]] as const))(
+    "on %s passes it to Atlas, says once what was applied, records nothing after, and ends as the signal would",
+    async (signal, code) => {
+      const [dir, bin, tmp] = [join(root, "m"), join(root, "bin"), join(root, "tmp")];
+
+      for (const each of [dir, bin, tmp]) mkdirSync(each);
+      FILES.forEach((sql, i) => writeFileSync(join(dir, NAMES[i] as string), sql));
+      await hashDir(run, dir);
+      writeFileSync(join(bin, "atlas"), STAND_IN);
+      chmodSync(join(bin, "atlas"), 0o755);
+      const state = join(root, "state");
+      await withScratchDb((devUrl) =>
+        withScratchDb(async (url) => {
+          const env = {
+            ...process.env,
+            DATABASE_REAL_ATLAS: REAL_ATLAS,
+            DATABASE_STAND_IN_STATE: state,
+            PATH: `${bin}:${process.env["PATH"] ?? ""}`,
+            TMPDIR: tmp,
+          };
+
+          const child = childApply(env, { devUrl, dir, url });
+          await until(() => existsSync(`${state}.pid`), "the held apply call");
+          // the held Atlas call, seen as database's child while it waits for the signal
+          const atlas = running(Number(readFileSync(`${state}.pid`, "utf8")), child.database().pid);
+          child.kill(signal);
+          const said = await endedWithin(child, atlas);
+
+          const revisions = await query(
+            url,
+            "SELECT version FROM atlas_schema_revisions.atlas_schema_revisions ORDER BY version",
+          );
+
+          const tables = await query(
+            url,
+            "SELECT to_regclass('public.a') IS NOT NULL AS a, to_regclass('public.b') IS NOT NULL AS b",
+          );
+
+          expect({
+            atlasRunning: runs(atlas),
+            end: said.at(-1),
+            left: readdirSync(tmp),
+            recorded: revisions.map((row) => String(row["version"])),
+            stopped: said.filter((line) => line.startsWith("Stopped by ")),
+            tables: tables[0],
+          }).toEqual({
+            atlasRunning: false,
+            end: `exit ${code}`,
+            left: [],
+            recorded: ["20260101000000"],
+            stopped: [`Stopped by ${signal}: applied ${NAMES[0]}; not applied ${NAMES[1]}`],
+            tables: { a: true, b: false },
+          });
+        }),
+      );
+    },
+    // room for until's 60 s wait for the held Atlas call, then STOP_WITHIN_MS's 20 s for the stop
+    90_000,
+  );
+});
 
 /**
  * `database migrate apply db --json --yes` in `project` as database's own process, signalled alone with
@@ -202,84 +220,88 @@ describe("a Postgres apply stopped by a signal while Atlas applies (PA4 of r22, 
  * stdout as JSON lines. Past STOP_WITHIN_MS database and its Atlas child are killed and the case fails.
  */
 async function databaseJsonStopped(
-	{ env, project, state }: { env: NodeJS.ProcessEnv; project: string; state: string },
-	signal: NodeJS.Signals,
+  { env, project, state }: { env: NodeJS.ProcessEnv; project: string; state: string },
+  signal: NodeJS.Signals,
 ) {
-	const database = spawn(
-		process.execPath,
-		[join(import.meta.dirname, "../../../src/bin.ts"), "migrate", "apply", "db", "--json", "--yes"],
-		{ cwd: project, env, stdio: ["ignore", "pipe", "pipe"] },
-	)
-	let [out, err] = ["", ""]
-	database.stdout.on("data", (chunk: Buffer) => (out += chunk.toString()))
-	database.stderr.on("data", (chunk: Buffer) => (err += chunk.toString()))
-	const ended = new Promise<NodeJS.Signals | null>((done) => database.on("close", (_, by) => done(by)))
-	await until(() => existsSync(`${state}.pid`), "the held apply call")
-	database.kill(signal)
-	const by = await Promise.race([ended, new Promise<"late">((done) => setTimeout(() => done("late"), STOP_WITHIN_MS))])
-	if (by === "late") {
-		database.kill("SIGKILL")
-		send(running(Number(readFileSync(`${state}.pid`, "utf8")), database.pid as number), "SIGKILL")
-		throw new Error(`database had not ended ${STOP_WITHIN_MS} ms after ${signal}: ${JSON.stringify({ err, out })}`)
-	}
-	return {
-		by,
-		err: err.split("\n").filter((line) => line.startsWith("Stopped by")),
-		out: out
-			.trim()
-			.split("\n")
-			.map((line) => JSON.parse(line) as unknown),
-	}
+  const database = spawn(
+    process.execPath,
+    [join(import.meta.dirname, "../../../src/bin.ts"), "migrate", "apply", "db", "--json", "--yes"],
+    { cwd: project, env, stdio: ["ignore", "pipe", "pipe"] },
+  );
+
+  let [out, err] = ["", ""];
+  database.stdout.on("data", (chunk: Buffer) => (out += chunk.toString()));
+  database.stderr.on("data", (chunk: Buffer) => (err += chunk.toString()));
+  const ended = new Promise<NodeJS.Signals | null>((done) => database.on("close", (_, by) => done(by)));
+  await until(() => existsSync(`${state}.pid`), "the held apply call");
+  database.kill(signal);
+  const by = await Promise.race([ended, new Promise<"late">((done) => setTimeout(() => done("late"), STOP_WITHIN_MS))]);
+
+  if (by === "late") {
+    database.kill("SIGKILL");
+    send(running(Number(readFileSync(`${state}.pid`, "utf8")), database.pid), "SIGKILL");
+    throw new Error(`database had not ended ${STOP_WITHIN_MS} ms after ${signal}: ${JSON.stringify({ err, out })}`);
+  }
+
+  return {
+    by,
+    err: err.split("\n").filter((line) => line.startsWith("Stopped by")),
+    out: out
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line)),
+  };
 }
 
-/*
- * The same stop through the CLI, `database migrate apply --json`, which printed no object when a signal
- * ended it (KC3 of r23). It prints the one object, naming the file that committed and the signal, and
- * still ends by the signal.
- */
+// The same stop through the CLI, `database migrate apply --json`, which printed no object when a signal
+// ended it (KC3 of r23). It prints the one object, naming the file that committed and the signal, and
+// still ends by the signal.
 describe("database migrate apply --json stopped by a signal while Atlas applies (KC3 of r23)", () => {
-	it.each(STOP_SIGNALS)(
-		"on %s prints the one JSON object naming the committed file, then ends by it",
-		async (signal) => {
-			const [dir, bin, tmp, project] = [join(root, "m"), join(root, "bin"), join(root, "tmp"), join(root, "project")]
-			for (const each of [dir, bin, tmp, project]) mkdirSync(each)
-			FILES.forEach((sql, i) => writeFileSync(join(dir, NAMES[i] as string), sql))
-			await hashDir(run, dir)
-			writeFileSync(join(bin, "atlas"), STAND_IN)
-			chmodSync(join(bin, "atlas"), 0o755)
-			const state = join(root, "state")
-			const env = {
-				...process.env,
-				DATABASE_REAL_ATLAS: REAL_ATLAS,
-				DATABASE_STAND_IN_STATE: state,
-				PATH: `${bin}:${process.env["PATH"] ?? ""}`,
-				TMPDIR: tmp,
-			}
-			await withScratchDb((devUrl) =>
-				withScratchDb(async (url) => {
-					const provider = JSON.stringify({ devUrl, type: "postgres", url })
-					writeFileSync(
-						join(project, "database.migrate.config.ts"),
-						`export default { databases: { db: { migrationsDir: ${JSON.stringify(dir)}, name: "db", provider: ${provider} } } }\n`,
-					)
-					const message = `Stopped by ${signal}: applied ${NAMES[0]}; not applied ${NAMES[1]}`
-					expect(await databaseJsonStopped({ env, project, state }, signal)).toEqual({
-						by: signal,
-						err: [message],
-						out: [
-							{
-								applied: [NAMES[0]],
-								database: "db",
-								pending: [NAMES[1]],
-								refused: [message],
-								stoppedBy: signal,
-								unknown: [],
-							},
-						],
-					})
-				}),
-			)
-		},
-		90_000,
-	)
-})
+  it.each(STOP_SIGNALS)(
+    "on %s prints the one JSON object naming the committed file, then ends by it",
+    async (signal) => {
+      const [dir, bin, tmp, project] = [join(root, "m"), join(root, "bin"), join(root, "tmp"), join(root, "project")];
+
+      for (const each of [dir, bin, tmp, project]) mkdirSync(each);
+      FILES.forEach((sql, i) => writeFileSync(join(dir, NAMES[i] as string), sql));
+      await hashDir(run, dir);
+      writeFileSync(join(bin, "atlas"), STAND_IN);
+      chmodSync(join(bin, "atlas"), 0o755);
+      const state = join(root, "state");
+
+      const env = {
+        ...process.env,
+        DATABASE_REAL_ATLAS: REAL_ATLAS,
+        DATABASE_STAND_IN_STATE: state,
+        PATH: `${bin}:${process.env["PATH"] ?? ""}`,
+        TMPDIR: tmp,
+      };
+
+      await withScratchDb((devUrl) =>
+        withScratchDb(async (url) => {
+          const provider = JSON.stringify({ devUrl, type: "postgres", url });
+          writeFileSync(
+            join(project, "database.migrate.config.ts"),
+            `export default { databases: { db: { migrationsDir: ${JSON.stringify(dir)}, name: "db", provider: ${provider} } } }\n`,
+          );
+          const message = `Stopped by ${signal}: applied ${NAMES[0]}; not applied ${NAMES[1]}`;
+          expect(await databaseJsonStopped({ env, project, state }, signal)).toEqual({
+            by: signal,
+            err: [message],
+            out: [
+              {
+                applied: [NAMES[0]],
+                database: "db",
+                pending: [NAMES[1]],
+                refused: [message],
+                stoppedBy: signal,
+                unknown: [],
+              },
+            ],
+          });
+        }),
+      );
+    },
+    90_000,
+  );
+});

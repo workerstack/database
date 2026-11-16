@@ -4,7 +4,7 @@
 
 // lookup-table: the 249 codes, one line per first letter, read by isIso3166Alpha2
 const ALPHA_2: ReadonlySet<string> = /* @__PURE__ */ new Set(
-	/* @__PURE__ */ `AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ
+  /* @__PURE__ */ `AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ
 BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ
 CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ
 DE DJ DK DM DO DZ
@@ -29,11 +29,11 @@ VA VC VE VG VI VN VU
 WF WS
 YE YT
 ZA ZM ZW`.split(/\s/u),
-)
+);
 
 // lookup-table: the 249 codes, one line per first letter, read by isIso3166Alpha3
 const ALPHA_3: ReadonlySet<string> = /* @__PURE__ */ new Set(
-	/* @__PURE__ */ `ABW AFG AGO AIA ALA ALB AND ARE ARG ARM ASM ATA ATF ATG AUS AUT AZE
+  /* @__PURE__ */ `ABW AFG AGO AIA ALA ALB AND ARE ARG ARM ASM ATA ATF ATG AUS AUT AZE
 BDI BEL BEN BES BFA BGD BGR BHR BHS BIH BLM BLR BLZ BMU BOL BRA BRB BRN BTN BVT BWA
 CAF CAN CCK CHE CHL CHN CIV CMR COD COG COK COL COM CPV CRI CUB CUW CXR CYM CYP CZE
 DEU DJI DMA DNK DOM DZA
@@ -58,7 +58,7 @@ VAT VCT VEN VGB VIR VNM VUT
 WLF WSM
 YEM
 ZAF ZMB ZWE`.split(/\s/u),
-)
+);
 
 /**
  * Whether `value` is an officially assigned ISO 3166-1 alpha-2 country code, exactly as written: uppercase, such as
@@ -66,7 +66,7 @@ ZAF ZMB ZWE`.split(/\s/u),
  * this never throws.
  */
 export function isIso3166Alpha2(value: string): boolean {
-	return ALPHA_2.has(value)
+  return ALPHA_2.has(value);
 }
 
 /**
@@ -74,5 +74,5 @@ export function isIso3166Alpha2(value: string): boolean {
  * HRV or GBR. The codes are those of Debian iso-codes v4.20.1. Any string is taken; this never throws.
  */
 export function isIso3166Alpha3(value: string): boolean {
-	return ALPHA_3.has(value)
+  return ALPHA_3.has(value);
 }

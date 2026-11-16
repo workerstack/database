@@ -3,10 +3,12 @@
  * which checks the file and hands it to the real `wrangler d1 migrations apply` on its local D1,
  * with no database.migrate.config.ts: the database is the wrangler binding's.
  */
-import { readdirSync, readFileSync } from "node:fs"
-import { join } from "node:path"
-import { beforeAll, describe, expect, it } from "vitest"
-import { app, BLOG, ok, type App } from "./support/project.ts"
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { beforeAll, describe, expect, it } from "vitest";
+
+import { app, BLOG, ok, type App } from "./support/project.ts";
 
 const WRANGLER_TOML = `name = "e2e"
 compatibility_date = "2026-10-01"
@@ -16,70 +18,73 @@ binding = "CORE"
 database_name = "core"
 database_id = "00000000-0000-0000-0000-000000000000"
 migrations_dir = "atlas-migrations"
-`
+`;
 
-let worker: App
+let worker: App;
 
 beforeAll(() => {
-	worker = app({ ...BLOG, "wrangler.toml": WRANGLER_TOML })
-	ok(worker.database("codegen", "core"), "codegen")
-	ok(worker.database("migrate", "init"), "migrate init")
-	ok(worker.database("migrate", "diff", "core", "init"), "migrate diff")
-}, 180_000)
+  worker = app({ ...BLOG, "wrangler.toml": WRANGLER_TOML });
+  ok(worker.database("codegen", "core"), "codegen");
+  ok(worker.database("migrate", "init"), "migrate init");
+  ok(worker.database("migrate", "diff", "core", "init"), "migrate diff");
+}, 180_000);
 
 describe("database on D1 --local, from tables to a migrated database", () => {
-	it("applies the diffed migration through wrangler, records it in d1_migrations, and finds nothing pending after", () => {
-		expect(ok(worker.database("migrate", "apply", "core", "--local"), "apply").stdout).toContain("1 applied")
-		expect(ok(worker.database("migrate", "apply", "core", "--local"), "apply again").stdout).toContain(
-			"No migrations to apply",
-		)
-		const tables = ok(
-			worker.wrangler(
-				"d1",
-				"execute",
-				"core",
-				"--local",
-				"--json",
-				"--command=SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
-			),
-			"wrangler d1 execute",
-		)
-		expect(tables.stdout).toContain('"post"')
-		expect(tables.stdout).toContain('"d1_migrations"')
-		expect(tables.stdout).not.toContain('"__drizzle_migrations"')
-	}, 180_000)
+  it("applies the diffed migration through wrangler, records it in d1_migrations, and finds nothing pending after", () => {
+    expect(ok(worker.database("migrate", "apply", "core", "--local"), "apply").stdout).toContain("1 applied");
+    expect(ok(worker.database("migrate", "apply", "core", "--local"), "apply again").stdout).toContain(
+      "No migrations to apply",
+    );
 
-	it("lets the migrated table enforce its unique index on D1", () => {
-		const insert = (id: string) =>
-			worker.wrangler(
-				"d1",
-				"execute",
-				"core",
-				"--local",
-				`--command=INSERT INTO post (id, title) VALUES ('${id}', 'Same')`,
-			)
-		ok(insert("pst_1"), "first insert")
-		const second = insert("pst_2")
-		expect(second.status).not.toBe(0)
-		expect(`${second.stdout}${second.stderr}`).toContain("UNIQUE constraint failed: post.title")
-	}, 120_000)
+    const tables = ok(
+      worker.wrangler(
+        "d1",
+        "execute",
+        "core",
+        "--local",
+        "--json",
+        "--command=SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
+      ),
+      "wrangler d1 execute",
+    );
 
-	it("diffs as in sync with --dry-run after the apply, and prints the drift of a changed table without writing it", () => {
-		expect(ok(worker.database("migrate", "diff", "core", "--dry-run"), "dry run").stdout).toContain(
-			"Schema is already in sync",
-		)
-		const before = readdirSync(join(worker.dir, "atlas-migrations")).sort()
-		const tables = readFileSync(join(worker.dir, "src/db/core.tables.ts"), "utf8")
-		worker.write({
-			"src/db/core.tables.ts": tables.replace(
-				'deleted_at: c.deletedAt("deleted_at"),',
-				'deleted_at: c.deletedAt("deleted_at"),\n\t\tsummary: c.text("summary"),',
-			),
-		})
-		const drift = worker.database("migrate", "diff", "core", "--dry-run")
-		expect(drift.status).toBe(1)
-		expect(drift.stdout).toContain("ADD COLUMN `summary` text")
-		expect(drift.stderr).toContain("core has drifted from its migrations")
-		expect(readdirSync(join(worker.dir, "atlas-migrations")).sort()).toEqual(before)
-	}, 180_000)
-})
+    expect(tables.stdout).toContain('"post"');
+    expect(tables.stdout).toContain('"d1_migrations"');
+    expect(tables.stdout).not.toContain('"__drizzle_migrations"');
+  }, 180_000);
+
+  it("lets the migrated table enforce its unique index on D1", () => {
+    const insert = (id: string) =>
+      worker.wrangler(
+        "d1",
+        "execute",
+        "core",
+        "--local",
+        `--command=INSERT INTO post (id, title) VALUES ('${id}', 'Same')`,
+      );
+
+    ok(insert("pst_1"), "first insert");
+    const second = insert("pst_2");
+    expect(second.status).not.toBe(0);
+    expect(`${second.stdout}${second.stderr}`).toContain("UNIQUE constraint failed: post.title");
+  }, 120_000);
+
+  it("diffs as in sync with --dry-run after the apply, and prints the drift of a changed table without writing it", () => {
+    expect(ok(worker.database("migrate", "diff", "core", "--dry-run"), "dry run").stdout).toContain(
+      "Schema is already in sync",
+    );
+    const before = readdirSync(join(worker.dir, "atlas-migrations")).sort();
+    const tables = readFileSync(join(worker.dir, "src/db/core.tables.ts"), "utf8");
+    worker.write({
+      "src/db/core.tables.ts": tables.replace(
+        'deleted_at: c.deletedAt("deleted_at"),',
+        'deleted_at: c.deletedAt("deleted_at"),\n\t\tsummary: c.text("summary"),',
+      ),
+    });
+    const drift = worker.database("migrate", "diff", "core", "--dry-run");
+    expect(drift.status).toBe(1);
+    expect(drift.stdout).toContain("ADD COLUMN `summary` text");
+    expect(drift.stderr).toContain("core has drifted from its migrations");
+    expect(readdirSync(join(worker.dir, "atlas-migrations")).sort()).toEqual(before);
+  }, 180_000);
+});

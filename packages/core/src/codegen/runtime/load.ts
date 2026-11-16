@@ -5,26 +5,30 @@
  * or a signal, and read the snapshot it writes. Under node the child loads TypeScript through
  * node-hooks.mjs; bun loads it itself.
  */
-import fs from "node:fs"
-import path from "node:path"
-import { refuseCompiled } from "../../migrate/core/compiled.ts"
-import { resolvePeer } from "../../migrate/core/optional-peer.ts"
-import { type MigrateRun, run as defaultRun } from "../../migrate/core/process.ts"
-import type { Snapshot } from "./snapshot-types.ts"
-import { scratchDir } from "../../migrate/core/cleanup.ts"
-import { GROUPS } from "./supervise.mjs"
+import fs from "node:fs";
+import path from "node:path";
+
+import { scratchDir } from "../../migrate/core/cleanup.ts";
+import { refuseCompiled } from "../../migrate/core/compiled.ts";
+import { resolvePeer } from "../../migrate/core/optional-peer.ts";
+import { type MigrateRun, run as defaultRun } from "../../migrate/core/process.ts";
+import type { Snapshot } from "./snapshot-types.ts";
+import { GROUPS } from "./supervise.mjs";
 
 /** How long the child may take to load the tables module */
-const LOAD_TIMEOUT_MS = 60_000
+const LOAD_TIMEOUT_MS = 60_000;
 
 /** The child's whole environment: what finds the runtime and its options, no secret of the parent's */
 function childEnv(): Record<string, string> {
-	const env: Record<string, string> = {}
-	for (const name of ["HOME", "NODE_OPTIONS", "PATH"]) {
-		const value = process.env[name]
-		if (value !== undefined) env[name] = value
-	}
-	return env
+  const env: Record<string, string> = {};
+
+  for (const name of ["HOME", "NODE_OPTIONS", "PATH"]) {
+    const value = process.env[name];
+
+    if (value !== undefined) env[name] = value;
+  }
+
+  return env;
 }
 
 /**
@@ -33,25 +37,27 @@ function childEnv(): Record<string, string> {
  * own (`groups`, as the supervisor spawns it), it takes the group, every process a module started
  */
 function watchSupervisor(groups: boolean): string {
-	const end = groups ? `process.kill(0, "SIGKILL")` : "process.exit(1)"
-	return `process.stdin.on("end", () => ${end}); process.stdin.resume(); `
+  const end = groups ? `process.kill(0, "SIGKILL")` : "process.exit(1)";
+
+  return `process.stdin.on("end", () => ${end}); process.stdin.resume(); `;
 }
 
 /** How long the supervisor gets past the child's timeout before codegen stops it in turn */
-const SUPERVISOR_GRACE_MS = 10_000
+const SUPERVISOR_GRACE_MS = 10_000;
 
 /**
  * The supervisor's arguments on `runtime` (supervise.mjs): it runs `cmd` with `args` as the child,
  * in a group of its own, for `timeoutMs`, and writes a timeout to `status`
  */
 function supervisorArgs(
-	runtime: "bun" | "node",
-	job: { args: readonly string[]; cmd: string; status: string; timeoutMs: number },
+  runtime: "bun" | "node",
+  job: { args: readonly string[]; cmd: string; status: string; timeoutMs: number },
 ): string[] {
-	const supervisor = new URL("supervise.mjs", import.meta.url).href
-	const script = `const { main } = await import(${JSON.stringify(supervisor)}); await main(process)`
-	const head = runtime === "bun" ? ["--no-env-file", "-e"] : ["--input-type=module", "-e"]
-	return [...head, script, JSON.stringify(job)]
+  const supervisor = new URL("supervise.mjs", import.meta.url).href;
+  const script = `const { main } = await import(${JSON.stringify(supervisor)}); await main(process)`;
+  const head = runtime === "bun" ? ["--no-env-file", "-e"] : ["--input-type=module", "-e"];
+
+  return [...head, script, JSON.stringify(job)];
 }
 
 /**
@@ -59,87 +65,97 @@ function supervisorArgs(
  * rest, so the child loads the reader and nothing of the CLI; under node with the hooks first
  */
 function childArgs(runtime: "bun" | "node", rest: readonly string[]): string[] {
-	const child = new URL("child.ts", import.meta.url).href
-	/* writeSnapshot has written and closed the result file when it returns, so the exit drops nothing; a
-	   module's timer or pool would otherwise keep the child alive past it */
-	const script = `${watchSupervisor(GROUPS)}const { writeSnapshot } = await import(${JSON.stringify(child)}); await writeSnapshot(process.argv.slice(-2)); process.exit(0)`
-	/* bun reads .env and .env.local from the working directory unless told not to */
-	if (runtime === "bun") return ["--no-env-file", "-e", script, ...rest]
-	const hooks = new URL("node-hooks.mjs", import.meta.url).href
-	return [
-		/* a package import.meta.resolve()s from the file that imports it, a second argument node 22 flags */
-		"--experimental-import-meta-resolve",
-		"--disable-warning=ExperimentalWarning",
-		"--import",
-		`data:text/javascript,import{install}from${JSON.stringify(hooks)};install()`,
-		"--input-type=module",
-		"-e",
-		script,
-		...rest,
-	]
+  const child = new URL("child.ts", import.meta.url).href;
+  // writeSnapshot has written and closed the result file when it returns, so the exit drops nothing; a
+  // module's timer or pool would otherwise keep the child alive past it
+  const script = `${watchSupervisor(GROUPS)}const { writeSnapshot } = await import(${JSON.stringify(child)}); await writeSnapshot(process.argv.slice(-2)); process.exit(0)`;
+
+  // bun reads .env and .env.local from the working directory unless told not to
+  if (runtime === "bun") return ["--no-env-file", "-e", script, ...rest];
+  const hooks = new URL("node-hooks.mjs", import.meta.url).href;
+
+  return [
+    // a package import.meta.resolve()s from the file that imports it, a second argument node 22 flags
+    "--experimental-import-meta-resolve",
+    "--disable-warning=ExperimentalWarning",
+    "--import",
+    `data:text/javascript,import{install}from${JSON.stringify(hooks)};install()`,
+    "--input-type=module",
+    "-e",
+    script,
+    ...rest,
+  ];
 }
 
 type LoadOptions = {
-	/**
-	 * The working directory the module loads in: database's own, where the app and drizzle-kit run, so a
-	 * root-relative read finds what it finds for them; the process's by default
-	 */
-	cwd?: string | undefined
-	/** The URL of the module database runs from, which a Bun single-file executable embeds; this module's own unless a test gives one */
-	moduleUrl?: string | undefined
-	run?: MigrateRun | undefined
-	runtime?: "bun" | "node" | undefined
-	/** How long the child may take; LOAD_TIMEOUT_MS unless a test needs less */
-	timeoutMs?: number | undefined
-}
+  /**
+   * The working directory the module loads in: database's own, where the app and drizzle-kit run, so a
+   * root-relative read finds what it finds for them; the process's by default
+   */
+  cwd?: string | undefined;
+  /** The URL of the module database runs from, which a Bun single-file executable embeds; this module's own unless a test gives one */
+  moduleUrl?: string | undefined;
+  run?: MigrateRun | undefined;
+  runtime?: "bun" | "node" | undefined;
+  /** How long the child may take; LOAD_TIMEOUT_MS unless a test needs less */
+  timeoutMs?: number | undefined;
+};
 
 /** The snapshot of every table `tablesPath` exports; an error naming the file when it cannot be loaded */
 async function loadSnapshot(tablesPath: string, options: LoadOptions = {}): Promise<Snapshot> {
-	const { moduleUrl = import.meta.url } = options
-	/* the child would rerun the app itself, as process.execPath is the app */
-	refuseCompiled(
-		moduleUrl,
-		"database codegen loads the tables file in a child process, which cannot read the modules a Bun single-file executable embeds: run codegen with bun or node, not from a compiled executable",
-	)
-	/* the child reads the module's imports with ts-morph, an optional peer (under node its hooks load it
-	   first): resolved here, so a project without it is told so, not that its tables file failed */
-	resolvePeer({ peer: "ts-morph", why: "read the modules a tables file imports" }, () =>
-		import.meta.resolve("ts-morph"),
-	)
-	const runtime = options.runtime ?? (process.versions["bun"] === undefined ? "node" : "bun")
-	const { dir, remove: removeDir } = scratchDir("database-codegen-")
-	try {
-		const result = path.join(dir, "snapshot.json")
-		const status = path.join(dir, "status.json")
-		const timeoutMs = options.timeoutMs ?? LOAD_TIMEOUT_MS
-		const child = { args: childArgs(runtime, [path.resolve(tablesPath), result]), cmd: process.execPath }
-		const ran = await (options.run ?? defaultRun)(
-			process.execPath,
-			supervisorArgs(runtime, { ...child, status, timeoutMs }),
-			{
-				cwd: options.cwd ?? process.cwd(),
-				exactEnv: childEnv(),
-				/* the supervisor reads codegen's end from its stdin, so a codegen killed outright leaves no module running */
-				lifeline: true,
-				timeoutMs: timeoutMs + SUPERVISOR_GRACE_MS,
-			},
-		)
-		/* the supervisor's own word, as a module may exit 124 itself; codegen's stopping the supervisor is one too */
-		if (fs.existsSync(status) || ran.code === 124)
-			throw new Error(`database timed out after ${timeoutMs / 1000} s loading ${tablesPath}`)
-		if (!fs.existsSync(result))
-			throw new Error(`database could not load ${tablesPath}: ${ran.stderr.trim() || `the loader exited ${ran.code}`}`)
-		const read = JSON.parse(fs.readFileSync(result, "utf8")) as
-			| { at?: string | undefined; error: string }
-			| { snapshot: Snapshot }
-		if ("error" in read)
-			throw new Error(
-				`database could not load ${tablesPath}: ${read.error}${read.at === undefined ? "" : ` (at ${read.at})`}`,
-			)
-		return read.snapshot
-	} finally {
-		removeDir()
-	}
+  const { moduleUrl = import.meta.url } = options;
+  // the child would rerun the app itself, as process.execPath is the app
+  refuseCompiled(
+    moduleUrl,
+    "database codegen loads the tables file in a child process, which cannot read the modules a Bun single-file executable embeds: run codegen with bun or node, not from a compiled executable",
+  );
+  // the child reads the module's imports with ts-morph, an optional peer (under node its hooks load it
+  // first): resolved here, so a project without it is told so, not that its tables file failed
+  resolvePeer({ peer: "ts-morph", why: "read the modules a tables file imports" }, () =>
+    import.meta.resolve("ts-morph"),
+  );
+  const runtime = options.runtime ?? (process.versions["bun"] === undefined ? "node" : "bun");
+  const { dir, remove: removeDir } = scratchDir("database-codegen-");
+
+  try {
+    const result = path.join(dir, "snapshot.json");
+    const status = path.join(dir, "status.json");
+    const timeoutMs = options.timeoutMs ?? LOAD_TIMEOUT_MS;
+    const child = { args: childArgs(runtime, [path.resolve(tablesPath), result]), cmd: process.execPath };
+
+    const ran = await (options.run ?? defaultRun)(
+      process.execPath,
+      supervisorArgs(runtime, { ...child, status, timeoutMs }),
+      {
+        cwd: options.cwd ?? process.cwd(),
+        exactEnv: childEnv(),
+        // the supervisor reads codegen's end from its stdin, so a codegen killed outright leaves no module running
+        lifeline: true,
+        timeoutMs: timeoutMs + SUPERVISOR_GRACE_MS,
+      },
+    );
+
+    // the supervisor's own word, as a module may exit 124 itself; codegen's stopping the supervisor is one too
+    if (fs.existsSync(status) || ran.code === 124)
+      throw new Error(`database timed out after ${timeoutMs / 1000} s loading ${tablesPath}`);
+
+    if (!fs.existsSync(result))
+      throw new Error(`database could not load ${tablesPath}: ${ran.stderr.trim() || `the loader exited ${ran.code}`}`);
+
+    const read = JSON.parse(fs.readFileSync(result, "utf8")) as
+      | { at?: string | undefined; error: string }
+      | { snapshot: Snapshot };
+
+    if ("error" in read) {
+      throw new Error(
+        `database could not load ${tablesPath}: ${read.error}${read.at === undefined ? "" : ` (at ${read.at})`}`,
+      );
+    }
+
+    return read.snapshot;
+  } finally {
+    removeDir();
+  }
 }
 
-export { childArgs, LOAD_TIMEOUT_MS, loadSnapshot, supervisorArgs, watchSupervisor }
+export { childArgs, LOAD_TIMEOUT_MS, loadSnapshot, supervisorArgs, watchSupervisor };

@@ -6,9 +6,9 @@
  */
 
 /** Whether generated code names database's namespace */
-export const DATABASE_NAMESPACE: RegExp = /\bdatabase\./
+export const DATABASE_NAMESPACE: RegExp = /\bdatabase\./;
 
 /** The import a generated file that names database's namespace takes */
-/* written whole from a quoted specifier, so no scan of database's own imports reads it as one */
+// written whole from a quoted specifier, so no scan of database's own imports reads it as one
 export const databaseImport = (databaseFrom: string): string =>
-	`import * as database from ${JSON.stringify(databaseFrom)}`
+  `import * as database from ${JSON.stringify(databaseFrom)}`;

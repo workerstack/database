@@ -5,20 +5,20 @@
  * for the process that made it, so a later run removes one a killed process left at once, by
  * whether that process still runs.
  */
-import { AsyncLocalStorage } from "node:async_hooks"
-import { createHash } from "node:crypto"
-import fs from "node:fs"
-import os from "node:os"
-import path from "node:path"
+import { AsyncLocalStorage } from "node:async_hooks";
+import { createHash } from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 /**
  * A step a signal runs, told which signal came and what the steps that ran before it returned, in
  * that order: a step held first runs last, and reads what the steps held after it found out
  */
-type Step = (signal: NodeJS.Signals, earlier: readonly unknown[]) => unknown
+type Step = (signal: NodeJS.Signals, earlier: readonly unknown[]) => unknown;
 
 // per-process-constant: what this process holds now
-const held = /* @__PURE__ */ new Set<Step>()
+const held = /* @__PURE__ */ new Set<Step>();
 
 /**
  * The signals a held step runs on: every one whose default action ends the process and that a
@@ -26,44 +26,47 @@ const held = /* @__PURE__ */ new Set<Step>()
  * step timeout (SIGTERM), and a terminal's hangup, as an SSH drop sends it (SIGHUP): a child in a
  * group of its own gets none of them from the terminal, so database's forward is its only signal.
  */
-export const STOP_SIGNALS = ["SIGHUP", "SIGINT", "SIGQUIT", "SIGTERM"] as const
+export const STOP_SIGNALS = ["SIGHUP", "SIGINT", "SIGQUIT", "SIGTERM"] as const;
 
 /** One of STOP_SIGNALS */
-export type StopSignal = (typeof STOP_SIGNALS)[number]
+export type StopSignal = (typeof STOP_SIGNALS)[number];
 
 // per-process-constant: the steps a signal is running, so a step's own work goes on while what it stops waits
-const inStep = /* @__PURE__ */ new AsyncLocalStorage<true>()
+const inStep = /* @__PURE__ */ new AsyncLocalStorage<true>();
 
 /** A stop under way: `open` settles once it lets the work it holds go on, which a stop that ends the process never does */
-type Gate = { let(): void; open: Promise<void> }
+type Gate = { let(): void; open: Promise<void> };
 
 // per-process-constant: the stop under way, if any
-let gate: Gate | undefined
+let gate: Gate | undefined;
 
 // per-process-constant: the steps of every stop so far, the last signal's at the end, which alone ends the stop
-let stopping: Promise<void> | undefined
+let stopping: Promise<void> | undefined;
 
 // per-process-constant: the end of the last stop begun, which settles after every stop before it
-let lastEnd: Promise<void> = /* @__PURE__ */ Promise.resolve()
+let lastEnd: Promise<void> = /* @__PURE__ */ Promise.resolve();
 
 function newGate(): Gate {
-	let release: (() => void) | undefined
-	const open = new Promise<void>((resolve) => {
-		release = resolve
-	})
-	return { let: () => release?.(), open }
+  let release: (() => void) | undefined;
+
+  const open = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  return { let: () => release?.(), open };
 }
 
 /** Every step, last held first, each once the one before ends: a child stops before the scratch it used goes */
 async function runSteps(steps: readonly Step[], signal: NodeJS.Signals): Promise<void> {
-	const returned: unknown[] = []
-	for (const step of steps.toReversed()) {
-		try {
-			returned.push(await step(signal, [...returned]))
-		} catch {
-			// reason: one step that fails must not keep the rest from cleaning up; the process ends either way
-		}
-	}
+  const returned: unknown[] = [];
+
+  for (const step of steps.toReversed()) {
+    try {
+      returned.push(await step(signal, [...returned]));
+    } catch {
+      // reason: one step that fails must not keep the rest from cleaning up; the process ends either way
+    }
+  }
 }
 
 /**
@@ -77,21 +80,23 @@ async function runSteps(steps: readonly Step[], signal: NodeJS.Signals): Promise
  * once: a child a step stops ends before database does.
  */
 function stop(signal: NodeJS.Signals): void {
-	const steps = [...held]
-	held.clear()
-	const current = (gate ??= newGate())
-	const ending = (stopping ?? Promise.resolve()).then(() => inStep.run(true, () => runSteps(steps, signal)))
-	stopping = ending
-	lastEnd = ending.then(() => {
-		/* a later signal came while these steps ran: its stop ends this one, after its own steps */
-		if (stopping !== ending) return
-		stopping = undefined
-		gate = undefined
-		if (process.listenerCount(signal) > 1) return current.let()
-		/* both gone before the signal comes again, so it ends the process, and what waits for this stop waits on */
-		for (const each of STOP_SIGNALS) process.off(each, stop)
-		process.kill(process.pid, signal)
-	})
+  const steps = [...held];
+  held.clear();
+  const current = (gate ??= newGate());
+  const ending = (stopping ?? Promise.resolve()).then(() => inStep.run(true, () => runSteps(steps, signal)));
+  stopping = ending;
+  lastEnd = ending.then(() => {
+    // a later signal came while these steps ran: its stop ends this one, after its own steps
+    if (stopping !== ending) return;
+    stopping = undefined;
+    gate = undefined;
+
+    if (process.listenerCount(signal) > 1) return current.let();
+
+    // both gone before the signal comes again, so it ends the process, and what waits for this stop waits on
+    for (const each of STOP_SIGNALS) process.off(each, stop);
+    process.kill(process.pid, signal);
+  });
 }
 
 /**
@@ -100,7 +105,7 @@ function stop(signal: NodeJS.Signals): void {
  * the end a slow step delays never reaches the real process.kill and ends the test's worker.
  */
 export function stopsEnded(): Promise<void> {
-	return lastEnd
+  return lastEnd;
 }
 
 /**
@@ -109,7 +114,7 @@ export function stopsEnded(): Promise<void> {
  * nothing a stopping run would leave behind
  */
 export function pastStop(): Promise<void> {
-	return gate === undefined || inStep.getStore() === true ? Promise.resolve() : gate.open
+  return gate === undefined || inStep.getStore() === true ? Promise.resolve() : gate.open;
 }
 
 /**
@@ -117,69 +122,75 @@ export function pastStop(): Promise<void> {
  * The listener is read from the process, not remembered: a host that removed every listener gets it back.
  */
 export function hold(step: Step): () => void {
-	for (const signal of STOP_SIGNALS) if (!process.listeners(signal).includes(stop)) process.on(signal, stop)
-	held.add(step)
-	return () => void held.delete(step)
+  for (const signal of STOP_SIGNALS) if (!process.listeners(signal).includes(stop)) process.on(signal, stop);
+  held.add(step);
+
+  return () => void held.delete(step);
 }
 
-/* the cleanup of a replay that has made nothing yet */
-const NOTHING = async (): Promise<void> => undefined
+// the cleanup of a replay that has made nothing yet
+const NOTHING = async (): Promise<void> => undefined;
 
 /**
  * A cleanup whose step runs at most once, set once there is something to clean: a signal before
  * that cleans nothing, and the step set after it still runs
  */
 export function onceCleanup(): { run: () => Promise<void>; set: (step: () => Promise<void>) => void } {
-	let step = NOTHING
-	let ran: Promise<void> | undefined
-	return {
-		run: () => (ran ??= step()),
-		set: (next) => {
-			step = next
-			ran = undefined
-		},
-	}
+  let step = NOTHING;
+  let ran: Promise<void> | undefined;
+
+  return {
+    run: () => (ran ??= step()),
+    set: (next) => {
+      step = next;
+      ran = undefined;
+    },
+  };
 }
 
 /** `body`, with `cleanup` held while it runs */
 export async function onSignals<T>(cleanup: () => Promise<void>, body: () => Promise<T>): Promise<T> {
-	const release = hold(cleanup)
-	try {
-		return await body()
-	} finally {
-		release()
-	}
+  const release = hold(cleanup);
+
+  try {
+    return await body();
+  } finally {
+    release();
+  }
 }
 
 /** Whether process `pid` runs: one another user runs answers EPERM, and so runs */
 export function isAlive(pid: number): boolean {
-	try {
-		process.kill(pid, 0)
-		return true
-	} catch (error) {
-		return (error as NodeJS.ErrnoException).code === "EPERM"
-	}
+  try {
+    process.kill(pid, 0);
+
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
 }
 
 /** How old a scratch directory with no live pid to read is before a later run removes it: no run holds one this long */
-export const SCRATCH_STALE_MS: number = 6 * 60 * 60_000
+export const SCRATCH_STALE_MS: number = 6 * 60 * 60_000;
 
 /**
  * This process's host and pid namespace, as a scratch name carries them beside its pid: a run in
  * another container sharing the temp directory has pids of its own, which this one must never read
  */
 export function hostMark(): string {
-	let namespace = ""
-	try {
-		namespace = fs.readlinkSync("/proc/self/ns/pid")
-	} catch {
-		// reason: no /proc (macOS, Windows), where the host name alone tells one machine's pids from another's
-	}
-	return createHash("sha256").update(`${os.hostname()}\0${namespace}`).digest("hex").slice(0, 8)
+  let namespace = "";
+
+  try {
+    namespace = fs.readlinkSync("/proc/self/ns/pid");
+  } catch {
+    // reason: no /proc (macOS, Windows), where the host name alone tells one machine's pids from another's
+  }
+
+  return createHash("sha256").update(`${os.hostname()}\0${namespace}`).digest("hex").slice(0, 8);
 }
 
 /** The pid and host mark a scratch name carries after its prefix, `<pid>-<mark>-` */
-const OWNER = /^(\d+)-([0-9a-f]{8})-/
+const OWNER = /^(\d+)-([0-9a-f]{8})-/;
 
 /**
  * Remove the scratch directories named `prefix` in `dir` that killed runs of this user left: one
@@ -187,27 +198,31 @@ const OWNER = /^(\d+)-([0-9a-f]{8})-/
  * user owns, or a live run's, stays.
  */
 export function sweepScratch(prefix: string, dir: string = os.tmpdir(), now: number = Date.now()): void {
-	const [uid, mark] = [process.getuid?.(), hostMark()]
-	for (const name of fs.readdirSync(dir)) {
-		if (!name.startsWith(prefix)) continue
-		const full = path.join(dir, name)
-		const owner = OWNER.exec(name.slice(prefix.length))
-		try {
-			const stat = fs.statSync(full)
-			if (uid !== undefined && stat.uid !== uid) continue
-			const gone = owner !== null && owner[2] === mark && !isAlive(Number(owner[1]))
-			if (gone || now - stat.mtimeMs > SCRATCH_STALE_MS) fs.rmSync(full, { force: true, recursive: true })
-		} catch {
-			// reason: another run removed it first, or it is not ours to remove; either way nothing is left to do
-		}
-	}
+  const [uid, mark] = [process.getuid?.(), hostMark()];
+
+  for (const name of fs.readdirSync(dir)) {
+    if (!name.startsWith(prefix)) continue;
+    const full = path.join(dir, name);
+    const owner = OWNER.exec(name.slice(prefix.length));
+
+    try {
+      const stat = fs.statSync(full);
+
+      if (uid !== undefined && stat.uid !== uid) continue;
+      const gone = owner !== null && owner[2] === mark && !isAlive(Number(owner[1]));
+
+      if (gone || now - stat.mtimeMs > SCRATCH_STALE_MS) fs.rmSync(full, { force: true, recursive: true });
+    } catch {
+      // reason: another run removed it first, or it is not ours to remove; either way nothing is left to do
+    }
+  }
 }
 
 // per-process-constant: the prefixes this process swept, each once, at its first scratch
-const swept = /* @__PURE__ */ new Set<string>()
+const swept = /* @__PURE__ */ new Set<string>();
 
 /** A directory only this user can open, held until `remove` */
-export type Scratch = { dir: string; remove(): void }
+export type Scratch = { dir: string; remove(): void };
 
 /**
  * A new directory under the temp directory that only this user can open (0700), named `prefix`, this
@@ -215,18 +230,20 @@ export type Scratch = { dir: string; remove(): void }
  * process's first scratch of a prefix sweeps what killed runs left.
  */
 export function scratchDir(prefix: string): Scratch {
-	if (!swept.has(prefix)) {
-		swept.add(prefix)
-		sweepScratch(prefix)
-	}
-	const dir = fs.mkdtempSync(path.join(os.tmpdir(), `${prefix}${process.pid}-${hostMark()}-`))
-	const rm = () => fs.rmSync(dir, { force: true, recursive: true })
-	const release = hold(rm)
-	return {
-		dir,
-		remove: () => {
-			release()
-			rm()
-		},
-	}
+  if (!swept.has(prefix)) {
+    swept.add(prefix);
+    sweepScratch(prefix);
+  }
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `${prefix}${process.pid}-${hostMark()}-`));
+  const rm = () => fs.rmSync(dir, { force: true, recursive: true });
+  const release = hold(rm);
+
+  return {
+    dir,
+    remove: () => {
+      release();
+      rm();
+    },
+  };
 }

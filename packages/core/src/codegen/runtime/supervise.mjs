@@ -9,15 +9,15 @@
  * may also use proves nothing. Plain JavaScript, run by node or bun before any hook loads. POSIX
  * only: a negative pid names a process group.
  */
-import { spawn } from "node:child_process"
-import fs from "node:fs"
-import { constants } from "node:os"
+import { spawn } from "node:child_process";
+import fs from "node:fs";
+import { constants } from "node:os";
 
 /** Whether the child leads a process group of its own: on POSIX, where it is spawned detached; Windows has no groups */
-const GROUPS = process.platform !== "win32"
+const GROUPS = process.platform !== "win32";
 
 /** The signals that stop the supervisor, each killing the child's group first */
-const SIGNALS = /** @type {const} */ (["SIGHUP", "SIGINT", "SIGTERM"])
+const SIGNALS = /** @type {const} */ (["SIGHUP", "SIGINT", "SIGTERM"]);
 
 /**
  * `cmd` with `args` in a process group of its own, its stdout and stderr this process's, its stdin
@@ -28,40 +28,46 @@ const SIGNALS = /** @type {const} */ (["SIGHUP", "SIGINT", "SIGTERM"])
  * @returns {{ done: Promise<{ code: number } | { timedOut: true }>, stop: () => void }}
  */
 function supervise({ args, cmd, kill = (pid, signal) => process.kill(pid, signal), spawn: start = spawn, timeoutMs }) {
-	const child = start(cmd, args, { detached: GROUPS, stdio: ["pipe", "inherit", "inherit"] })
-	let started = false
-	child.on("spawn", () => {
-		started = true
-	})
-	/* the group is killed only for a child seen to start whose pid names a group of its own: -0 is
-	   this process's own group, and -1 every process the user owns */
-	const stop = () => {
-		const pid = child.pid
-		if (!started || pid === undefined || !Number.isInteger(pid) || pid <= 1) return
-		try {
-			kill(-pid, "SIGKILL")
-		} catch {
-			// reason: the group is gone already, which is what killing it asks for
-		}
-	}
-	/** @type {Promise<{ code: number } | { timedOut: true }>} */
-	const done = new Promise((resolve) => {
-		const timer = setTimeout(() => {
-			stop()
-			resolve({ timedOut: true })
-		}, timeoutMs)
-		child.on("error", () => {
-			clearTimeout(timer)
-			resolve({ code: 127 })
-		})
-		child.on("exit", (code, signal) => {
-			clearTimeout(timer)
-			/* a module that exits leaves its pool's processes behind: they go with it */
-			stop()
-			resolve({ code: code ?? 128 + constants.signals[/** @type {NodeJS.Signals} */ (signal)] })
-		})
-	})
-	return { done, stop }
+  const child = start(cmd, args, { detached: GROUPS, stdio: ["pipe", "inherit", "inherit"] });
+  let started = false;
+  child.on("spawn", () => {
+    started = true;
+  });
+
+  // the group is killed only for a child seen to start whose pid names a group of its own: -0 is
+  // this process's own group, and -1 every process the user owns
+  const stop = () => {
+    const pid = child.pid;
+
+    if (!started || pid === undefined || !Number.isInteger(pid) || pid <= 1) return;
+
+    try {
+      kill(-pid, "SIGKILL");
+    } catch {
+      // reason: the group is gone already, which is what killing it asks for
+    }
+  };
+
+  /** @type {Promise<{ code: number } | { timedOut: true }>} */
+  const done = new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      stop();
+      resolve({ timedOut: true });
+    }, timeoutMs);
+
+    child.on("error", () => {
+      clearTimeout(timer);
+      resolve({ code: 127 });
+    });
+    child.on("exit", (code, signal) => {
+      clearTimeout(timer);
+      // a module that exits leaves its pool's processes behind: they go with it
+      stop();
+      resolve({ code: code ?? 128 + constants.signals[/** @type {NodeJS.Signals} */ (signal)] });
+    });
+  });
+
+  return { done, stop };
 }
 
 /**
@@ -72,25 +78,30 @@ function supervise({ args, cmd, kill = (pid, signal) => process.kill(pid, signal
  * @returns {Promise<void>}
  */
 async function main(proc) {
-	const { args, cmd, status, timeoutMs } = JSON.parse(/** @type {string} */ (proc.argv.at(-1)))
-	const run = supervise({ args, cmd, timeoutMs })
-	for (const signal of SIGNALS) {
-		proc.on(signal, () => {
-			run.stop()
-			proc.exit(128 + constants.signals[signal])
-		})
-	}
-	/* the pipe codegen holds closed: codegen is gone, however it ended, as a terminal's hang-up says */
-	proc.stdin.on("end", () => {
-		run.stop()
-		proc.exit(128 + constants.signals.SIGHUP)
-	})
-	proc.stdin.resume()
-	const ended = await run.done
-	if ("timedOut" in ended) {
-		fs.writeFileSync(status, JSON.stringify({ timedOut: true }))
-		proc.exit(124)
-	} else proc.exit(ended.code)
+  const { args, cmd, status, timeoutMs } = JSON.parse(/** @type {string} */ (proc.argv.at(-1)));
+  const run = supervise({ args, cmd, timeoutMs });
+
+  for (const signal of SIGNALS) {
+    proc.on(signal, () => {
+      run.stop();
+      proc.exit(128 + constants.signals[signal]);
+    });
+  }
+
+  // the pipe codegen holds closed: codegen is gone, however it ended, as a terminal's hang-up says
+  proc.stdin.on("end", () => {
+    run.stop();
+    proc.exit(128 + constants.signals.SIGHUP);
+  });
+  proc.stdin.resume();
+  const ended = await run.done;
+
+  if ("timedOut" in ended) {
+    fs.writeFileSync(status, JSON.stringify({ timedOut: true }));
+    proc.exit(124);
+  } else {
+    proc.exit(ended.code);
+  }
 }
 
-export { GROUPS, main, supervise }
+export { GROUPS, main, supervise };

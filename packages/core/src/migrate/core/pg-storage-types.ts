@@ -10,12 +10,12 @@
  * leaves it to the target (a temporary table, one made without USING or TABLESPACE, SET ACCESS
  * METHOD DEFAULT)
  */
-type Storage = { accessMethod: string | undefined; logged: boolean | undefined; tablespace: string | undefined }
+type Storage = { accessMethod: string | undefined; logged: boolean | undefined; tablespace: string | undefined };
 
 /** Where the target keeps its tables' and materialized views' rows, and its indexes', by key */
-type Placed = { indexes: ReadonlyMap<string, string>; relations: ReadonlyMap<string, Storage> }
+type Placed = { indexes: ReadonlyMap<string, string>; relations: ReadonlyMap<string, Storage> };
 
 /** Where the target's catalog says its relations are, and the statement of the history its applied files end before */
-type Placing = { at: number; placed: Placed }
+type Placing = { at: number; placed: Placed };
 
-export type { Placed, Placing, Storage }
+export type { Placed, Placing, Storage };

@@ -2,23 +2,24 @@
  * SQLite constraint violations, raised by a real engine and seen the way an app sees them:
  * through drizzle, whose `DrizzleQueryError` wraps the engine error on `cause`.
  */
-import { sql } from "drizzle-orm"
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { DatabaseError } from "../../../src/error.ts"
+import { sql } from "drizzle-orm";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { DatabaseError } from "../../../src/error.ts";
 import {
-	classifySqliteError,
-	constraintError,
-	handleConstraintViolation,
-	sqliteErrorHandler,
-} from "../../../src/sqlite/constraint-handler.ts"
-import type { ConstraintMap } from "../../../src/types.ts"
-import { ELSEWHERE_CASES, ELSEWHERE_DDL, ELSEWHERE_MAPS } from "../support/elsewhere-constraints.ts"
-import { type LibsqlHarness, libsqlMemory } from "../support/libsql.ts"
+  classifySqliteError,
+  constraintError,
+  handleConstraintViolation,
+  sqliteErrorHandler,
+} from "../../../src/sqlite/constraint-handler.ts";
+import type { ConstraintMap } from "../../../src/types.ts";
+import { ELSEWHERE_CASES, ELSEWHERE_DDL, ELSEWHERE_MAPS } from "../support/elsewhere-constraints.ts";
+import { type LibsqlHarness, libsqlMemory } from "../support/libsql.ts";
 
 const DDL = [
-	"PRAGMA foreign_keys = ON",
-	"CREATE TABLE org (id TEXT PRIMARY KEY)",
-	`CREATE TABLE member (
+  "PRAGMA foreign_keys = ON",
+  "CREATE TABLE org (id TEXT PRIMARY KEY)",
+  `CREATE TABLE member (
 		id TEXT PRIMARY KEY,
 		email TEXT UNIQUE,
 		first TEXT,
@@ -31,383 +32,403 @@ const DDL = [
 		CONSTRAINT member_seats_check CHECK (seats > 0),
 		UNIQUE (first, last)
 	)`,
-	"INSERT INTO org VALUES ('o1')",
-	"INSERT INTO member (id, email, first, last, org_id) VALUES ('m1', 'a@x', 'Ada', 'L', 'o1')",
-	/* a parent with a foreign key of its own, still referenced by a child (fkdelete.ts) */
-	"CREATE TABLE author (id TEXT PRIMARY KEY)",
-	"CREATE TABLE post (id TEXT PRIMARY KEY, author_id TEXT REFERENCES author(id))",
-	"CREATE TABLE comment (id TEXT PRIMARY KEY, post_id TEXT REFERENCES post(id))",
-	"INSERT INTO author VALUES ('a1')",
-	"INSERT INTO post VALUES ('p1', 'a1')",
-	"INSERT INTO comment VALUES ('c1', 'p1')",
-	/* U23: a composite key mapped on its first column, as codegen writes it, and a key no map lists */
-	"CREATE TABLE parent (a TEXT, b TEXT, PRIMARY KEY (a, b))",
-	"CREATE TABLE child (id TEXT PRIMARY KEY, pa TEXT, pb TEXT, FOREIGN KEY (pa, pb) REFERENCES parent (a, b))",
-	"CREATE TABLE team (id TEXT PRIMARY KEY, name TEXT, owner_id TEXT REFERENCES org(id))",
-	"INSERT INTO parent VALUES ('x', '1')",
-	"INSERT INTO child VALUES ('c1', 'x', '1')",
-	"INSERT INTO team VALUES ('t1', 'one', 'o1')",
-]
+  "INSERT INTO org VALUES ('o1')",
+  "INSERT INTO member (id, email, first, last, org_id) VALUES ('m1', 'a@x', 'Ada', 'L', 'o1')",
+  // a parent with a foreign key of its own, still referenced by a child (fkdelete.ts)
+  "CREATE TABLE author (id TEXT PRIMARY KEY)",
+  "CREATE TABLE post (id TEXT PRIMARY KEY, author_id TEXT REFERENCES author(id))",
+  "CREATE TABLE comment (id TEXT PRIMARY KEY, post_id TEXT REFERENCES post(id))",
+  "INSERT INTO author VALUES ('a1')",
+  "INSERT INTO post VALUES ('p1', 'a1')",
+  "INSERT INTO comment VALUES ('c1', 'p1')",
+  // U23: a composite key mapped on its first column, as codegen writes it, and a key no map lists
+  "CREATE TABLE parent (a TEXT, b TEXT, PRIMARY KEY (a, b))",
+  "CREATE TABLE child (id TEXT PRIMARY KEY, pa TEXT, pb TEXT, FOREIGN KEY (pa, pb) REFERENCES parent (a, b))",
+  "CREATE TABLE team (id TEXT PRIMARY KEY, name TEXT, owner_id TEXT REFERENCES org(id))",
+  "INSERT INTO parent VALUES ('x', '1')",
+  "INSERT INTO child VALUES ('c1', 'x', '1')",
+  "INSERT INTO team VALUES ('t1', 'one', 'o1')",
+];
 
 const MAPS: ConstraintMap[] = [
-	{
-		member: {
-			check: {
-				member_seats_check: { cause: "Seats must be positive", errorKey: "member_seats_invalid" },
-				member_status_check: { cause: "Unknown status", errorKey: "member_status_invalid" },
-			},
-			foreignKey: { org_id: { cause: "No such org", errorKey: "member_org_missing" } },
-			primaryKey: { cause: "Member exists", errorKey: "member_id_taken" },
-			unique: {
-				email: { cause: "Email in use", errorKey: "member_email_taken" },
-				"first,last": { cause: "Name in use", errorKey: "member_name_taken" },
-			},
-		},
-		post: { foreignKey: { author_id: { cause: "No such author", errorKey: "post_author_missing" } } },
-	},
-]
+  {
+    member: {
+      check: {
+        member_seats_check: { cause: "Seats must be positive", errorKey: "member_seats_invalid" },
+        member_status_check: { cause: "Unknown status", errorKey: "member_status_invalid" },
+      },
+      foreignKey: { org_id: { cause: "No such org", errorKey: "member_org_missing" } },
+      primaryKey: { cause: "Member exists", errorKey: "member_id_taken" },
+      unique: {
+        email: { cause: "Email in use", errorKey: "member_email_taken" },
+        "first,last": { cause: "Name in use", errorKey: "member_name_taken" },
+      },
+    },
+    post: { foreignKey: { author_id: { cause: "No such author", errorKey: "post_author_missing" } } },
+  },
+];
 
-type Classify = { handler?: (error: unknown, maps: ConstraintMap[]) => void; maps?: ConstraintMap[] }
+type Classify = { handler?: (error: unknown, maps: ConstraintMap[]) => void; maps?: ConstraintMap[] };
 
 /** What `handler` throws for the engine error that `statement` raises through drizzle. */
 async function classify(harness: LibsqlHarness, statement: string, options: Classify = {}): Promise<unknown> {
-	const { handler = sqliteErrorHandler, maps = MAPS } = options
-	const failure = await harness.db.run(sql.raw(statement)).then(
-		() => null,
-		(error: unknown) => error,
-	)
-	expect(failure).toBeInstanceOf(Error)
-	try {
-		handler(failure, maps)
-	} catch (thrown) {
-		return thrown
-	}
-	return "not handled"
+  const { handler = sqliteErrorHandler, maps = MAPS } = options;
+
+  const failure = await harness.db.run(sql.raw(statement)).then(
+    () => null,
+    (error: unknown) => error,
+  );
+
+  expect(failure).toBeInstanceOf(Error);
+
+  try {
+    handler(failure, maps);
+  } catch (thrown) {
+    return thrown;
+  }
+
+  return "not handled";
 }
 
 /** A fresh database with the member schema for every test. */
 function useMemberDb(): () => LibsqlHarness {
-	let harness: LibsqlHarness | undefined
-	beforeEach(async () => {
-		harness = libsqlMemory()
-		for (const statement of DDL) await harness.client.execute(statement)
-	})
-	afterEach(() => harness?.close())
-	return () => harness as LibsqlHarness
+  let harness: LibsqlHarness | undefined;
+  beforeEach(async () => {
+    harness = libsqlMemory();
+
+    for (const statement of DDL) await harness.client.execute(statement);
+  });
+  afterEach(() => harness?.close());
+
+  return () => harness as LibsqlHarness;
 }
 
 const MAPPED = [
-	{
-		column: "email",
-		errorKey: "member_email_taken",
-		name: "a unique column",
-		status: 409,
-		sql: "INSERT INTO member (id, email) VALUES ('m2', 'a@x')",
-	},
-	{
-		column: undefined,
-		errorKey: "member_id_taken",
-		name: "the primary key",
-		status: 409,
-		sql: "INSERT INTO member (id) VALUES ('m1')",
-	},
-	{
-		column: undefined,
-		errorKey: "member_name_taken",
-		name: "a composite unique, by its columns together",
-		status: 409,
-		sql: "INSERT INTO member (id, first, last) VALUES ('m3', 'Ada', 'L')",
-	},
-	{
-		column: undefined,
-		errorKey: "member_seats_invalid",
-		name: "the second named CHECK",
-		status: 400,
-		sql: "INSERT INTO member (id, seats) VALUES ('m4', -1)",
-	},
-	{
-		column: undefined,
-		errorKey: "member_status_invalid",
-		name: "the first named CHECK",
-		status: 400,
-		sql: "INSERT INTO member (id, status) VALUES ('m5', 'zzz')",
-	},
-	{
-		column: "org_id",
-		errorKey: "member_org_missing",
-		name: "a foreign key",
-		status: 409,
-		sql: "INSERT INTO member (id, org_id) VALUES ('m6', 'nope')",
-	},
-	{
-		column: "role",
-		errorKey: "required_field_missing",
-		name: "NOT NULL, with its column",
-		status: 400,
-		sql: "INSERT INTO member (id, role) VALUES ('m7', NULL)",
-	},
-]
+  {
+    column: "email",
+    errorKey: "member_email_taken",
+    name: "a unique column",
+    sql: "INSERT INTO member (id, email) VALUES ('m2', 'a@x')",
+    status: 409,
+  },
+  {
+    column: undefined,
+    errorKey: "member_id_taken",
+    name: "the primary key",
+    sql: "INSERT INTO member (id) VALUES ('m1')",
+    status: 409,
+  },
+  {
+    column: undefined,
+    errorKey: "member_name_taken",
+    name: "a composite unique, by its columns together",
+    sql: "INSERT INTO member (id, first, last) VALUES ('m3', 'Ada', 'L')",
+    status: 409,
+  },
+  {
+    column: undefined,
+    errorKey: "member_seats_invalid",
+    name: "the second named CHECK",
+    sql: "INSERT INTO member (id, seats) VALUES ('m4', -1)",
+    status: 400,
+  },
+  {
+    column: undefined,
+    errorKey: "member_status_invalid",
+    name: "the first named CHECK",
+    sql: "INSERT INTO member (id, status) VALUES ('m5', 'zzz')",
+    status: 400,
+  },
+  {
+    column: "org_id",
+    errorKey: "member_org_missing",
+    name: "a foreign key",
+    sql: "INSERT INTO member (id, org_id) VALUES ('m6', 'nope')",
+    status: 409,
+  },
+  {
+    column: "role",
+    errorKey: "required_field_missing",
+    name: "NOT NULL, with its column",
+    sql: "INSERT INTO member (id, role) VALUES ('m7', NULL)",
+    status: 400,
+  },
+];
 
 describe("sqliteErrorHandler on libsql through drizzle: mapped", () => {
-	const db = useMemberDb()
+  const db = useMemberDb();
 
-	it.each(MAPPED)("maps $name", async ({ column, errorKey, sql: statement, status }) => {
-		const thrown = await classify(db(), statement)
-		expect(thrown).toBeInstanceOf(DatabaseError)
-		expect(thrown).toMatchObject({ errorKey, status, table: "member" })
-		expect((thrown as DatabaseError).column).toBe(column)
-	})
+  it.each(MAPPED)("maps $name", async ({ column, errorKey, sql: statement, status }) => {
+    const thrown = await classify(db(), statement);
+    expect(thrown).toBeInstanceOf(DatabaseError);
+    expect(thrown).toMatchObject({ errorKey, status, table: "member" });
+    expect((thrown as DatabaseError).column).toBe(column);
+  });
 
-	it("handleConstraintViolation takes the error itself, wrapper and all", async () => {
-		const thrown = await classify(db(), "INSERT INTO member (id, email) VALUES ('m2', 'a@x')", {
-			handler: handleConstraintViolation,
-		})
-		expect(thrown).toMatchObject({ errorKey: "member_email_taken" })
-	})
+  it("handleConstraintViolation takes the error itself, wrapper and all", async () => {
+    const thrown = await classify(db(), "INSERT INTO member (id, email) VALUES ('m2', 'a@x')", {
+      handler: handleConstraintViolation,
+    });
 
-	it("keeps the engine error off the client-facing cause and on source", async () => {
-		const thrown = (await classify(db(), "INSERT INTO member (id, email) VALUES ('m2', 'a@x')")) as DatabaseError
-		expect(thrown.cause).toBe("Email in use")
-		expect(thrown.source).toBeInstanceOf(Error)
-		expect(JSON.stringify(thrown)).not.toContain("INSERT")
-	})
-})
+    expect(thrown).toMatchObject({ errorKey: "member_email_taken" });
+  });
+
+  it("keeps the engine error off the client-facing cause and on source", async () => {
+    const thrown = (await classify(db(), "INSERT INTO member (id, email) VALUES ('m2', 'a@x')")) as DatabaseError;
+    expect(thrown.cause).toBe("Email in use");
+    expect(thrown.source).toBeInstanceOf(Error);
+    expect(JSON.stringify(thrown)).not.toContain("INSERT");
+  });
+});
 
 describe("sqliteErrorHandler on libsql through drizzle: unmapped", () => {
-	const db = useMemberDb()
+  const db = useMemberDb();
 
-	it.each([
-		["INSERT INTO member (id, email) VALUES ('m2', 'a@x')", "unique_constraint_violation"],
-		["INSERT INTO member (id) VALUES ('m1')", "primary_key_violation"],
-		["INSERT INTO member (id, seats) VALUES ('m4', -1)", "check_constraint_violation"],
-		["INSERT INTO member (id, org_id) VALUES ('m6', 'nope')", "foreign_key_violation"],
-	])("falls back to the generic key: %s → %s", async (statement, errorKey) => {
-		expect(await classify(db(), statement, { maps: [] })).toMatchObject({ errorKey })
-	})
+  it.each([
+    ["INSERT INTO member (id, email) VALUES ('m2', 'a@x')", "unique_constraint_violation"],
+    ["INSERT INTO member (id) VALUES ('m1')", "primary_key_violation"],
+    ["INSERT INTO member (id, seats) VALUES ('m4', -1)", "check_constraint_violation"],
+    ["INSERT INTO member (id, org_id) VALUES ('m6', 'nope')", "foreign_key_violation"],
+  ])("falls back to the generic key: %s → %s", async (statement, errorKey) => {
+    expect(await classify(db(), statement, { maps: [] })).toMatchObject({ errorKey });
+  });
 
-	it("leaves an error that is not a constraint violation alone", async () => {
-		expect(await classify(db(), "SELECT reset_at FROM member")).toBe("not handled")
-		expect(() => sqliteErrorHandler(new Error("boom"), MAPS)).not.toThrow()
-		expect(() => sqliteErrorHandler("text", MAPS)).not.toThrow()
-	})
-})
+  it("leaves an error that is not a constraint violation alone", async () => {
+    expect(await classify(db(), "SELECT reset_at FROM member")).toBe("not handled");
+    expect(() => sqliteErrorHandler(new Error("boom"), MAPS)).not.toThrow();
+    expect(() => sqliteErrorHandler("text", MAPS)).not.toThrow();
+  });
+});
 
 describe("sqliteErrorHandler on libsql: a delete of a row others still reference (C2)", () => {
-	const db = useMemberDb()
+  const db = useMemberDb();
 
-	it("says the row is still referenced, and blames no foreign key of the deleted table", async () => {
-		const thrown = await classify(db(), "DELETE FROM post WHERE id = 'p1'")
-		expect(thrown).toMatchObject({
-			cause: "The record is still referenced by other records",
-			errorKey: "foreign_key_violation",
-			status: 409,
-			table: "post",
-		})
-		expect((thrown as DatabaseError).column).toBeUndefined()
-	})
+  it("says the row is still referenced, and blames no foreign key of the deleted table", async () => {
+    const thrown = await classify(db(), "DELETE FROM post WHERE id = 'p1'");
+    expect(thrown).toMatchObject({
+      cause: "The record is still referenced by other records",
+      errorKey: "foreign_key_violation",
+      status: 409,
+      table: "post",
+    });
+    expect((thrown as DatabaseError).column).toBeUndefined();
+  });
 
-	it("reports a composite unique that no map names as the pair, never as its first column", async () => {
-		const unmapped = [{ member: { unique: { first: { cause: "First in use", errorKey: "member_first_taken" } } } }]
-		const thrown = await classify(db(), "INSERT INTO member (id, first, last) VALUES ('m9', 'Ada', 'L')", {
-			maps: unmapped,
-		})
-		expect(thrown).toMatchObject({
-			cause: "Duplicate value for member.first, member.last",
-			errorKey: "unique_constraint_violation",
-		})
-	})
-})
+  it("reports a composite unique that no map names as the pair, never as its first column", async () => {
+    const unmapped = [{ member: { unique: { first: { cause: "First in use", errorKey: "member_first_taken" } } } }];
+
+    const thrown = await classify(db(), "INSERT INTO member (id, first, last) VALUES ('m9', 'Ada', 'L')", {
+      maps: unmapped,
+    });
+
+    expect(thrown).toMatchObject({
+      cause: "Duplicate value for member.first, member.last",
+      errorKey: "unique_constraint_violation",
+    });
+  });
+});
 
 describe("sqliteErrorHandler on libsql: an expression index and a STRICT column (Q9, Q10)", () => {
-	const db = useMemberDb()
-	/* each table keyed, as codegen keys every table with a key: a table the maps key nowhere names no column (Q10 of r18) */
-	const maps: ConstraintMap[] = [
-		{ account: { unique: { u_email_lower: { cause: "Email taken", errorKey: "email_taken" } } }, s: {} },
-	]
-	const setup = [
-		"CREATE TABLE account (id TEXT PRIMARY KEY, email TEXT)",
-		"CREATE UNIQUE INDEX u_email_lower ON account (lower(email))",
-		"INSERT INTO account VALUES ('a1', 'a@b.c')",
-		"CREATE TABLE s (id TEXT PRIMARY KEY, n INTEGER) STRICT",
-	]
+  const db = useMemberDb();
 
-	it("maps a unique expression index by name, as Postgres maps the constraint", async () => {
-		for (const statement of setup) await db().client.execute(statement)
-		expect(await classify(db(), "INSERT INTO account VALUES ('a2', 'A@B.C')", { maps })).toMatchObject({
-			errorKey: "email_taken",
-			status: 409,
-			table: "account",
-		})
-	})
+  // each table keyed, as codegen keys every table with a key: a table the maps key nowhere names no column (Q10 of r18)
+  const maps: ConstraintMap[] = [
+    { account: { unique: { u_email_lower: { cause: "Email taken", errorKey: "email_taken" } } }, s: {} },
+  ];
 
-	it("answers text in a STRICT INTEGER column with the 400 Postgres gives", async () => {
-		for (const statement of setup) await db().client.execute(statement)
-		expect(await classify(db(), "INSERT INTO s VALUES ('x', 'abc')", { maps })).toMatchObject({
-			column: "n",
-			errorKey: "invalid_value",
-			status: 400,
-			table: "s",
-		})
-	})
-})
+  const setup = [
+    "CREATE TABLE account (id TEXT PRIMARY KEY, email TEXT)",
+    "CREATE UNIQUE INDEX u_email_lower ON account (lower(email))",
+    "INSERT INTO account VALUES ('a1', 'a@b.c')",
+    "CREATE TABLE s (id TEXT PRIMARY KEY, n INTEGER) STRICT",
+  ];
 
-/* Q8 of r18: libsql's batch() prefixes the engine's words twice, under a code its table cannot name */
+  it("maps a unique expression index by name, as Postgres maps the constraint", async () => {
+    for (const statement of setup) await db().client.execute(statement);
+    expect(await classify(db(), "INSERT INTO account VALUES ('a2', 'A@B.C')", { maps })).toMatchObject({
+      errorKey: "email_taken",
+      status: 409,
+      table: "account",
+    });
+  });
+
+  it("answers text in a STRICT INTEGER column with the 400 Postgres gives", async () => {
+    for (const statement of setup) await db().client.execute(statement);
+    expect(await classify(db(), "INSERT INTO s VALUES ('x', 'abc')", { maps })).toMatchObject({
+      column: "n",
+      errorKey: "invalid_value",
+      status: 400,
+      table: "s",
+    });
+  });
+});
+
+// Q8 of r18: libsql's batch() prefixes the engine's words twice, under a code its table cannot name
 describe("sqliteErrorHandler on libsql: a STRICT mismatch through batch()", () => {
-	const db = useMemberDb()
+  const db = useMemberDb();
 
-	it("is the 400 execute() gives, naming no private column", async () => {
-		await db().client.execute("CREATE TABLE s (id TEXT PRIMARY KEY, pin_hash INTEGER) STRICT")
-		const failure = await db()
-			.client.batch(["INSERT INTO s VALUES ('x', 'abc')"])
-			.then(
-				() => null,
-				(error: unknown) => error,
-			)
-		const classified = classifySqliteError(failure, [{ s: { private: ["pin_hash"] } }])
-		expect(classified).toMatchObject({ errorKey: "invalid_value", status: 400, table: "s" })
-		expect(classified?.column).toBeUndefined()
-		expect(String(classified?.cause)).not.toContain("pin_hash")
-	})
-})
+  it("is the 400 execute() gives, naming no private column", async () => {
+    await db().client.execute("CREATE TABLE s (id TEXT PRIMARY KEY, pin_hash INTEGER) STRICT");
+
+    const failure = await db()
+      .client.batch(["INSERT INTO s VALUES ('x', 'abc')"])
+      .then(
+        () => null,
+        (error: unknown) => error,
+      );
+
+    const classified = classifySqliteError(failure, [{ s: { private: ["pin_hash"] } }]);
+    expect(classified).toMatchObject({ errorKey: "invalid_value", status: 400, table: "s" });
+    expect(classified?.column).toBeUndefined();
+    expect(String(classified?.cause)).not.toContain("pin_hash");
+  });
+});
 
 describe("sqliteErrorHandler on libsql: a trigger's RAISE", () => {
-	const db = useMemberDb()
+  const db = useMemberDb();
 
-	it.each(["ABORT", "FAIL"])(
-		"answers RAISE(%s, …) with a 400 constraint_violation, its message the cause",
-		async (kind) => {
-			await db().client.execute("CREATE TABLE stock (qty INTEGER)")
-			await db().client.execute(
-				`CREATE TRIGGER qty_positive BEFORE INSERT ON stock WHEN new.qty <= 0 BEGIN SELECT RAISE(${kind}, 'qty must be positive'); END`,
-			)
-			expect(await classify(db(), "INSERT INTO stock VALUES (0)")).toMatchObject({
-				cause: "qty must be positive",
-				errorKey: "constraint_violation",
-				status: 400,
-			})
-		},
-	)
-})
+  it.each(["ABORT", "FAIL"])(
+    "answers RAISE(%s, …) with a 400 constraint_violation, its message the cause",
+    async (kind) => {
+      await db().client.execute("CREATE TABLE stock (qty INTEGER)");
+      await db().client.execute(
+        `CREATE TRIGGER qty_positive BEFORE INSERT ON stock WHEN new.qty <= 0 BEGIN SELECT RAISE(${kind}, 'qty must be positive'); END`,
+      );
+      expect(await classify(db(), "INSERT INTO stock VALUES (0)")).toMatchObject({
+        cause: "qty must be positive",
+        errorKey: "constraint_violation",
+        status: 400,
+      });
+    },
+  );
+});
 
-/* QE1 and QE2 of r23: a constraint that fails in a row other than the statement's own */
+// QE1 and QE2 of r23: a constraint that fails in a row other than the statement's own
 describe("sqliteErrorHandler on libsql: a constraint failing in another row (QE1, QE2 of r23)", () => {
-	it.each(ELSEWHERE_CASES)("answers $label", async ({ expected, statement }) => {
-		const harness = libsqlMemory()
-		try {
-			for (const ddl of ELSEWHERE_DDL) await harness.client.execute(ddl)
-			expect(await classify(harness, statement, { maps: ELSEWHERE_MAPS })).toMatchObject(expected)
-		} finally {
-			harness.close()
-		}
-	})
-})
+  it.each(ELSEWHERE_CASES)("answers $label", async ({ expected, statement }) => {
+    const harness = libsqlMemory();
+
+    try {
+      for (const ddl of ELSEWHERE_DDL) await harness.client.execute(ddl);
+      expect(await classify(harness, statement, { maps: ELSEWHERE_MAPS })).toMatchObject(expected);
+    } finally {
+      harness.close();
+    }
+  });
+});
 
 describe("names outside [A-Za-z0-9_] (R6)", () => {
-	const PUNCTUATED: ConstraintMap[] = [
-		{
-			acct: { check: { "age-adult": { cause: "Must be an adult", errorKey: "acct_age_adult" } } },
-			line: { check: { price_positive: { cause: "the other table's", errorKey: "line_price_positive" } } },
-			"line-item": {
-				check: { price_positive: { cause: "Price must be positive", errorKey: "line_item_price_positive" } },
-				unique: { sku: { cause: "SKU taken", errorKey: "line_item_sku_taken" } },
-			},
-		},
-	]
-	let punctuated: LibsqlHarness
-	beforeEach(async () => {
-		punctuated = libsqlMemory()
-		await punctuated.client
-			.executeMultiple(`CREATE TABLE acct (id TEXT PRIMARY KEY, age INTEGER, CONSTRAINT "age-adult" CHECK (age >= 18));
+  const PUNCTUATED: ConstraintMap[] = [
+    {
+      acct: { check: { "age-adult": { cause: "Must be an adult", errorKey: "acct_age_adult" } } },
+      line: { check: { price_positive: { cause: "the other table's", errorKey: "line_price_positive" } } },
+      "line-item": {
+        check: { price_positive: { cause: "Price must be positive", errorKey: "line_item_price_positive" } },
+        unique: { sku: { cause: "SKU taken", errorKey: "line_item_sku_taken" } },
+      },
+    },
+  ];
+
+  let punctuated: LibsqlHarness;
+  beforeEach(async () => {
+    punctuated = libsqlMemory();
+    await punctuated.client
+      .executeMultiple(`CREATE TABLE acct (id TEXT PRIMARY KEY, age INTEGER, CONSTRAINT "age-adult" CHECK (age >= 18));
 CREATE TABLE line (id TEXT PRIMARY KEY, price INTEGER, CONSTRAINT price_positive CHECK (price > 0));
 CREATE TABLE "line-item" (id TEXT PRIMARY KEY, sku TEXT UNIQUE, price INTEGER, CONSTRAINT price_positive CHECK (price > 0));
-INSERT INTO "line-item" VALUES ('l1', 'A', 1);`)
-	})
-	afterEach(() => punctuated.close())
+INSERT INTO "line-item" VALUES ('l1', 'A', 1);`);
+  });
+  afterEach(() => punctuated.close());
 
-	/** What the handler makes of `statement`'s violation */
-	async function mapped(statement: string): Promise<DatabaseError> {
-		try {
-			await punctuated.db.run(sql.raw(statement))
-		} catch (error) {
-			const mappedError = constraintError(error, PUNCTUATED)
-			if (mappedError !== null) return mappedError
-			throw error
-		}
-		throw new Error(`${statement} did not fail`)
-	}
+  /** What the handler makes of `statement`'s violation */
+  async function mapped(statement: string): Promise<DatabaseError> {
+    try {
+      await punctuated.db.run(sql.raw(statement));
+    } catch (error) {
+      const mappedError = constraintError(error, PUNCTUATED);
 
-	it("maps a CHECK whose name holds a hyphen", async () => {
-		expect(await mapped("INSERT INTO acct VALUES ('a1', 12)")).toMatchObject({ errorKey: "acct_age_adult" })
-	})
+      if (mappedError !== null) return mappedError;
+      throw error;
+    }
 
-	it("maps a unique column of a hyphenated table, naming that table", async () => {
-		expect(await mapped(`INSERT INTO "line-item" VALUES ('l2', 'A', 2)`)).toMatchObject({
-			column: "sku",
-			errorKey: "line_item_sku_taken",
-			table: "line-item",
-		})
-	})
+    throw new Error(`${statement} did not fail`);
+  }
 
-	it("blames a CHECK on the hyphenated table, not a table its name starts with", async () => {
-		expect(await mapped(`INSERT INTO "line-item" VALUES ('l3', 'B', 0)`)).toMatchObject({
-			errorKey: "line_item_price_positive",
-			table: "line-item",
-		})
-		expect(await mapped(`UPDATE [line-item] SET price = -1`)).toMatchObject({ errorKey: "line_item_price_positive" })
-		expect(await mapped("INSERT INTO `line-item` VALUES ('l4', 'C', 0)")).toMatchObject({ table: "line-item" })
-	})
-})
+  it("maps a CHECK whose name holds a hyphen", async () => {
+    expect(await mapped("INSERT INTO acct VALUES ('a1', 12)")).toMatchObject({ errorKey: "acct_age_adult" });
+  });
+
+  it("maps a unique column of a hyphenated table, naming that table", async () => {
+    expect(await mapped(`INSERT INTO "line-item" VALUES ('l2', 'A', 2)`)).toMatchObject({
+      column: "sku",
+      errorKey: "line_item_sku_taken",
+      table: "line-item",
+    });
+  });
+
+  it("blames a CHECK on the hyphenated table, not a table its name starts with", async () => {
+    expect(await mapped(`INSERT INTO "line-item" VALUES ('l3', 'B', 0)`)).toMatchObject({
+      errorKey: "line_item_price_positive",
+      table: "line-item",
+    });
+    expect(await mapped(`UPDATE [line-item] SET price = -1`)).toMatchObject({ errorKey: "line_item_price_positive" });
+    expect(await mapped("INSERT INTO `line-item` VALUES ('l4', 'C', 0)")).toMatchObject({ table: "line-item" });
+  });
+});
 
 describe("an unmapped unique index on an expression (R11)", () => {
-	it("names the statement's table, as Postgres does", async () => {
-		const harness = libsqlMemory()
-		try {
-			await harness.client.executeMultiple(`CREATE TABLE "line-item" (id TEXT PRIMARY KEY, sku TEXT);
-CREATE UNIQUE INDEX "line-item_sku_lower" ON "line-item" (lower(sku));
-INSERT INTO "line-item" VALUES ('l1', 'A');`)
-			const failure = await harness.db
-				.run(sql.raw(`INSERT INTO "line-item" VALUES ('l2', 'a')`))
-				.catch((error: unknown) => error)
-			expect(constraintError(failure, [])).toMatchObject({
-				errorKey: "unique_constraint_violation",
-				table: "line-item",
-			})
-		} finally {
-			harness.close()
-		}
-	})
-})
+  it("names the statement's table, as Postgres does", async () => {
+    const harness = libsqlMemory();
 
-/* U23 of the 0.13.0 round: a map may not list every foreign key, so an UPDATE of a column it does
-   not list may have broken the table's own key: the neutral cause, never "still referenced" */
+    try {
+      await harness.client.executeMultiple(`CREATE TABLE "line-item" (id TEXT PRIMARY KEY, sku TEXT);
+CREATE UNIQUE INDEX "line-item_sku_lower" ON "line-item" (lower(sku));
+INSERT INTO "line-item" VALUES ('l1', 'A');`);
+
+      const failure = await harness.db
+        .run(sql.raw(`INSERT INTO "line-item" VALUES ('l2', 'a')`))
+        .catch((error: unknown) => error);
+
+      expect(constraintError(failure, [])).toMatchObject({
+        errorKey: "unique_constraint_violation",
+        table: "line-item",
+      });
+    } finally {
+      harness.close();
+    }
+  });
+});
+
+// U23 of the 0.13.0 round: a map may not list every foreign key, so an UPDATE of a column it does
+// not list may have broken the table's own key: the neutral cause, never "still referenced"
 const PARTIAL: ConstraintMap[] = [
-	{
-		child: { foreignKey: { pa: { cause: "No such parent", errorKey: "child_parent_missing" } } },
-		team: { primaryKey: { cause: "Team exists", errorKey: "team_id_taken" } },
-	},
-]
+  {
+    child: { foreignKey: { pa: { cause: "No such parent", errorKey: "child_parent_missing" } } },
+    team: { primaryKey: { cause: "Team exists", errorKey: "team_id_taken" } },
+  },
+];
 
 describe("sqliteErrorHandler on libsql: an UPDATE of a foreign key column the map does not list (U23)", () => {
-	const db = useMemberDb()
+  const db = useMemberDb();
 
-	it.each([
-		["the second column of a composite key", "UPDATE child SET pb = '9' WHERE id = 'c1'", "child"],
-		["a key the map leaves out", "UPDATE team SET owner_id = 'nope' WHERE id = 't1'", "team"],
-	])("answers %s with the neutral cause", async (_, statement, table) => {
-		expect(await classify(db(), statement, { maps: PARTIAL })).toMatchObject({
-			cause: "Referenced record does not exist or is still in use",
-			errorKey: "foreign_key_violation",
-			status: 409,
-			table,
-		})
-	})
+  it.each([
+    ["the second column of a composite key", "UPDATE child SET pb = '9' WHERE id = 'c1'", "child"],
+    ["a key the map leaves out", "UPDATE team SET owner_id = 'nope' WHERE id = 't1'", "team"],
+  ])("answers %s with the neutral cause", async (_, statement, table) => {
+    expect(await classify(db(), statement, { maps: PARTIAL })).toMatchObject({
+      cause: "Referenced record does not exist or is still in use",
+      errorKey: "foreign_key_violation",
+      status: 409,
+      table,
+    });
+  });
 
-	it("still names the listed key, and still calls a delete's failure the other side", async () => {
-		expect(await classify(db(), "UPDATE child SET pa = 'nope' WHERE id = 'c1'", { maps: PARTIAL })).toMatchObject({
-			errorKey: "child_parent_missing",
-		})
-		expect(await classify(db(), "DELETE FROM parent WHERE a = 'x'", { maps: PARTIAL })).toMatchObject({
-			cause: "The record is still referenced by other records",
-		})
-	})
-})
+  it("still names the listed key, and still calls a delete's failure the other side", async () => {
+    expect(await classify(db(), "UPDATE child SET pa = 'nope' WHERE id = 'c1'", { maps: PARTIAL })).toMatchObject({
+      errorKey: "child_parent_missing",
+    });
+    expect(await classify(db(), "DELETE FROM parent WHERE a = 'x'", { maps: PARTIAL })).toMatchObject({
+      cause: "The record is still referenced by other records",
+    });
+  });
+});

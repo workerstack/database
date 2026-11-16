@@ -6,19 +6,19 @@
  * own tablespace records none (reltablespace 0), and Postgres reads a move to that tablespace's name
  * as a move to none, so it reads as that name here.
  */
-import { type Connect, failureOf, loadPostgres } from "./pg-live-objects.ts"
-import type { LiveTarget } from "./pg-live-types.ts"
-import { keyOf, type Node, nodesOf } from "./pg-nodes.ts"
-import type { Placed, Storage } from "./pg-storage-types.ts"
-import { postgresOptionsOf } from "./pg-url.ts"
+import { type Connect, failureOf, loadPostgres } from "./pg-live-objects.ts";
+import type { LiveTarget } from "./pg-live-types.ts";
+import { keyOf, nodesOf } from "./pg-nodes.ts";
+import type { Placed, Storage } from "./pg-storage-types.ts";
+import { postgresOptionsOf } from "./pg-url.ts";
 
 /** How database reads where the target keeps its relations: readPlaced, unless a test says otherwise */
-type ReadPlaced = (target: LiveTarget) => Promise<Placed | undefined>
+type ReadPlaced = (target: LiveTarget) => Promise<Placed | undefined>;
 
-/* why database loads postgres.js here */
-const READS = "read where the target keeps a relation a pending file moves"
+// why database loads postgres.js here
+const READS = "read where the target keeps a relation a pending file moves";
 
-/* every table, materialized view and index outside the system's schemas, with where it is */
+// every table, materialized view and index outside the system's schemas, with where it is
 const PLACED = `SELECT n.nspname AS schema, c.relname AS name, c.relkind AS kind, a.amname AS method,
 	coalesce(t.spcname, d.spcname) AS tablespace, c.relpersistence AS persistence
 FROM pg_catalog.pg_class c
@@ -27,19 +27,22 @@ LEFT JOIN pg_catalog.pg_am a ON a.oid = c.relam
 LEFT JOIN pg_catalog.pg_tablespace t ON t.oid = c.reltablespace
 CROSS JOIN (SELECT s.spcname FROM pg_catalog.pg_database b
 	JOIN pg_catalog.pg_tablespace s ON s.oid = b.dattablespace WHERE b.datname = current_database()) d
-WHERE c.relkind IN ('r', 'm', 'i') AND n.nspname <> 'information_schema' AND n.nspname NOT LIKE 'pg\\_%'`
+WHERE c.relkind IN ('r', 'm', 'i') AND n.nspname <> 'information_schema' AND n.nspname NOT LIKE 'pg\\_%'`;
 
 /** The rows of PLACED as Placed, keyed under `schema` as the history's facts are */
 function placedOf(rows: ReadonlyArray<Record<string, unknown>>, schema: string): Placed {
-	const indexes = new Map<string, string>()
-	const relations = new Map<string, Storage>()
-	for (const row of rows) {
-		const key = keyOf([String(row["schema"]), String(row["name"])], schema)
-		const tablespace = String(row["tablespace"])
-		if (row["kind"] === "i") indexes.set(key, tablespace)
-		else relations.set(key, { accessMethod: String(row["method"]), logged: row["persistence"] === "p", tablespace })
-	}
-	return { indexes, relations }
+  const indexes = new Map<string, string>();
+  const relations = new Map<string, Storage>();
+
+  for (const row of rows) {
+    const key = keyOf([String(row["schema"]), String(row["name"])], schema);
+    const tablespace = String(row["tablespace"]);
+
+    if (row["kind"] === "i") indexes.set(key, tablespace);
+    else relations.set(key, { accessMethod: String(row["method"]), logged: row["persistence"] === "p", tablespace });
+  }
+
+  return { indexes, relations };
 }
 
 /**
@@ -47,42 +50,45 @@ function placedOf(rows: ReadonlyArray<Record<string, unknown>>, schema: string):
  * peer, so the files are rated alone. It writes nothing
  */
 async function readPlaced(
-	target: LiveTarget,
-	load: () => Promise<Connect> = () => loadPostgres(READS),
+  target: LiveTarget,
+  load: () => Promise<Connect> = () => loadPostgres(READS),
 ): Promise<Placed | undefined> {
-	let connect: Connect
-	try {
-		connect = await load()
-	} catch {
-		// reason: the postgres package is an optional peer; without it each move of an unnamed relation warns
-		return undefined
-	}
-	const sql = connect({ ...postgresOptionsOf(target.url, "url"), max: 1 })
-	try {
-		return placedOf(await sql.unsafe(PLACED, []), target.schema)
-	} catch (error) {
-		throw new Error(
-			`database could not read where url keeps its relations: ${failureOf(error, { field: "url", url: target.url, urls: [target.url] })}`,
-			{ cause: error },
-		)
-	} finally {
-		await sql.end()
-	}
+  let connect: Connect;
+
+  try {
+    connect = await load();
+  } catch {
+    // reason: the postgres package is an optional peer; without it each move of an unnamed relation warns
+    return undefined;
+  }
+
+  const sql = connect({ ...postgresOptionsOf(target.url, "url"), max: 1 });
+
+  try {
+    return placedOf(await sql.unsafe(PLACED, []), target.schema);
+  } catch (error) {
+    throw new Error(
+      `database could not read where url keeps its relations: ${failureOf(error, { field: "url", url: target.url, urls: [target.url] })}`,
+      { cause: error },
+    );
+  } finally {
+    await sql.end();
+  }
 }
 
-/* lookup-table: the moves whose no-op the history cannot always see: an access method or tablespace for a
-   relation made without USING or TABLESPACE, and a persistence after code the history cannot read ran */
+// lookup-table: the moves whose no-op the history cannot always see: an access method or tablespace for a
+// relation made without USING or TABLESPACE, and a persistence after code the history cannot read ran
 const CATALOG_MOVES: ReadonlySet<unknown> = /* @__PURE__ */ new Set([
-	"AT_SetAccessMethod",
-	"AT_SetLogged",
-	"AT_SetTableSpace",
-	"AT_SetUnLogged",
-])
+  "AT_SetAccessMethod",
+  "AT_SetLogged",
+  "AT_SetTableSpace",
+  "AT_SetUnLogged",
+]);
 
 /** Whether a parse tree among `trees` moves a relation to an access method, a tablespace or a persistence */
 const movesStorage = (trees: readonly unknown[]): boolean =>
-	trees.some((tree) =>
-		nodesOf(tree).some(([type, node]) => type === "AlterTableCmd" && CATALOG_MOVES.has((node as Node)["subtype"])),
-	)
+  trees.some((tree) =>
+    nodesOf(tree).some(([type, node]) => type === "AlterTableCmd" && CATALOG_MOVES.has(node["subtype"])),
+  );
 
-export { movesStorage, placedOf, type ReadPlaced, readPlaced }
+export { movesStorage, placedOf, type ReadPlaced, readPlaced };

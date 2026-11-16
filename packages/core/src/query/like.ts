@@ -5,7 +5,7 @@
  * specials `%` and `_` are escaped before `*` expands to `%`.
  */
 function likePattern(value: string): string {
-	return escapeLike(value).replace(/\*/g, "%")
+  return escapeLike(value).replaceAll("*", "%");
 }
 
 /**
@@ -14,7 +14,7 @@ function likePattern(value: string): string {
  * class, and `*` stays the wildcard.
  */
 function globPattern(value: string): string {
-	return value.replace(/\[/g, "[[]").replace(/\?/g, "[?]")
+  return value.replaceAll("[", "[[]").replaceAll("?", "[?]");
 }
 
 /**
@@ -22,14 +22,14 @@ function globPattern(value: string): string {
  * LIKE's own specials `%` and `_` each escaped, so `%${escapeLike(term)}%` finds `term` as written
  */
 function escapeLike(text: string): string {
-	return text.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_")
+  return text.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_");
 }
 
 /** A value's stars only at its ends: whether each end is open, and the text between */
-const FIXED: RegExp = /^(\**)([^*]*)(\**)$/
+const FIXED: RegExp = /^(\**)([^*]*)(\**)$/;
 
 /** The pattern SQLite matches `value` with under `operator`, or null for a fixed text, which is found with none */
 const patternOf = (operator: "like" | "ilike", value: string): string | null =>
-	FIXED.test(value) ? null : operator === "like" ? globPattern(value) : likePattern(value)
+  FIXED.test(value) ? null : operator === "like" ? globPattern(value) : likePattern(value);
 
-export { escapeLike, FIXED, globPattern, likePattern, patternOf }
+export { escapeLike, FIXED, globPattern, likePattern, patternOf };

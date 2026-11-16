@@ -1,62 +1,63 @@
-import { DatabaseError } from "../../error.ts"
-import { type ConstraintMap, databaseErrorKeys, type StatusKey } from "../../types.ts"
-import { constraintError } from "../constraint-handler.ts"
-import { resourceOutcome } from "../resource-outcome.ts"
-import { readSqliteError, type SqliteErrorRead } from "../read-error.ts"
-import { causeChain, innermostFirst } from "../../error-chain.ts"
+import { causeChain, innermostFirst } from "../../error-chain.ts";
+import { DatabaseError } from "../../error.ts";
+import { type ConstraintMap, databaseErrorKeys, type StatusKey } from "../../types.ts";
+import { constraintError } from "../constraint-handler.ts";
+import { readSqliteError, type SqliteErrorRead } from "../read-error.ts";
+import { resourceOutcome } from "../resource-outcome.ts";
 
-/* Retryable per developers.cloudflare.com/d1/observability/debug-d1/, plus D1's overload and
- * limit resets. Only a platform message (one with no SQLite result code) is read for these, so
- * a query or bound value that happens to contain the words never matches. */
+// Retryable per developers.cloudflare.com/d1/observability/debug-d1/, plus D1's overload and
+// limit resets. Only a platform message (one with no SQLite result code) is read for these, so
+// a query or bound value that happens to contain the words never matches.
 const D1_TRANSIENT_PATTERNS = [
-	"network connection lost",
-	"replica disconnected from primary",
-	"transient issue on remote node",
-	"client disconnected",
-	"reset",
-	"startup failure",
-	"overloaded",
-	"too many requests",
-	"memory limit",
-	"cpu time limit",
-	"storage operation timeout",
-	"starting up",
-	/* Platform-side failure with a support reference; D1 already retried reads. */
-	"internal error",
-] as const
+  "network connection lost",
+  "replica disconnected from primary",
+  "transient issue on remote node",
+  "client disconnected",
+  "reset",
+  "startup failure",
+  "overloaded",
+  "too many requests",
+  "memory limit",
+  "cpu time limit",
+  "storage operation timeout",
+  "starting up",
+  // Platform-side failure with a support reference; D1 already retried reads.
+  "internal error",
+] as const;
 
-const D1_PREFIX = /\bD1_(?:ERROR|EXEC_ERROR|TYPE_ERROR|COLUMN_NOTFOUND)\b/
+const D1_PREFIX = /\bD1_(?:ERROR|EXEC_ERROR|TYPE_ERROR|COLUMN_NOTFOUND)\b/;
 
-type Outcome = { cause: string; errorKey: string; status: StatusKey }
+type Outcome = { cause: string; errorKey: string; status: StatusKey };
 
 const QUERY_FAILED: Outcome = {
-	cause: "The database rejected the query.",
-	errorKey: databaseErrorKeys.DATABASE_IO_ERROR,
-	status: "internal_server_error",
-}
+  cause: "The database rejected the query.",
+  errorKey: databaseErrorKeys.DATABASE_IO_ERROR,
+  status: "internal_server_error",
+};
 
-/* D1 caps a LIKE or GLOB pattern at 50 bytes (SQLITE_LIMIT_LIKE_PATTERN_LENGTH): the request's to shorten */
+// D1 caps a LIKE or GLOB pattern at 50 bytes (SQLITE_LIMIT_LIKE_PATTERN_LENGTH): the request's to shorten
 const PATTERN_TOO_LONG: Outcome = {
-	cause: "A like or ilike filter value with a * inside it may be at most 50 bytes on D1, once escaped.",
-	errorKey: databaseErrorKeys.INVALID_VALUE,
-	status: "bad_request",
-}
+  cause: "A like or ilike filter value with a * inside it may be at most 50 bytes on D1, once escaped.",
+  errorKey: databaseErrorKeys.INVALID_VALUE,
+  status: "bad_request",
+};
 
 const STORAGE_FULL: Outcome = {
-	cause: "The database storage limit has been reached.",
-	errorKey: databaseErrorKeys.STORAGE_LIMIT_REACHED,
-	status: "unprocessable_entity",
-}
+  cause: "The database storage limit has been reached.",
+  errorKey: databaseErrorKeys.STORAGE_LIMIT_REACHED,
+  status: "unprocessable_entity",
+};
 
 /**
  * The D1 platform message in the chain, read innermost first: the platform's error is the deepest,
  * and a wrapper's message (drizzle's carries the SQL and its params) never decides the outcome.
  */
 function platformMessage(error: Error): string | null {
-	const platform = innermostFirst(causeChain(error))
-		.filter((link): link is Error => link instanceof Error)
-		.find((link) => typeof (link as { query?: unknown }).query !== "string" && D1_PREFIX.test(link.message))
-	return platform?.message ?? null
+  const platform = innermostFirst(causeChain(error))
+    .filter((link): link is Error => link instanceof Error)
+    .find((link) => typeof (link as { query?: unknown }).query !== "string" && D1_PREFIX.test(link.message));
+
+  return platform?.message ?? null;
 }
 
 /**
@@ -64,28 +65,31 @@ function platformMessage(error: Error): string | null {
  * phrase found in a message, which a D1_TYPE_ERROR fills with the bound value
  */
 const tooComplex = (read: SqliteErrorRead | null): boolean =>
-	read?.code === "SQLITE_ERROR" && read.message === "LIKE or GLOB pattern too complex"
+  read?.code === "SQLITE_ERROR" && read.message === "LIKE or GLOB pattern too complex";
 
 function platformOutcome(message: string): Outcome {
-	/* D1_TYPE_ERROR, D1_EXEC_ERROR and D1_COLUMN_NOTFOUND quote the query or a bound value: always a query error */
-	if (!/\bD1_ERROR\b/.test(message)) return QUERY_FAILED
-	const lower = message.toLowerCase()
-	if (D1_TRANSIENT_PATTERNS.some((pattern) => lower.includes(pattern))) {
-		return {
-			cause: "The database is temporarily unavailable. Please retry.",
-			errorKey: databaseErrorKeys.DATABASE_UNAVAILABLE,
-			status: "service_unavailable",
-		}
-	}
-	/* D1's own words for a database past its size, classed as SQLite's full disk is */
-	if (["size limit", "storage limit", "exceeded maximum db size"].some((words) => lower.includes(words)))
-		return STORAGE_FULL
-	return QUERY_FAILED
+  // D1_TYPE_ERROR, D1_EXEC_ERROR and D1_COLUMN_NOTFOUND quote the query or a bound value: always a query error
+  if (!/\bD1_ERROR\b/.test(message)) return QUERY_FAILED;
+  const lower = message.toLowerCase();
+
+  if (D1_TRANSIENT_PATTERNS.some((pattern) => lower.includes(pattern))) {
+    return {
+      cause: "The database is temporarily unavailable. Please retry.",
+      errorKey: databaseErrorKeys.DATABASE_UNAVAILABLE,
+      status: "service_unavailable",
+    };
+  }
+
+  // D1's own words for a database past its size, classed as SQLite's full disk is
+  if (["size limit", "storage limit", "exceeded maximum db size"].some((words) => lower.includes(words)))
+    return STORAGE_FULL;
+
+  return QUERY_FAILED;
 }
 
 /** The outcome for an engine error that is not a constraint violation: the shared resource table's, else a query error */
 function engineOutcome(code: string): Outcome {
-	return resourceOutcome(code) ?? QUERY_FAILED
+  return resourceOutcome(code) ?? QUERY_FAILED;
 }
 
 /**
@@ -96,21 +100,26 @@ function engineOutcome(code: string): Outcome {
  * for clients; the original error, which holds the SQL and its bound values, is on `source`.
  */
 function classifyD1Error(error: unknown, constraintMaps: readonly ConstraintMap[]): DatabaseError | undefined {
-	if (!(error instanceof Error)) return undefined
-	const constraint = constraintError(error, constraintMaps)
-	if (constraint !== null) return constraint
-	const read = readSqliteError(error)
-	if (tooComplex(read)) return new DatabaseError({ ...PATTERN_TOO_LONG, source: error })
-	const platform = read === null ? platformMessage(error) : null
-	if (read === null && platform === null) return undefined
-	const outcome = read === null ? platformOutcome(platform as string) : engineOutcome(read.code)
-	return new DatabaseError({ ...outcome, source: error })
+  if (!(error instanceof Error)) return undefined;
+  const constraint = constraintError(error, constraintMaps);
+
+  if (constraint !== null) return constraint;
+  const read = readSqliteError(error);
+
+  if (tooComplex(read)) return new DatabaseError({ ...PATTERN_TOO_LONG, source: error });
+  const platform = read === null ? platformMessage(error) : null;
+
+  if (read === null && platform === null) return undefined;
+  const outcome = read === null ? platformOutcome(platform as string) : engineOutcome(read.code);
+
+  return new DatabaseError({ ...outcome, source: error });
 }
 
 /** Throw the DatabaseError classifyD1Error finds for `error`; return when it finds none */
 function d1ErrorHandler(error: unknown, constraintMaps: readonly ConstraintMap[]): void {
-	const classified = classifyD1Error(error, constraintMaps)
-	if (classified !== undefined) throw classified
+  const classified = classifyD1Error(error, constraintMaps);
+
+  if (classified !== undefined) throw classified;
 }
 
-export { classifyD1Error, d1ErrorHandler }
+export { classifyD1Error, d1ErrorHandler };

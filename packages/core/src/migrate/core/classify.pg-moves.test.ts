@@ -11,9 +11,10 @@
  * elsewhere, to a place the history never named, after a rename of the tablespace or a move of all
  * of it, and of a relation dropped and made again.
  */
-import { describe, expect, it } from "vitest"
-import { classifyMigration } from "./classify.ts"
-import { extractSchema } from "./schema.ts"
+import { describe, expect, it } from "vitest";
+
+import { classifyMigration } from "./classify.ts";
+import { extractSchema } from "./schema.ts";
 
 const HISTORY = `CREATE TABLE plain (id int);
 CREATE UNLOGGED TABLE scratch (id int);
@@ -22,150 +23,152 @@ CREATE MATERIALIZED VIEW mv USING heap TABLESPACE fast AS SELECT 1 AS id;
 CREATE MATERIALIZED VIEW mv_plain AS SELECT 1 AS id;
 CREATE INDEX placed_id ON placed (id) TABLESPACE fast;
 CREATE INDEX plain_id ON plain (id);
-`
+`;
 
 /** `later`'s rating after HISTORY and `more`, all read as Postgres */
 const rate = (later: string, more = "") =>
-	classifyMigration(later, { before: extractSchema(`${HISTORY}${more}`, undefined, "postgres"), dialect: "postgres" })
+  classifyMigration(later, { before: extractSchema(`${HISTORY}${more}`, undefined, "postgres"), dialect: "postgres" });
 
-const REWRITES = "rewrites or scans the table under an exclusive lock"
+const REWRITES = "rewrites or scans the table under an exclusive lock";
 
 describe("a move to where the history left the relation (PA17 of r22b)", () => {
-	it.each([
-		["ALTER TABLE plain SET LOGGED;", ""],
-		["ALTER TABLE scratch SET UNLOGGED;", ""],
-		["ALTER TABLE placed SET ACCESS METHOD heap;", ""],
-		["ALTER TABLE placed SET TABLESPACE fast;", ""],
-		["ALTER MATERIALIZED VIEW mv SET ACCESS METHOD heap;", ""],
-		["ALTER MATERIALIZED VIEW mv SET TABLESPACE fast;", ""],
-		["ALTER INDEX placed_id SET TABLESPACE fast;", ""],
-		["ALTER TABLE plain SET TABLESPACE fast;", "ALTER TABLE plain SET TABLESPACE fast;\n"],
-		["ALTER TABLE plain SET ACCESS METHOD heap;", "ALTER TABLE plain SET ACCESS METHOD heap;\n"],
-		["ALTER TABLE plain SET UNLOGGED;", "ALTER TABLE plain SET UNLOGGED;\n"],
-		["ALTER TABLE scratch SET LOGGED;", "ALTER TABLE scratch SET LOGGED;\n"],
-		["ALTER INDEX plain_id SET TABLESPACE fast;", "ALTER INDEX plain_id SET TABLESPACE fast;\n"],
-		["ALTER TABLE kept SET TABLESPACE fast;", "ALTER TABLE placed RENAME TO kept;\n"],
-		["ALTER TABLE s.placed SET TABLESPACE fast;", "CREATE SCHEMA s;\nALTER TABLE placed SET SCHEMA s;\n"],
-		[
-			"ALTER TABLE b.t SET TABLESPACE fast;",
-			"CREATE SCHEMA a;\nCREATE TABLE a.t (id int) TABLESPACE fast;\nALTER SCHEMA a RENAME TO b;\n",
-		],
-		["ALTER INDEX kept_id SET TABLESPACE fast;", "ALTER INDEX placed_id RENAME TO kept_id;\n"],
-		["ALTER TABLE placed SET TABLESPACE old;", "ALTER TABLESPACE fast RENAME TO old;\n"],
-		["ALTER TABLE c SET UNLOGGED;", "CREATE UNLOGGED TABLE c AS SELECT 1 AS id;\n"],
-		["ALTER TABLE c SET TABLESPACE fast;", "CREATE TABLE c TABLESPACE fast AS SELECT 1 AS id;\n"],
-		["ALTER TABLE c SET UNLOGGED;", "SELECT 1 AS id INTO UNLOGGED c;\n"],
-		["ALTER TABLE plain SET LOGGED, SET TABLESPACE fast;", "ALTER TABLE plain SET TABLESPACE fast;\n"],
-		["ALTER INDEX placed_id SET TABLESPACE fast;", "REINDEX (VERBOSE) INDEX placed_id;\n"],
-		["ALTER TABLE placed SET TABLESPACE fast;", "REINDEX (TABLESPACE slow) TABLE placed;\n"],
-	])("warns of nothing for %j after %j", (later, more) => {
-		const rated = rate(later, more)
-		expect(rated.lockWarnings).toEqual([])
-		expect(rated.safety).toBe("safe")
-	})
+  it.each([
+    ["ALTER TABLE plain SET LOGGED;", ""],
+    ["ALTER TABLE scratch SET UNLOGGED;", ""],
+    ["ALTER TABLE placed SET ACCESS METHOD heap;", ""],
+    ["ALTER TABLE placed SET TABLESPACE fast;", ""],
+    ["ALTER MATERIALIZED VIEW mv SET ACCESS METHOD heap;", ""],
+    ["ALTER MATERIALIZED VIEW mv SET TABLESPACE fast;", ""],
+    ["ALTER INDEX placed_id SET TABLESPACE fast;", ""],
+    ["ALTER TABLE plain SET TABLESPACE fast;", "ALTER TABLE plain SET TABLESPACE fast;\n"],
+    ["ALTER TABLE plain SET ACCESS METHOD heap;", "ALTER TABLE plain SET ACCESS METHOD heap;\n"],
+    ["ALTER TABLE plain SET UNLOGGED;", "ALTER TABLE plain SET UNLOGGED;\n"],
+    ["ALTER TABLE scratch SET LOGGED;", "ALTER TABLE scratch SET LOGGED;\n"],
+    ["ALTER INDEX plain_id SET TABLESPACE fast;", "ALTER INDEX plain_id SET TABLESPACE fast;\n"],
+    ["ALTER TABLE kept SET TABLESPACE fast;", "ALTER TABLE placed RENAME TO kept;\n"],
+    ["ALTER TABLE s.placed SET TABLESPACE fast;", "CREATE SCHEMA s;\nALTER TABLE placed SET SCHEMA s;\n"],
+    [
+      "ALTER TABLE b.t SET TABLESPACE fast;",
+      "CREATE SCHEMA a;\nCREATE TABLE a.t (id int) TABLESPACE fast;\nALTER SCHEMA a RENAME TO b;\n",
+    ],
+    ["ALTER INDEX kept_id SET TABLESPACE fast;", "ALTER INDEX placed_id RENAME TO kept_id;\n"],
+    ["ALTER TABLE placed SET TABLESPACE old;", "ALTER TABLESPACE fast RENAME TO old;\n"],
+    ["ALTER TABLE c SET UNLOGGED;", "CREATE UNLOGGED TABLE c AS SELECT 1 AS id;\n"],
+    ["ALTER TABLE c SET TABLESPACE fast;", "CREATE TABLE c TABLESPACE fast AS SELECT 1 AS id;\n"],
+    ["ALTER TABLE c SET UNLOGGED;", "SELECT 1 AS id INTO UNLOGGED c;\n"],
+    ["ALTER TABLE plain SET LOGGED, SET TABLESPACE fast;", "ALTER TABLE plain SET TABLESPACE fast;\n"],
+    ["ALTER INDEX placed_id SET TABLESPACE fast;", "REINDEX (VERBOSE) INDEX placed_id;\n"],
+    ["ALTER TABLE placed SET TABLESPACE fast;", "REINDEX (TABLESPACE slow) TABLE placed;\n"],
+  ])("warns of nothing for %j after %j", (later, more) => {
+    const rated = rate(later, more);
+    expect(rated.lockWarnings).toEqual([]);
+    expect(rated.safety).toBe("safe");
+  });
 
-	it("follows the file's own REINDEX into a tablespace, so the move back warns of the rewrite (AE2-4 of r22)", () => {
-		const sql = "REINDEX (TABLESPACE slow) INDEX placed_id;\nALTER INDEX placed_id SET TABLESPACE fast;"
-		expect(rate(sql).lockWarnings).toContain(`ALTER INDEX placed_id SET TABLESPACE fast (${REWRITES})`)
-	})
+  it("follows the file's own REINDEX into a tablespace, so the move back warns of the rewrite (AE2-4 of r22)", () => {
+    const sql = "REINDEX (TABLESPACE slow) INDEX placed_id;\nALTER INDEX placed_id SET TABLESPACE fast;";
+    expect(rate(sql).lockWarnings).toContain(`ALTER INDEX placed_id SET TABLESPACE fast (${REWRITES})`);
+  });
 
-	it("follows the file's own move, so the second move to the same place warns of nothing", () => {
-		const sql = "ALTER TABLE plain SET TABLESPACE fast;\nALTER TABLE plain SET TABLESPACE fast;"
-		expect(rate(sql).lockWarnings).toEqual([`ALTER TABLE plain SET TABLESPACE fast (${REWRITES})`])
-	})
-})
+  it("follows the file's own move, so the second move to the same place warns of nothing", () => {
+    const sql = "ALTER TABLE plain SET TABLESPACE fast;\nALTER TABLE plain SET TABLESPACE fast;";
+    expect(rate(sql).lockWarnings).toEqual([`ALTER TABLE plain SET TABLESPACE fast (${REWRITES})`]);
+  });
+});
 
 describe("an index Postgres names on a temp table of a permanent table's name (AE2-4 of r22)", () => {
-	it.each([
-		["CREATE INDEX ON o (id)", "o_id_idx"],
-		["ALTER TABLE o ADD PRIMARY KEY (id)", "o_pkey"],
-	])("keeps the permanent index where it was after %j moves the temp table's %s", (makes, index) => {
-		const files = [
-			`CREATE TABLE o (id int);\nCREATE UNIQUE INDEX ${index} ON o (id) TABLESPACE slow;\n`,
-			`CREATE TEMP TABLE o (id int);\n${makes};\nALTER INDEX ${index} SET TABLESPACE fast;\n`,
-		]
-		const before = files.reduce(
-			(schema, file) => extractSchema(file, schema, "postgres"),
-			extractSchema("", undefined, "postgres"),
-		)
-		const later = `ALTER INDEX ${index} SET TABLESPACE fast;`
-		expect(classifyMigration(later, { before, dialect: "postgres" }).lockWarnings).toEqual([
-			`${later.slice(0, -1)} (${REWRITES})`,
-		])
-	})
-})
+  it.each([
+    ["CREATE INDEX ON o (id)", "o_id_idx"],
+    ["ALTER TABLE o ADD PRIMARY KEY (id)", "o_pkey"],
+  ])("keeps the permanent index where it was after %j moves the temp table's %s", (makes, index) => {
+    const files = [
+      `CREATE TABLE o (id int);\nCREATE UNIQUE INDEX ${index} ON o (id) TABLESPACE slow;\n`,
+      `CREATE TEMP TABLE o (id int);\n${makes};\nALTER INDEX ${index} SET TABLESPACE fast;\n`,
+    ];
+
+    const before = files.reduce(
+      (schema, file) => extractSchema(file, schema, "postgres"),
+      extractSchema("", undefined, "postgres"),
+    );
+
+    const later = `ALTER INDEX ${index} SET TABLESPACE fast;`;
+    expect(classifyMigration(later, { before, dialect: "postgres" }).lockWarnings).toEqual([
+      `${later.slice(0, -1)} (${REWRITES})`,
+    ]);
+  });
+});
 
 describe("a move the history does not show is a no-op (siblings of PA17 of r22b)", () => {
-	it.each([
-		/* made without USING or TABLESPACE: the target's defaults decide where it is */
-		["ALTER TABLE plain SET ACCESS METHOD heap;", ""],
-		["ALTER TABLE plain SET TABLESPACE pg_default;", ""],
-		["ALTER MATERIALIZED VIEW mv_plain SET TABLESPACE pg_default;", ""],
-		["ALTER INDEX plain_id SET TABLESPACE fast;", ""],
-		["ALTER TABLE placed SET ACCESS METHOD DEFAULT;", ""],
-		["ALTER TABLE plain SET ACCESS METHOD DEFAULT;", ""],
-		/* a move elsewhere */
-		["ALTER TABLE placed SET TABLESPACE slow;", ""],
-		["ALTER TABLE placed SET ACCESS METHOD other;", ""],
-		["ALTER INDEX placed_id SET TABLESPACE slow;", ""],
-		/* the tablespace renamed, or every relation in it moved, or the relation made again */
-		["ALTER TABLE placed SET TABLESPACE fast;", "ALTER TABLESPACE fast RENAME TO old;\n"],
-		["ALTER INDEX placed_id SET TABLESPACE fast;", "ALTER TABLESPACE fast RENAME TO old;\n"],
-		["ALTER TABLE placed SET TABLESPACE fast;", "ALTER TABLE ALL IN TABLESPACE fast SET TABLESPACE slow;\n"],
-		["ALTER INDEX placed_id SET TABLESPACE fast;", "ALTER INDEX ALL IN TABLESPACE fast SET TABLESPACE slow;\n"],
-		["ALTER TABLE placed SET TABLESPACE fast;", "DROP TABLE placed;\nCREATE TABLE placed (id int);\n"],
-		["ALTER TABLE ghost SET TABLESPACE fast;", ""],
-		/* a REINDEX that rebuilds indexes in a tablespace (AE2-4 of r22) */
-		["ALTER INDEX placed_id SET TABLESPACE fast;", "REINDEX (TABLESPACE slow) INDEX placed_id;\n"],
-		["ALTER INDEX placed_id SET TABLESPACE fast;", "REINDEX (TABLESPACE slow) TABLE placed;\n"],
-		["ALTER INDEX placed_id SET TABLESPACE fast;", "REINDEX (TABLESPACE slow) SCHEMA public;\n"],
-		["ALTER INDEX placed_id SET TABLESPACE fast;", "REINDEX (TABLESPACE slow, VERBOSE) DATABASE d;\n"],
-		["ALTER INDEX placed_id SET TABLESPACE fast;", "REINDEX (TABLESPACE slow) SYSTEM d;\n"],
-	])("warns of the rewrite for %j after %j", (later, more) => {
-		expect(rate(later, more).lockWarnings).toEqual([`${later.slice(0, -1)} (${REWRITES})`])
-	})
+  it.each([
+    // made without USING or TABLESPACE: the target's defaults decide where it is
+    ["ALTER TABLE plain SET ACCESS METHOD heap;", ""],
+    ["ALTER TABLE plain SET TABLESPACE pg_default;", ""],
+    ["ALTER MATERIALIZED VIEW mv_plain SET TABLESPACE pg_default;", ""],
+    ["ALTER INDEX plain_id SET TABLESPACE fast;", ""],
+    ["ALTER TABLE placed SET ACCESS METHOD DEFAULT;", ""],
+    ["ALTER TABLE plain SET ACCESS METHOD DEFAULT;", ""],
+    // a move elsewhere
+    ["ALTER TABLE placed SET TABLESPACE slow;", ""],
+    ["ALTER TABLE placed SET ACCESS METHOD other;", ""],
+    ["ALTER INDEX placed_id SET TABLESPACE slow;", ""],
+    // the tablespace renamed, or every relation in it moved, or the relation made again
+    ["ALTER TABLE placed SET TABLESPACE fast;", "ALTER TABLESPACE fast RENAME TO old;\n"],
+    ["ALTER INDEX placed_id SET TABLESPACE fast;", "ALTER TABLESPACE fast RENAME TO old;\n"],
+    ["ALTER TABLE placed SET TABLESPACE fast;", "ALTER TABLE ALL IN TABLESPACE fast SET TABLESPACE slow;\n"],
+    ["ALTER INDEX placed_id SET TABLESPACE fast;", "ALTER INDEX ALL IN TABLESPACE fast SET TABLESPACE slow;\n"],
+    ["ALTER TABLE placed SET TABLESPACE fast;", "DROP TABLE placed;\nCREATE TABLE placed (id int);\n"],
+    ["ALTER TABLE ghost SET TABLESPACE fast;", ""],
+    // a REINDEX that rebuilds indexes in a tablespace (AE2-4 of r22)
+    ["ALTER INDEX placed_id SET TABLESPACE fast;", "REINDEX (TABLESPACE slow) INDEX placed_id;\n"],
+    ["ALTER INDEX placed_id SET TABLESPACE fast;", "REINDEX (TABLESPACE slow) TABLE placed;\n"],
+    ["ALTER INDEX placed_id SET TABLESPACE fast;", "REINDEX (TABLESPACE slow) SCHEMA public;\n"],
+    ["ALTER INDEX placed_id SET TABLESPACE fast;", "REINDEX (TABLESPACE slow, VERBOSE) DATABASE d;\n"],
+    ["ALTER INDEX placed_id SET TABLESPACE fast;", "REINDEX (TABLESPACE slow) SYSTEM d;\n"],
+  ])("warns of the rewrite for %j after %j", (later, more) => {
+    expect(rate(later, more).lockWarnings).toEqual([`${later.slice(0, -1)} (${REWRITES})`]);
+  });
 
-	it("rates a change of persistence cautious, with the rewrite, and one the history does not show the same", () => {
-		for (const [later, more] of [
-			["ALTER TABLE scratch SET LOGGED;", ""],
-			["ALTER TABLE plain SET LOGGED;", "ALTER TABLE plain SET UNLOGGED;\n"],
-			["ALTER TABLE ghost SET LOGGED;", ""],
-			["ALTER TABLE placed SET LOGGED;", "DROP TABLE placed;\nCREATE UNLOGGED TABLE placed (id int);\n"],
-		]) {
-			const rated = rate(later as string, more)
-			expect(rated.safety, later).toBe("cautious")
-			expect(rated.lockWarnings, later).toEqual([`${(later as string).slice(0, -1)} (${REWRITES})`])
-		}
-	})
-})
+  it("rates a change of persistence cautious, with the rewrite, and one the history does not show the same", () => {
+    for (const [later, more] of [
+      ["ALTER TABLE scratch SET LOGGED;", ""],
+      ["ALTER TABLE plain SET LOGGED;", "ALTER TABLE plain SET UNLOGGED;\n"],
+      ["ALTER TABLE ghost SET LOGGED;", ""],
+      ["ALTER TABLE placed SET LOGGED;", "DROP TABLE placed;\nCREATE UNLOGGED TABLE placed (id int);\n"],
+    ]) {
+      const rated = rate(later as string, more);
+      expect(rated.safety, later).toBe("cautious");
+      expect(rated.lockWarnings, later).toEqual([`${(later as string).slice(0, -1)} (${REWRITES})`]);
+    }
+  });
+});
 
-/* PA1 of r23: a history statement whose effect its text cannot show (a DO block, a CALL, a call of a function
-   the history defined) may have flipped a table's persistence, which PG17 then rewrote on the move back while
-   check and apply rated it safe. Its persistence is unknown after one, unless the target's catalog says it */
+// PA1 of r23: a history statement whose effect its text cannot show (a DO block, a CALL, a call of a function
+// the history defined) may have flipped a table's persistence, which PG17 then rewrote on the move back while
+// check and apply rated it safe. Its persistence is unknown after one, unless the target's catalog says it
 describe("persistence after a history statement its text cannot show (PA1 of r23)", () => {
-	const OPAQUE = [
-		"DO $$ BEGIN EXECUTE 'ALTER TABLE scratch SET LOGGED'; EXECUTE 'ALTER TABLE plain SET UNLOGGED'; END $$;\n",
-		"CREATE PROCEDURE flip() LANGUAGE plpgsql AS $$ BEGIN EXECUTE 'ALTER TABLE scratch SET LOGGED'; END $$;\nCALL flip();\n",
-		"CREATE FUNCTION flip() RETURNS void LANGUAGE plpgsql AS $$ BEGIN EXECUTE 'ALTER TABLE scratch SET LOGGED'; END $$;\nSELECT flip();\n",
-	]
+  const OPAQUE = [
+    "DO $$ BEGIN EXECUTE 'ALTER TABLE scratch SET LOGGED'; EXECUTE 'ALTER TABLE plain SET UNLOGGED'; END $$;\n",
+    "CREATE PROCEDURE flip() LANGUAGE plpgsql AS $$ BEGIN EXECUTE 'ALTER TABLE scratch SET LOGGED'; END $$;\nCALL flip();\n",
+    "CREATE FUNCTION flip() RETURNS void LANGUAGE plpgsql AS $$ BEGIN EXECUTE 'ALTER TABLE scratch SET LOGGED'; END $$;\nSELECT flip();\n",
+  ];
 
-	it.each(OPAQUE)("warns of the rewrite for a move after %j, where no catalog is read", (more) => {
-		for (const later of ["ALTER TABLE scratch SET UNLOGGED;", "ALTER TABLE plain SET LOGGED;"])
-			expect(rate(later, more).lockWarnings, later).toEqual([`${later.slice(0, -1)} (${REWRITES})`])
-	})
+  it.each(OPAQUE)("warns of the rewrite for a move after %j, where no catalog is read", (more) => {
+    for (const later of ["ALTER TABLE scratch SET UNLOGGED;", "ALTER TABLE plain SET LOGGED;"])
+      expect(rate(later, more).lockWarnings, later).toEqual([`${later.slice(0, -1)} (${REWRITES})`]);
+  });
 
-	it("warns of the rewrite for a move after such a statement in its own file", () => {
-		const sql = `${OPAQUE[0]}ALTER TABLE scratch SET UNLOGGED;`
-		expect(rate(sql).lockWarnings).toContain(`ALTER TABLE scratch SET UNLOGGED (${REWRITES})`)
-	})
+  it("warns of the rewrite for a move after such a statement in its own file", () => {
+    const sql = `${OPAQUE[0]}ALTER TABLE scratch SET UNLOGGED;`;
+    expect(rate(sql).lockWarnings).toContain(`ALTER TABLE scratch SET UNLOGGED (${REWRITES})`);
+  });
 
-	it("keeps what the history's text shows after one of its functions is only defined, not called", () => {
-		const more = "CREATE FUNCTION flip() RETURNS void LANGUAGE sql AS 'SELECT 1';\n"
-		expect(rate("ALTER TABLE scratch SET UNLOGGED;", more).lockWarnings).toEqual([])
-	})
+  it("keeps what the history's text shows after one of its functions is only defined, not called", () => {
+    const more = "CREATE FUNCTION flip() RETURNS void LANGUAGE sql AS 'SELECT 1';\n";
+    expect(rate("ALTER TABLE scratch SET UNLOGGED;", more).lockWarnings).toEqual([]);
+  });
 
-	it("follows the text again for a statement after it that shows the move", () => {
-		const more = `${OPAQUE[0]}ALTER TABLE scratch SET UNLOGGED;\n`
-		expect(rate("ALTER TABLE scratch SET UNLOGGED;", more).lockWarnings).toEqual([])
-	})
-})
+  it("follows the text again for a statement after it that shows the move", () => {
+    const more = `${OPAQUE[0]}ALTER TABLE scratch SET UNLOGGED;\n`;
+    expect(rate("ALTER TABLE scratch SET UNLOGGED;", more).lockWarnings).toEqual([]);
+  });
+});

@@ -4,66 +4,74 @@
  * is set, and plainly where none is: in validation, the constraint map and its error keys, the
  * published entity names and the diagram outline. The handler's lookup is src/pg/map-table.ts.
  */
-import path from "node:path"
-import pg from "pg"
-import { describe, expect, it } from "vitest"
-import { project, read, runCodegen, useProjects } from "../support/codegen-project.ts"
-import { withScratchDb } from "../support/pg.ts"
+import path from "node:path";
 
-useProjects()
+import pg from "pg";
+import { describe, expect, it } from "vitest";
+
+import { project, read, runCodegen, useProjects } from "../support/codegen-project.ts";
+import { withScratchDb } from "../support/pg.ts";
+
+useProjects();
 
 const TABLES = `import { pgSchema, pgTable, text } from "drizzle-orm/pg-core"
 export const auth = pgSchema("auth")
 export const authUsers = auth.table("users", { id: text("id").primaryKey(), email: text("email").unique() })
 export const users = pgTable("users", { id: text("id").primaryKey(), email: text("email").unique(), authId: text("auth_id").references(() => authUsers.id) })
-`
+`;
 
 describe("database codegen: one table name in two Postgres schemas (F51)", () => {
-	it("generates both, each under its own name", async () => {
-		const dir = project({ "src/db/db.core.tables.ts": TABLES })
-		const { code, err } = await runCodegen(dir, ["--tables", "src/db/db.core.tables.ts"])
-		expect(code, err).toBe(0)
-		/* the constraint map keyed by each, and each one's error keys its own */
-		const constraints = read(dir, "src/db/db.core.constraints.gen.ts")
-		expect(constraints).toContain('\t"auth.users": {')
-		expect(constraints).toContain("\tusers: {")
-		expect(constraints).toContain('errorKey: "auth_users_email_duplicate"')
-		expect(constraints).toContain('errorKey: "users_email_duplicate"')
-		expect(constraints).toContain('referenced: ["id"]')
-		/* the published names, unique */
-		const manifest = JSON.parse(read(dir, "src/db/db.core.manifest.gen.json")) as { entities: Array<{ name: string }> }
-		expect(manifest.entities.map(({ name }) => name)).toEqual(["auth.users", "users"])
-		expect(read(dir, "src/db/dtos/auth-users/index.gen.ts")).toContain('name: "auth.users",')
-		/* the outline, each part of a qualified name quoted */
-		const ddl = read(dir, "src/db/diagrams/core-schema.gen.sql")
-		expect(ddl).toContain('CREATE TABLE "auth"."users" (')
-		expect(ddl).toContain('CREATE TABLE "users" (')
-		expect(ddl).toContain('"auth_id" TEXT REFERENCES "auth"."users"("id")')
-		const relations = JSON.parse(read(dir, "src/db/diagrams/core-relations.gen.json")) as {
-			relations: Array<{ from: string; to: string }>
-		}
-		expect(relations.relations).toMatchObject([{ from: "users.auth_id", to: "auth.users.id" }])
-		/* raw SQL's table names, schema-qualified and unquoted, which read the right table spliced into SQL text */
-		expect(read(dir, "src/db/table-names/index.gen.ts")).toContain('authUsers: "auth.users",')
-		const { t } = (await import(path.join(dir, "src/db/table-names/index.gen.ts"))) as { t: Record<string, string> }
-		const ids = await withScratchDb(async (url) => {
-			const client = new pg.Client({ connectionString: url })
-			await client.connect()
-			try {
-				await client.query(
-					"CREATE SCHEMA auth; CREATE TABLE auth.users (id text); CREATE TABLE public.users (id text); INSERT INTO auth.users VALUES ('in-auth'); INSERT INTO public.users VALUES ('in-public')",
-				)
-				const of = async (table: string) => (await client.query(`SELECT id FROM ${table}`)).rows.map((row) => row.id)
-				return { auth: await of(t["authUsers"] as string), app: await of(t["users"] as string) }
-			} finally {
-				await client.end()
-			}
-		})
-		expect(ids).toEqual({ app: ["in-public"], auth: ["in-auth"] })
-	}, 120_000)
-})
+  it("generates both, each under its own name", async () => {
+    const dir = project({ "src/db/db.core.tables.ts": TABLES });
+    const { code, err } = await runCodegen(dir, ["--tables", "src/db/db.core.tables.ts"]);
+    expect(code, err).toBe(0);
+    // the constraint map keyed by each, and each one's error keys its own
+    const constraints = read(dir, "src/db/db.core.constraints.gen.ts");
+    expect(constraints).toContain('\t"auth.users": {');
+    expect(constraints).toContain("\tusers: {");
+    expect(constraints).toContain('errorKey: "auth_users_email_duplicate"');
+    expect(constraints).toContain('errorKey: "users_email_duplicate"');
+    expect(constraints).toContain('referenced: ["id"]');
+    // the published names, unique
+    const manifest = JSON.parse(read(dir, "src/db/db.core.manifest.gen.json")) as { entities: Array<{ name: string }> };
+    expect(manifest.entities.map(({ name }) => name)).toEqual(["auth.users", "users"]);
+    expect(read(dir, "src/db/dtos/auth-users/index.gen.ts")).toContain('name: "auth.users",');
+    // the outline, each part of a qualified name quoted
+    const ddl = read(dir, "src/db/diagrams/core-schema.gen.sql");
+    expect(ddl).toContain('CREATE TABLE "auth"."users" (');
+    expect(ddl).toContain('CREATE TABLE "users" (');
+    expect(ddl).toContain('"auth_id" TEXT REFERENCES "auth"."users"("id")');
 
-/* CS5 of r22b: the manifest's audience reads no TypeScript, so a relation names its target as the entity does */
+    const relations = JSON.parse(read(dir, "src/db/diagrams/core-relations.gen.json")) as {
+      relations: Array<{ from: string; to: string }>;
+    };
+
+    expect(relations.relations).toMatchObject([{ from: "users.auth_id", to: "auth.users.id" }]);
+    // raw SQL's table names, schema-qualified and unquoted, which read the right table spliced into SQL text
+    expect(read(dir, "src/db/table-names/index.gen.ts")).toContain('authUsers: "auth.users",');
+    const { t } = (await import(path.join(dir, "src/db/table-names/index.gen.ts"))) as { t: Record<string, string> };
+
+    const ids = await withScratchDb(async (url) => {
+      const client = new pg.Client({ connectionString: url });
+      await client.connect();
+
+      try {
+        await client.query(
+          "CREATE SCHEMA auth; CREATE TABLE auth.users (id text); CREATE TABLE public.users (id text); INSERT INTO auth.users VALUES ('in-auth'); INSERT INTO public.users VALUES ('in-public')",
+        );
+        const of = async (table: string) => (await client.query(`SELECT id FROM ${table}`)).rows.map((row) => row.id);
+
+        return { app: await of(t["users"] as string), auth: await of(t["authUsers"] as string) };
+      } finally {
+        await client.end();
+      }
+    });
+
+    expect(ids).toEqual({ app: ["in-public"], auth: ["in-auth"] });
+  }, 120_000);
+});
+
+// CS5 of r22b: the manifest's audience reads no TypeScript, so a relation names its target as the entity does
 const NAMED = `import { pgSchema, pgTable, text } from "drizzle-orm/pg-core"
 export const app = pgSchema("app")
 export const org = app.table("org", { id: text("id").primaryKey() })
@@ -73,26 +81,28 @@ export const member = pgTable("member", {
 	orgId: text("org_id").references(() => org.id),
 	accountId: text("account_id").references(() => userAccount.id),
 })
-`
+`;
 
-type Relation = { column: string; refColumn: string; table: string }
-type Entity = { columns: Array<{ name: string }>; name: string; relations: Relation[] }
+type Relation = { column: string; refColumn: string; table: string };
+
+type Entity = { columns: Array<{ name: string }>; name: string; relations: Relation[] };
 
 describe("the manifest's relations (CS5; siblings: a pgSchema table and a camelCase variable)", () => {
-	it("each name the target entity by its name, and their columns by the entities' column names, at v 3", async () => {
-		const dir = project({ "src/db/db.core.tables.ts": NAMED })
-		const { code, err } = await runCodegen(dir, ["--tables", "src/db/db.core.tables.ts"])
-		expect(code, err).toBe(0)
-		const manifest = JSON.parse(read(dir, "src/db/db.core.manifest.gen.json")) as { entities: Entity[]; v: number }
-		expect(manifest.v).toBe(3)
-		const byName = new Map(manifest.entities.map((entity) => [entity.name, entity]))
-		const relations = manifest.entities.flatMap((entity) => entity.relations.map((relation) => ({ entity, relation })))
-		expect(relations.map(({ relation }) => relation.table).toSorted()).toEqual(["app.org", "user_account"])
-		for (const { entity, relation } of relations) {
-			const target = byName.get(relation.table)
-			expect(target, relation.table).toBeDefined()
-			expect(target?.columns.map(({ name }) => name)).toContain(relation.refColumn)
-			expect(entity.columns.map(({ name }) => name)).toContain(relation.column)
-		}
-	}, 120_000)
-})
+  it("each name the target entity by its name, and their columns by the entities' column names, at v 3", async () => {
+    const dir = project({ "src/db/db.core.tables.ts": NAMED });
+    const { code, err } = await runCodegen(dir, ["--tables", "src/db/db.core.tables.ts"]);
+    expect(code, err).toBe(0);
+    const manifest = JSON.parse(read(dir, "src/db/db.core.manifest.gen.json")) as { entities: Entity[]; v: number };
+    expect(manifest.v).toBe(3);
+    const byName = new Map(manifest.entities.map((entity) => [entity.name, entity]));
+    const relations = manifest.entities.flatMap((entity) => entity.relations.map((relation) => ({ entity, relation })));
+    expect(relations.map(({ relation }) => relation.table).toSorted()).toEqual(["app.org", "user_account"]);
+
+    for (const { entity, relation } of relations) {
+      const target = byName.get(relation.table);
+      expect(target, relation.table).toBeDefined();
+      expect(target?.columns.map(({ name }) => name)).toContain(relation.refColumn);
+      expect(entity.columns.map(({ name }) => name)).toContain(relation.column);
+    }
+  }, 120_000);
+});

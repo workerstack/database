@@ -1,207 +1,215 @@
-import { sql } from "drizzle-orm"
-import { describe, expect, it } from "vitest"
-import * as z from "zod"
-import { constraintsOf, refuseJsonDocument, statesOf, STRING_LIST } from "./read-database.ts"
+import { sql } from "drizzle-orm";
+import { describe, expect, it } from "vitest";
+import * as z from "zod";
+
+import { constraintsOf, refuseJsonDocument, statesOf, STRING_LIST } from "./read-database.ts";
 
 describe("STRING_LIST", () => {
-	it("holds an array of strings alone", () => {
-		expect(STRING_LIST(["a", "b"])).toBe(true)
-		expect(STRING_LIST([])).toBe(true)
-		expect(STRING_LIST(["a", 1])).toBe(false)
-		expect(STRING_LIST("a")).toBe(false)
-	})
-})
+  it("holds an array of strings alone", () => {
+    expect(STRING_LIST(["a", "b"])).toBe(true);
+    expect(STRING_LIST([])).toBe(true);
+    expect(STRING_LIST(["a", 1])).toBe(false);
+    expect(STRING_LIST("a")).toBe(false);
+  });
+});
 
-/* F60: a bound JSON cannot carry would reach the snapshot as null and drop without a word */
+// F60: a bound JSON cannot carry would reach the snapshot as null and drop without a word
 describe("constraintsOf: a number that is no finite number", () => {
-	it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
-		"refuses %s, naming the column and the key",
-		(max) => {
-			expect(() => constraintsOf({ max }, "t.c")).toThrow(
-				`t.c: the constraint max is ${max}, no finite number; a bound read from the environment is NaN in codegen's child, which has none of it`,
-			)
-		},
-	)
-})
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    "refuses %s, naming the column and the key",
+    (max) => {
+      expect(() => constraintsOf({ max }, "t.c")).toThrow(
+        `t.c: the constraint max is ${max}, no finite number; a bound read from the environment is NaN in codegen's child, which has none of it`,
+      );
+    },
+  );
+});
 
 describe("constraintsOf", () => {
-	it("keeps every primitive, drops an undefined one, and reads none as empty", () => {
-		expect(constraintsOf({ max: 3, pattern: "/a/", private: true, trim: undefined }, "t.c")).toEqual({
-			max: 3,
-			pattern: "/a/",
-			private: true,
-		})
-		expect(constraintsOf(undefined, "t.c")).toEqual({})
-	})
+  it("keeps every primitive, drops an undefined one, and reads none as empty", () => {
+    expect(constraintsOf({ max: 3, pattern: "/a/", private: true, trim: undefined }, "t.c")).toEqual({
+      max: 3,
+      pattern: "/a/",
+      private: true,
+    });
+    expect(constraintsOf(undefined, "t.c")).toEqual({});
+  });
 
-	it("refuses any other value, naming the column and the constraint", () => {
-		expect(() => constraintsOf({ max: {} }, "t.c")).toThrow(
-			"t.c: the constraint max is a object; database reads a boolean, a number or a string",
-		)
-	})
-})
+  it("refuses any other value, naming the column and the constraint", () => {
+    expect(() => constraintsOf({ max: {} }, "t.c")).toThrow(
+      "t.c: the constraint max is a object; database reads a boolean, a number or a string",
+    );
+  });
+});
 
 describe("statesOf", () => {
-	it("reads no machine as null, and each part it leaves out as null", () => {
-		expect(statesOf(undefined, "t.c")).toBeNull()
-		expect(statesOf({}, "t.c")).toEqual({ initial: null, terminal: null, transitions: null })
-		expect(statesOf({ initial: "a", terminal: ["b"], transitions: { a: ["b"] } }, "t.c")).toEqual({
-			initial: "a",
-			terminal: ["b"],
-			transitions: { a: ["b"] },
-		})
-	})
+  it("reads no machine as null, and each part it leaves out as null", () => {
+    expect(statesOf(undefined, "t.c")).toBeNull();
+    expect(statesOf({}, "t.c")).toEqual({ initial: null, terminal: null, transitions: null });
+    expect(statesOf({ initial: "a", terminal: ["b"], transitions: { a: ["b"] } }, "t.c")).toEqual({
+      initial: "a",
+      terminal: ["b"],
+      transitions: { a: ["b"] },
+    });
+  });
 
-	/* D2-3 of the area D round-two review: a transitions entry set to undefined is the key left out, as canTransition reads it */
-	it("reads a transitions entry set to undefined as the key left out", () => {
-		expect(statesOf({ transitions: { a: ["b"], b: undefined } }, "t.c")).toEqual({
-			initial: null,
-			terminal: null,
-			transitions: { a: ["b"] },
-		})
-	})
+  // D2-3 of the area D round-two review: a transitions entry set to undefined is the key left out, as canTransition reads it
+  it("reads a transitions entry set to undefined as the key left out", () => {
+    expect(statesOf({ transitions: { a: ["b"], b: undefined } }, "t.c")).toEqual({
+      initial: null,
+      terminal: null,
+      transitions: { a: ["b"] },
+    });
+  });
 
-	it("refuses a machine of another shape, naming the column", () => {
-		for (const raw of [{ initial: 1 }, { terminal: "b" }, { transitions: { a: "b" } }])
-			expect(() => statesOf(raw, "t.c")).toThrow("t.c: its state machine is not")
-	})
+  it("refuses a machine of another shape, naming the column", () => {
+    for (const raw of [{ initial: 1 }, { terminal: "b" }, { transitions: { a: "b" } }])
+      expect(() => statesOf(raw, "t.c")).toThrow("t.c: its state machine is not");
+  });
 
-	/* F9 of the 0.14.1 review: a misspelt key would leave its part of the machine unread */
-	it("refuses a key no state machine has, naming the column and the key", () => {
-		expect(() => statesOf({ inital: "a" }, "t.c")).toThrow(
-			"t.c: its state machine has inital, which is none of initial, terminal, transitions and values",
-		)
-	})
-})
+  // F9 of the 0.14.1 review: a misspelt key would leave its part of the machine unread
+  it("refuses a key no state machine has, naming the column and the key", () => {
+    expect(() => statesOf({ inital: "a" }, "t.c")).toThrow(
+      "t.c: its state machine has inital, which is none of initial, terminal, transitions and values",
+    );
+  });
+});
 
-/* CD2, CD3 of r22b: a c.json schema is the stored document */
-/* a NOT NULL column no default fills */
-const NOT_NULL = { filled: false, notNull: true }
-const NULLABLE = { filled: false, notNull: false }
+// CD2, CD3 of r22b: a c.json schema is the stored document
+// a NOT NULL column no default fills
+const NOT_NULL = { filled: false, notNull: true };
+const NULLABLE = { filled: false, notNull: false };
 
-/* CD2 of r23: JSON stores the document, so a part JSON stores as another value fails every read of the row */
+// CD2 of r23: JSON stores the document, so a part JSON stores as another value fails every read of the row
 describe("refuseJsonDocument: a part JSON does not store as itself", () => {
-	it.each([
-		["a Date", z.object({ at: z.date() }), "JSON stores a Date as a string"],
-		["a coerced Date", z.object({ at: z.coerce.date() }), "JSON stores a Date as a string"],
-		["a Map", z.map(z.string(), z.number()), "JSON stores a Map as {}"],
-		["a Set", z.object({ tags: z.set(z.string()) }), "JSON stores a Set as {}"],
-		["NaN", z.object({ n: z.union([z.number(), z.nan()]) }), "JSON stores NaN as null"],
-		["a BigInt", z.object({ n: z.bigint() }), "JSON cannot store a BigInt"],
-		["a Symbol", z.symbol(), "JSON cannot store a Symbol"],
-		["a File", z.object({ f: z.file() }), "JSON cannot store a File"],
-		["undefined in a tuple", z.tuple([z.string(), z.undefined()]), "JSON stores undefined in an array as null"],
-		["undefined in a tuple's rest", z.tuple([z.string()]).rest(z.undefined()), "in an array as null"],
-		["an optional array element", z.array(z.string().optional()), "JSON stores undefined in an array as null"],
-		["an undefined field", z.object({ a: z.undefined() }), "JSON leaves out a key whose value is undefined"],
-	])("refuses %s, naming the column and what JSON stores", (_, schema, stores) => {
-		expect(() => refuseJsonDocument(schema, "t.c", NULLABLE)).toThrow(`t.c: a c.json schema is the stored document`)
-		expect(() => refuseJsonDocument(schema, "t.c", NULLABLE)).toThrow(stores)
-	})
+  it.each([
+    ["a Date", z.object({ at: z.date() }), "JSON stores a Date as a string"],
+    ["a coerced Date", z.object({ at: z.coerce.date() }), "JSON stores a Date as a string"],
+    ["a Map", z.map(z.string(), z.number()), "JSON stores a Map as {}"],
+    ["a Set", z.object({ tags: z.set(z.string()) }), "JSON stores a Set as {}"],
+    ["NaN", z.object({ n: z.union([z.number(), z.nan()]) }), "JSON stores NaN as null"],
+    ["a BigInt", z.object({ n: z.bigint() }), "JSON cannot store a BigInt"],
+    ["a Symbol", z.symbol(), "JSON cannot store a Symbol"],
+    ["a File", z.object({ f: z.file() }), "JSON cannot store a File"],
+    ["undefined in a tuple", z.tuple([z.string(), z.undefined()]), "JSON stores undefined in an array as null"],
+    ["undefined in a tuple's rest", z.tuple([z.string()]).rest(z.undefined()), "in an array as null"],
+    ["an optional array element", z.array(z.string().optional()), "JSON stores undefined in an array as null"],
+    ["an undefined field", z.object({ a: z.undefined() }), "JSON leaves out a key whose value is undefined"],
+  ])("refuses %s, naming the column and what JSON stores", (_, schema, stores) => {
+    expect(() => refuseJsonDocument(schema, "t.c", NULLABLE)).toThrow(`t.c: a c.json schema is the stored document`);
+    expect(() => refuseJsonDocument(schema, "t.c", NULLABLE)).toThrow(stores);
+  });
 
-	type Tree = { kids: Tree[] }
-	const tree: z.ZodType<Tree> = z.lazy(() => z.object({ kids: z.array(tree) }))
-	it.each([
-		["an optional field", z.object({ a: z.string().optional() })],
-		["a nullable array element", z.array(z.string().nullable())],
-		["a union with undefined, on a nullable column", z.union([z.object({ a: z.string() }), z.undefined()])],
-		["a custom check", z.custom<string>((value) => typeof value === "string")],
-		["a coerced number", z.object({ n: z.coerce.number() })],
-		["a record", z.record(z.string(), z.number())],
-		["an ISO datetime string", z.object({ at: z.iso.datetime() })],
-		["a recursive lazy", tree],
-	])("keeps %s, which JSON stores as itself", (_, schema) => {
-		expect(() => refuseJsonDocument(schema, "t.c", NULLABLE)).not.toThrow()
-	})
-})
+  type Tree = { kids: Tree[] };
+
+  const tree: z.ZodType<Tree> = z.lazy(() => z.object({ kids: z.array(tree) }));
+  it.each([
+    ["an optional field", z.object({ a: z.string().optional() })],
+    ["a nullable array element", z.array(z.string().nullable())],
+    ["a union with undefined, on a nullable column", z.union([z.object({ a: z.string() }), z.undefined()])],
+    ["a custom check", z.custom<string>((value) => typeof value === "string")],
+    ["a coerced number", z.object({ n: z.coerce.number() })],
+    ["a record", z.record(z.string(), z.number())],
+    ["an ISO datetime string", z.object({ at: z.iso.datetime() })],
+    ["a recursive lazy", tree],
+  ])("keeps %s, which JSON stores as itself", (_, schema) => {
+    expect(() => refuseJsonDocument(schema, "t.c", NULLABLE)).not.toThrow();
+  });
+});
 
 describe("refuseJsonDocument: a schema whose output its input refuses, or a NOT NULL one that takes null or undefined", () => {
-	const STORED = "t.c: a c.json schema is the stored document"
-	type Tree = { children: Tree[]; name: string }
-	const tree: z.ZodType<Tree> = z.lazy(() => z.object({ children: z.array(tree), name: z.string().trim() }))
-	const changing: z.ZodType = z.lazy(() =>
-		z.object({ next: z.array(changing).optional(), n: z.string().transform(Number) }),
-	)
+  const STORED = "t.c: a c.json schema is the stored document";
 
-	it.each([
-		["a transform", z.string().transform((text) => text.length)],
-		["a pipe", z.string().pipe(z.coerce.number())],
-		["a preprocess", z.preprocess(String, z.string())],
-		["a transform in a shape's field", z.object({ a: z.object({ b: z.string().transform(Number) }) })],
-		["a transform in a union's option", z.union([z.number(), z.string().transform(Number)])],
-		["a transform in a recursive lazy", changing],
-	])("refuses %s, naming the column", (_, schema) => {
-		expect(() => refuseJsonDocument(schema, "t.c", { filled: false, notNull: false })).toThrow(STORED)
-	})
+  type Tree = { children: Tree[]; name: string };
 
-	it.each([
-		["an overwrite", z.object({ name: z.string().trim().toLowerCase().normalize() })],
-		["a default", z.object({ n: z.number().default(1) })],
-		["a coerce", z.object({ n: z.coerce.number() })],
-		["a refine", z.string().refine((text) => text !== "x")],
-		["a recursive lazy of overwrites", tree],
-	])("keeps %s, whose output parses again", (_, schema) => {
-		expect(() => refuseJsonDocument(schema, "t.c", NOT_NULL)).not.toThrow()
-	})
+  const tree: z.ZodType<Tree> = z.lazy(() => z.object({ children: z.array(tree), name: z.string().trim() }));
 
-	it("refuses a schema that takes null on a NOT NULL column, and keeps it on a nullable one (sibling)", () => {
-		const nullable = z.object({ a: z.string() }).nullable()
-		expect(() => refuseJsonDocument(nullable, "t.c", NOT_NULL)).toThrow(
-			"t.c: its schema takes null and the column is NOT NULL: make the column nullable, or pass the schema's non-null form",
-		)
-		expect(() => refuseJsonDocument(nullable, "t.c", { filled: false, notNull: false })).not.toThrow()
-		expect(() => refuseJsonDocument(z.unknown(), "t.c", NOT_NULL)).toThrow("takes null")
-	})
+  const changing: z.ZodType = z.lazy(() =>
+    z.object({ n: z.string().transform(Number), next: z.array(changing).optional() }),
+  );
 
-	/* AA4 of area A's review: the sibling through .optional(), unless a default fills the column */
-	it("refuses a schema that takes undefined on a NOT NULL column nothing fills, and keeps it where a default does", () => {
-		const optional = z.object({ a: z.string() }).optional()
-		const message =
-			"t.c: its schema takes undefined (an .optional(), a .default() or a union with undefined) and the column is NOT NULL with no default: make the schema refuse undefined, or give the column a default"
-		expect(() => refuseJsonDocument(optional, "t.c", NOT_NULL)).toThrow(message)
-		/* A2-11 of r22: a schema default holds no .optional() to drop, and gets the same message */
-		expect(() => refuseJsonDocument(z.object({ a: z.string() }).default({ a: "x" }), "t.c", NOT_NULL)).toThrow(message)
-		expect(() => refuseJsonDocument(optional, "t.c", { filled: true, notNull: true })).not.toThrow()
-		expect(() => refuseJsonDocument(optional, "t.c", { filled: false, notNull: false })).not.toThrow()
-	})
-})
+  it.each([
+    ["a transform", z.string().transform((text) => text.length)],
+    ["a pipe", z.string().pipe(z.coerce.number())],
+    ["a preprocess", z.preprocess(String, z.string())],
+    ["a transform in a shape's field", z.object({ a: z.object({ b: z.string().transform(Number) }) })],
+    ["a transform in a union's option", z.union([z.number(), z.string().transform(Number)])],
+    ["a transform in a recursive lazy", changing],
+  ])("refuses %s, naming the column", (_, schema) => {
+    expect(() => refuseJsonDocument(schema, "t.c", { filled: false, notNull: false })).toThrow(STORED);
+  });
 
-/* CD4 of r22b: a state column's fill is its machine's initial */
-const MACHINE = { initial: "a", terminal: ["b"] }
+  it.each([
+    ["an overwrite", z.object({ name: z.string().trim().toLowerCase().normalize() })],
+    ["a default", z.object({ n: z.number().default(1) })],
+    ["a coerce", z.object({ n: z.coerce.number() })],
+    ["a refine", z.string().refine((text) => text !== "x")],
+    ["a recursive lazy of overwrites", tree],
+  ])("keeps %s, whose output parses again", (_, schema) => {
+    expect(() => refuseJsonDocument(schema, "t.c", NOT_NULL)).not.toThrow();
+  });
+
+  it("refuses a schema that takes null on a NOT NULL column, and keeps it on a nullable one (sibling)", () => {
+    const nullable = z.object({ a: z.string() }).nullable();
+    expect(() => refuseJsonDocument(nullable, "t.c", NOT_NULL)).toThrow(
+      "t.c: its schema takes null and the column is NOT NULL: make the column nullable, or pass the schema's non-null form",
+    );
+    expect(() => refuseJsonDocument(nullable, "t.c", { filled: false, notNull: false })).not.toThrow();
+    expect(() => refuseJsonDocument(z.unknown(), "t.c", NOT_NULL)).toThrow("takes null");
+  });
+
+  // AA4 of area A's review: the sibling through .optional(), unless a default fills the column
+  it("refuses a schema that takes undefined on a NOT NULL column nothing fills, and keeps it where a default does", () => {
+    const optional = z.object({ a: z.string() }).optional();
+
+    const message =
+      "t.c: its schema takes undefined (an .optional(), a .default() or a union with undefined) and the column is NOT NULL with no default: make the schema refuse undefined, or give the column a default";
+
+    expect(() => refuseJsonDocument(optional, "t.c", NOT_NULL)).toThrow(message);
+    // A2-11 of r22: a schema default holds no .optional() to drop, and gets the same message
+    expect(() => refuseJsonDocument(z.object({ a: z.string() }).default({ a: "x" }), "t.c", NOT_NULL)).toThrow(message);
+    expect(() => refuseJsonDocument(optional, "t.c", { filled: true, notNull: true })).not.toThrow();
+    expect(() => refuseJsonDocument(optional, "t.c", { filled: false, notNull: false })).not.toThrow();
+  });
+});
+
+// CD4 of r22b: a state column's fill is its machine's initial
+const MACHINE = { initial: "a", terminal: ["b"] };
+
 const NO_LITERAL =
-	't.s: its default is no literal value, so database cannot hold it to its state machine\'s initial "a"; write .default("a")'
+  't.s: its default is no literal value, so database cannot hold it to its state machine\'s initial "a"; write .default("a")';
 
 describe("statesOf: a state column's default is its initial", () => {
-	it("keeps any fill on a machine that declares no initial (sibling)", () => {
-		expect(() => statesOf({ terminal: ["b"] }, "t.s", { default: "b" })).not.toThrow()
-		expect(() => statesOf({ terminal: ["b"] }, "t.s", { defaultFn: () => "b" })).not.toThrow()
-	})
+  it("keeps any fill on a machine that declares no initial (sibling)", () => {
+    expect(() => statesOf({ terminal: ["b"] }, "t.s", { default: "b" })).not.toThrow();
+    expect(() => statesOf({ terminal: ["b"] }, "t.s", { defaultFn: () => "b" })).not.toThrow();
+  });
 
-	it("keeps no default, and a literal default of initial", () => {
-		expect(statesOf(MACHINE, "t.s", {})?.initial).toBe("a")
-		expect(statesOf(MACHINE, "t.s", { default: "a" })?.initial).toBe("a")
-	})
+  it("keeps no default, and a literal default of initial", () => {
+    expect(statesOf(MACHINE, "t.s", {})?.initial).toBe("a");
+    expect(statesOf(MACHINE, "t.s", { default: "a" })?.initial).toBe("a");
+  });
 
-	/* CD3 of r23: a create that leaves a nullable column out stores null, which is no state */
-	it("refuses a nullable column with no default, and keeps one with a default of initial or NOT NULL", () => {
-		expect(() => statesOf(MACHINE, "t.s", { notNull: false })).toThrow(
-			't.s: a create that leaves it out stores null, a row in no state of its machine; write .default("a"), or .notNull() so a create sends "a"',
-		)
-		expect(statesOf(MACHINE, "t.s", { default: "a", notNull: false })?.initial).toBe("a")
-		expect(statesOf(MACHINE, "t.s", { notNull: true })?.initial).toBe("a")
-	})
+  // CD3 of r23: a create that leaves a nullable column out stores null, which is no state
+  it("refuses a nullable column with no default, and keeps one with a default of initial or NOT NULL", () => {
+    expect(() => statesOf(MACHINE, "t.s", { notNull: false })).toThrow(
+      't.s: a create that leaves it out stores null, a row in no state of its machine; write .default("a"), or .notNull() so a create sends "a"',
+    );
+    expect(statesOf(MACHINE, "t.s", { default: "a", notNull: false })?.initial).toBe("a");
+    expect(statesOf(MACHINE, "t.s", { notNull: true })?.initial).toBe("a");
+  });
 
-	it("refuses a literal default other than initial, naming the column", () => {
-		expect(() => statesOf(MACHINE, "t.s", { default: "b" })).toThrow(
-			't.s: its default "b" is not its state machine\'s initial "a"; a row starts at initial',
-		)
-	})
+  it("refuses a literal default other than initial, naming the column", () => {
+    expect(() => statesOf(MACHINE, "t.s", { default: "b" })).toThrow(
+      't.s: its default "b" is not its state machine\'s initial "a"; a row starts at initial',
+    );
+  });
 
-	it.each([
-		["a default function", { defaultFn: () => "a" }],
-		["an update function", { onUpdateFn: () => "a" }],
-		["an SQL default", { default: sql`'a'` }],
-	])("refuses %s, which database cannot read as a value", (_, fill) => {
-		expect(() => statesOf(MACHINE, "t.s", fill)).toThrow(NO_LITERAL)
-	})
-})
+  it.each([
+    ["a default function", { defaultFn: () => "a" }],
+    ["an update function", { onUpdateFn: () => "a" }],
+    ["an SQL default", { default: sql`'a'` }],
+  ])("refuses %s, which database cannot read as a value", (_, fill) => {
+    expect(() => statesOf(MACHINE, "t.s", fill)).toThrow(NO_LITERAL);
+  });
+});

@@ -7,13 +7,13 @@
  */
 
 /** The writes a table takes, in the order the proofs compile them */
-export const EVENTS = /** @type {const} */ (["INSERT", "UPDATE", "DELETE"])
+export const EVENTS = /** @type {const} */ (["INSERT", "UPDATE", "DELETE"]);
 
 /** @param {string} name */
-export const quote = (name) => `"${name.replaceAll('"', '""')}"`
+export const quote = (name) => `"${name.replaceAll('"', '""')}"`;
 
-/* what in SQL text may spell any word: a comment, a string, a quoted name */
-const HIDDEN = /--[^\n]*|\/\*[\s\S]*?(?:\*\/|$)|'(?:[^']|'')*'|"(?:[^"]|"")*"|`(?:[^`]|``)*`|\[[^\]]*\]/g
+// what in SQL text may spell any word: a comment, a string, a quoted name
+const HIDDEN = /--[^\n]*|\/\*[\s\S]*?(?:\*\/|$)|'(?:[^']|'')*'|"(?:[^"]|"")*"|`(?:[^`]|``)*`|\[[^\]]*\]/g;
 
 /**
  * The event of trigger text `sql`, as sqlite_master holds it: the first bare INSERT, UPDATE or DELETE outside a
@@ -23,8 +23,9 @@ const HIDDEN = /--[^\n]*|\/\*[\s\S]*?(?:\*\/|$)|'(?:[^']|'')*'|"(?:[^"]|"")*"|`(
  * @returns {"DELETE" | "INSERT" | "UPDATE"}
  */
 export function triggerEvent(sql) {
-	const event = /** @type {RegExpExecArray} */ (/\b(DELETE|INSERT|UPDATE)\b/i.exec(sql.replace(HIDDEN, " ")))
-	return /** @type {"DELETE" | "INSERT" | "UPDATE"} */ (/** @type {string} */ (event[1]).toUpperCase())
+  const event = /** @type {RegExpExecArray} */ (/\b(DELETE|INSERT|UPDATE)\b/i.exec(sql.replaceAll(HIDDEN, " ")));
+
+  return /** @type {"DELETE" | "INSERT" | "UPDATE"} */ (event[1].toUpperCase());
 }
 
 /**
@@ -36,7 +37,9 @@ export function triggerEvent(sql) {
  * @param {readonly string[]} columns
  */
 export function writeOf(table, event, columns) {
-	if (event === "INSERT") return `INSERT INTO ${quote(table)} DEFAULT VALUES`
-	if (event === "DELETE") return `DELETE FROM ${quote(table)}`
-	return `UPDATE ${quote(table)} SET ${columns.map((column) => `${quote(column)} = ${quote(column)}`).join(", ")}`
+  if (event === "INSERT") return `INSERT INTO ${quote(table)} DEFAULT VALUES`;
+
+  if (event === "DELETE") return `DELETE FROM ${quote(table)}`;
+
+  return `UPDATE ${quote(table)} SET ${columns.map((column) => `${quote(column)} = ${quote(column)}`).join(", ")}`;
 }

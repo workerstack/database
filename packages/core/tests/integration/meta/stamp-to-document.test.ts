@@ -7,21 +7,23 @@
  * generator emits. Assertions are on the exact JSON Schema, because "the object
  * is non-empty" would pass even if the stamp landed somewhere honey never looks.
  */
-import fs from "node:fs"
-import path from "node:path"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import * as z from "zod"
-import { analyze } from "../../../src/codegen/analyzer.ts"
-import type { UniqueIndexMeta } from "../../../src/codegen/analyzer-types.ts"
-import { generateDtos } from "../../../src/codegen/generators/dtos/index.ts"
-import { DATABASE_META_KEY, readEntityMeta, readQueryMeta } from "../../../src/meta.ts"
-import { createListQuerySchema } from "../../../src/query/schema.ts"
-import { depthOfKey, readRootKey, searchSchemaKey } from "./honey-search.ts"
-import { testContext } from "../../../src/codegen/generators/__fixtures__/context.ts"
+import fs from "node:fs";
+import path from "node:path";
 
-/* Generated inside the package so the emitted `@workerstack/database/meta` import
-   resolves through the workspace. `.tmp-*` is gitignored. */
-const WORK_DIR = path.resolve(import.meta.dirname, ".tmp-stamp-e2e")
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import * as z from "zod";
+
+import type { UniqueIndexMeta } from "../../../src/codegen/analyzer-types.ts";
+import { analyze } from "../../../src/codegen/analyzer.ts";
+import { testContext } from "../../../src/codegen/generators/__fixtures__/context.ts";
+import { generateDtos } from "../../../src/codegen/generators/dtos/index.ts";
+import { DATABASE_META_KEY, readEntityMeta, readQueryMeta } from "../../../src/meta.ts";
+import { createListQuerySchema } from "../../../src/query/schema.ts";
+import { depthOfKey, readRootKey, searchSchemaKey } from "./honey-search.ts";
+
+// Generated inside the package so the emitted `@workerstack/database/meta` import
+// resolves through the workspace. `.tmp-*` is gitignored.
+const WORK_DIR = path.resolve(import.meta.dirname, ".tmp-stamp-e2e");
 
 const TABLES = `
 import { sqliteTable as createTable, text, integer, uniqueIndex } from "drizzle-orm/sqlite-core"
@@ -39,312 +41,310 @@ export const article = createTable("article", {
 }, (t) => [
 	uniqueIndex("idx_article_slug").on(t.slug),
 ])
-`
+`;
 
-type Generated = { articleDtoCreateSchema: z.ZodObject; articleDtoReadSchema: z.ZodObject }
+type Generated = { articleDtoCreateSchema: z.ZodObject; articleDtoReadSchema: z.ZodObject };
 
-let generated: Generated
-let articleUniqueIndexes: UniqueIndexMeta[]
+let generated: Generated;
+let articleUniqueIndexes: UniqueIndexMeta[];
 
 beforeAll(async () => {
-	fs.rmSync(WORK_DIR, { force: true, recursive: true })
-	fs.mkdirSync(WORK_DIR, { recursive: true })
-	const tablesPath = path.join(WORK_DIR, "db.blog.tables.ts")
-	fs.writeFileSync(tablesPath, TABLES)
+  fs.rmSync(WORK_DIR, { force: true, recursive: true });
+  fs.mkdirSync(WORK_DIR, { recursive: true });
+  const tablesPath = path.join(WORK_DIR, "db.blog.tables.ts");
+  fs.writeFileSync(tablesPath, TABLES);
 
-	const analysis = await analyze(tablesPath)
-	articleUniqueIndexes = analysis.tables.find((t) => t.sqlName === "article")!.uniqueIndexes
-	generateDtos(testContext(analysis, { cwd: WORK_DIR, tablesPath: tablesPath }), {
-		output: path.join(WORK_DIR, "dtos"),
-	})
+  const analysis = await analyze(tablesPath);
+  articleUniqueIndexes = analysis.tables.find((t) => t.sqlName === "article")!.uniqueIndexes;
+  generateDtos(testContext(analysis, { cwd: WORK_DIR, tablesPath: tablesPath }), {
+    output: path.join(WORK_DIR, "dtos"),
+  });
 
-	generated = (await import(path.join(WORK_DIR, "dtos", "article", "index.gen.ts"))) as Generated
-})
+  generated = (await import(path.join(WORK_DIR, "dtos", "article", "index.gen.ts"))) as Generated;
+});
 
 afterAll(() => {
-	fs.rmSync(WORK_DIR, { force: true, recursive: true })
-})
+  fs.rmSync(WORK_DIR, { force: true, recursive: true });
+});
 
-/* The facts the generator derives for the fixture above. Written out in full so
-   a change to the derivation shows up here as a diff, not as a silent pass. */
+// The facts the generator derives for the fixture above. Written out in full so
+// a change to the derivation shows up here as a diff, not as a silent pass.
 const EXPECTED_ENTITY = {
-	generated: ["id", "created_at", "updated_at", "deleted_at"],
-	identity: "id",
-	immutable: ["id", "author_id", "slug", "created_at", "updated_at", "deleted_at"],
-	kind: "entity",
-	name: "article",
-	softDelete: "deleted_at",
-	states: null,
-	tenantColumn: null,
-	partialUniqueIndexes: [],
-	uniqueIndexes: [{ columns: ["slug"], name: "idx_article_slug" }],
-	v: 1,
-}
+  generated: ["id", "created_at", "updated_at", "deleted_at"],
+  identity: "id",
+  immutable: ["id", "author_id", "slug", "created_at", "updated_at", "deleted_at"],
+  kind: "entity",
+  name: "article",
+  partialUniqueIndexes: [],
+  softDelete: "deleted_at",
+  states: null,
+  tenantColumn: null,
+  uniqueIndexes: [{ columns: ["slug"], name: "idx_article_slug" }],
+  v: 1,
+};
 
 describe("entity stamp — bare item schema", () => {
-	it("lands on the JSON Schema root, verbatim", () => {
-		const json = z.toJSONSchema(generated.articleDtoReadSchema) as Record<string, unknown>
-		expect(json[DATABASE_META_KEY]).toEqual(EXPECTED_ENTITY)
-	})
+  it("lands on the JSON Schema root, verbatim", () => {
+    const json = z.toJSONSchema(generated.articleDtoReadSchema) as Record<string, unknown>;
+    expect(json[DATABASE_META_KEY]).toEqual(EXPECTED_ENTITY);
+  });
 
-	it("is a sibling of the schema's own keywords, not nested inside them", () => {
-		const json = z.toJSONSchema(generated.articleDtoReadSchema) as Record<string, unknown>
-		expect(json["type"]).toBe("object")
-		expect(Object.keys(json)).toContain(DATABASE_META_KEY)
-		/* honey reads the root; anything under properties/items would be missed by search: "root" */
-		/* by the key itself: a property's own rules are x-database-* keys (F65) */
-		expect(JSON.stringify(json["properties"])).not.toContain(`"${DATABASE_META_KEY}":`)
-	})
+  it("is a sibling of the schema's own keywords, not nested inside them", () => {
+    const json = z.toJSONSchema(generated.articleDtoReadSchema) as Record<string, unknown>;
+    expect(json["type"]).toBe("object");
+    expect(Object.keys(json)).toContain(DATABASE_META_KEY);
+    // honey reads the root; anything under properties/items would be missed by search: "root"
+    // by the key itself: a property's own rules are x-database-* keys (F65)
+    expect(JSON.stringify(json["properties"])).not.toContain(`"${DATABASE_META_KEY}":`);
+  });
 
-	it("is found by honey's root search at depth 0", () => {
-		const json = z.toJSONSchema(generated.articleDtoReadSchema) as Record<string, unknown>
-		expect(readRootKey(json, DATABASE_META_KEY)).toEqual({ found: true, value: EXPECTED_ENTITY })
-		expect(depthOfKey(json, DATABASE_META_KEY)).toBe(0)
-	})
+  it("is found by honey's root search at depth 0", () => {
+    const json = z.toJSONSchema(generated.articleDtoReadSchema) as Record<string, unknown>;
+    expect(readRootKey(json, DATABASE_META_KEY)).toEqual({ found: true, value: EXPECTED_ENTITY });
+    expect(depthOfKey(json, DATABASE_META_KEY)).toBe(0);
+  });
 
-	it("survives both io views", () => {
-		for (const io of ["input", "output"] as const) {
-			const json = z.toJSONSchema(generated.articleDtoReadSchema, { io }) as Record<string, unknown>
-			expect(readEntityMeta(json)).toEqual(EXPECTED_ENTITY)
-		}
-	})
+  it("survives both io views", () => {
+    for (const io of ["input", "output"] as const) {
+      const json = z.toJSONSchema(generated.articleDtoReadSchema, { io }) as Record<string, unknown>;
+      expect(readEntityMeta(json)).toEqual(EXPECTED_ENTITY);
+    }
+  });
 
-	it("uniqueIndexes matches the fixture table's analyzer indexes and is non-empty", () => {
-		const json = z.toJSONSchema(generated.articleDtoReadSchema)
-		const meta = readEntityMeta(json)
-		expect(articleUniqueIndexes.length).toBeGreaterThan(0)
-		expect(meta?.uniqueIndexes.length).toBeGreaterThan(0)
-		expect(meta?.uniqueIndexes).toEqual(articleUniqueIndexes)
-		expect(meta?.uniqueIndexes).toEqual(EXPECTED_ENTITY.uniqueIndexes)
-	})
-})
+  it("uniqueIndexes matches the fixture table's analyzer indexes and is non-empty", () => {
+    const json = z.toJSONSchema(generated.articleDtoReadSchema);
+    const meta = readEntityMeta(json);
+    expect(articleUniqueIndexes.length).toBeGreaterThan(0);
+    expect(meta?.uniqueIndexes.length).toBeGreaterThan(0);
+    expect(meta?.uniqueIndexes).toEqual(articleUniqueIndexes);
+    expect(meta?.uniqueIndexes).toEqual(EXPECTED_ENTITY.uniqueIndexes);
+  });
+});
 
 describe("entity stamp — bare array output", () => {
-	it("sits under items, where honey's root search sees it through one level", () => {
-		const json = z.toJSONSchema(z.array(generated.articleDtoReadSchema)) as Record<string, unknown>
+  it("sits under items, where honey's root search sees it through one level", () => {
+    const json = z.toJSONSchema(z.array(generated.articleDtoReadSchema)) as Record<string, unknown>;
 
-		expect(json["type"]).toBe("array")
-		expect(json[DATABASE_META_KEY]).toBeUndefined()
-		expect((json["items"] as Record<string, unknown>)[DATABASE_META_KEY]).toEqual(EXPECTED_ENTITY)
+    expect(json["type"]).toBe("array");
+    expect(json[DATABASE_META_KEY]).toBeUndefined();
+    expect((json["items"] as Record<string, unknown>)[DATABASE_META_KEY]).toEqual(EXPECTED_ENTITY);
 
-		expect(readRootKey(json, DATABASE_META_KEY)).toEqual({ found: true, value: EXPECTED_ENTITY })
-		expect(depthOfKey(json, DATABASE_META_KEY)).toBe(1)
-	})
-})
+    expect(readRootKey(json, DATABASE_META_KEY)).toEqual({ found: true, value: EXPECTED_ENTITY });
+    expect(depthOfKey(json, DATABASE_META_KEY)).toBe(1);
+  });
+});
 
-/* The shape a database-backed list endpoint actually returns. */
+// The shape a database-backed list endpoint actually returns.
 function envelope() {
-	return z.object({
-		articles: z.array(generated.articleDtoReadSchema),
-		count: z.number().int(),
-		hasMore: z.boolean(),
-		nextCursor: z.string().nullable(),
-	})
+  return z.object({
+    articles: z.array(generated.articleDtoReadSchema),
+    count: z.number().int(),
+    hasMore: z.boolean(),
+    nextCursor: z.string().nullable(),
+  });
 }
 
 describe("entity stamp — pagination envelope", () => {
-	it("sits at properties.articles.items, and nowhere shallower", () => {
-		const json = z.toJSONSchema(envelope()) as Record<string, unknown>
-		const props = json["properties"] as Record<string, Record<string, unknown>>
+  it("sits at properties.articles.items, and nowhere shallower", () => {
+    const json = z.toJSONSchema(envelope()) as Record<string, unknown>;
+    const props = json["properties"] as Record<string, Record<string, unknown>>;
 
-		expect(json[DATABASE_META_KEY]).toBeUndefined()
-		expect(props["articles"]![DATABASE_META_KEY]).toBeUndefined()
-		expect((props["articles"]!["items"] as Record<string, unknown>)[DATABASE_META_KEY]).toEqual(EXPECTED_ENTITY)
-	})
+    expect(json[DATABASE_META_KEY]).toBeUndefined();
+    expect(props["articles"]![DATABASE_META_KEY]).toBeUndefined();
+    expect((props["articles"]!["items"] as Record<string, unknown>)[DATABASE_META_KEY]).toEqual(EXPECTED_ENTITY);
+  });
 
-	it("is invisible to honey's root search — deep is required for this shape", () => {
-		const json = z.toJSONSchema(envelope()) as Record<string, unknown>
-		expect(readRootKey(json, DATABASE_META_KEY)).toEqual({ found: false })
-	})
+  it("is invisible to honey's root search — deep is required for this shape", () => {
+    const json = z.toJSONSchema(envelope()) as Record<string, unknown>;
+    expect(readRootKey(json, DATABASE_META_KEY)).toEqual({ found: false });
+  });
 
-	it("is found by honey's deep search at depth 2, well inside its limit of 6", () => {
-		const json = z.toJSONSchema(envelope()) as Record<string, unknown>
+  it("is found by honey's deep search at depth 2, well inside its limit of 6", () => {
+    const json = z.toJSONSchema(envelope()) as Record<string, unknown>;
 
-		expect(depthOfKey(json, DATABASE_META_KEY)).toBe(2)
-		expect(searchSchemaKey(json, DATABASE_META_KEY)).toEqual({ found: true, value: EXPECTED_ENTITY })
-	})
-})
+    expect(depthOfKey(json, DATABASE_META_KEY)).toBe(2);
+    expect(searchSchemaKey(json, DATABASE_META_KEY)).toEqual({ found: true, value: EXPECTED_ENTITY });
+  });
+});
 
 describe("entity stamp — pagination envelope, searched around", () => {
-	it("is not confused by sidecar keys at the same depth", () => {
-		const json = z.toJSONSchema(envelope()) as Record<string, unknown>
-		const props = json["properties"] as Record<string, unknown>
-		/* count / hasMore / nextCursor are visited at depth 1 alongside the array */
-		expect(Object.keys(props).sort()).toEqual(["articles", "count", "hasMore", "nextCursor"])
-		expect(searchSchemaKey(json, DATABASE_META_KEY).found).toBe(true)
-	})
+  it("is not confused by sidecar keys at the same depth", () => {
+    const json = z.toJSONSchema(envelope()) as Record<string, unknown>;
+    const props = json["properties"] as Record<string, unknown>;
+    // count / hasMore / nextCursor are visited at depth 1 alongside the array
+    expect(Object.keys(props).sort()).toEqual(["articles", "count", "hasMore", "nextCursor"]);
+    expect(searchSchemaKey(json, DATABASE_META_KEY).found).toBe(true);
+  });
 
-	it("stays findable when the envelope nests one level deeper", () => {
-		const wrapped = z.object({ data: envelope() })
-		const json = z.toJSONSchema(wrapped) as Record<string, unknown>
-		expect(depthOfKey(json, DATABASE_META_KEY)).toBe(3)
-		expect(searchSchemaKey(json, DATABASE_META_KEY).found).toBe(true)
-	})
+  it("stays findable when the envelope nests one level deeper", () => {
+    const wrapped = z.object({ data: envelope() });
+    const json = z.toJSONSchema(wrapped) as Record<string, unknown>;
+    expect(depthOfKey(json, DATABASE_META_KEY)).toBe(3);
+    expect(searchSchemaKey(json, DATABASE_META_KEY).found).toBe(true);
+  });
 
-	it("is reported ambiguous when two different entities sit at the same depth", () => {
-		/* honey errors rather than picking one — worth pinning, because a
-		   multi-entity response is a shape an app could plausibly write. */
-		const other = z.object({ id: z.string() }).meta({
-			[DATABASE_META_KEY]: { ...EXPECTED_ENTITY, name: "author" },
-		})
-		const json = z.toJSONSchema(
-			z.object({ articles: z.array(generated.articleDtoReadSchema), authors: z.array(other) }),
-		) as Record<string, unknown>
+  it("is reported ambiguous when two different entities sit at the same depth", () => {
+    // honey errors rather than picking one — worth pinning, because a
+    // multi-entity response is a shape an app could plausibly write.
+    const other = z.object({ id: z.string() }).meta({
+      [DATABASE_META_KEY]: { ...EXPECTED_ENTITY, name: "author" },
+    });
 
-		const hit = searchSchemaKey(json, DATABASE_META_KEY)
-		expect(hit.found).toBe("ambiguous")
-	})
+    const json = z.toJSONSchema(
+      z.object({ articles: z.array(generated.articleDtoReadSchema), authors: z.array(other) }),
+    ) as Record<string, unknown>;
 
-	it("is not ambiguous when the same entity appears twice — identical values dedupe", () => {
-		const json = z.toJSONSchema(
-			z.object({
-				articles: z.array(generated.articleDtoReadSchema),
-				featured: z.array(generated.articleDtoReadSchema),
-			}),
-		) as Record<string, unknown>
+    const hit = searchSchemaKey(json, DATABASE_META_KEY);
+    expect(hit.found).toBe("ambiguous");
+  });
 
-		expect(searchSchemaKey(json, DATABASE_META_KEY)).toEqual({ found: true, value: EXPECTED_ENTITY })
-	})
-})
+  it("is not ambiguous when the same entity appears twice — identical values dedupe", () => {
+    const json = z.toJSONSchema(
+      z.object({
+        articles: z.array(generated.articleDtoReadSchema),
+        featured: z.array(generated.articleDtoReadSchema),
+      }),
+    ) as Record<string, unknown>;
+
+    expect(searchSchemaKey(json, DATABASE_META_KEY)).toEqual({ found: true, value: EXPECTED_ENTITY });
+  });
+});
 
 describe("query stamp — search parameters", () => {
-	const listQuery = createListQuerySchema({
-		fields: { scalars: ["id", "title", "created_at"] },
-		filter: { created_at: "date", title: "string" },
-		pagination: { defaultLimit: 20, maxLimit: 100 },
-		sort: ["created_at", "title"],
-	})
+  const listQuery = createListQuerySchema({
+    fields: { scalars: ["id", "title", "created_at"] },
+    filter: { created_at: "date", title: "string" },
+    pagination: { defaultLimit: 20, maxLimit: 100 },
+    sort: ["created_at", "title"],
+  });
 
-	const EXPECTED_QUERY = {
-		defaultOrder: "created_at.desc",
-		filterFields: [
-			{ field: "created_at", ops: ["eq", "ne", "neq", "gt", "gte", "lt", "lte", "is"], type: "date" },
-			{ field: "title", ops: ["eq", "ne", "neq", "like", "ilike", "in", "nin", "is"], type: "string" },
-		],
-		filterable: ["created_at", "title"],
-		grammar: "postgrest",
-		kind: "query",
-		maxFilterConditions: 20,
-		maxFilterDepth: 3,
-		maxFilterValues: 60,
-		maxInValues: 50,
-		maxLimit: 100,
-		maxPatternBytes: 50,
-		maxFilterBytes: 4608,
-		maxPage: 10_000,
-		maxQueryBytes: 14_336,
-		maxSearchBytes: 600,
-		maxSearchTerms: 8,
-		maxSortKeys: 3,
-		nulls: ["first", "last"],
-		searchable: [],
-		selectable: ["id", "title", "created_at"],
-		sortable: ["created_at", "title"],
-		stableTiebreak: "id",
-		v: 1,
-	}
+  const EXPECTED_QUERY = {
+    defaultOrder: "created_at.desc",
+    filterFields: [
+      { field: "created_at", ops: ["eq", "ne", "neq", "gt", "gte", "lt", "lte", "is"], type: "date" },
+      { field: "title", ops: ["eq", "ne", "neq", "like", "ilike", "in", "nin", "is"], type: "string" },
+    ],
+    filterable: ["created_at", "title"],
+    grammar: "postgrest",
+    kind: "query",
+    maxFilterBytes: 4608,
+    maxFilterConditions: 20,
+    maxFilterDepth: 3,
+    maxFilterValues: 60,
+    maxInValues: 50,
+    maxLimit: 100,
+    maxPage: 10_000,
+    maxPatternBytes: 50,
+    maxQueryBytes: 14_336,
+    maxSearchBytes: 600,
+    maxSearchTerms: 8,
+    maxSortKeys: 3,
+    nulls: ["first", "last"],
+    searchable: [],
+    selectable: ["id", "title", "created_at"],
+    sortable: ["created_at", "title"],
+    stableTiebreak: "id",
+    v: 1,
+  };
 
-	it("lands on the JSON Schema root, verbatim, in the input view honey reads", () => {
-		const json = z.toJSONSchema(listQuery, { io: "input", unrepresentable: "any" }) as Record<string, unknown>
-		expect(json[DATABASE_META_KEY]).toEqual(EXPECTED_QUERY)
-	})
+  it("lands on the JSON Schema root, verbatim, in the input view honey reads", () => {
+    const json = z.toJSONSchema(listQuery, { io: "input", unrepresentable: "any" }) as Record<string, unknown>;
+    expect(json[DATABASE_META_KEY]).toEqual(EXPECTED_QUERY);
+  });
 
-	it("is found by honey's root search at depth 0", () => {
-		const json = z.toJSONSchema(listQuery, { io: "input", unrepresentable: "any" }) as Record<string, unknown>
-		expect(readRootKey(json, DATABASE_META_KEY)).toEqual({ found: true, value: EXPECTED_QUERY })
-		expect(depthOfKey(json, DATABASE_META_KEY)).toBe(0)
-	})
+  it("is found by honey's root search at depth 0", () => {
+    const json = z.toJSONSchema(listQuery, { io: "input", unrepresentable: "any" }) as Record<string, unknown>;
+    expect(readRootKey(json, DATABASE_META_KEY)).toEqual({ found: true, value: EXPECTED_QUERY });
+    expect(depthOfKey(json, DATABASE_META_KEY)).toBe(0);
+  });
 
-	it("publishes searchable as an explicit empty list when the endpoint takes no q", () => {
-		const json = z.toJSONSchema(listQuery, { io: "input", unrepresentable: "any" }) as Record<string, unknown>
-		expect(readQueryMeta(json)?.searchable).toEqual([])
-	})
-})
+  it("publishes searchable as an explicit empty list when the endpoint takes no q", () => {
+    const json = z.toJSONSchema(listQuery, { io: "input", unrepresentable: "any" }) as Record<string, unknown>;
+    expect(readQueryMeta(json)?.searchable).toEqual([]);
+  });
+});
 
 describe("both descriptors on one operation", () => {
-	/*
-	 * The entity descriptor rides the output schema; the query descriptor rides
-	 * the search schema. Both use the one reserved key, by design.
-	 *
-	 * honey resolves a schema entry by walking `from` and stopping at the FIRST
-	 * source that carries the key (codegen.ts / meta-spec.ts:443-450 at cd7eb5c).
-	 * With the default source order — output, input.json, input.search, … — the
-	 * entity descriptor wins and the query descriptor is never read.
-	 *
-	 * These tests pin database's half: both stamps are present and correct on their
-	 * own schemas. The dropping happens entirely inside honey's resolution, so
-	 * the fix belongs there; database's single-key layout is not the problem and
-	 * splitting it would trade one silent drop for a permanent extra key.
-	 */
-	const listQuery = createListQuerySchema({
-		fields: { scalars: ["id", "title"] },
-		filter: { title: "string" },
-		sort: ["created_at"],
-	})
+  // The entity descriptor rides the output schema; the query descriptor rides
+  // the search schema. Both use the one reserved key, by design.
+  //
+  // honey resolves a schema entry by walking `from` and stopping at the FIRST
+  // source that carries the key (codegen.ts / meta-spec.ts:443-450 at cd7eb5c).
+  // With the default source order — output, input.json, input.search, … — the
+  // entity descriptor wins and the query descriptor is never read.
+  //
+  // These tests pin database's half: both stamps are present and correct on their
+  // own schemas. The dropping happens entirely inside honey's resolution, so
+  // the fix belongs there; database's single-key layout is not the problem and
+  // splitting it would trade one silent drop for a permanent extra key.
+  const listQuery = createListQuerySchema({
+    fields: { scalars: ["id", "title"] },
+    filter: { title: "string" },
+    sort: ["created_at"],
+  });
 
-	it("each schema carries its own descriptor, of the right kind", () => {
-		const outputJson = z.toJSONSchema(generated.articleDtoReadSchema) as Record<string, unknown>
-		const searchJson = z.toJSONSchema(listQuery, { io: "input", unrepresentable: "any" }) as Record<string, unknown>
+  it("each schema carries its own descriptor, of the right kind", () => {
+    const outputJson = z.toJSONSchema(generated.articleDtoReadSchema) as Record<string, unknown>;
+    const searchJson = z.toJSONSchema(listQuery, { io: "input", unrepresentable: "any" }) as Record<string, unknown>;
 
-		expect(readEntityMeta(outputJson)?.kind).toBe("entity")
-		expect(readQueryMeta(outputJson)).toBeNull()
+    expect(readEntityMeta(outputJson)?.kind).toBe("entity");
+    expect(readQueryMeta(outputJson)).toBeNull();
 
-		expect(readQueryMeta(searchJson)?.kind).toBe("query")
-		expect(readEntityMeta(searchJson)).toBeNull()
-	})
+    expect(readQueryMeta(searchJson)?.kind).toBe("query");
+    expect(readEntityMeta(searchJson)).toBeNull();
+  });
 
-	it("a consumer reading only the first source that carries the key loses one of them", () => {
-		/* Reproduction of the collision, so the honey fix has a concrete case. */
-		const sources: Array<[string, Record<string, unknown>]> = [
-			["output", z.toJSONSchema(generated.articleDtoReadSchema) as Record<string, unknown>],
-			["input.search", z.toJSONSchema(listQuery, { io: "input", unrepresentable: "any" }) as Record<string, unknown>],
-		]
+  it("a consumer reading only the first source that carries the key loses one of them", () => {
+    // Reproduction of the collision, so the honey fix has a concrete case.
+    const sources: Array<[string, Record<string, unknown>]> = [
+      ["output", z.toJSONSchema(generated.articleDtoReadSchema)],
+      ["input.search", z.toJSONSchema(listQuery, { io: "input", unrepresentable: "any" })],
+    ];
 
-		const firstHit = sources.find(([, json]) => searchSchemaKey(json, DATABASE_META_KEY).found !== false)
-		expect(firstHit?.[0]).toBe("output")
+    const firstHit = sources.find(([, json]) => searchSchemaKey(json, DATABASE_META_KEY).found !== false);
+    expect(firstHit?.[0]).toBe("output");
 
-		/* Both are individually resolvable — nothing is wrong with the stamps. */
-		for (const [, json] of sources) {
-			expect(searchSchemaKey(json, DATABASE_META_KEY).found).toBe(true)
-		}
-	})
-})
+    // Both are individually resolvable — nothing is wrong with the stamps.
+    for (const [, json] of sources) expect(searchSchemaKey(json, DATABASE_META_KEY).found).toBe(true);
+  });
+});
 
 /** What an object of the one field `notes` publishes for it */
 const property = (schema: z.ZodType) =>
-	(
-		z.toJSONSchema(z.object({ notes: schema }), { io: "input" }) as unknown as {
-			properties: { notes: Record<string, unknown> }
-		}
-	).properties.notes
+  (
+    z.toJSONSchema(z.object({ notes: schema }), { io: "input" }) as unknown as {
+      properties: { notes: Record<string, unknown> };
+    }
+  ).properties.notes;
+
 /** The generated create DTO's `notes` */
-const notes = () => generated.articleDtoCreateSchema.shape["notes"] as z.ZodType
+const notes = () => generated.articleDtoCreateSchema.shape["notes"] as z.ZodType;
 
-/* C2 of r21: a nullable written JSON value is its schema beside null, its keys on both; the schema
-   itself, not a one-member union of it (C2a of the 0.20.0 G3) */
+// C2 of r21: a nullable written JSON value is its schema beside null, its keys on both; the schema
+// itself, not a one-member union of it (C2a of the 0.20.0 G3)
 describe("a nullable written JSON field's keys, as honey searches them", () => {
-	const RULE = "no U+0000 or unpaired surrogate"
+  const RULE = "no U+0000 or unpaired surrogate";
 
-	it("publishes the schema beside null, the rule on the property and on its non-null member", () => {
-		const { anyOf, ...keys } = property(notes()) as { anyOf: Array<Record<string, unknown>> }
-		expect(keys).toEqual({ "x-database-text": RULE })
-		expect(anyOf).toEqual([
-			expect.objectContaining({ anyOf: expect.any(Array), "x-database-text": RULE }),
-			{ type: "null" },
-		])
-		const members = anyOf[0]?.["anyOf"] as unknown[] | undefined
-		expect(members?.length).toBeGreaterThan(1)
-	})
+  it("publishes the schema beside null, the rule on the property and on its non-null member", () => {
+    const { anyOf, ...keys } = property(notes()) as { anyOf: Array<Record<string, unknown>> };
+    expect(keys).toEqual({ "x-database-text": RULE });
+    expect(anyOf).toEqual([
+      expect.objectContaining({ anyOf: expect.any(Array), "x-database-text": RULE }),
+      { type: "null" },
+    ]);
+    const members = anyOf[0]?.["anyOf"] as unknown[] | undefined;
+    expect(members?.length).toBeGreaterThan(1);
+  });
 
-	it("is found at the property by honey's search, one value however deep it repeats", () => {
-		expect(searchSchemaKey(property(notes()), "x-database-text")).toEqual({ found: true, value: RULE })
-		expect(depthOfKey(property(notes()), "x-database-text")).toBe(0)
-	})
+  it("is found at the property by honey's search, one value however deep it repeats", () => {
+    expect(searchSchemaKey(property(notes()), "x-database-text")).toEqual({ found: true, value: RULE });
+    expect(depthOfKey(property(notes()), "x-database-text")).toBe(0);
+  });
 
-	it("is found at the same depth on the field taken as required, as a consumer unwraps it", () => {
-		const required = (notes() as z.ZodOptional<z.ZodNullable<z.ZodType>>).unwrap().unwrap()
-		expect(searchSchemaKey(property(required), "x-database-text")).toEqual({ found: true, value: RULE })
-		expect(depthOfKey(property(required), "x-database-text")).toBe(0)
-		expect(required.safeParse(null).success).toBe(false)
-	})
-})
+  it("is found at the same depth on the field taken as required, as a consumer unwraps it", () => {
+    const required = (notes() as z.ZodOptional<z.ZodNullable<z.ZodType>>).unwrap().unwrap();
+    expect(searchSchemaKey(property(required), "x-database-text")).toEqual({ found: true, value: RULE });
+    expect(depthOfKey(property(required), "x-database-text")).toBe(0);
+    expect(required.safeParse(null).success).toBe(false);
+  });
+});

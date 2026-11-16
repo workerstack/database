@@ -2,42 +2,46 @@
  * PostgREST-style filters and sort orders: parse and validate. DB-agnostic: no SQL, only
  * the AST and its checks. The grammar lives in filter-parse.ts, the checks in filter-validate.ts.
  */
-import { FILTER_OPERATORS, parseFilter } from "./filter-parse.ts"
-import { parseFilterNumber } from "./filter-typed.ts"
+import { FILTER_OPERATORS, parseFilter } from "./filter-parse.ts";
+import { parseFilterNumber } from "./filter-typed.ts";
 import {
-	FILTER_LIMITS,
-	OPERATORS_BY_TYPE,
-	type FilterField,
-	type FilterFieldSpec,
-	type FilterLimits,
-	type FilterValidationResult,
-	type LimitsGiven,
-	validateFilter,
-} from "./filter-validate.ts"
-import type { SortDirection, SortField } from "./types.ts"
+  FILTER_LIMITS,
+  OPERATORS_BY_TYPE,
+  type FilterField,
+  type FilterFieldSpec,
+  type FilterLimits,
+  type FilterValidationResult,
+  type LimitsGiven,
+  validateFilter,
+} from "./filter-validate.ts";
+import type { SortDirection, SortField } from "./types.ts";
 
 /** The direction suffix an `order` entry may end in, before any nulls suffix, and what it reads as */
-const SORT_DIRECTIONS = { asc: "asc", desc: "desc" } as const satisfies Record<string, SortDirection>
+const SORT_DIRECTIONS = { asc: "asc", desc: "desc" } as const satisfies Record<string, SortDirection>;
+
 /** The nulls suffix an `order` entry may end in, and what it reads as */
-const SORT_NULLS = { nullsfirst: "first", nullslast: "last" } as const
+const SORT_NULLS = { nullsfirst: "first", nullslast: "last" } as const;
 
 /** The value `suffixes` reads the last of `tokens` as, popping it, or undefined when it is none of them */
 function suffixOf<T extends string>(tokens: string[], suffixes: Readonly<Record<string, T>>): T | undefined {
-	for (const [suffix, value] of Object.entries(suffixes))
-		if (tokens.at(-1) === suffix) {
-			tokens.pop()
-			return value
-		}
-	return undefined
+  for (const [suffix, value] of Object.entries(suffixes)) {
+    if (tokens.at(-1) === suffix) {
+      tokens.pop();
+
+      return value;
+    }
+  }
+
+  return undefined;
 }
 
 function escapeRegExp(value: string): string {
-	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /** A regular expression taking any one of `names`, each literally */
 function anyOf(names: readonly string[]): string {
-	return `(?:${names.map(escapeRegExp).join("|")})`
+  return `(?:${names.map(escapeRegExp).join("|")})`;
 }
 
 /**
@@ -48,9 +52,10 @@ function anyOf(names: readonly string[]): string {
  * pattern leaves that to the description
  */
 function orderPattern(sort: readonly string[], maxSortKeys: number): string {
-	const entry = `${anyOf(sort)}(?:\\.${anyOf(Object.keys(SORT_DIRECTIONS))})?(?:\\.${anyOf(Object.keys(SORT_NULLS))})?`
-	const keys = Math.min(maxSortKeys, sort.length)
-	return `^(?:${entry}(?:,${entry}){0,${Math.max(0, keys - 1)}})?$`
+  const entry = `${anyOf(sort)}(?:\\.${anyOf(Object.keys(SORT_DIRECTIONS))})?(?:\\.${anyOf(Object.keys(SORT_NULLS))})?`;
+  const keys = Math.min(maxSortKeys, sort.length);
+
+  return `^(?:${entry}(?:,${entry}){0,${Math.max(0, keys - 1)}})?$`;
 }
 
 /**
@@ -76,17 +81,20 @@ function orderPattern(sort: readonly string[], maxSortKeys: number): string {
  * than drop it and widen the request to the default order.
  */
 function parseOrder(input: string | null | undefined): SortField[] | null {
-	const entries = orderEntries(input)
-	const fields = entries.filter((entry) => typeof entry !== "string")
-	return fields.length === entries.length && namedTwice(fields).length === 0 ? fields : null
+  const entries = orderEntries(input);
+  const fields = entries.filter((entry) => typeof entry !== "string");
+
+  return fields.length === entries.length && namedTwice(fields).length === 0 ? fields : null;
 }
 
 /** Each field `fields` names more than once, once each */
 function namedTwice(fields: readonly SortField[]): string[] {
-	const seen = new Set<string>()
-	const twice = new Set<string>()
-	for (const { field } of fields) (seen.has(field) ? twice : seen).add(field)
-	return [...twice]
+  const seen = new Set<string>();
+  const twice = new Set<string>();
+
+  for (const { field } of fields) (seen.has(field) ? twice : seen).add(field);
+
+  return [...twice];
 }
 
 /**
@@ -94,47 +102,49 @@ function namedTwice(fields: readonly SortField[]): string[] {
  * has whitespace around it, which the published pattern refuses too
  */
 function orderEntries(input: string | null | undefined): Array<SortField | string> {
-	if (!input) return []
+  if (!input) return [];
 
-	const fields: Array<SortField | string> = []
-	const parts = input.split(",")
+  const fields: Array<SortField | string> = [];
+  const parts = input.split(",");
 
-	for (const part of parts) {
-		const trimmed = part.trim()
+  for (const part of parts) {
+    const trimmed = part.trim();
 
-		const tokens = trimmed.split(".")
+    const tokens = trimmed.split(".");
 
-		const nulls = suffixOf(tokens, SORT_NULLS)
-		const direction: SortDirection = suffixOf(tokens, SORT_DIRECTIONS) ?? "asc"
+    const nulls = suffixOf(tokens, SORT_NULLS);
+    const direction: SortDirection = suffixOf(tokens, SORT_DIRECTIONS) ?? "asc";
 
-		const field = tokens.join(".")
-		if (!field || part !== trimmed) {
-			fields.push(part)
-			continue
-		}
+    const field = tokens.join(".");
 
-		const entry: SortField = { direction, field }
-		if (nulls) entry.nulls = nulls
-		fields.push(entry)
-	}
+    if (!field || part !== trimmed) {
+      fields.push(part);
+      continue;
+    }
 
-	return fields
+    const entry: SortField = { direction, field };
+
+    if (nulls) entry.nulls = nulls;
+    fields.push(entry);
+  }
+
+  return fields;
 }
 
 export {
-	FILTER_LIMITS,
-	FILTER_OPERATORS,
-	OPERATORS_BY_TYPE,
-	parseFilter,
-	parseFilterNumber,
-	namedTwice,
-	orderEntries,
-	orderPattern,
-	parseOrder,
-	validateFilter,
-	type FilterField,
-	type FilterFieldSpec,
-	type FilterLimits,
-	type FilterValidationResult,
-	type LimitsGiven,
-}
+  FILTER_LIMITS,
+  FILTER_OPERATORS,
+  OPERATORS_BY_TYPE,
+  parseFilter,
+  parseFilterNumber,
+  namedTwice,
+  orderEntries,
+  orderPattern,
+  parseOrder,
+  validateFilter,
+  type FilterField,
+  type FilterFieldSpec,
+  type FilterLimits,
+  type FilterValidationResult,
+  type LimitsGiven,
+};

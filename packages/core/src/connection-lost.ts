@@ -3,54 +3,52 @@
  * Postgres driver's and libsql's. The Postgres and
  * SQLite handlers answer it as the 503 a retry may fix.
  */
-import type { ConstraintFallback } from "./constraint-map.ts"
-import { causeChain } from "./error-chain.ts"
-import { databaseErrorKeys } from "./types.ts"
+import type { ConstraintFallback } from "./constraint-map.ts";
+import { causeChain } from "./error-chain.ts";
+import { databaseErrorKeys } from "./types.ts";
 
 /** What a lost connection is answered with, on every dialect */
 export const UNAVAILABLE: ConstraintFallback = {
-	cause: "Database is temporarily unavailable. Please retry shortly.",
-	errorKey: databaseErrorKeys.DATABASE_UNAVAILABLE,
-	status: "service_unavailable",
-}
+  cause: "Database is temporarily unavailable. Please retry shortly.",
+  errorKey: databaseErrorKeys.DATABASE_UNAVAILABLE,
+  status: "service_unavailable",
+};
 
-/* the drivers' own codes for a connection refused, lost or timed out, which carry no SQLSTATE */
+// the drivers' own codes for a connection refused, lost or timed out, which carry no SQLSTATE
 // lookup-table: the codes connectionLost reads
 const CONNECTION_CODES: ReadonlySet<string> = /* @__PURE__ */ new Set([
-	"CONNECT_TIMEOUT",
-	"CONNECTION_CLOSED",
-	"CONNECTION_DESTROYED",
-	"CONNECTION_ENDED",
-	"EAI_AGAIN",
-	"ECONNREFUSED",
-	"ECONNRESET",
-	"EHOSTUNREACH",
-	"ENETUNREACH",
-	"EPIPE",
-	"ERR_POSTGRES_IDLE_TIMEOUT",
-	"ERR_POSTGRES_LIFETIME_TIMEOUT",
-	"ETIMEDOUT",
-	/* libsql's: its WebSocket closed or failed, and an idle stream sqld expired */
-	"HRANA_WEBSOCKET_ERROR",
-	"STREAM_EXPIRED",
-])
+  "CONNECT_TIMEOUT",
+  "CONNECTION_CLOSED",
+  "CONNECTION_DESTROYED",
+  "CONNECTION_ENDED",
+  "EAI_AGAIN",
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "EPIPE",
+  "ERR_POSTGRES_IDLE_TIMEOUT",
+  "ERR_POSTGRES_LIFETIME_TIMEOUT",
+  "ETIMEDOUT",
+  // libsql's: its WebSocket closed or failed, and an idle stream sqld expired
+  "HRANA_WEBSOCKET_ERROR",
+  "STREAM_EXPIRED",
+]);
 
-/* an HTTP status a server answers when it cannot serve now, which a retry may get past */
-const retryable = (status: unknown): boolean => typeof status === "number" && (status >= 500 || status === 429)
+// an HTTP status a server answers when it cannot serve now, which a retry may get past
+const retryable = (status: unknown): boolean => typeof status === "number" && (status >= 500 || status === 429);
 
-/*
- * node-postgres's and pg-pool's words for a connection lost, timed out or not to be had, which they
- * throw with no code. Their words for the app's own end() or its
- * query_timeout are no lost connection, and stay unclassified
- */
+// node-postgres's and pg-pool's words for a connection lost, timed out or not to be had, which they
+// throw with no code. Their words for the app's own end() or its
+// query_timeout are no lost connection, and stay unclassified
 // lookup-table: the messages connectionLost reads
 const CONNECTION_MESSAGES: ReadonlySet<string> = /* @__PURE__ */ new Set([
-	"Client has encountered a connection error and is not queryable",
-	"Connection terminated due to connection timeout",
-	"Connection terminated unexpectedly",
-	"timeout exceeded when trying to connect",
-	"timeout expired",
-])
+  "Client has encountered a connection error and is not queryable",
+  "Connection terminated due to connection timeout",
+  "Connection terminated unexpectedly",
+  "timeout exceeded when trying to connect",
+  "timeout expired",
+]);
 
 /**
  * Whether `error`, or one under it on `.cause`, is a driver's lost connection: postgres.js's and
@@ -60,14 +58,19 @@ const CONNECTION_MESSAGES: ReadonlySet<string> = /* @__PURE__ */ new Set([
  * request the server refuses. The 08xxx SQLSTATEs stay in RESOURCE for a libpq-based driver
  */
 export function connectionLost(error: unknown): boolean {
-	let serverError = false
-	for (const link of causeChain(error).filter((each): each is Error => each instanceof Error)) {
-		const { code, status } = link as { code?: unknown; status?: unknown }
-		if (typeof code === "string" && (CONNECTION_CODES.has(code) || code.startsWith("ERR_POSTGRES_CONNECTION_")))
-			return true
-		if (code === undefined && CONNECTION_MESSAGES.has(link.message)) return true
-		serverError ||= code === "SERVER_ERROR"
-		if (serverError && retryable(status)) return true
-	}
-	return false
+  let serverError = false;
+
+  for (const link of causeChain(error).filter((each): each is Error => each instanceof Error)) {
+    const { code, status } = link as { code?: unknown; status?: unknown };
+
+    if (typeof code === "string" && (CONNECTION_CODES.has(code) || code.startsWith("ERR_POSTGRES_CONNECTION_")))
+      return true;
+
+    if (code === undefined && CONNECTION_MESSAGES.has(link.message)) return true;
+    serverError ||= code === "SERVER_ERROR";
+
+    if (serverError && retryable(status)) return true;
+  }
+
+  return false;
 }

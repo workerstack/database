@@ -12,236 +12,246 @@
  * own driver, and on two shards for the merged list; `listOptions` reads the table through drizzle's
  * relational API.
  */
-import { defineRelations, eq } from "drizzle-orm"
-import { integer, type SQLiteAsyncDatabase, sqliteTable, text } from "drizzle-orm/sqlite-core"
-import { type DecodedCursor, readCursor } from "../../../src/query/cursor.ts"
-import { queryHelpers } from "../../../src/query/drizzle.ts"
-import { SEALED } from "../../../src/query/__fixtures__/cursor-secret.ts"
-import { paginateMerged } from "../../../src/query/merged.ts"
-import { createListQuerySchema } from "../../../src/query/schema.ts"
-import { applyListQuery, buildDerivedListQuery, buildListQuery } from "../../../src/query/sqlite/build-list-query.ts"
-import type { ListQueryResult } from "../../../src/query/sqlite/build-list-query-types.ts"
+import { defineRelations, eq } from "drizzle-orm";
+import { integer, type SQLiteAsyncDatabase, sqliteTable, text } from "drizzle-orm/sqlite-core";
+
+import { SEALED } from "../../../src/query/__fixtures__/cursor-secret.ts";
+import { type DecodedCursor, readCursor } from "../../../src/query/cursor.ts";
+import { queryHelpers } from "../../../src/query/drizzle.ts";
+import { paginateMerged } from "../../../src/query/merged.ts";
+import { createListQuerySchema } from "../../../src/query/schema.ts";
+import type { ListQueryResult } from "../../../src/query/sqlite/build-list-query-types.ts";
+import { applyListQuery, buildDerivedListQuery, buildListQuery } from "../../../src/query/sqlite/build-list-query.ts";
 
 const post = sqliteTable("post", {
-	id: text("id").primaryKey(),
-	m: integer("m", { mode: "timestamp_ms" }),
-	s: integer("s", { mode: "timestamp" }),
-})
+  id: text("id").primaryKey(),
+  m: integer("m", { mode: "timestamp_ms" }),
+  s: integer("s", { mode: "timestamp" }),
+});
+
 const metric = sqliteTable("metric", {
-	m: integer("m", { mode: "timestamp_ms" }),
-	post_id: text("post_id"),
-	s: integer("s", { mode: "timestamp" }),
-})
+  m: integer("m", { mode: "timestamp_ms" }),
+  post_id: text("post_id"),
+  s: integer("s", { mode: "timestamp" }),
+});
+
 /** The relations a suite builds its drizzle with, so `listOptions` reads `post` through `findMany` */
-export const TEXT_RELATIONS = defineRelations({ post })
-const schema = createListQuerySchema({ pagination: { defaultLimit: 1, maxLimit: 1 }, sort: ["m", "s"] })
-/* AB3-5 of area B: two rows a page, so a TEXT row can lead a page another row ends */
-const pairs = createListQuerySchema({ pagination: { defaultLimit: 2, maxLimit: 2 }, sort: ["m", "s"] })
+export const TEXT_RELATIONS = defineRelations({ post });
+const schema = createListQuerySchema({ pagination: { defaultLimit: 1, maxLimit: 1 }, sort: ["m", "s"] });
 
-/* past the cap a cursor holds (MAX_CURSOR_LENGTH), so its cursor carries it by reference */
-const LONG_TEXT = "replace(hex(zeroblob(4500)), '0', 'z')"
+// AB3-5 of area B: two rows a page, so a TEXT row can lead a page another row ends
+const pairs = createListQuerySchema({ pagination: { defaultLimit: 2, maxLimit: 2 }, sort: ["m", "s"] });
 
-/*
- * seconds: 1000.5 < 2000 < '1970-…' < 'a-text' < 'b,text' (a comma, which no join may split) < 9000
- * z's, twice (f before g by id); milliseconds: 1500.0 (a whole REAL) < 2000000 < the same texts
- */
+// past the cap a cursor holds (MAX_CURSOR_LENGTH), so its cursor carries it by reference
+const LONG_TEXT = "replace(hex(zeroblob(4500)), '0', 'z')";
+
+// seconds: 1000.5 < 2000 < '1970-…' < 'a-text' < 'b,text' (a comma, which no join may split) < 9000
+// z's, twice (f before g by id); milliseconds: 1500.0 (a whole REAL) < 2000000 < the same texts
 const ROWS = [
-	"('c', 1000.5, 1500.0)",
-	"('a', 2000, 2000000)",
-	"('d', '1970-01-01T00:00:01Z', '1970-01-01T00:00:01Z')",
-	"('e', 'a-text', 'a-text')",
-	"('h', 'b,text', 'b,text')",
-	`('f', ${LONG_TEXT}, ${LONG_TEXT})`,
-	`('g', ${LONG_TEXT}, ${LONG_TEXT})`,
-] as const
+  "('c', 1000.5, 1500.0)",
+  "('a', 2000, 2000000)",
+  "('d', '1970-01-01T00:00:01Z', '1970-01-01T00:00:01Z')",
+  "('e', 'a-text', 'a-text')",
+  "('h', 'b,text', 'b,text')",
+  `('f', ${LONG_TEXT}, ${LONG_TEXT})`,
+  `('g', ${LONG_TEXT}, ${LONG_TEXT})`,
+] as const;
 
 /** The statements that seed one database with every one of `rows`, or one shard of two with its half */
 const seedOf =
-	(rows: readonly string[]) =>
-	(shard?: 0 | 1): string[] => [
-		"CREATE TABLE post (id TEXT PRIMARY KEY, s INTEGER, m INTEGER)",
-		"CREATE TABLE metric (post_id TEXT, s INTEGER, m INTEGER)",
-		`INSERT INTO post VALUES ${(shard === undefined ? rows : rows.filter((_, i) => i % 2 === shard)).join(", ")}`,
-		"INSERT INTO metric SELECT id, s, m FROM post",
-	]
+  (rows: readonly string[]) =>
+  (shard?: 0 | 1): string[] => [
+    "CREATE TABLE post (id TEXT PRIMARY KEY, s INTEGER, m INTEGER)",
+    "CREATE TABLE metric (post_id TEXT, s INTEGER, m INTEGER)",
+    `INSERT INTO post VALUES ${(shard === undefined ? rows : rows.filter((_, i) => i % 2 === shard)).join(", ")}`,
+    "INSERT INTO metric SELECT id, s, m FROM post",
+  ];
 
 /** The statements that seed one database with every row, or one shard of two with its half */
-export const TEXT_SEED = seedOf(ROWS)
+export const TEXT_SEED = seedOf(ROWS);
 
 /** AB3-5 of area B: 1000.5 < 2000 < '1970-…', so descending two a page, the TEXT row leads page 1 and a number ends it */
-export const LEADING_SEED = seedOf(ROWS.slice(0, 3))
+export const LEADING_SEED = seedOf(ROWS.slice(0, 3));
 
-/*
- * B2-6 of area B: milliseconds holding a fraction below one, as a raw writer stores a REAL, which the
- * Date drizzle reads truncates toward zero: -1.5 < -1.25 < 1000.25 < 1000.5 < 1000.75 < 1001, the
- * seconds the same; no TEXT, so every list pages them
- */
+// B2-6 of area B: milliseconds holding a fraction below one, as a raw writer stores a REAL, which the
+// Date drizzle reads truncates toward zero: -1.5 < -1.25 < 1000.25 < 1000.5 < 1000.75 < 1001, the
+// seconds the same; no TEXT, so every list pages them
 const FRACTION_ROWS = [
-	"('c', 1000.5, 1000.5)",
-	"('f', -1.25, -1.25)",
-	"('a', 1001, 1001)",
-	"('e', 1000.25, 1000.25)",
-	"('b', -1.5, -1.5)",
-	"('d', 1000.75, 1000.75)",
-] as const
+  "('c', 1000.5, 1000.5)",
+  "('f', -1.25, -1.25)",
+  "('a', 1001, 1001)",
+  "('e', 1000.25, 1000.25)",
+  "('b', -1.5, -1.5)",
+  "('d', 1000.75, 1000.75)",
+] as const;
 
 /** The statements that seed a database, or one shard of two, with the fraction rows */
-export const FRACTION_SEED = seedOf(FRACTION_ROWS)
+export const FRACTION_SEED = seedOf(FRACTION_ROWS);
 
 /** Every id by either key over the fraction rows */
 export const FRACTION_SERVED = {
-	asc: ["b", "f", "e", "c", "d", "a"],
-	desc: ["a", "d", "c", "e", "f", "b"],
-} as const
+  asc: ["b", "f", "e", "c", "d", "a"],
+  desc: ["a", "d", "c", "e", "f", "b"],
+} as const;
 
-/*
- * AB3-1 of area B: ±Infinity, as a raw writer stores 9e999, both units; -Infinity < 1 < 2 < 3 <
- * Infinity twice (b before e by id); no TEXT, so every list pages them
- */
+// AB3-1 of area B: ±Infinity, as a raw writer stores 9e999, both units; -Infinity < 1 < 2 < 3 <
+// Infinity twice (b before e by id); no TEXT, so every list pages them
 const INFINITY_ROWS = [
-	"('a', 1, 1)",
-	"('b', 9e999, 9e999)",
-	"('c', 2, 2)",
-	"('d', -9e999, -9e999)",
-	"('e', 9e999, 9e999)",
-	"('f', 3, 3)",
-] as const
+  "('a', 1, 1)",
+  "('b', 9e999, 9e999)",
+  "('c', 2, 2)",
+  "('d', -9e999, -9e999)",
+  "('e', 9e999, 9e999)",
+  "('f', 3, 3)",
+] as const;
 
 /** The statements that seed a database, or one shard of two, with the infinity rows */
-export const INFINITY_SEED = seedOf(INFINITY_ROWS)
+export const INFINITY_SEED = seedOf(INFINITY_ROWS);
 
 /** Every id by either key over the infinity rows */
 export const INFINITY_SERVED = {
-	asc: ["d", "a", "c", "f", "b", "e"],
-	desc: ["e", "b", "f", "c", "a", "d"],
-} as const
+  asc: ["d", "a", "c", "f", "b", "e"],
+  desc: ["e", "b", "f", "c", "a", "d"],
+} as const;
 
-/*
- * AB4-7 of area B: REALs whose text one form of SQLite's alone reads back, both units: 1e-300 < 1000
- * < 2000 < 1e300 < Infinity. On D1 printf('%!.17g') misprints 1e300 and cast(k as text) keeps 15
- * digits, and a JS number bound for 1e-300 finds no row; libsql's cast keeps 15 digits too
- */
+// AB4-7 of area B: REALs whose text one form of SQLite's alone reads back, both units: 1e-300 < 1000
+// < 2000 < 1e300 < Infinity. On D1 printf('%!.17g') misprints 1e300 and cast(k as text) keeps 15
+// digits, and a JS number bound for 1e-300 finds no row; libsql's cast keeps 15 digits too
 const HUGE_ROWS = [
-	"('a', 1000, 1000)",
-	"('b', 1e300, 1e300)",
-	"('c', 9e999, 9e999)",
-	"('d', 2000, 2000)",
-	"('e', 1e-300, 1e-300)",
-] as const
+  "('a', 1000, 1000)",
+  "('b', 1e300, 1e300)",
+  "('c', 9e999, 9e999)",
+  "('d', 2000, 2000)",
+  "('e', 1e-300, 1e-300)",
+] as const;
 
 /** The statements that seed a database, or one shard of two, with the huge rows */
-export const HUGE_SEED = seedOf(HUGE_ROWS)
+export const HUGE_SEED = seedOf(HUGE_ROWS);
 
 /** Every id by either key over the huge rows */
 export const HUGE_SERVED = {
-	asc: ["e", "a", "d", "b", "c"],
-	desc: ["c", "b", "d", "a", "e"],
-} as const
+  asc: ["e", "a", "d", "b", "c"],
+  desc: ["c", "b", "d", "a", "e"],
+} as const;
 
-/*
- * AB4-7 of area B: a REAL no text D1 prints of reads back as it, neither cast(k as text) nor printf:
- * 1000 < 2000 < 7.0631582885980606e300, which libsql and bun:sqlite print exactly
- */
+// AB4-7 of area B: a REAL no text D1 prints of reads back as it, neither cast(k as text) nor printf:
+// 1000 < 2000 < 7.0631582885980606e300, which libsql and bun:sqlite print exactly
 const UNPRINTED_ROWS = [
-	"('a', 1000, 1000)",
-	"('b', 7.0631582885980606e300, 7.0631582885980606e300)",
-	"('c', 2000, 2000)",
-] as const
+  "('a', 1000, 1000)",
+  "('b', 7.0631582885980606e300, 7.0631582885980606e300)",
+  "('c', 2000, 2000)",
+] as const;
 
 /** The statements that seed a database, or one shard of two, with the unprinted rows */
-export const UNPRINTED_SEED = seedOf(UNPRINTED_ROWS)
+export const UNPRINTED_SEED = seedOf(UNPRINTED_ROWS);
 
 /** Every id by either key over the unprinted rows */
-export const UNPRINTED_SERVED = { asc: ["a", "c", "b"], desc: ["b", "c", "a"] } as const
+export const UNPRINTED_SERVED = { asc: ["a", "c", "b"], desc: ["b", "c", "a"] } as const;
 
 /** Every id in SQLite's order of either key */
 export const TEXT_SERVED = {
-	asc: ["c", "a", "d", "e", "h", "f", "g"],
-	desc: ["g", "f", "h", "e", "d", "a", "c"],
-} as const
+  asc: ["c", "a", "d", "e", "h", "f", "g"],
+  desc: ["g", "f", "h", "e", "d", "a", "c"],
+} as const;
 
-export type TextKey = "m" | "s"
-export type TextShape = "anchored joined" | "anchored own" | "anchorless" | "listOptions" | "merged" | "table"
-type Db = SQLiteAsyncDatabase<any, any>
+export type TextKey = "m" | "s";
 
-type Parsed = ReturnType<typeof schema.parse>
+export type TextShape = "anchored joined" | "anchored own" | "anchorless" | "listOptions" | "merged" | "table";
+
+type Db = SQLiteAsyncDatabase<any, any>;
+
+type Parsed = ReturnType<typeof schema.parse>;
 
 /** The list `shape`, any built on one database, builds for `parsed` */
 function listOf(shape: Exclude<TextShape, "listOptions" | "merged">, parsed: Parsed): ListQueryResult {
-	if (shape === "table") return buildListQuery({ ...SEALED, parsed, table: post })
-	const sortColumns = shape === "anchored joined" ? { m: metric.m, s: metric.s } : { m: post.m, s: post.s }
-	if (shape === "anchorless") return buildDerivedListQuery({ ...SEALED, idColumn: post.id, parsed, sortColumns })
-	return buildDerivedListQuery({ ...SEALED, anchor: { idColumn: post.id, table: post }, parsed, sortColumns })
+  if (shape === "table") return buildListQuery({ ...SEALED, parsed, table: post });
+  const sortColumns = shape === "anchored joined" ? { m: metric.m, s: metric.s } : { m: post.m, s: post.s };
+
+  if (shape === "anchorless") return buildDerivedListQuery({ ...SEALED, idColumn: post.id, parsed, sortColumns });
+
+  return buildDerivedListQuery({ ...SEALED, anchor: { idColumn: post.id, table: post }, parsed, sortColumns });
 }
 
 /** One page of the list `shape` builds by `key` for `parsed`, over every shard of `dbs` when merged, its next cursor and hasMore */
 async function pageOf(
-	dbs: readonly Db[],
-	{ key, shape }: { key: TextKey; shape: TextShape },
-	parsed: Parsed,
+  dbs: readonly Db[],
+  { key, shape }: { key: TextKey; shape: TextShape },
+  parsed: Parsed,
 ): Promise<[Record<string, unknown>[], string | null, boolean]> {
-	const select = (db: Db) => (extras: object) =>
-		db
-			.select({ id: post.id, [key]: shape === "anchored joined" ? metric[key] : post[key], ...extras })
-			.from(post)
-			.innerJoin(metric, eq(metric.post_id, post.id))
-	if (shape === "listOptions") {
-		const options = queryHelpers.listOptions(parsed, SEALED)
-		const relational = dbs[0] as unknown as {
-			query: { post: { findMany: (options: never) => Promise<Record<string, unknown>[]> } }
-		}
-		const [items, meta] = queryHelpers.paginate(await relational.query.post.findMany(options as never), options)
-		return [items, meta.nextCursor, meta.hasMore]
-	}
-	if (shape === "merged") {
-		const list = buildListQuery({ ...SEALED, merged: {}, parsed, table: post })
-		const [items, meta] = paginateMerged(await Promise.all(dbs.map((db) => applyListQuery(select(db), list))), list)
-		return [items, meta.nextCursor, meta.hasMore]
-	}
-	const list = listOf(shape, parsed)
-	const [items, meta] = queryHelpers.paginate(await applyListQuery(select(dbs[0]!), list), list)
-	return [items, meta.nextCursor, meta.hasMore]
+  const select = (db: Db) => (extras: object) =>
+    db
+      .select({ id: post.id, [key]: shape === "anchored joined" ? metric[key] : post[key], ...extras })
+      .from(post)
+      .innerJoin(metric, eq(metric.post_id, post.id));
+
+  if (shape === "listOptions") {
+    const options = queryHelpers.listOptions(parsed, SEALED);
+
+    const relational = dbs[0] as unknown as {
+      query: { post: { findMany: (options: never) => Promise<Record<string, unknown>[]> } };
+    };
+
+    const [items, meta] = queryHelpers.paginate(await relational.query.post.findMany(options as never), options);
+
+    return [items, meta.nextCursor, meta.hasMore];
+  }
+
+  if (shape === "merged") {
+    const list = buildListQuery({ ...SEALED, merged: {}, parsed, table: post });
+    const [items, meta] = paginateMerged(await Promise.all(dbs.map((db) => applyListQuery(select(db), list))), list);
+
+    return [items, meta.nextCursor, meta.hasMore];
+  }
+
+  const list = listOf(shape, parsed);
+  const [items, meta] = queryHelpers.paginate(await applyListQuery(select(dbs[0]!), list), list);
+
+  return [items, meta.nextCursor, meta.hasMore];
 }
 
 /** The rows of the first page the list of `shape` by `key` serves `direction`, as paginate hands them on */
 export async function firstPage(
-	dbs: readonly Db[],
-	{ direction, key, shape }: { direction: "asc" | "desc"; key: TextKey; shape: TextShape },
+  dbs: readonly Db[],
+  { direction, key, shape }: { direction: "asc" | "desc"; key: TextKey; shape: TextShape },
 ): Promise<Record<string, unknown>[]> {
-	const [items] = await pageOf(dbs, { key, shape }, schema.parse({ order: `${key}.${direction}` }))
-	return items
+  const [items] = await pageOf(dbs, { key, shape }, schema.parse({ order: `${key}.${direction}` }));
+
+  return items;
 }
 
 /** The ids of the first page, two a page, the list of `shape` by `key` serves `direction`; or the error it answered */
 export async function firstPair(
-	dbs: readonly Db[],
-	{ direction, key, shape }: { direction: "asc" | "desc"; key: TextKey; shape: TextShape },
+  dbs: readonly Db[],
+  { direction, key, shape }: { direction: "asc" | "desc"; key: TextKey; shape: TextShape },
 ): Promise<{ error?: unknown; ids?: unknown[] }> {
-	try {
-		const [items] = await pageOf(dbs, { key, shape }, pairs.parse({ order: `${key}.${direction}` }))
-		return { ids: items.map((row) => row["id"]) }
-	} catch (error) {
-		return { error }
-	}
+  try {
+    const [items] = await pageOf(dbs, { key, shape }, pairs.parse({ order: `${key}.${direction}` }));
+
+    return { ids: items.map((row) => row["id"]) };
+  } catch (error) {
+    return { error };
+  }
 }
 
 /** The first page's next cursor of the list `shape` by `key`, `direction`, as readCursor opens it */
 export async function firstCursor(
-	dbs: readonly Db[],
-	{ direction, key, shape }: { direction: "asc" | "desc"; key: TextKey; shape: TextShape },
+  dbs: readonly Db[],
+  { direction, key, shape }: { direction: "asc" | "desc"; key: TextKey; shape: TextShape },
 ): Promise<DecodedCursor> {
-	const parsed = schema.parse({ order: `${key}.${direction}` })
-	const [, next] = await pageOf(dbs, { key, shape }, parsed)
-	return readCursor(next as string, parsed.parsedSort, SEALED)
+  const parsed = schema.parse({ order: `${key}.${direction}` });
+  const [, next] = await pageOf(dbs, { key, shape }, parsed);
+
+  return readCursor(next as string, parsed.parsedSort, SEALED);
 }
 
 /** `ids`' rows deleted on every shard, from both tables */
 async function dropRows(dbs: readonly Db[], ids: readonly string[]): Promise<void> {
-	for (const db of dbs)
-		for (const id of ids) {
-			await db.delete(post).where(eq(post.id, id))
-			await db.delete(metric).where(eq(metric.post_id, id))
-		}
+  for (const db of dbs) {
+    for (const id of ids) {
+      await db.delete(post).where(eq(post.id, id));
+      await db.delete(metric).where(eq(metric.post_id, id));
+    }
+  }
 }
 
 /**
@@ -249,30 +259,35 @@ async function dropRows(dbs: readonly Db[], ids: readonly string[]): Promise<voi
  * each page's rows on every shard before the next when `deleting`; and the error that ended it
  */
 export async function servedText(
-	dbs: readonly Db[],
-	{ deleting, direction, key, shape }: { deleting: boolean; direction: "asc" | "desc"; key: TextKey; shape: TextShape },
+  dbs: readonly Db[],
+  { deleting, direction, key, shape }: { deleting: boolean; direction: "asc" | "desc"; key: TextKey; shape: TextShape },
 ): Promise<{ error?: unknown; ids: string[]; stranded?: true }> {
-	const ids: string[] = []
-	let cursor: string | undefined
-	try {
-		for (let n = 1; n <= 8; n++) {
-			const [items, next, hasMore] = await pageOf(
-				dbs,
-				{ key, shape },
-				{ ...schema.parse({ order: `${key}.${direction}` }), cursor },
-			)
-			const page = items.map((row) => (row as { id: string }).id)
-			ids.push(...page)
-			if (deleting) await dropRows(dbs, page)
-			if (next === null) return hasMore ? { ids, stranded: true } : { ids }
-			cursor = next
-		}
-	} catch (error) {
-		return { error, ids }
-	}
-	return { ids }
+  const ids: string[] = [];
+  let cursor: string | undefined;
+
+  try {
+    for (let n = 1; n <= 8; n++) {
+      const [items, next, hasMore] = await pageOf(
+        dbs,
+        { key, shape },
+        { ...schema.parse({ order: `${key}.${direction}` }), cursor },
+      );
+
+      const page = items.map((row) => (row as { id: string }).id);
+      ids.push(...page);
+
+      if (deleting) await dropRows(dbs, page);
+
+      if (next === null) return hasMore ? { ids, stranded: true } : { ids };
+      cursor = next;
+    }
+  } catch (error) {
+    return { error, ids };
+  }
+
+  return { ids };
 }
 
 /** Whether `ids` is the start of `order`: no id repeated, none skipped */
 export const startsOrder = (ids: readonly string[], order: readonly string[]): boolean =>
-	ids.every((id, i) => order[i] === id)
+  ids.every((id, i) => order[i] === id);

@@ -5,7 +5,7 @@
 
 /** A log that sends each `*.error` event to console.warn, with its data, and drops every other */
 function warnOnError(event: string, data: Record<string, unknown>): void {
-	if (event.endsWith(".error")) console.warn(event, data)
+  if (event.endsWith(".error")) console.warn(event, data);
 }
 
-export { warnOnError }
+export { warnOnError };

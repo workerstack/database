@@ -1,93 +1,100 @@
-import { Column, getColumnTable, getTableColumns, is, sql, type SQL, type SQLWrapper } from "drizzle-orm"
-import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core"
-import { own } from "../../constraint-map.ts"
-import { DatabaseError } from "../../error.ts"
-import { databaseErrorKeys } from "../../types.ts"
-import { CURSOR_TIEBREAK_COLUMN } from "../cursor.ts"
-import { listDialect } from "../list-dialect.ts"
-import type { ComputedSortResolver, FilterAST, SortField } from "../types.ts"
-import { filterToSQL } from "./executor.ts"
-import { assertSchemaParsed } from "../trusted.ts"
-import { DateKey } from "./cursor-fit.ts"
-import { orderByKeys, orderSQL, type SortKey } from "./keyset.ts"
-import { finish, type Keyset } from "./list-finish.ts"
-import type { LikeSearchResolver } from "./search.ts"
+import { Column, getColumnTable, getTableColumns, is, sql, type SQL, type SQLWrapper } from "drizzle-orm";
+import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
+
+import { own } from "../../constraint-map.ts";
+import { DatabaseError } from "../../error.ts";
+import { databaseErrorKeys } from "../../types.ts";
+import { CURSOR_TIEBREAK_COLUMN } from "../cursor.ts";
+import { listDialect } from "../list-dialect.ts";
+import { assertSchemaParsed } from "../trusted.ts";
+import type { ComputedSortResolver, FilterAST, SortField } from "../types.ts";
 import type {
-	BuildDerivedListQueryOpts,
-	BuildListQueryOpts,
-	ListExtras,
-	ListQueryResult,
-	MergedListQueryResult,
-} from "./build-list-query-types.ts"
+  BuildDerivedListQueryOpts,
+  BuildListQueryOpts,
+  ListExtras,
+  ListQueryResult,
+  MergedListQueryResult,
+} from "./build-list-query-types.ts";
+import { DateKey } from "./cursor-fit.ts";
+import { filterToSQL } from "./executor.ts";
+import { orderByKeys, orderSQL, type SortKey } from "./keyset.ts";
+import { finish, type Keyset } from "./list-finish.ts";
+import type { LikeSearchResolver } from "./search.ts";
 
 function isFilterAST(v: unknown): v is FilterAST {
-	return typeof v === "object" && v !== null && "root" in v
+  return typeof v === "object" && v !== null && "root" in v;
 }
 
 function buildFilterWhere(
-	filterAst: FilterAST | null | unknown,
-	table: SQLiteTable,
-	opts: BuildListQueryOpts<SQLiteTable>,
+  filterAst: FilterAST | null | unknown,
+  table: SQLiteTable,
+  opts: BuildListQueryOpts<SQLiteTable>,
 ): SQL | null {
-	if (!filterAst || !isFilterAST(filterAst)) return null
+  if (!filterAst || !isFilterAST(filterAst)) return null;
 
-	return filterToSQL(filterAst, {
-		computedFilters: opts.computedFilters,
-		mainTable: table,
-		relations: opts.relations,
-	})
+  return filterToSQL(filterAst, {
+    computedFilters: opts.computedFilters,
+    mainTable: table,
+    relations: opts.relations,
+  });
 }
 
 function resolveBaseWhere(baseWhere: BuildListQueryOpts<SQLiteTable>["baseWhere"]): SQL | undefined {
-	return typeof baseWhere === "function" ? baseWhere(sql) : baseWhere
+  return typeof baseWhere === "function" ? baseWhere(sql) : baseWhere;
 }
 
 /** A sort the schema accepted but this table cannot run is a wiring mistake, not a reason to reorder */
 function sortNotWired(field: string, missing: string): DatabaseError {
-	return new DatabaseError({
-		cause: `Sort on '${field}' has no ${missing} to run it`,
-		errorKey: databaseErrorKeys.SORT_NOT_WIRED,
-		status: "internal_server_error",
-	})
+  return new DatabaseError({
+    cause: `Sort on '${field}' has no ${missing} to run it`,
+    errorKey: databaseErrorKeys.SORT_NOT_WIRED,
+    status: "internal_server_error",
+  });
 }
 
 /** The ORDER BY of `sort` and its keyset keys; keys are null once a computed sort is in the order */
 function planSort(
-	sort: readonly SortField[],
-	columns: Record<string, SQLiteColumn>,
-	computedSorts: Record<string, ComputedSortResolver> | undefined,
+  sort: readonly SortField[],
+  columns: Record<string, SQLiteColumn>,
+  computedSorts: Record<string, ComputedSortResolver> | undefined,
 ): Keyset {
-	const keys: SortKey[] = []
-	const orderBy: SQL[] = []
-	let keysetable = true
-	for (const { direction, field, nulls } of sort) {
-		if (field.startsWith("@")) {
-			const resolver = own(computedSorts, field)
-			if (!resolver) throw sortNotWired(field, "resolver")
-			orderBy.push(resolver(direction))
-			keysetable = false
-			continue
-		}
-		const column = own(columns, field)
-		if (!column) throw sortNotWired(field, "column")
-		const key = { column, direction, nulls }
-		keys.push(key)
-		orderBy.push(orderSQL(key))
-	}
-	return { keys: keysetable ? keys : null, orderBy }
+  const keys: SortKey[] = [];
+  const orderBy: SQL[] = [];
+  let keysetable = true;
+
+  for (const { direction, field, nulls } of sort) {
+    if (field.startsWith("@")) {
+      const resolver = own(computedSorts, field);
+
+      if (!resolver) throw sortNotWired(field, "resolver");
+      orderBy.push(resolver(direction));
+      keysetable = false;
+      continue;
+    }
+
+    const column = own(columns, field);
+
+    if (!column) throw sortNotWired(field, "column");
+    const key = { column, direction, nulls };
+    keys.push(key);
+    orderBy.push(orderSQL(key));
+  }
+
+  return { keys: keysetable ? keys : null, orderBy };
 }
 
 /** The search predicate; a `q` the schema accepted with no resolver to run it is a wiring mistake */
 function searchWhere(q: string | undefined, search: LikeSearchResolver | undefined): SQL | null {
-	if (!q) return null
-	if (search) return search(q)
-	/* The schema accepted `q`, so the endpoint promised search. Dropping it
-	   would answer every query with the unfiltered list. */
-	throw new DatabaseError({
-		cause: "Request carries q but buildListQuery got no search resolver",
-		errorKey: databaseErrorKeys.SEARCH_NOT_WIRED,
-		status: "internal_server_error",
-	})
+  if (!q) return null;
+
+  if (search) return search(q);
+  // The schema accepted `q`, so the endpoint promised search. Dropping it
+  // would answer every query with the unfiltered list.
+  throw new DatabaseError({
+    cause: "Request carries q but buildListQuery got no search resolver",
+    errorKey: databaseErrorKeys.SEARCH_NOT_WIRED,
+    status: "internal_server_error",
+  });
 }
 
 /**
@@ -96,19 +103,21 @@ function searchWhere(q: string | undefined, search: LikeSearchResolver | undefin
  * across shards, so a table without one cannot be merged at all
  */
 function refuseUnmergeable(
-	sort: readonly SortField[],
-	idColumn: SQLiteColumn | undefined,
-	tiebreakColumn: string,
+  sort: readonly SortField[],
+  idColumn: SQLiteColumn | undefined,
+  tiebreakColumn: string,
 ): void {
-	const computed = sort.find(({ field }) => field.startsWith("@"))
-	const cause =
-		computed !== undefined
-			? `a merged list orders by values paginateMerged reads from the rows: sort it by columns only, not ${computed.field}`
-			: idColumn === undefined
-				? `a merged list needs an "${tiebreakColumn}" column to break ties across shards, and this table has none`
-				: undefined
-	if (cause !== undefined)
-		throw new DatabaseError({ cause, errorKey: databaseErrorKeys.SORT_NOT_WIRED, status: "internal_server_error" })
+  const computed = sort.find(({ field }) => field.startsWith("@"));
+
+  const cause =
+    computed === undefined
+      ? idColumn === undefined
+        ? `a merged list needs an "${tiebreakColumn}" column to break ties across shards, and this table has none`
+        : undefined
+      : `a merged list orders by values paginateMerged reads from the rows: sort it by columns only, not ${computed.field}`;
+
+  if (cause !== undefined)
+    throw new DatabaseError({ cause, errorKey: databaseErrorKeys.SORT_NOT_WIRED, status: "internal_server_error" });
 }
 
 /**
@@ -118,11 +127,11 @@ function refuseUnmergeable(
  * without the tiebreak column
  */
 function buildListQuery<TTable extends SQLiteTable>(
-	opts: BuildListQueryOpts<TTable> & {
-		/** the shards' list, which `paginateMerged` pages */
-		merged: NonNullable<BuildListQueryOpts<TTable>["merged"]>
-	},
-): MergedListQueryResult
+  opts: BuildListQueryOpts<TTable> & {
+    /** the shards' list, which `paginateMerged` pages */
+    merged: NonNullable<BuildListQueryOpts<TTable>["merged"]>;
+  },
+): MergedListQueryResult;
 /**
  * A table's list query from a parsed request: its WHERE (base, filter, search and cursor), ORDER BY
  * with the list schema's tiebreak (`id` by default), LIMIT, OFFSET and the extras `paginate` reads. A sort,
@@ -130,64 +139,65 @@ function buildListQuery<TTable extends SQLiteTable>(
  * without the tiebreak column
  */
 function buildListQuery<TTable extends SQLiteTable>(
-	opts: BuildListQueryOpts<TTable> & {
-		/** absent: one database's list, which `paginate` pages */
-		merged?: undefined
-	},
-): ListQueryResult
+  opts: BuildListQueryOpts<TTable> & {
+    /** absent: one database's list, which `paginate` pages */
+    merged?: undefined;
+  },
+): ListQueryResult;
 function buildListQuery<TTable extends SQLiteTable>(
-	opts: BuildListQueryOpts<TTable>,
+  opts: BuildListQueryOpts<TTable>,
 ): ListQueryResult | MergedListQueryResult {
-	const { parsed, table } = opts
-	assertSchemaParsed(parsed)
-	const columns = getTableColumns(table) as Record<string, SQLiteColumn>
-	/* the schema decided the order: an empty sort orders by the tiebreak alone, as listOptions and paginate do */
-	const sort = parsed.parsedSort
+  const { parsed, table } = opts;
+  assertSchemaParsed(parsed);
+  const columns = getTableColumns(table) as Record<string, SQLiteColumn>;
+  // the schema decided the order: an empty sort orders by the tiebreak alone, as listOptions and paginate do
+  const sort = parsed.parsedSort;
 
-	const tiebreakColumn = parsed.tiebreak ?? CURSOR_TIEBREAK_COLUMN
-	const idColumn = own(columns, tiebreakColumn)
-	if (parsed.cursor && !idColumn) {
-		/* Without a tiebreak column there is no predicate to add, and ignoring the
-		   cursor would quietly re-serve the first page. This is a schema mistake. */
-		throw new DatabaseError({
-			cause: `Table has no "${tiebreakColumn}" property to break ties on`,
-			errorKey: databaseErrorKeys.CURSOR_PAGINATION_UNSUPPORTED,
-			status: "internal_server_error",
-		})
-	}
+  const tiebreakColumn = parsed.tiebreak ?? CURSOR_TIEBREAK_COLUMN;
+  const idColumn = own(columns, tiebreakColumn);
 
-	if (opts.merged !== undefined) refuseUnmergeable(sort, idColumn, tiebreakColumn)
-	const tiebreak: SortKey | null = idColumn ? { column: idColumn, direction: sort[0]?.direction ?? "desc" } : null
-	const planned = planSort(sort, columns, opts.computedSorts)
-	const keyset: Keyset = {
-		keys: tiebreak ? planned.keys : null,
-		orderBy: tiebreak ? [...planned.orderBy, orderSQL(tiebreak)] : planned.orderBy,
-	}
+  if (parsed.cursor && !idColumn) {
+    // Without a tiebreak column there is no predicate to add, and ignoring the
+    // cursor would quietly re-serve the first page. This is a schema mistake.
+    throw new DatabaseError({
+      cause: `Table has no "${tiebreakColumn}" property to break ties on`,
+      errorKey: databaseErrorKeys.CURSOR_PAGINATION_UNSUPPORTED,
+      status: "internal_server_error",
+    });
+  }
 
-	/*
-	 * a merged list reads a null anchor as a real NULL: its row is on one
-	 * shard only, so every other reads it as gone, and resuming such a shard at -Infinity would repeat
-	 * its rows. A row D1 reads back as null that holds ±Infinity comes back out of its shard's order,
-	 * which paginateMerged refuses
-	 */
-	const nonFinite = opts.merged === undefined ? opts.nonFinite : "exact"
-	/* finish built the pagination its `merged` says: a merged list's query is paged by paginateMerged alone */
-	return finish({
-		cursor: { cursorScope: opts.cursorScope, cursorSecret: opts.cursorSecret, nonFinite },
-		/* its table's, whose columns the cursor binds */
-		dialect: listDialect(Object.values(columns), undefined),
-		keyset,
-		merged: opts.merged,
-		parsed,
-		table,
-		sort,
-		tiebreak,
-		where: [
-			resolveBaseWhere(opts.baseWhere),
-			buildFilterWhere(parsed.filterAst, table, opts),
-			searchWhere(parsed.q?.trim(), opts.search),
-		],
-	}) as ListQueryResult | MergedListQueryResult
+  if (opts.merged !== undefined) refuseUnmergeable(sort, idColumn, tiebreakColumn);
+  const tiebreak: SortKey | null = idColumn ? { column: idColumn, direction: sort[0]?.direction ?? "desc" } : null;
+  const planned = planSort(sort, columns, opts.computedSorts);
+
+  const keyset: Keyset = {
+    keys: tiebreak ? planned.keys : null,
+    orderBy: tiebreak ? [...planned.orderBy, orderSQL(tiebreak)] : planned.orderBy,
+  };
+
+  // a merged list reads a null anchor as a real NULL: its row is on one
+  // shard only, so every other reads it as gone, and resuming such a shard at -Infinity would repeat
+  // its rows. A row D1 reads back as null that holds ±Infinity comes back out of its shard's order,
+  // which paginateMerged refuses
+  const nonFinite = opts.merged === undefined ? opts.nonFinite : "exact";
+
+  // finish built the pagination its `merged` says: a merged list's query is paged by paginateMerged alone
+  return finish({
+    cursor: { cursorScope: opts.cursorScope, cursorSecret: opts.cursorSecret, nonFinite },
+    // its table's, whose columns the cursor binds
+    dialect: listDialect(Object.values(columns), undefined),
+    keyset,
+    merged: opts.merged,
+    parsed,
+    table,
+    sort,
+    tiebreak,
+    where: [
+      resolveBaseWhere(opts.baseWhere),
+      buildFilterWhere(parsed.filterAst, table, opts),
+      searchWhere(parsed.q?.trim(), opts.search),
+    ],
+  }) as ListQueryResult | MergedListQueryResult;
 }
 
 /**
@@ -197,14 +207,16 @@ function buildListQuery<TTable extends SQLiteTable>(
  * an idColumn that is an expression has no name to compare
  */
 function refuseOtherTiebreak(idColumn: SQLWrapper, tiebreak: string | undefined): void {
-	if (tiebreak === undefined || !is(idColumn, Column)) return
-	const key = Object.entries<Column>(getTableColumns(getColumnTable(idColumn))).find(
-		([, column]) => column.name === idColumn.name,
-	)?.[0]
-	if (key === tiebreak) return
-	throw new TypeError(
-		`buildDerivedListQuery: idColumn "${key}" is not the column the list schema breaks ties on, "${tiebreak}": set the schema's tiebreak to "${key}"`,
-	)
+  if (tiebreak === undefined || !is(idColumn, Column)) return;
+
+  const key = Object.entries<Column>(getTableColumns(getColumnTable(idColumn))).find(
+    ([, column]) => column.name === idColumn.name,
+  )?.[0];
+
+  if (key === tiebreak) return;
+  throw new TypeError(
+    `buildDerivedListQuery: idColumn "${key}" is not the column the list schema breaks ties on, "${tiebreak}": set the schema's tiebreak to "${key}"`,
+  );
 }
 
 /**
@@ -214,13 +226,13 @@ function refuseOtherTiebreak(idColumn: SQLWrapper, tiebreak: string | undefined)
  * list given `anchor`, throws a TypeError
  */
 function buildDerivedListQuery<TSortField extends string>(
-	opts: BuildDerivedListQueryOpts<TSortField> & {
-		/** absent: a merged list reads no key back by reference, so it takes `idColumn` */
-		anchor?: never | undefined
-		/** the shards' list, which `paginateMerged` pages */
-		merged: NonNullable<BuildDerivedListQueryOpts<TSortField>["merged"]>
-	},
-): MergedListQueryResult
+  opts: BuildDerivedListQueryOpts<TSortField> & {
+    /** absent: a merged list reads no key back by reference, so it takes `idColumn` */
+    anchor?: never | undefined;
+    /** the shards' list, which `paginateMerged` pages */
+    merged: NonNullable<BuildDerivedListQueryOpts<TSortField>["merged"]>;
+  },
+): MergedListQueryResult;
 /**
  * A list query over rows no one table holds, sorted by the expressions `sortColumns` names and
  * broken by `idColumn` or `anchor`'s, filtered and searched by the SQL your code lowered. A sort
@@ -228,58 +240,64 @@ function buildDerivedListQuery<TSortField extends string>(
  * list given `anchor`, throws a TypeError
  */
 function buildDerivedListQuery<TSortField extends string>(
-	opts: BuildDerivedListQueryOpts<TSortField> & {
-		/** absent: one database's list, which `paginate` pages */
-		merged?: undefined
-	},
-): ListQueryResult
+  opts: BuildDerivedListQueryOpts<TSortField> & {
+    /** absent: one database's list, which `paginate` pages */
+    merged?: undefined;
+  },
+): ListQueryResult;
 function buildDerivedListQuery<TSortField extends string>(
-	opts: BuildDerivedListQueryOpts<TSortField>,
+  opts: BuildDerivedListQueryOpts<TSortField>,
 ): ListQueryResult | MergedListQueryResult {
-	const sort = opts.parsed.parsedSort
-	/* a sort the schema accepted must order the rows: one with no column is a wiring mistake */
-	const keys: SortKey[] = sort.map(({ direction, field, nulls }) => {
-		const column = own(opts.sortColumns, field)
-		if (!column) throw sortNotWired(field, "column")
-		return { column: "type" in column ? new DateKey(column.sql) : column, direction, nulls }
-	})
+  const sort = opts.parsed.parsedSort;
 
-	const idColumn = opts.anchor === undefined ? opts.idColumn : opts.anchor.idColumn
-	refuseOtherTiebreak(idColumn, opts.parsed.tiebreak)
-	const tiebreak: SortKey = { column: idColumn, direction: sort[0]?.direction ?? "desc" }
-	/* every key the list may sort by, not only this request's: a list's dialect is its wiring's, on every page */
-	const wired = Object.values<SQLWrapper | { sql: SQLWrapper; type: "date" }>(opts.sortColumns)
-	const dialect = listDialect([idColumn, ...wired.map((key) => ("type" in key ? key.sql : key))], opts.dialect)
-	const orderBy = orderByKeys(keys, tiebreak)
+  // a sort the schema accepted must order the rows: one with no column is a wiring mistake
+  const keys: SortKey[] = sort.map(({ direction, field, nulls }) => {
+    const column = own(opts.sortColumns, field);
 
-	/* a merged list reads no key back by reference, and a null anchor as a real NULL, as buildListQuery's does */
-	const merged = opts.merged !== undefined
-	if (merged && opts.anchor !== undefined)
-		throw new TypeError("a merged derived list reads no key by reference: give it idColumn, not anchor")
-	return finish({
-		cursor: {
-			cursorScope: opts.cursorScope,
-			cursorSecret: opts.cursorSecret,
-			...(merged ? { nonFinite: "exact" as const } : {}),
-		},
-		dialect,
-		keyset: { keys, orderBy },
-		merged: opts.merged,
-		parsed: opts.parsed,
-		sort,
-		table: merged ? undefined : opts.anchor?.table,
-		tiebreak,
-		where: [resolveBaseWhere(opts.baseWhere), opts.filterWhere, opts.searchWhere],
-	}) as ListQueryResult | MergedListQueryResult
+    if (!column) throw sortNotWired(field, "column");
+
+    return { column: "type" in column ? new DateKey(column.sql) : column, direction, nulls };
+  });
+
+  const idColumn = opts.anchor === undefined ? opts.idColumn : opts.anchor.idColumn;
+  refuseOtherTiebreak(idColumn, opts.parsed.tiebreak);
+  const tiebreak: SortKey = { column: idColumn, direction: sort[0]?.direction ?? "desc" };
+  // every key the list may sort by, not only this request's: a list's dialect is its wiring's, on every page
+  const wired = Object.values<SQLWrapper | { sql: SQLWrapper; type: "date" }>(opts.sortColumns);
+  const dialect = listDialect([idColumn, ...wired.map((key) => ("type" in key ? key.sql : key))], opts.dialect);
+  const orderBy = orderByKeys(keys, tiebreak);
+
+  // a merged list reads no key back by reference, and a null anchor as a real NULL, as buildListQuery's does
+  const merged = opts.merged !== undefined;
+
+  if (merged && opts.anchor !== undefined)
+    throw new TypeError("a merged derived list reads no key by reference: give it idColumn, not anchor");
+
+  return finish({
+    cursor: {
+      cursorScope: opts.cursorScope,
+      cursorSecret: opts.cursorSecret,
+      ...(merged ? { nonFinite: "exact" as const } : {}),
+    },
+    dialect,
+    keyset: { keys, orderBy },
+    merged: opts.merged,
+    parsed: opts.parsed,
+    sort,
+    table: merged ? undefined : opts.anchor?.table,
+    tiebreak,
+    where: [resolveBaseWhere(opts.baseWhere), opts.filterWhere, opts.searchWhere],
+  }) as ListQueryResult | MergedListQueryResult;
 }
 
-export { applyListQuery } from "./apply-list-query.ts"
+export { applyListQuery } from "./apply-list-query.ts";
+
 export {
-	buildDerivedListQuery,
-	buildListQuery,
-	type BuildDerivedListQueryOpts,
-	type BuildListQueryOpts,
-	type ListExtras,
-	type ListQueryResult,
-	type MergedListQueryResult,
-}
+  buildDerivedListQuery,
+  buildListQuery,
+  type BuildDerivedListQueryOpts,
+  type BuildListQueryOpts,
+  type ListExtras,
+  type ListQueryResult,
+  type MergedListQueryResult,
+};

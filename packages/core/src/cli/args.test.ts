@@ -1,145 +1,147 @@
-import { describe, expect, it } from "vitest"
-import { commandHelp, OPTIONS, optionsHelp, parseArgs, usageOf } from "./args.ts"
-import { CliError, ShowHelp } from "./output.ts"
+import { describe, expect, it } from "vitest";
+
+import { commandHelp, OPTIONS, optionsHelp, parseArgs, usageOf } from "./args.ts";
+import { CliError, ShowHelp } from "./output.ts";
 
 describe("parseArgs", () => {
-	it("reads positionals, value options in both forms, short aliases and flags", () => {
-		expect(parseArgs(["core", "--dir", "m", "--file=one.sql", "-e", "prod", "-y", "--local"], "migrate apply")).toEqual(
-			{
-				options: { dir: "m", env: "prod", file: "one.sql", local: true, yes: true },
-				positionals: ["core"],
-			},
-		)
-		expect(parseArgs(["-"], "codegen").positionals).toEqual(["-"])
-	})
+  it("reads positionals, value options in both forms, short aliases and flags", () => {
+    expect(parseArgs(["core", "--dir", "m", "--file=one.sql", "-e", "prod", "-y", "--local"], "migrate apply")).toEqual(
+      {
+        options: { dir: "m", env: "prod", file: "one.sql", local: true, yes: true },
+        positionals: ["core"],
+      },
+    );
+    expect(parseArgs(["-"], "codegen").positionals).toEqual(["-"]);
+  });
 
-	it("takes an option that stands alone with no positional, and any other beside one", () => {
-		expect(parseArgs(["--tables", "t.ts", "-g", "dtos"], "codegen").options).toEqual({
-			generator: "dtos",
-			tables: "t.ts",
-		})
-		expect(parseArgs(["core", "-g", "dtos"], "codegen").positionals).toEqual(["core"])
-		expect(() => parseArgs(["core", "--tables=t.ts"], "codegen")).toThrow(
-			new CliError("Usage: database codegen --tables <path> [-g <name>]"),
-		)
-	})
+  it("takes an option that stands alone with no positional, and any other beside one", () => {
+    expect(parseArgs(["--tables", "t.ts", "-g", "dtos"], "codegen").options).toEqual({
+      generator: "dtos",
+      tables: "t.ts",
+    });
+    expect(parseArgs(["core", "-g", "dtos"], "codegen").positionals).toEqual(["core"]);
+    expect(() => parseArgs(["core", "--tables=t.ts"], "codegen")).toThrow(
+      new CliError("Usage: database codegen --tables <path> [-g <name>]"),
+    );
+  });
 
-	it.each([
-		[["--nope"], "Unknown option: --nope"],
-		[["-x"], "Unknown option: -x"],
-		[["--yes"], "--yes does not apply to codegen"],
-		[["-g"], "-g needs a value"],
-		[["-g", "--tables"], "-g needs a value"],
-		[["--tables="], "--tables needs a value"],
-	])("refuses %j for codegen", (argv, message) => {
-		expect(() => parseArgs(argv, "codegen")).toThrow(new CliError(message))
-	})
-})
+  it.each([
+    [["--nope"], "Unknown option: --nope"],
+    [["-x"], "Unknown option: -x"],
+    [["--yes"], "--yes does not apply to codegen"],
+    [["-g"], "-g needs a value"],
+    [["-g", "--tables"], "-g needs a value"],
+    [["--tables="], "--tables needs a value"],
+  ])("refuses %j for codegen", (argv, message) => {
+    expect(() => parseArgs(argv, "codegen")).toThrow(new CliError(message));
+  });
+});
 
-/* P17 of the 0.14.1 review: --yes=false read as --yes, approving what its writer meant to refuse */
+// P17 of the 0.14.1 review: --yes=false read as --yes, approving what its writer meant to refuse
 describe("parseArgs: a flag given a value", () => {
-	it("refuses it, whatever the value, naming the flag", () => {
-		for (const arg of ["--yes=false", "--yes=no", "--json=0", "--local=true"])
-			expect(() => parseArgs(["core", arg], "migrate apply"), arg).toThrow(
-				new CliError(`${arg.slice(0, arg.indexOf("="))} is a flag and takes no value; give it alone, or leave it out`),
-			)
-	})
-})
+  it("refuses it, whatever the value, naming the flag", () => {
+    for (const arg of ["--yes=false", "--yes=no", "--json=0", "--local=true"]) {
+      expect(() => parseArgs(["core", arg], "migrate apply"), arg).toThrow(
+        new CliError(`${arg.slice(0, arg.indexOf("="))} is a flag and takes no value; give it alone, or leave it out`),
+      );
+    }
+  });
+});
 
 describe("optionsHelp", () => {
-	it("lists every declared option with its value, aliases and commands", () => {
-		const lines = optionsHelp()
-		expect(lines).toHaveLength(OPTIONS.length + 2)
-		expect(lines.find((line) => line.includes("--generator"))).toMatch(
-			/^ {2}-g, --generator <name> +Run one generator only \[codegen\]$/,
-		)
-		expect(lines.find((line) => line.includes("--local"))).toMatch(
-			/^ {2}--local +.*\[migrate apply, migrate baseline, migrate check, migrate status\]$/,
-		)
-		const migrating = /\[migrate apply, migrate baseline, migrate check, migrate status\]$/
-		expect(lines.find((line) => line.includes("--env"))).toMatch(
-			/\[migrate apply, migrate baseline, migrate check, migrate diff, migrate status\]$/,
-		)
-		expect(lines.find((line) => line.includes("--dir"))).toMatch(migrating)
-		expect(lines.slice(-2)).toEqual([
-			expect.stringMatching(/^ {2}-h, --help +Show this help$/),
-			expect.stringMatching(/^ {2}--version +Print database's version$/),
-		])
-	})
-})
+  it("lists every declared option with its value, aliases and commands", () => {
+    const lines = optionsHelp();
+    expect(lines).toHaveLength(OPTIONS.length + 2);
+    expect(lines.find((line) => line.includes("--generator"))).toMatch(
+      /^ {2}-g, --generator <name> +Run one generator only \[codegen\]$/,
+    );
+    expect(lines.find((line) => line.includes("--local"))).toMatch(
+      /^ {2}--local +.*\[migrate apply, migrate baseline, migrate check, migrate status\]$/,
+    );
+    const migrating = /\[migrate apply, migrate baseline, migrate check, migrate status\]$/;
+    expect(lines.find((line) => line.includes("--env"))).toMatch(
+      /\[migrate apply, migrate baseline, migrate check, migrate diff, migrate status\]$/,
+    );
+    expect(lines.find((line) => line.includes("--dir"))).toMatch(migrating);
+    expect(lines.slice(-2)).toEqual([
+      expect.stringMatching(/^ {2}-h, --help +Show this help$/),
+      expect.stringMatching(/^ {2}--version +Print database's version$/),
+    ]);
+  });
+});
 
-/* P13 ⊃ C10 of the 0.15.0 review: a second -g or --env replaced the first without a word */
+// P13 ⊃ C10 of the 0.15.0 review: a second -g or --env replaced the first without a word
 describe("parseArgs: an option given twice", () => {
-	it.each([
-		[["-g", "dtos", "-g", "manifest"], "codegen" as const, "--generator"],
-		[["db", "--env", "a", "-e", "b"], "migrate status" as const, "--env"],
-		[["db", "--yes", "-y"], "migrate apply" as const, "--yes"],
-	])("refuses %j, naming the option", (argv, command, option) => {
-		expect(() => parseArgs(argv, command)).toThrow(`${option} is given twice; give it once`)
-	})
-})
+  it.each([
+    [["-g", "dtos", "-g", "manifest"], "codegen" as const, "--generator"],
+    [["db", "--env", "a", "-e", "b"], "migrate status" as const, "--env"],
+    [["db", "--yes", "-y"], "migrate apply" as const, "--yes"],
+  ])("refuses %j, naming the option", (argv, command, option) => {
+    expect(() => parseArgs(argv, command)).toThrow(`${option} is given twice; give it once`);
+  });
+});
 
-/* P13 ⊃ K19: -h and --help at any position print that command's usage, built from OPTIONS */
+// P13 ⊃ K19: -h and --help at any position print that command's usage, built from OPTIONS
 describe("parseArgs: -h and --help", () => {
-	it.each([["--help"], ["db", "-h"], ["-e", "x", "--help", "db"]])("shows the command's help for %j", (...argv) => {
-		expect(() => parseArgs(argv, "migrate status")).toThrow(ShowHelp)
-	})
+  it.each([["--help"], ["db", "-h"], ["-e", "x", "--help", "db"]])("shows the command's help for %j", (...argv) => {
+    expect(() => parseArgs(argv, "migrate status")).toThrow(ShowHelp);
+  });
 
-	it("builds a command's usage and options from what it takes", () => {
-		expect(usageOf("migrate status")).toBe(
-			"Usage: database migrate status <database> [-e <name>] [--dir <path>] [--local] [--json]",
-		)
-		expect(usageOf("migrate diff")).toBe("Usage: database migrate diff <database> [name] [-e <name>] [--dry-run]")
-		expect(commandHelp("migrate init").split("\n")).toEqual([
-			"Usage: database migrate init [--dialect <name>]",
-			"",
-			"Options:",
-			"  --dialect <name>  The project's dialect: sqlite (default) or postgres",
-			"  -h, --help        Show this help",
-		])
-	})
-})
+  it("builds a command's usage and options from what it takes", () => {
+    expect(usageOf("migrate status")).toBe(
+      "Usage: database migrate status <database> [-e <name>] [--dir <path>] [--local] [--json]",
+    );
+    expect(usageOf("migrate diff")).toBe("Usage: database migrate diff <database> [name] [-e <name>] [--dry-run]");
+    expect(commandHelp("migrate init").split("\n")).toEqual([
+      "Usage: database migrate init [--dialect <name>]",
+      "",
+      "Options:",
+      "  --dialect <name>  The project's dialect: sqlite (default) or postgres",
+      "  -h, --help        Show this help",
+    ]);
+  });
+});
 
-/* r18 P17: a positional a command does not read is refused with its usage, never dropped */
+// r18 P17: a positional a command does not read is refused with its usage, never dropped
 describe("parseArgs: positionals past what a command reads", () => {
-	it.each([
-		[["postgres"], "migrate init" as const, "Usage: database migrate init"],
-		[["core", "add", "users"], "migrate diff" as const, "Usage: database migrate diff <database> [name]"],
-		[["core", "prod"], "migrate status" as const, "Usage: database migrate status <database>"],
-	])("refuses %j on %s", (argv, command, usage) => {
-		expect(() => parseArgs(argv, command)).toThrow(usage)
-	})
+  it.each([
+    [["postgres"], "migrate init" as const, "Usage: database migrate init"],
+    [["core", "add", "users"], "migrate diff" as const, "Usage: database migrate diff <database> [name]"],
+    [["core", "prod"], "migrate status" as const, "Usage: database migrate status <database>"],
+  ])("refuses %j on %s", (argv, command, usage) => {
+    expect(() => parseArgs(argv, command)).toThrow(usage);
+  });
 
-	it("takes as many as a command reads, and any number for one that reads a list", () => {
-		expect(parseArgs(["core", "add"], "migrate diff").positionals).toEqual(["core", "add"])
-		expect(parseArgs(["core", "growth", "shard-0"], "codegen").positionals).toEqual(["core", "growth", "shard-0"])
-	})
-})
+  it("takes as many as a command reads, and any number for one that reads a list", () => {
+    expect(parseArgs(["core", "add"], "migrate diff").positionals).toEqual(["core", "add"]);
+    expect(parseArgs(["core", "growth", "shard-0"], "codegen").positionals).toEqual(["core", "growth", "shard-0"]);
+  });
+});
 
-/* KC2 of r22b: a bare migrate diff ignored database.migrate.config.ts and wrote the whole schema into a new ./atlas-migrations */
+// KC2 of r22b: a bare migrate diff ignored database.migrate.config.ts and wrote the whole schema into a new ./atlas-migrations
 describe("required positionals are enforced for every command (KC2; sibling: the `[…]` maximum)", () => {
-	it.each([
-		["migrate apply" as const, "Usage: database migrate apply <database>"],
-		["migrate baseline" as const, "Usage: database migrate baseline <database>"],
-		["migrate check" as const, "Usage: database migrate check <database>"],
-		["migrate diff" as const, "Usage: database migrate diff <database> [name]"],
-		["migrate status" as const, "Usage: database migrate status <database>"],
-	])("refuses %s with no database, with its usage", (command, usage) => {
-		expect(() => parseArgs([], command)).toThrow(usage)
-	})
+  it.each([
+    ["migrate apply" as const, "Usage: database migrate apply <database>"],
+    ["migrate baseline" as const, "Usage: database migrate baseline <database>"],
+    ["migrate check" as const, "Usage: database migrate check <database>"],
+    ["migrate diff" as const, "Usage: database migrate diff <database> [name]"],
+    ["migrate status" as const, "Usage: database migrate status <database>"],
+  ])("refuses %s with no database, with its usage", (command, usage) => {
+    expect(() => parseArgs([], command)).toThrow(usage);
+  });
 
-	/* KC8 of r22b: `database migrate status ""` looked up a database named nothing */
-	it.each([
-		[["core", ""], "migrate diff" as const, "Usage: database migrate diff <database> [name]"],
-		[[""], "migrate status" as const, "Usage: database migrate status <database>"],
-		[[""], "codegen" as const, "Usage: database codegen [database...]"],
-	])("refuses an empty positional, %j on %s, with its usage", (argv, command, usage) => {
-		expect(() => parseArgs(argv, command)).toThrow(usage)
-	})
+  // KC8 of r22b: `database migrate status ""` looked up a database named nothing
+  it.each([
+    [["core", ""], "migrate diff" as const, "Usage: database migrate diff <database> [name]"],
+    [[""], "migrate status" as const, "Usage: database migrate status <database>"],
+    [[""], "codegen" as const, "Usage: database codegen [database...]"],
+  ])("refuses an empty positional, %j on %s, with its usage", (argv, command, usage) => {
+    expect(() => parseArgs(argv, command)).toThrow(usage);
+  });
 
-	it("takes none for codegen and init, which require none, and none beside an option that stands alone", () => {
-		expect(parseArgs([], "codegen").positionals).toEqual([])
-		expect(parseArgs([], "migrate init").positionals).toEqual([])
-		expect(parseArgs(["--tables", "t.ts"], "codegen").positionals).toEqual([])
-	})
-})
+  it("takes none for codegen and init, which require none, and none beside an option that stands alone", () => {
+    expect(parseArgs([], "codegen").positionals).toEqual([]);
+    expect(parseArgs([], "migrate init").positionals).toEqual([]);
+    expect(parseArgs(["--tables", "t.ts"], "codegen").positionals).toEqual([]);
+  });
+});

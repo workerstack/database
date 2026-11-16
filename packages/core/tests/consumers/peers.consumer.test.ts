@@ -4,459 +4,480 @@
  * node_modules); a Vite build and a wrangler bundle carry no tooling; tsc compiles every subpath
  * under strict flags in a bundler project and in a nodenext project.
  */
-import { chmodSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
-import { dirname, join } from "node:path"
-import { Miniflare } from "miniflare"
-import semver from "semver"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { PEERS } from "../../src/migrate/core/peer-needs.ts"
-import { acquirePgRunLock, PG_LOCK_WAIT_MS } from "../support/pg-lock.ts"
-import { pgUrl } from "../support/pg-url.ts"
-import { APP, REEXPORT_ALL } from "./fixture.ts"
-import {
-	admittedOf,
-	failures,
-	floorOf,
-	IMPORT_ALL,
-	installedVersion,
-	ok,
-	pack,
-	peerRange,
-	removePackage,
-	REQUIRED_PEERS,
-	run,
-	type Stage,
-	stage,
-	stageLine,
-} from "./stage.ts"
+import { chmodSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 
-let tarball: string
+import { Miniflare } from "miniflare";
+import semver from "semver";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+import { PEERS } from "../../src/migrate/core/peer-needs.ts";
+import { acquirePgRunLock, PG_LOCK_WAIT_MS } from "../support/pg-lock.ts";
+import { pgUrl } from "../support/pg-url.ts";
+import { APP, REEXPORT_ALL } from "./fixture.ts";
+import {
+  admittedOf,
+  failures,
+  floorOf,
+  IMPORT_ALL,
+  installedVersion,
+  ok,
+  pack,
+  peerRange,
+  removePackage,
+  REQUIRED_PEERS,
+  run,
+  type Stage,
+  stage,
+  stageLine,
+} from "./stage.ts";
+
+let tarball: string;
+
 beforeAll(() => {
-	tarball = pack()
-})
+  tarball = pack();
+});
 
 /** database's files in a `tsc --listFiles` run: its declarations, and any of its source tsc loaded */
 function databaseFiles(output: string): { declarations: string[]; source: string[] } {
-	const files = output.split("\n").filter((line) => line.includes("node_modules/@workerstack/database/"))
-	return {
-		declarations: files.filter((file) => file.endsWith(".d.ts")),
-		source: files.filter((file) => file.endsWith(".ts") && !file.endsWith(".d.ts")),
-	}
+  const files = output.split("\n").filter((line) => line.includes("node_modules/@workerstack/database/"));
+
+  return {
+    declarations: files.filter((file) => file.endsWith(".d.ts")),
+    source: files.filter((file) => file.endsWith(".ts") && !file.endsWith(".d.ts")),
+  };
 }
 
-/* every subpath loads without ts-morph: codegen loads it in the child that reads the tables (codegen/runtime/load.ts) */
-const NEEDS_TS_MORPH: string[] = []
+// every subpath loads without ts-morph: codegen loads it in the child that reads the tables (codegen/runtime/load.ts)
+const NEEDS_TS_MORPH: string[] = [];
 
 describe.each([
-	["required", NEEDS_TS_MORPH],
-	["all", []],
+  ["required", NEEDS_TS_MORPH],
+  ["all", []],
 ] as const)("a consumer with %s peers", (peers, unavailable) => {
-	let app: Stage
-	beforeAll(() => {
-		app = stage(tarball, peers, { ...APP, "import-all.mjs": IMPORT_ALL, "reexport-all.mjs": REEXPORT_ALL })
-	})
-	afterAll(() => app?.dispose())
+  let app: Stage;
+  beforeAll(() => {
+    app = stage(tarball, peers, { ...APP, "import-all.mjs": IMPORT_ALL, "reexport-all.mjs": REEXPORT_ALL });
+  });
+  afterAll(() => app?.dispose());
 
-	it.each([
-		["bun", "bun", ["import-all.mjs"]],
-		["tsx", "npx", ["tsx", "import-all.mjs"]],
-	] as const)("imports every subpath under %s, but for those whose optional peer is absent", (_runtime, cmd, args) => {
-		const output = ok(run(app.dir, cmd, args), `${cmd} import-all`)
-		expect(failures(output)).toEqual([...unavailable])
-		for (const line of output.split("\n").filter((l) => l.startsWith("FAIL "))) expect(line).toContain("ts-morph")
-	})
+  it.each([
+    ["bun", "bun", ["import-all.mjs"]],
+    ["tsx", "npx", ["tsx", "import-all.mjs"]],
+  ] as const)("imports every subpath under %s, but for those whose optional peer is absent", (_runtime, cmd, args) => {
+    const output = ok(run(app.dir, cmd, args), `${cmd} import-all`);
+    expect(failures(output)).toEqual([...unavailable]);
 
-	it("bundles with Vite, everything inlined, and no tooling in the bundle", () => {
-		ok(run(app.dir, "npx", ["vite", "build", "--ssr", "src/worker.ts"]), "vite build")
-		const files = readdirSync(join(app.dir, "dist-vite")).filter((file) => file.endsWith(".js"))
-		expect(files.length).toBeGreaterThan(0)
-		const bundle = files.map((file) => readFileSync(join(app.dir, "dist-vite", file), "utf8")).join("\n")
-		/* database's own code is in it, not left external */
-		expect(bundle).toContain("invalid_cursor")
-		expect(bundle).not.toMatch(/ts-morph|child_process|node:fs/)
-	})
+    for (const line of output.split("\n").filter((l) => l.startsWith("FAIL "))) expect(line).toContain("ts-morph");
+  });
 
-	it("bundles a Worker with wrangler", () => {
-		expect(
-			ok(run(app.dir, "npx", ["wrangler", "deploy", "--dry-run", "--outdir", "dist-worker"]), "wrangler"),
-		).toContain("--dry-run: exiting now.")
-	})
+  it("bundles with Vite, everything inlined, and no tooling in the bundle", () => {
+    ok(run(app.dir, "npx", ["vite", "build", "--ssr", "src/worker.ts"]), "vite build");
+    const files = readdirSync(join(app.dir, "dist-vite")).filter((file) => file.endsWith(".js"));
+    expect(files.length).toBeGreaterThan(0);
+    const bundle = files.map((file) => readFileSync(join(app.dir, "dist-vite", file), "utf8")).join("\n");
+    // database's own code is in it, not left external
+    expect(bundle).toContain("invalid_cursor");
+    expect(bundle).not.toMatch(/ts-morph|child_process|node:fs/);
+  });
 
-	/* 4.18: workerd refuses code from strings, so no database schema may build any, nor bundle zod's compiler */
-	it.runIf(peers === "required")(
-		"runs on workerd, its schemas built and parsed with no code from a string",
-		async () => {
-			const args = [
-				"wrangler",
-				"deploy",
-				"src/no-eval.ts",
-				"--name",
-				"no-eval",
-				"--dry-run",
-				"--outdir",
-				"dist-no-eval",
-			]
-			ok(run(app.dir, "npx", args), "wrangler no-eval")
-			const scriptPath = join(app.dir, "dist-no-eval", "no-eval.js")
-			expect(readFileSync(scriptPath, "utf8")).not.toContain("ZodCompileUnsupportedError")
-			/* a date every workerd binary takes, so the test does not follow miniflare's version */
-			const worker = new Miniflare({
-				compatibilityDate: "2025-01-01",
-				modules: true,
-				modulesRoot: dirname(scriptPath),
-				scriptPath,
-			})
-			try {
-				const response = await worker.dispatchFetch("http://database.test/")
-				expect(await response.json()).toEqual({ made: 0, parsed: [true, true, true] })
-			} finally {
-				await worker.dispose()
-			}
-		},
-	)
+  it("bundles a Worker with wrangler", () => {
+    expect(
+      ok(run(app.dir, "npx", ["wrangler", "deploy", "--dry-run", "--outdir", "dist-worker"]), "wrangler"),
+    ).toContain("--dry-run: exiting now.");
+  });
 
-	/* K2 of r17: a D1-only project, without the optional peers, type-checks its migrate config */
-	it("type-checks a migrate config with no optional peer's types", () => {
-		const result = run(app.dir, "npx", ["tsc", "-p", "tsconfig.migrate.json"])
-		expect(result.output.split("\n").filter((line) => line.includes("error TS"))).toEqual([])
-		expect(result.status).toBe(0)
-	})
+  // 4.18: workerd refuses code from strings, so no database schema may build any, nor bundle zod's compiler
+  it.runIf(peers === "required")(
+    "runs on workerd, its schemas built and parsed with no code from a string",
+    async () => {
+      const args = [
+        "wrangler",
+        "deploy",
+        "src/no-eval.ts",
+        "--name",
+        "no-eval",
+        "--dry-run",
+        "--outdir",
+        "dist-no-eval",
+      ];
 
-	/*
-	 * K1 of r20: 0.18.0 gave 218 TS5097 here, one per `./x.ts` specifier of database's source the Worker
-	 * reached. K3 of r21: the Worker's globals are what `wrangler types` wrote, and no file of
-	 * @cloudflare/workers-types, which the app has installed, is read for database's D1 modules, whose
-	 * types c3/src/d1.ts proves held by the wrong calls each refused
-	 */
-	it.runIf(peers === "all").each(["c3/tsconfig.json", "c3/tsconfig.strict.json"])(
-		"type-checks a stock create-cloudflare Worker from database's declarations alone (%s)",
-		(config) => {
-			const result = run(app.dir, "npx", ["tsc", "-p", config, "--listFiles"])
-			expect(result.output.split("\n").filter((line) => line.includes("error TS"))).toEqual([])
-			expect(result.status).toBe(0)
-			expect(databaseFiles(result.output).source).toEqual([])
-			expect(databaseFiles(result.output).declarations.length).toBeGreaterThan(0)
-			expect(result.output.split("\n").filter((line) => line.includes("@cloudflare/workers-types"))).toEqual([])
-		},
-	)
+      ok(run(app.dir, "npx", args), "wrangler no-eval");
+      const scriptPath = join(app.dir, "dist-no-eval", "no-eval.js");
+      expect(readFileSync(scriptPath, "utf8")).not.toContain("ZodCompileUnsupportedError");
 
-	it
-		.runIf(peers === "all")
-		.each([
-			"tsconfig.bundler.json",
-			"tsconfig.declarations.json",
-			"tsconfig.nodenext.json",
-			"tsconfig.worker.json",
-			"tsconfig.worker-es2022.json",
-			"tsconfig.worker-node.json",
-		])("type-checks every subpath under strict flags (%s)", (config) => {
-		const result = run(app.dir, "npx", ["tsc", "-p", config])
-		expect(result.output.split("\n").filter((line) => line.includes("error TS"))).toEqual([])
-		expect(result.status).toBe(0)
-	})
+      // a date every workerd binary takes, so the test does not follow miniflare's version
+      const worker = new Miniflare({
+        compatibilityDate: "2025-01-01",
+        modules: true,
+        modulesRoot: dirname(scriptPath),
+        scriptPath,
+      });
 
-	/* KT4 of r22b: 0.20.1's queryHelpers and resourceOutcome named types no subpath exports, and a project emitting declarations failed with TS2742 */
-	it.runIf(peers === "all")("emits declarations for a module re-exporting every value database exports", () => {
-		const count = Number(ok(run(app.dir, "bun", ["reexport-all.mjs"]), "reexport-all").trim())
-		expect(count).toBeGreaterThan(180)
-		const result = run(app.dir, "npx", ["tsc", "-p", "tsconfig.reexport.json"])
-		expect(result.output.split("\n").filter((line) => line.includes("error TS"))).toEqual([])
-		expect(result.status).toBe(0)
-	})
+      try {
+        const response = await worker.dispatchFetch("http://database.test/");
+        expect(await response.json()).toEqual({ made: 0, parsed: [true, true, true] });
+      } finally {
+        await worker.dispose();
+      }
+    },
+  );
 
-	/*
-	 * An install that never ran prepack (a `file:` or link install of the tree, a git dependency) has
-	 * no types/: tsc then takes the `default` condition, database's source, as every release before 0.19
-	 * did. Last in its describe, since it takes types/ out of the installed database.
-	 */
-	it.runIf(peers === "all")("falls back to database's source where its declarations were never emitted", () => {
-		const packed = run(app.dir, "npx", ["tsc", "-p", "tsconfig.bundler.json", "--listFiles"])
-		expect(databaseFiles(packed.output)).toMatchObject({ source: [] })
-		rmSync(join(app.dir, "node_modules/@workerstack/database/types"), { force: true, recursive: true })
-		const unpacked = run(app.dir, "npx", ["tsc", "-p", "tsconfig.bundler.json", "--listFiles"])
-		expect(unpacked.output.split("\n").filter((line) => line.includes("error TS"))).toEqual([])
-		expect(unpacked.status).toBe(0)
-		expect(databaseFiles(unpacked.output).declarations).toEqual([])
-		expect(databaseFiles(unpacked.output).source.length).toBeGreaterThan(0)
-	})
-})
+  // K2 of r17: a D1-only project, without the optional peers, type-checks its migrate config
+  it("type-checks a migrate config with no optional peer's types", () => {
+    const result = run(app.dir, "npx", ["tsc", "-p", "tsconfig.migrate.json"]);
+    expect(result.output.split("\n").filter((line) => line.includes("error TS"))).toEqual([]);
+    expect(result.status).toBe(0);
+  });
 
-/* K8 of r20: every peer at the floor database states installs, and database type-checks against it */
+  // K1 of r20: 0.18.0 gave 218 TS5097 here, one per `./x.ts` specifier of database's source the Worker
+  // reached. K3 of r21: the Worker's globals are what `wrangler types` wrote, and no file of
+  // @cloudflare/workers-types, which the app has installed, is read for database's D1 modules, whose
+  // types c3/src/d1.ts proves held by the wrong calls each refused
+  it.runIf(peers === "all").each(["c3/tsconfig.json", "c3/tsconfig.strict.json"])(
+    "type-checks a stock create-cloudflare Worker from database's declarations alone (%s)",
+    (config) => {
+      const result = run(app.dir, "npx", ["tsc", "-p", config, "--listFiles"]);
+      expect(result.output.split("\n").filter((line) => line.includes("error TS"))).toEqual([]);
+      expect(result.status).toBe(0);
+      expect(databaseFiles(result.output).source).toEqual([]);
+      expect(databaseFiles(result.output).declarations.length).toBeGreaterThan(0);
+      expect(result.output.split("\n").filter((line) => line.includes("@cloudflare/workers-types"))).toEqual([]);
+    },
+  );
+
+  it
+    .runIf(peers === "all")
+    .each([
+      "tsconfig.bundler.json",
+      "tsconfig.declarations.json",
+      "tsconfig.nodenext.json",
+      "tsconfig.worker.json",
+      "tsconfig.worker-es2022.json",
+      "tsconfig.worker-node.json",
+    ])("type-checks every subpath under strict flags (%s)", (config) => {
+    const result = run(app.dir, "npx", ["tsc", "-p", config]);
+    expect(result.output.split("\n").filter((line) => line.includes("error TS"))).toEqual([]);
+    expect(result.status).toBe(0);
+  });
+
+  // KT4 of r22b: 0.20.1's queryHelpers and resourceOutcome named types no subpath exports, and a project emitting declarations failed with TS2742
+  it.runIf(peers === "all")("emits declarations for a module re-exporting every value database exports", () => {
+    const count = Number(ok(run(app.dir, "bun", ["reexport-all.mjs"]), "reexport-all").trim());
+    expect(count).toBeGreaterThan(180);
+    const result = run(app.dir, "npx", ["tsc", "-p", "tsconfig.reexport.json"]);
+    expect(result.output.split("\n").filter((line) => line.includes("error TS"))).toEqual([]);
+    expect(result.status).toBe(0);
+  });
+
+  // An install that never ran prepack (a `file:` or link install of the tree, a git dependency) has
+  // no types/: tsc then takes the `default` condition, database's source, as every release before 0.19
+  // did. Last in its describe, since it takes types/ out of the installed database.
+  it.runIf(peers === "all")("falls back to database's source where its declarations were never emitted", () => {
+    const packed = run(app.dir, "npx", ["tsc", "-p", "tsconfig.bundler.json", "--listFiles"]);
+    expect(databaseFiles(packed.output)).toMatchObject({ source: [] });
+    rmSync(join(app.dir, "node_modules/@workerstack/database/types"), { force: true, recursive: true });
+    const unpacked = run(app.dir, "npx", ["tsc", "-p", "tsconfig.bundler.json", "--listFiles"]);
+    expect(unpacked.output.split("\n").filter((line) => line.includes("error TS"))).toEqual([]);
+    expect(unpacked.status).toBe(0);
+    expect(databaseFiles(unpacked.output).declarations).toEqual([]);
+    expect(databaseFiles(unpacked.output).source.length).toBeGreaterThan(0);
+  });
+});
+
+// K8 of r20: every peer at the floor database states installs, and database type-checks against it
 describe("a consumer at database's peer floors", () => {
-	let app: Stage
-	beforeAll(() => {
-		app = stage(tarball, "all", APP, "floor")
-	})
-	afterAll(() => app?.dispose())
+  let app: Stage;
+  beforeAll(() => {
+    app = stage(tarball, "all", APP, "floor");
+  });
+  afterAll(() => app?.dispose());
 
-	it("type-checks every subpath under strict flags, on the TypeScript at database's floor", () => {
-		expect(installedVersion(app.dir, "typescript")).toBe(floorOf(peerRange("typescript")))
-		const result = run(app.dir, "npx", ["tsc", "-p", "tsconfig.bundler.json"])
-		expect(result.output.split("\n").filter((line) => line.includes("error TS"))).toEqual([])
-		expect(result.status).toBe(0)
-		/* KT2's sibling: the floor reads database's declarations themselves without an error, NoInfer and Uint8Array<ArrayBuffer> among them */
-		const checked = tscErrors(app.dir, false)
-		expect(checked.filter((line) => line.includes("/@workerstack/database/"))).toEqual([])
-	})
-})
+  it("type-checks every subpath under strict flags, on the TypeScript at database's floor", () => {
+    expect(installedVersion(app.dir, "typescript")).toBe(floorOf(peerRange("typescript")));
+    const result = run(app.dir, "npx", ["tsc", "-p", "tsconfig.bundler.json"]);
+    expect(result.output.split("\n").filter((line) => line.includes("error TS"))).toEqual([]);
+    expect(result.status).toBe(0);
+    // KT2's sibling: the floor reads database's declarations themselves without an error, NoInfer and Uint8Array<ArrayBuffer> among them
+    const checked = tscErrors(app.dir, false);
+    expect(checked.filter((line) => line.includes("/@workerstack/database/"))).toEqual([]);
+  });
+});
 
 /** The `error TS` lines of the bundler project's tsc in `dir`, with `skipLibCheck` as given */
 const tscErrors = (dir: string, skipLibCheck: boolean): string[] =>
-	run(dir, "npx", ["tsc", "-p", "tsconfig.bundler.json", "--skipLibCheck", String(skipLibCheck)])
-		.output.split("\n")
-		.filter((line) => line.includes("error TS"))
+  run(dir, "npx", ["tsc", "-p", "tsconfig.bundler.json", "--skipLibCheck", String(skipLibCheck)])
+    .output.split("\n")
+    .filter((line) => line.includes("error TS"));
 
-/* KT2 of r22b: below 5.7 tsc read database's NoInfer and Uint8Array<ArrayBuffer> as any, and a typo compiled */
+// KT2 of r22b: below 5.7 tsc read database's NoInfer and Uint8Array<ArrayBuffer> as any, and a typo compiled
 describe("a consumer on TypeScript 5.6.3, below database's floor", () => {
-	let app: Stage
-	beforeAll(() => {
-		app = stage(tarball, "all", APP, { pin: { typescript: "5.6.3" } })
-	})
-	afterAll(() => app?.dispose())
+  let app: Stage;
+  beforeAll(() => {
+    app = stage(tarball, "all", APP, { pin: { typescript: "5.6.3" } });
+  });
+  afterAll(() => app?.dispose());
 
-	it.each([true, false])(
-		"fails at each import of database, in the project's own file, with skipLibCheck %s",
-		(skip) => {
-			expect(installedVersion(app.dir, "typescript")).toBe("5.6.3")
-			const errors = tscErrors(app.dir, skip)
-			/* each import of every subpath names the floor, whose comment says to upgrade */
-			const floor = join(app.dir, "node_modules/@workerstack/database/types/typescript-floor-types.d.ts")
-			expect(
-				errors.filter((line) => line.endsWith(`error TS2306: File '${floor}' is not a module.`)).length,
-			).toBeGreaterThan(20)
-			/* the two checks it lost now fail too: their imports are any, so each @ts-expect-error is unused */
-			const lines = errors.filter((line) => line.startsWith("src/floor.ts("))
-			expect(lines.map((line) => line.replace(/^src\/floor\.ts\((\d+),\d+\): error (TS\d+).*$/, "$1 $2"))).toEqual([
-				"1 TS2306",
-				"2 TS2306",
-				"7 TS2578",
-				"12 TS2578",
-			])
-			/* and nothing inside database's declarations is read */
-			expect(errors.filter((line) => line.includes("/@workerstack/database/") && !line.includes("TS2306"))).toEqual([])
-		},
-	)
+  it.each([true, false])(
+    "fails at each import of database, in the project's own file, with skipLibCheck %s",
+    (skip) => {
+      expect(installedVersion(app.dir, "typescript")).toBe("5.6.3");
+      const errors = tscErrors(app.dir, skip);
+      // each import of every subpath names the floor, whose comment says to upgrade
+      const floor = join(app.dir, "node_modules/@workerstack/database/types/typescript-floor-types.d.ts");
+      expect(
+        errors.filter((line) => line.endsWith(`error TS2306: File '${floor}' is not a module.`)).length,
+      ).toBeGreaterThan(20);
+      // the two checks it lost now fail too: their imports are any, so each @ts-expect-error is unused
+      const lines = errors.filter((line) => line.startsWith("src/floor.ts("));
+      expect(lines.map((line) => line.replace(/^src\/floor\.ts\((\d+),\d+\): error (TS\d+).*$/, "$1 $2"))).toEqual([
+        "1 TS2306",
+        "2 TS2306",
+        "7 TS2578",
+        "12 TS2578",
+      ]);
+      // and nothing inside database's declarations is read
+      expect(errors.filter((line) => line.includes("/@workerstack/database/") && !line.includes("TS2306"))).toEqual([]);
+    },
+  );
 
-	it("is refused by npm", () => {
-		const refused = run(app.dir, "npm", ["install", "--no-audit", "--no-fund", "--loglevel=error"])
-		expect(refused.status).not.toBe(0)
-		expect(refused.output).toContain(`peerOptional typescript@"${peerRange("typescript")}" from @workerstack/database`)
-	})
-})
+  it("is refused by npm", () => {
+    const refused = run(app.dir, "npm", ["install", "--no-audit", "--no-fund", "--loglevel=error"]);
+    expect(refused.status).not.toBe(0);
+    expect(refused.output).toContain(`peerOptional typescript@"${peerRange("typescript")}" from @workerstack/database`);
+  });
+});
 
-/* every tagged drizzle the range names, each by its exact version: 0.18 admitted the tagged rc.5, which failed the sharding types */
+// every tagged drizzle the range names, each by its exact version: 0.18 admitted the tagged rc.5, which failed the sharding types
 describe.each(admittedOf("drizzle-orm"))("a consumer on drizzle %s", (version) => {
-	let app: Stage
-	beforeAll(() => {
-		app = stage(tarball, "all", APP, { pin: { "drizzle-kit": version, "drizzle-orm": version } })
-	})
-	afterAll(() => app?.dispose())
+  let app: Stage;
+  beforeAll(() => {
+    app = stage(tarball, "all", APP, { pin: { "drizzle-kit": version, "drizzle-orm": version } });
+  });
+  afterAll(() => app?.dispose());
 
-	it("type-checks every subpath under strict flags", () => {
-		expect(installedVersion(app.dir, "drizzle-orm")).toBe(version)
-		const result = run(app.dir, "npx", ["tsc", "-p", "tsconfig.bundler.json"])
-		expect(result.output.split("\n").filter((line) => line.includes("error TS"))).toEqual([])
-		expect(result.status).toBe(0)
-	})
-})
+  it("type-checks every subpath under strict flags", () => {
+    expect(installedVersion(app.dir, "drizzle-orm")).toBe(version);
+    const result = run(app.dir, "npx", ["tsc", "-p", "tsconfig.bundler.json"]);
+    expect(result.output.split("\n").filter((line) => line.includes("error TS"))).toEqual([]);
+    expect(result.status).toBe(0);
+  });
+});
 
-/* K7 of r20: a command whose optional peer is missing names the package, the range database takes and the install */
+// K7 of r20: a command whose optional peer is missing names the package, the range database takes and the install
 describe("a consumer missing each optional peer", () => {
-	const TABLES = `import { sqliteTable } from "drizzle-orm/sqlite-core"
+  const TABLES = `import { sqliteTable } from "drizzle-orm/sqlite-core"
 import { c } from "@workerstack/database/sqlite/columns"
 export const post = sqliteTable("post", { id: c.id("id", { prefix: "post" }), title: c.text("title", { max: 200 }) })
-`
-	const configOf = (provider: string) =>
-		`export default { databases: { core: { migrationsDir: "m", name: "core", provider: ${provider} } } }\n`
-	/* unset, the block fails here on its cause, not later on a case config with no url */
-	const PG = JSON.stringify(pgUrl())
-	/* the preconditions each command meets before it needs the peer: tables, a drizzle and a wrangler config, a database file */
-	const PROJECT = {
-		"drizzle.config.ts": `export default { dialect: "sqlite", out: "./m", schema: "./post.tables.ts" }\n`,
-		"m/20260101000000_init.sql": "CREATE TABLE a (id integer);\n",
-		"post.tables.ts": TABLES,
-		"wrangler.jsonc": JSON.stringify({
-			compatibility_date: "2025-01-01",
-			d1_databases: [{ binding: "CORE", database_id: "00000000-0000-0000-0000-000000000000", database_name: "core" }],
-			name: "w",
-		}),
-		"x.db": "",
-	}
-	const CASES = [
-		{ argv: ["codegen", "--tables", "post.tables.ts"], config: undefined, peer: "ts-morph" },
-		{ argv: ["migrate", "diff", "core", "--dry-run"], config: undefined, peer: "drizzle-kit" },
-		{
-			argv: ["migrate", "check", "core", "--json"],
-			config: configOf(`{ type: "libsql", url: "file:x.db" }`),
-			peer: "@libsql/client",
-		},
-		{
-			argv: ["migrate", "check", "core", "--json"],
-			config: configOf(`{ type: "d1", databaseName: "CORE", local: true }`),
-			peer: "wrangler",
-		},
-		{
-			argv: ["migrate", "check", "core", "--json"],
-			config: configOf(`{ type: "postgres", url: ${PG}, devUrl: ${PG} }`),
-			peer: "libpg-query",
-		},
-	]
-	let app: Stage
-	/* the postgres provider's commands reach the server: the run's lock, held for the block (tests/support/pg-lock.ts) */
-	let release: (() => Promise<void>) | undefined
-	beforeAll(async () => {
-		release = await acquirePgRunLock(pgUrl())
-	}, PG_LOCK_WAIT_MS)
-	beforeAll(() => {
-		app = stage(tarball, "required")
-		/* wrangler is one of the stage's tools; this consumer has none */
-		removePackage(app.dir, "wrangler")
-	})
-	afterAll(async () => {
-		app?.dispose()
-		await release?.()
-	})
+`;
 
-	/** `files` written under `dir` */
-	const write = (dir: string, files: Record<string, string>) => {
-		for (const [file, text] of Object.entries(files)) {
-			mkdirSync(dirname(join(dir, file)), { recursive: true })
-			writeFileSync(join(dir, file), text)
-		}
-	}
+  const configOf = (provider: string) =>
+    `export default { databases: { core: { migrationsDir: "m", name: "core", provider: ${provider} } } }\n`;
 
-	it.each(CASES)(
-		"database $argv.0 $argv.1 without $peer names it, its range and the install",
-		({ argv, config, peer }) => {
-			const dir = join(app.dir, "cases", peer.replace(/\W+/g, "-"))
-			write(dir, { ...PROJECT, ...(config === undefined ? {} : { "database.migrate.config.ts": config }) })
-			ok(run(dir, "atlas", ["migrate", "hash", "--dir", `file://${join(dir, "m")}`]), "atlas migrate hash")
-			const result = run(dir, join(app.dir, "node_modules", ".bin", "database"), argv)
-			expect(result.status).not.toBe(0)
-			expect(result.output).toContain(`database needs ${peer} (${peerRange(peer)}) to `)
-			expect(result.output).toContain(`install "${peer}@${peerRange(peer)}"`)
-			/* no resolver text from database's own source, and no blame on the tables module */
-			expect(result.output).not.toContain("@workerstack/database/src/")
-			expect(result.output).not.toContain("could not load")
-			/* a refusal under --json is the one JSON object stdout promises (K5 of r19) */
-			if (argv.includes("--json"))
-				expect(result.output).toContain(
-					`{"applied":[],"database":"core","pending":[],"refused":["database needs ${peer} (`,
-				)
-		},
-	)
+  // unset, the block fails here on its cause, not later on a case config with no url
+  const PG = JSON.stringify(pgUrl());
 
-	/* K1, P8 and S2 of r21: every (command, provider) PEERS gives peers to, with each absent and the endpoint dead */
-	const DEAD = "postgres://u:p@127.0.0.1:9/core?sslmode=disable"
-	// lookup-table: a provider of each type whose endpoint no call reaches
-	const PROVIDERS: Record<string, string> = {
-		"bun-sqlite": `{ type: "bun-sqlite", path: "x.db" }`,
-		d1: `{ type: "d1", databaseName: "core" }`,
-		libsql: `{ type: "libsql", url: "http://127.0.0.1:9" }`,
-		postgres: `{ type: "postgres", url: "${DEAD}", devUrl: "${DEAD}" }`,
-		turso: `{ type: "turso", apiToken: "tok", databaseName: "core", org: "org" }`,
-	}
-	/* Atlas, in range on PATH here, is checked by the one `atlas version` read (PA5 of r22): a cell names the npm peers */
-	const CELLS = Object.entries(PEERS).flatMap(([provider, commands]) =>
-		Object.entries(commands).flatMap(([command, needs = []]) => {
-			const required = needs.filter((need) => need.optional !== true && need.peer !== "atlas")
-			const atlas = needs.some((need) => need.peer === "atlas")
-			return required.length === 0 ? [] : [{ atlas, command, needs: required, provider }]
-		}),
-	)
-	/* what records a call: atlas and wrangler on PATH, and fetch inside database's process, each appending to the log;
-	   atlas says the version database is tested against, and fails at anything else */
-	const RECORDERS = {
-		"bin/atlas": `#!/bin/sh\necho "atlas $*" >> "$DATABASE_CALLS"\n[ "$1" = version ] && echo "atlas version v1.3.0" && exit 0\nexit 1\n`,
-		"bin/wrangler": `#!/bin/sh\necho "wrangler $*" >> "$DATABASE_CALLS"\nexit 1\n`,
-		"record-fetch.ts": `import { appendFileSync } from "node:fs"
+  // the preconditions each command meets before it needs the peer: tables, a drizzle and a wrangler config, a database file
+  const PROJECT = {
+    "drizzle.config.ts": `export default { dialect: "sqlite", out: "./m", schema: "./post.tables.ts" }\n`,
+    "m/20260101000000_init.sql": "CREATE TABLE a (id integer);\n",
+    "post.tables.ts": TABLES,
+    "wrangler.jsonc": JSON.stringify({
+      compatibility_date: "2025-01-01",
+      d1_databases: [{ binding: "CORE", database_id: "00000000-0000-0000-0000-000000000000", database_name: "core" }],
+      name: "w",
+    }),
+    "x.db": "",
+  };
+
+  const CASES = [
+    { argv: ["codegen", "--tables", "post.tables.ts"], config: undefined, peer: "ts-morph" },
+    { argv: ["migrate", "diff", "core", "--dry-run"], config: undefined, peer: "drizzle-kit" },
+    {
+      argv: ["migrate", "check", "core", "--json"],
+      config: configOf(`{ type: "libsql", url: "file:x.db" }`),
+      peer: "@libsql/client",
+    },
+    {
+      argv: ["migrate", "check", "core", "--json"],
+      config: configOf(`{ type: "d1", databaseName: "CORE", local: true }`),
+      peer: "wrangler",
+    },
+    {
+      argv: ["migrate", "check", "core", "--json"],
+      config: configOf(`{ type: "postgres", url: ${PG}, devUrl: ${PG} }`),
+      peer: "libpg-query",
+    },
+  ];
+
+  let app: Stage;
+  // the postgres provider's commands reach the server: the run's lock, held for the block (tests/support/pg-lock.ts)
+  let release: (() => Promise<void>) | undefined;
+  beforeAll(async () => {
+    release = await acquirePgRunLock(pgUrl());
+  }, PG_LOCK_WAIT_MS);
+  beforeAll(() => {
+    app = stage(tarball, "required");
+    // wrangler is one of the stage's tools; this consumer has none
+    removePackage(app.dir, "wrangler");
+  });
+  afterAll(async () => {
+    app?.dispose();
+    await release?.();
+  });
+
+  /** `files` written under `dir` */
+  const write = (dir: string, files: Record<string, string>) => {
+    for (const [file, text] of Object.entries(files)) {
+      mkdirSync(dirname(join(dir, file)), { recursive: true });
+      writeFileSync(join(dir, file), text);
+    }
+  };
+
+  it.each(CASES)(
+    "database $argv.0 $argv.1 without $peer names it, its range and the install",
+    ({ argv, config, peer }) => {
+      const dir = join(app.dir, "cases", peer.replaceAll(/\W+/g, "-"));
+      write(dir, { ...PROJECT, ...(config === undefined ? {} : { "database.migrate.config.ts": config }) });
+      ok(run(dir, "atlas", ["migrate", "hash", "--dir", `file://${join(dir, "m")}`]), "atlas migrate hash");
+      const result = run(dir, join(app.dir, "node_modules", ".bin", "database"), argv);
+      expect(result.status).not.toBe(0);
+      expect(result.output).toContain(`database needs ${peer} (${peerRange(peer)}) to `);
+      expect(result.output).toContain(`install "${peer}@${peerRange(peer)}"`);
+      // no resolver text from database's own source, and no blame on the tables module
+      expect(result.output).not.toContain("@workerstack/database/src/");
+      expect(result.output).not.toContain("could not load");
+
+      // a refusal under --json is the one JSON object stdout promises (K5 of r19)
+      if (argv.includes("--json")) {
+        expect(result.output).toContain(
+          `{"applied":[],"database":"core","pending":[],"refused":["database needs ${peer} (`,
+        );
+      }
+    },
+  );
+
+  // K1, P8 and S2 of r21: every (command, provider) PEERS gives peers to, with each absent and the endpoint dead
+  const DEAD = "postgres://u:p@127.0.0.1:9/core?sslmode=disable";
+
+  // lookup-table: a provider of each type whose endpoint no call reaches
+  const PROVIDERS: Record<string, string> = {
+    "bun-sqlite": `{ type: "bun-sqlite", path: "x.db" }`,
+    d1: `{ type: "d1", databaseName: "core" }`,
+    libsql: `{ type: "libsql", url: "http://127.0.0.1:9" }`,
+    postgres: `{ type: "postgres", url: "${DEAD}", devUrl: "${DEAD}" }`,
+    turso: `{ type: "turso", apiToken: "tok", databaseName: "core", org: "org" }`,
+  };
+
+  // Atlas, in range on PATH here, is checked by the one `atlas version` read (PA5 of r22): a cell names the npm peers
+  const CELLS = Object.entries(PEERS).flatMap(([provider, commands]) =>
+    Object.entries(commands).flatMap(([command, needs = []]) => {
+      const required = needs.filter((need) => need.optional !== true && need.peer !== "atlas");
+      const atlas = needs.some((need) => need.peer === "atlas");
+
+      return required.length === 0 ? [] : [{ atlas, command, needs: required, provider }];
+    }),
+  );
+
+  // what records a call: atlas and wrangler on PATH, and fetch inside database's process, each appending to the log;
+  // atlas says the version database is tested against, and fails at anything else
+  const RECORDERS = {
+    "bin/atlas": `#!/bin/sh\necho "atlas $*" >> "$DATABASE_CALLS"\n[ "$1" = version ] && echo "atlas version v1.3.0" && exit 0\nexit 1\n`,
+    "bin/wrangler": `#!/bin/sh\necho "wrangler $*" >> "$DATABASE_CALLS"\nexit 1\n`,
+    "record-fetch.ts": `import { appendFileSync } from "node:fs"
 globalThis.fetch = (async (input: string | URL | Request) => {
 	appendFileSync(process.env["DATABASE_CALLS"] as string, \`fetch \${input instanceof Request ? input.url : String(input)}\\n\`)
 	throw new TypeError("fetch failed")
 }) as typeof fetch
 `,
-	}
-	/** database migrate `command` core in the cell for `provider`, as a project would run it, and every call it made */
-	const runCell = (provider: string, command: string, files: Record<string, string> = {}) => {
-		const dir = join(app.dir, "cells", `${provider}-${command}${Object.keys(files).length > 0 ? "-more" : ""}`)
-		write(dir, {
-			...PROJECT,
-			...RECORDERS,
-			"database.migrate.config.ts": configOf(PROVIDERS[provider] as string),
-			...files,
-		})
-		for (const bin of ["atlas", "wrangler"]) chmodSync(join(dir, "bin", bin), 0o755)
-		const calls = join(dir, "calls.log")
-		writeFileSync(calls, "")
-		const database = join(app.dir, "node_modules", ".bin", "database")
-		const result = run(dir, "bun", ["--preload", "./record-fetch.ts", database, "migrate", command, "core"], {
-			DATABASE_CALLS: calls,
-			PATH: `${join(dir, "bin")}:${process.env["PATH"] ?? ""}`,
-		})
-		return { calls: readFileSync(calls, "utf8"), result }
-	}
+  };
 
-	it.each(CELLS)(
-		"database migrate $command on $provider names every peer it needs before any I/O",
-		({ atlas, command, needs, provider }) => {
-			const { calls, result } = runCell(provider, command)
-			expect(result.status).not.toBe(0)
-			const each = needs.map(({ peer, why }) => `${peer} (${peerRange(peer)}) to ${why}`)
-			expect(result.output).toContain(`database needs ${each.join(", and ")}; `)
-			expect(result.output).toContain(`install ${needs.map(({ peer }) => `"${peer}@${peerRange(peer)}"`).join(" ")}`)
-			/* no connect, fetch, spawn or Atlas call but Atlas's version read: the Turso create and token mint among them */
-			expect(calls).toBe(atlas ? "atlas version\n" : "")
-			expect(result.output).not.toMatch(/ECONNREFUSED|dial tcp|fetch failed|Script not found/)
-		},
-	)
+  /** database migrate `command` core in the cell for `provider`, as a project would run it, and every call it made */
+  const runCell = (provider: string, command: string, files: Record<string, string> = {}) => {
+    const dir = join(app.dir, "cells", `${provider}-${command}${Object.keys(files).length > 0 ? "-more" : ""}`);
+    write(dir, {
+      ...PROJECT,
+      ...RECORDERS,
+      "database.migrate.config.ts": configOf(PROVIDERS[provider] as string),
+      ...files,
+    });
 
-	/* KC3 of r22: a SQLite diff whose database.config.ts declares FTS loads the tables file, through ts-morph */
-	it.each(["bun-sqlite", "d1", "libsql", "turso"])(
-		"database migrate diff on %s with FTS declared names drizzle-kit and ts-morph in one refusal, before Atlas runs",
-		(provider) => {
-			const fts = `export default { databases: { core: { tables: "./post.tables.ts", fts: { post: { columns: ["title"] } } } } }\n`
-			const { calls, result } = runCell(provider, "diff", { "database.config.ts": fts })
-			expect(result.status).not.toBe(0)
-			const kit = `drizzle-kit (${peerRange("drizzle-kit")}) to export the drizzle schema for database migrate diff`
-			const morph = `ts-morph (${peerRange("ts-morph")}) to read the tables file whose FTS database.config.ts declares`
-			expect(result.output).toContain(`database needs ${kit}, and ${morph}; `)
-			expect(result.output).toContain(
-				`install "drizzle-kit@${peerRange("drizzle-kit")}" "ts-morph@${peerRange("ts-morph")}"`,
-			)
-			expect(calls).toBe("atlas version\n")
-		},
-	)
+    for (const bin of ["atlas", "wrangler"]) chmodSync(join(dir, "bin", bin), 0o755);
+    const calls = join(dir, "calls.log");
+    writeFileSync(calls, "");
+    const database = join(app.dir, "node_modules", ".bin", "database");
 
-	/* K2 of r21: `bun add <peer>` took a major outside database's range; the refusal's own words land inside it */
-	it.each([
-		["postgres", "baseline"],
-		["turso", "check"],
-	])("installs inside database's range by the words the %s %s refusal gives", (provider, command) => {
-		const { result } = runCell(provider, command)
-		const words = /; install ((?:"[^"]+" ?)+)/.exec(result.output)?.[1] ?? ""
-		const dir = join(app.dir, "installs", provider)
-		write(dir, { "package.json": JSON.stringify({ name: "install", private: true }) })
-		ok(run(dir, "sh", ["-c", `bun add ${words}`]), `bun add ${words}`)
-		/* each word is "<peer>@<range>", and no range holds an @ */
-		const installed = [...words.matchAll(/"([^"]+)"/g)].map(([, word]) => (word as string).replace(/@[^@]*$/, ""))
-		expect(installed.length).toBeGreaterThan(0)
-		for (const peer of installed)
-			expect(semver.satisfies(installedVersion(dir, peer), peerRange(peer)), peer).toBe(true)
-	})
-})
+    const result = run(dir, "bun", ["--preload", "./record-fetch.ts", database, "migrate", command, "core"], {
+      DATABASE_CALLS: calls,
+      PATH: `${join(dir, "bin")}:${process.env["PATH"] ?? ""}`,
+    });
 
-/* K3 of r20: the README's own line installs each required peer inside database's range */
+    return { calls: readFileSync(calls, "utf8"), result };
+  };
+
+  it.each(CELLS)(
+    "database migrate $command on $provider names every peer it needs before any I/O",
+    ({ atlas, command, needs, provider }) => {
+      const { calls, result } = runCell(provider, command);
+      expect(result.status).not.toBe(0);
+      const each = needs.map(({ peer, why }) => `${peer} (${peerRange(peer)}) to ${why}`);
+      expect(result.output).toContain(`database needs ${each.join(", and ")}; `);
+      expect(result.output).toContain(`install ${needs.map(({ peer }) => `"${peer}@${peerRange(peer)}"`).join(" ")}`);
+      // no connect, fetch, spawn or Atlas call but Atlas's version read: the Turso create and token mint among them
+      expect(calls).toBe(atlas ? "atlas version\n" : "");
+      expect(result.output).not.toMatch(/ECONNREFUSED|dial tcp|fetch failed|Script not found/);
+    },
+  );
+
+  // KC3 of r22: a SQLite diff whose database.config.ts declares FTS loads the tables file, through ts-morph
+  it.each(["bun-sqlite", "d1", "libsql", "turso"])(
+    "database migrate diff on %s with FTS declared names drizzle-kit and ts-morph in one refusal, before Atlas runs",
+    (provider) => {
+      const fts = `export default { databases: { core: { tables: "./post.tables.ts", fts: { post: { columns: ["title"] } } } } }\n`;
+      const { calls, result } = runCell(provider, "diff", { "database.config.ts": fts });
+      expect(result.status).not.toBe(0);
+      const kit = `drizzle-kit (${peerRange("drizzle-kit")}) to export the drizzle schema for database migrate diff`;
+      const morph = `ts-morph (${peerRange("ts-morph")}) to read the tables file whose FTS database.config.ts declares`;
+      expect(result.output).toContain(`database needs ${kit}, and ${morph}; `);
+      expect(result.output).toContain(
+        `install "drizzle-kit@${peerRange("drizzle-kit")}" "ts-morph@${peerRange("ts-morph")}"`,
+      );
+      expect(calls).toBe("atlas version\n");
+    },
+  );
+
+  // K2 of r21: `bun add <peer>` took a major outside database's range; the refusal's own words land inside it
+  it.each([
+    ["postgres", "baseline"],
+    ["turso", "check"],
+  ])("installs inside database's range by the words the %s %s refusal gives", (provider, command) => {
+    const { result } = runCell(provider, command);
+    const words = /; install ((?:"[^"]+" ?)+)/.exec(result.output)?.[1] ?? "";
+    const dir = join(app.dir, "installs", provider);
+    write(dir, { "package.json": JSON.stringify({ name: "install", private: true }) });
+    ok(run(dir, "sh", ["-c", `bun add ${words}`]), `bun add ${words}`);
+    // each word is "<peer>@<range>", and no range holds an @
+    const installed = [...words.matchAll(/"([^"]+)"/g)].map(([, word]) => (word as string).replace(/@[^@]*$/, ""));
+    expect(installed.length).toBeGreaterThan(0);
+
+    for (const peer of installed)
+      expect(semver.satisfies(installedVersion(dir, peer), peerRange(peer)), peer).toBe(true);
+  });
+});
+
+// K3 of r20: the README's own line installs each required peer inside database's range
 describe("a consumer installed by the README's bun add line", () => {
-	let app: Stage
-	beforeAll(() => {
-		const readme = readFileSync(join(import.meta.dirname, "../../../../README.md"), "utf8")
-		const line = readme.split("\n").find((text) => text.startsWith("bun add "))
-		if (line === undefined) throw new Error("the README has no bun add line")
-		app = stageLine(tarball, line)
-	})
-	afterAll(() => app?.dispose())
+  let app: Stage;
+  beforeAll(() => {
+    const readme = readFileSync(join(import.meta.dirname, "../../README.md"), "utf8");
+    const line = readme.split("\n").find((text) => text.startsWith("bun add "));
 
-	it.each(Object.entries(REQUIRED_PEERS))("installs %s inside database's range %s", (name, range) => {
-		expect(semver.satisfies(installedVersion(app.dir, name), range)).toBe(true)
-	})
-})
+    if (line === undefined) throw new Error("the README has no bun add line");
+    app = stageLine(tarball, line);
+  });
+  afterAll(() => app?.dispose());
+
+  it.each(Object.entries(REQUIRED_PEERS))("installs %s inside database's range %s", (name, range) => {
+    expect(semver.satisfies(installedVersion(app.dir, name), range)).toBe(true);
+  });
+});

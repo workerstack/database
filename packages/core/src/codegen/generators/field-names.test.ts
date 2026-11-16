@@ -1,223 +1,231 @@
-import { fixtureRoot } from "../__fixtures__/temp.ts"
-import fs from "node:fs"
-import path from "node:path"
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import type { FieldMeta, TableMeta } from "../analyzer-types.ts"
-import { generateFieldNames } from "./field-names.ts"
-import { testContext } from "./__fixtures__/context.ts"
+import fs from "node:fs";
+import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { fixtureRoot } from "../__fixtures__/temp.ts";
+import type { FieldMeta, TableMeta } from "../analyzer-types.ts";
+import { testContext } from "./__fixtures__/context.ts";
+import { generateFieldNames } from "./field-names.ts";
 
 function field(name: string): FieldMeta {
-	return {
-		constraints: {
-			autogenerate: false,
-			email: false,
-			format: null,
-			imageUri: false,
-			lowercase: false,
-			max: null,
-			maxBytes: null,
-			min: null,
-			mutable: false,
-			name: false,
-			nomutate: false,
-			password: false,
-			pattern: null,
-			private: false,
-			tenant: false,
-			trim: false,
-			uppercase: false,
-			url: false,
-		},
-		drizzleHelper: "text",
-		autoIncrement: false,
-		columnType: "SQLiteText",
-		databaseKind: "text",
-		dataType: "string",
-		generated: false,
-		hasDefault: false,
-		identity: false,
-		inCompositeKey: false,
-		onUpdate: false,
-		prefix: null,
-		sqlType: "text",
-		unique: null,
-		enumValues: null,
-		states: null,
-		foreignKey: null,
-		isNotNull: false,
-		isPrimaryKey: name === "id",
-		jsonSchemaName: null,
-		length: null,
-		name,
-		schemaImports: [],
-		schemaJson: null,
-		sqlName: name,
-	}
+  return {
+    autoIncrement: false,
+    columnType: "SQLiteText",
+    constraints: {
+      autogenerate: false,
+      email: false,
+      format: null,
+      imageUri: false,
+      lowercase: false,
+      max: null,
+      maxBytes: null,
+      min: null,
+      mutable: false,
+      name: false,
+      nomutate: false,
+      password: false,
+      pattern: null,
+      private: false,
+      tenant: false,
+      trim: false,
+      uppercase: false,
+      url: false,
+    },
+    dataType: "string",
+    databaseKind: "text",
+    drizzleHelper: "text",
+    enumValues: null,
+    foreignKey: null,
+    generated: false,
+    hasDefault: false,
+    identity: false,
+    inCompositeKey: false,
+    isNotNull: false,
+    isPrimaryKey: name === "id",
+    jsonSchemaName: null,
+    length: null,
+    name,
+    onUpdate: false,
+    prefix: null,
+    schemaImports: [],
+    schemaJson: null,
+    sqlName: name,
+    sqlType: "text",
+    states: null,
+    unique: null,
+  };
 }
 
 function table(sqlName: string, fieldNames: string[]): TableMeta {
-	return {
-		checkConstraints: [],
-		expressionIndexes: [],
-		schema: null,
-		fields: fieldNames.map(field),
-		hasCompositePrimaryKey: false,
-		idPrefix: null,
-		sqlName,
-		timestamps: {
-			createdAt: false,
-			deletedAt: false,
-			names: { createdAt: null, deletedAt: null, updatedAt: null },
-			style: "snake_case",
-			updatedAt: false,
-		},
-		partialUniqueIndexes: [],
-		uniqueIndexes: [],
-		varName: sqlName,
-	}
+  return {
+    checkConstraints: [],
+    expressionIndexes: [],
+    fields: fieldNames.map(field),
+    hasCompositePrimaryKey: false,
+    idPrefix: null,
+    partialUniqueIndexes: [],
+    schema: null,
+    sqlName,
+    timestamps: {
+      createdAt: false,
+      deletedAt: false,
+      names: { createdAt: null, deletedAt: null, updatedAt: null },
+      style: "snake_case",
+      updatedAt: false,
+    },
+    uniqueIndexes: [],
+    varName: sqlName,
+  };
 }
 
 /** A fresh temp directory per test, removed after it. */
 function useTmpDir(prefix: string): () => string {
-	let dir = ""
-	beforeEach(() => {
-		dir = fs.mkdtempSync(path.join(fixtureRoot(), prefix))
-	})
-	afterEach(() => fs.rmSync(dir, { force: true, recursive: true }))
-	return () => dir
+  let dir = "";
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(fixtureRoot(), prefix));
+  });
+  afterEach(() => fs.rmSync(dir, { force: true, recursive: true }));
+
+  return () => dir;
 }
 
-type GenerateOptions = { dbName?: string; updatePackageJson?: boolean }
+type GenerateOptions = { dbName?: string; updatePackageJson?: boolean };
 
 function generateIn(
-	dir: string,
-	tables: TableMeta[],
-	{ dbName = "core", updatePackageJson = false }: GenerateOptions = {},
+  dir: string,
+  tables: TableMeta[],
+  { dbName = "core", updatePackageJson = false }: GenerateOptions = {},
 ): string {
-	const output = path.join(dir, "field-names.gen.ts")
-	generateFieldNames(testContext(tables, { cwd: dir, dbName }), { output, updatePackageJson })
-	return fs.existsSync(output) ? fs.readFileSync(output, "utf-8") : ""
+  const output = path.join(dir, "field-names.gen.ts");
+  generateFieldNames(testContext(tables, { cwd: dir, dbName }), { output, updatePackageJson });
+
+  return fs.existsSync(output) ? fs.readFileSync(output, "utf-8") : "";
 }
 
 describe("generateFieldNames — names and labels", () => {
-	const tmpDir = useTmpDir("database-field-names-")
-	const generate = (tables: TableMeta[], options?: GenerateOptions) => generateIn(tmpDir(), tables, options)
+  const tmpDir = useTmpDir("database-field-names-");
+  const generate = (tables: TableMeta[], options?: GenerateOptions) => generateIn(tmpDir(), tables, options);
 
-	it("emits a const and type named from the database", () => {
-		const content = generate([table("post", ["id", "title"])])
-		expect(content).toContain("const CORE_DB_FIELD_NAMES = {")
-		expect(content).toContain("type CoreDbFieldName = keyof typeof CORE_DB_FIELD_NAMES")
-		expect(content).toContain("export { CORE_DB_FIELD_NAMES, type CoreDbFieldName }")
-	})
+  it("emits a const and type named from the database", () => {
+    const content = generate([table("post", ["id", "title"])]);
+    expect(content).toContain("const CORE_DB_FIELD_NAMES = {");
+    expect(content).toContain("type CoreDbFieldName = keyof typeof CORE_DB_FIELD_NAMES");
+    expect(content).toContain("export { CORE_DB_FIELD_NAMES, type CoreDbFieldName }");
+  });
 
-	it("carries the generated header", () => {
-		const content = generate([table("post", ["id"])])
-		expect(content).toContain("@generated by database")
-	})
+  it("carries the generated header", () => {
+    const content = generate([table("post", ["id"])]);
+    expect(content).toContain("@generated by database");
+  });
 
-	it("humanises snake_case into a label", () => {
-		const content = generate([table("post", ["minute_read"])])
-		expect(content).toContain('minute_read: "Minute read"')
-	})
+  it("humanises snake_case into a label", () => {
+    const content = generate([table("post", ["minute_read"])]);
+    expect(content).toContain('minute_read: "Minute read"');
+  });
 
-	it("strips a _json suffix", () => {
-		const content = generate([table("post", ["settings_json"])])
-		expect(content).toContain('settings_json: "Settings"')
-	})
+  it("strips a _json suffix", () => {
+    const content = generate([table("post", ["settings_json"])]);
+    expect(content).toContain('settings_json: "Settings"');
+  });
 
-	it("strips a _id suffix but keeps a bare id", () => {
-		const content = generate([table("post", ["author_id", "id"])])
-		expect(content).toContain('author_id: "Author"')
-		expect(content).toContain('id: "Id"')
-	})
+  it("strips a _id suffix but keeps a bare id", () => {
+    const content = generate([table("post", ["author_id", "id"])]);
+    expect(content).toContain('author_id: "Author"');
+    expect(content).toContain('id: "Id"');
+  });
 
-	it("quotes a key that is not an identifier (D6)", () => {
-		const content = generate([table("member", ["display-name", "id"])])
-		expect(content).toContain(`\t"display-name": "Display-name",`)
-	})
+  it("quotes a key that is not an identifier (D6)", () => {
+    const content = generate([table("member", ["display-name", "id"])]);
+    expect(content).toContain(`\t"display-name": "Display-name",`);
+  });
 
-	it("marks entries whose label was altered by suffix stripping", () => {
-		const content = generate([table("post", ["author_id", "title"])])
-		expect(content).toContain("/* was author_id */")
-		/* an unaltered label needs no note */
-		expect(content).toMatch(/title: "Title",\s*$/m)
-	})
-})
+  it("marks entries whose label was altered by suffix stripping", () => {
+    const content = generate([table("post", ["author_id", "title"])]);
+    expect(content).toContain("/* was author_id */");
+    // an unaltered label needs no note
+    expect(content).toMatch(/title: "Title",\s*$/m);
+  });
+});
 
 describe("generateFieldNames — which fields are listed", () => {
-	const tmpDir = useTmpDir("database-field-names-")
-	const generate = (tables: TableMeta[], options?: GenerateOptions) => generateIn(tmpDir(), tables, options)
+  const tmpDir = useTmpDir("database-field-names-");
+  const generate = (tables: TableMeta[], options?: GenerateOptions) => generateIn(tmpDir(), tables, options);
 
-	it("leaves out a column marked { private: true } (M-L6)", () => {
-		const secret = { ...field("passwordHash"), constraints: { ...field("passwordHash").constraints, private: true } }
-		const content = generate([{ ...table("user", ["id", "email"]), fields: [field("id"), field("email"), secret] }])
-		expect(content).toContain("email")
-		expect(content).not.toContain("passwordHash")
-	})
+  it("leaves out a column marked { private: true } (M-L6)", () => {
+    const secret = { ...field("passwordHash"), constraints: { ...field("passwordHash").constraints, private: true } };
+    const content = generate([{ ...table("user", ["id", "email"]), fields: [field("id"), field("email"), secret] }]);
+    expect(content).toContain("email");
+    expect(content).not.toContain("passwordHash");
+  });
 
-	it("deduplicates a field name shared across tables", () => {
-		const content = generate([table("post", ["id", "title"]), table("page", ["id", "title"])])
-		expect(content.match(/^\ttitle:/gm)).toHaveLength(1)
-		expect(content.match(/^\tid:/gm)).toHaveLength(1)
-	})
+  it("deduplicates a field name shared across tables", () => {
+    const content = generate([table("post", ["id", "title"]), table("page", ["id", "title"])]);
+    expect(content.match(/^\ttitle:/gm)).toHaveLength(1);
+    expect(content.match(/^\tid:/gm)).toHaveLength(1);
+  });
 
-	it("sorts entries so regeneration is stable regardless of table order", () => {
-		const forward = generate([table("post", ["zebra", "apple"])])
-		fs.rmSync(path.join(tmpDir(), "field-names.gen.ts"))
-		const reversed = generate([table("post", ["apple", "zebra"])])
-		expect(reversed).toBe(forward)
-		expect(forward.indexOf("apple:")).toBeLessThan(forward.indexOf("zebra:"))
-	})
+  it("sorts entries so regeneration is stable regardless of table order", () => {
+    const forward = generate([table("post", ["zebra", "apple"])]);
+    fs.rmSync(path.join(tmpDir(), "field-names.gen.ts"));
+    const reversed = generate([table("post", ["apple", "zebra"])]);
+    expect(reversed).toBe(forward);
+    expect(forward.indexOf("apple:")).toBeLessThan(forward.indexOf("zebra:"));
+  });
 
-	it("writes nothing when every field is private", () => {
-		const hidden = { ...field("_search"), constraints: { ...field("_search").constraints, private: true } }
-		expect(generate([{ ...table("post", []), fields: [hidden] }])).toBe("")
-	})
+  it("writes nothing when every field is private", () => {
+    const hidden = { ...field("_search"), constraints: { ...field("_search").constraints, private: true } };
+    expect(generate([{ ...table("post", []), fields: [hidden] }])).toBe("");
+  });
 
-	it("writes nothing when there are no tables", () => {
-		expect(generate([])).toBe("")
-	})
-})
+  it("writes nothing when there are no tables", () => {
+    expect(generate([])).toBe("");
+  });
+});
 
 describe("generateFieldNames — package.json exports", () => {
-	const tmpDir = useTmpDir("database-field-names-")
-	const generate = (tables: TableMeta[], options?: GenerateOptions) => generateIn(tmpDir(), tables, options)
+  const tmpDir = useTmpDir("database-field-names-");
+  const generate = (tables: TableMeta[], options?: GenerateOptions) => generateIn(tmpDir(), tables, options);
 
-	it("registers a ./field-names export when asked", () => {
-		fs.writeFileSync(path.join(tmpDir(), "package.json"), JSON.stringify({ exports: {}, name: "app" }))
-		generate([table("post", ["id"])], { updatePackageJson: true })
+  it("registers a ./field-names export when asked", () => {
+    fs.writeFileSync(path.join(tmpDir(), "package.json"), JSON.stringify({ exports: {}, name: "app" }));
+    generate([table("post", ["id"])], { updatePackageJson: true });
 
-		const pkg = JSON.parse(fs.readFileSync(path.join(tmpDir(), "package.json"), "utf-8")) as {
-			exports: Record<string, string>
-		}
-		expect(pkg.exports["./field-names"]).toBe("./field-names.gen.ts")
-	})
+    const pkg = JSON.parse(fs.readFileSync(path.join(tmpDir(), "package.json"), "utf-8")) as {
+      exports: Record<string, string>;
+    };
 
-	it("preserves unrelated exports and replaces its own on a rerun", () => {
-		fs.writeFileSync(
-			path.join(tmpDir(), "package.json"),
-			JSON.stringify({ exports: { ".": "./index.ts", "./field-names": "./stale.ts" }, name: "app" }),
-		)
-		generate([table("post", ["id"])], { updatePackageJson: true })
+    expect(pkg.exports["./field-names"]).toBe("./field-names.gen.ts");
+  });
 
-		const pkg = JSON.parse(fs.readFileSync(path.join(tmpDir(), "package.json"), "utf-8")) as {
-			exports: Record<string, string>
-		}
-		expect(pkg.exports["."]).toBe("./index.ts")
-		expect(pkg.exports["./field-names"]).toBe("./field-names.gen.ts")
-	})
+  it("preserves unrelated exports and replaces its own on a rerun", () => {
+    fs.writeFileSync(
+      path.join(tmpDir(), "package.json"),
+      JSON.stringify({ exports: { ".": "./index.ts", "./field-names": "./stale.ts" }, name: "app" }),
+    );
+    generate([table("post", ["id"])], { updatePackageJson: true });
 
-	it("writes the file and leaves package.json alone when none is found above the output", () => {
-		expect(generate([table("post", ["id"])], { updatePackageJson: true })).toContain("FIELD_NAMES")
-		expect(fs.readdirSync(tmpDir())).toEqual(["field-names.gen.ts"])
-	})
+    const pkg = JSON.parse(fs.readFileSync(path.join(tmpDir(), "package.json"), "utf-8")) as {
+      exports: Record<string, string>;
+    };
 
-	it("keeps a single-target exports as the . export (S-13)", () => {
-		fs.writeFileSync(path.join(tmpDir(), "package.json"), JSON.stringify({ exports: "./index.ts", name: "app" }))
-		generate([table("post", ["id"])], { updatePackageJson: true })
-		const pkg = JSON.parse(fs.readFileSync(path.join(tmpDir(), "package.json"), "utf-8")) as {
-			exports: Record<string, string>
-		}
-		expect(pkg.exports["."]).toBe("./index.ts")
-	})
-})
+    expect(pkg.exports["."]).toBe("./index.ts");
+    expect(pkg.exports["./field-names"]).toBe("./field-names.gen.ts");
+  });
+
+  it("writes the file and leaves package.json alone when none is found above the output", () => {
+    expect(generate([table("post", ["id"])], { updatePackageJson: true })).toContain("FIELD_NAMES");
+    expect(fs.readdirSync(tmpDir())).toEqual(["field-names.gen.ts"]);
+  });
+
+  it("keeps a single-target exports as the . export (S-13)", () => {
+    fs.writeFileSync(path.join(tmpDir(), "package.json"), JSON.stringify({ exports: "./index.ts", name: "app" }));
+    generate([table("post", ["id"])], { updatePackageJson: true });
+
+    const pkg = JSON.parse(fs.readFileSync(path.join(tmpDir(), "package.json"), "utf-8")) as {
+      exports: Record<string, string>;
+    };
+
+    expect(pkg.exports["."]).toBe("./index.ts");
+  });
+});

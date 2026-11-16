@@ -8,22 +8,24 @@
 
 /** `sql` inside a DO block, under a dollar tag `sql` does not hold */
 function inDoBlock(sql: string): string {
-	let tag = "database_view"
-	for (let i = 1; sql.includes(`$${tag}$`); i++) tag = `database_view${i}`
-	return `DO $database$ BEGIN EXECUTE $${tag}$${sql}$${tag}$; END $database$`
+  let tag = "database_view";
+
+  for (let i = 1; sql.includes(`$${tag}$`); i++) tag = `database_view${i}`;
+
+  return `DO $database$ BEGIN EXECUTE $${tag}$${sql}$${tag}$; END $database$`;
 }
 
 /** `code` (codeOf), a view's or materialized view's create or drop, as Atlas replays it; undefined for any other */
 const viewReplay = (sql: string, code: string): string | undefined =>
-	/^(?:CREATE (?:OR REPLACE )?(?:MATERIALIZED )?VIEW|DROP (?:MATERIALIZED )?VIEW)\b/i.test(code)
-		? inDoBlock(sql)
-		: undefined
+  /^(?:CREATE (?:OR REPLACE )?(?:MATERIALIZED )?VIEW|DROP (?:MATERIALIZED )?VIEW)\b/i.test(code)
+    ? inDoBlock(sql)
+    : undefined;
 
 /**
  * `code`, an extension's create or drop, as baseline's replay runs it; a diff gives the dev database its
  * extensions in a prelude instead (pg-objects.ts devPrelude). Undefined for any other statement
  */
 const extensionReplay = (sql: string, code: string): string | undefined =>
-	/^(?:CREATE|DROP) EXTENSION\b/i.test(code) ? inDoBlock(sql) : undefined
+  /^(?:CREATE|DROP) EXTENSION\b/i.test(code) ? inDoBlock(sql) : undefined;
 
-export { extensionReplay, viewReplay }
+export { extensionReplay, viewReplay };

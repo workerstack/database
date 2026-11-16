@@ -1,53 +1,57 @@
-import { fixtureRoot } from "./__fixtures__/temp.ts"
-import fs from "node:fs"
-import path from "node:path"
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { analyze } from "./analyzer.ts"
+import fs from "node:fs";
+import path from "node:path";
 
-/* the README, meta-contract §6.3/§8 and state-machines §2 declare tables with sqliteTable(...) */
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { fixtureRoot } from "./__fixtures__/temp.ts";
+import { analyze } from "./analyzer.ts";
+
+// the README, meta-contract §6.3/§8 and state-machines §2 declare tables with sqliteTable(...)
 const COLUMNS = `{
 	id: text("id").primaryKey(),
 	title: text("title").notNull(),
-}`
+}`;
 
 describe("analyzer: table builders", () => {
-	let dir: string
+  let dir: string;
 
-	beforeEach(() => {
-		dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-analyzer-builders-"))
-	})
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(fixtureRoot(), "database-analyzer-builders-"));
+  });
 
-	afterEach(() => {
-		fs.rmSync(dir, { force: true, recursive: true })
-	})
+  afterEach(() => {
+    fs.rmSync(dir, { force: true, recursive: true });
+  });
 
-	async function tablesOf(source: string): Promise<string[]> {
-		const file = path.join(dir, "db.test.tables.ts")
-		fs.writeFileSync(file, source)
-		return (await analyze(file)).tables.map((table) => `${table.varName}:${table.sqlName}`)
-	}
+  async function tablesOf(source: string): Promise<string[]> {
+    const file = path.join(dir, "db.test.tables.ts");
+    fs.writeFileSync(file, source);
 
-	it.each([
-		["sqliteTable", 'import { sqliteTable, text } from "drizzle-orm/sqlite-core"', "sqliteTable"],
-		["pgTable", 'import { pgTable, text } from "drizzle-orm/pg-core"', "pgTable"],
-		["an aliased sqliteTable", 'import { sqliteTable as table, text } from "drizzle-orm/sqlite-core"', "table"],
-		["an aliased pgTable", 'import { pgTable as define, text } from "drizzle-orm/pg-core"', "define"],
-		[
-			"the createTable alias database has always read",
-			'import { sqliteTable as createTable, text } from "drizzle-orm/sqlite-core"',
-			"createTable",
-		],
-	])("finds a table declared with %s", async (_name, imports, builder) => {
-		expect(await tablesOf(`${imports}\nexport const post = ${builder}("posts", ${COLUMNS})\n`)).toEqual(["post:posts"])
-	})
+    return (await analyze(file)).tables.map((table) => `${table.varName}:${table.sqlName}`);
+  }
 
-	it("ignores calls that are not a table builder", async () => {
-		const source = `import { text } from "drizzle-orm/sqlite-core"
+  it.each([
+    ["sqliteTable", 'import { sqliteTable, text } from "drizzle-orm/sqlite-core"', "sqliteTable"],
+    ["pgTable", 'import { pgTable, text } from "drizzle-orm/pg-core"', "pgTable"],
+    ["an aliased sqliteTable", 'import { sqliteTable as table, text } from "drizzle-orm/sqlite-core"', "table"],
+    ["an aliased pgTable", 'import { pgTable as define, text } from "drizzle-orm/pg-core"', "define"],
+    [
+      "the createTable alias database has always read",
+      'import { sqliteTable as createTable, text } from "drizzle-orm/sqlite-core"',
+      "createTable",
+    ],
+  ])("finds a table declared with %s", async (_name, imports, builder) => {
+    expect(await tablesOf(`${imports}\nexport const post = ${builder}("posts", ${COLUMNS})\n`)).toEqual(["post:posts"]);
+  });
+
+  it("ignores calls that are not a table builder", async () => {
+    const source = `import { text } from "drizzle-orm/sqlite-core"
 const define = (name: string, cols: object) => ({ cols, name })
 const make = (name: string, cols: object) => ({ name, cols })
 export const a = make("a", ${COLUMNS})
 export const b = define("b", ${COLUMNS})
-`
-		expect(await tablesOf(source)).toEqual([])
-	})
-})
+`;
+
+    expect(await tablesOf(source)).toEqual([]);
+  });
+});

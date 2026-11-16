@@ -3,19 +3,19 @@
  * every value typed as its field declares, so SQL generation binds numbers as numbers and
  * booleans as booleans, and computed resolvers receive the declared type.
  */
-import { readFilter } from "./filter-parse.ts"
-import { type CheckedField, typedValue } from "./filter-typed.ts"
-import { patternOf } from "./like.ts"
-import type { FieldType, FilterAST, FilterCondition, FilterGroup, FilterOperator } from "./types.ts"
+import { readFilter } from "./filter-parse.ts";
+import { type CheckedField, typedValue } from "./filter-typed.ts";
+import { patternOf } from "./like.ts";
+import type { FieldType, FilterAST, FilterCondition, FilterGroup, FilterOperator } from "./types.ts";
 
 /** The operators each field type takes when its spec lists none; `is` takes null and notnull on every type */
 const OPERATORS_BY_TYPE: Record<FieldType, readonly FilterOperator[]> = {
-	boolean: ["eq", "ne", "neq", "is"],
-	date: ["eq", "ne", "neq", "gt", "gte", "lt", "lte", "is"],
-	enum: ["eq", "ne", "neq", "in", "nin", "is"],
-	number: ["eq", "ne", "neq", "gt", "gte", "lt", "lte", "in", "nin", "is"],
-	string: ["eq", "ne", "neq", "like", "ilike", "in", "nin", "is"],
-} as const
+  boolean: ["eq", "ne", "neq", "is"],
+  date: ["eq", "ne", "neq", "gt", "gte", "lt", "lte", "is"],
+  enum: ["eq", "ne", "neq", "in", "nin", "is"],
+  number: ["eq", "ne", "neq", "gt", "gte", "lt", "lte", "in", "nin", "is"],
+  string: ["eq", "ne", "neq", "like", "ilike", "in", "nin", "is"],
+} as const;
 
 /**
  * What a field's spec may list beyond its type's defaults: contains on any type, its value one
@@ -23,12 +23,12 @@ const OPERATORS_BY_TYPE: Record<FieldType, readonly FilterOperator[]> = {
  * on a string, which compare text: an ISO instant written in two offsets sorts wrong as text
  */
 const TYPABLE_BY_TYPE: Record<FieldType, readonly FilterOperator[]> = {
-	boolean: [...OPERATORS_BY_TYPE.boolean, "contains"],
-	date: [...OPERATORS_BY_TYPE.date, "in", "nin", "contains"],
-	enum: [...OPERATORS_BY_TYPE.enum, "contains"],
-	number: [...OPERATORS_BY_TYPE.number, "contains"],
-	string: [...OPERATORS_BY_TYPE.string, "gt", "gte", "lt", "lte", "contains"],
-}
+  boolean: [...OPERATORS_BY_TYPE.boolean, "contains"],
+  date: [...OPERATORS_BY_TYPE.date, "in", "nin", "contains"],
+  enum: [...OPERATORS_BY_TYPE.enum, "contains"],
+  number: [...OPERATORS_BY_TYPE.number, "contains"],
+  string: [...OPERATORS_BY_TYPE.string, "gt", "gte", "lt", "lte", "contains"],
+};
 
 /**
  * A field as a runtime field map declares it: its type, the operators it takes when not its
@@ -36,63 +36,63 @@ const TYPABLE_BY_TYPE: Record<FieldType, readonly FilterOperator[]> = {
  * column that stores it holds, in place of epoch milliseconds
  */
 type FilterFieldSpec = {
-	/** "iso", on a date field only: values are ISO 8601 text, not epoch milliseconds */
-	format?: "iso" | undefined
-	/** the operators the field takes in place of its type's; `contains` on any type, gt to lte on a string, and `in` and `nin` on a date, beyond them */
-	operators?: readonly FilterOperator[] | undefined
-	/** the type each value is checked and typed as */
-	type: FieldType
-}
+  /** "iso", on a date field only: values are ISO 8601 text, not epoch milliseconds */
+  format?: "iso" | undefined;
+  /** the operators the field takes in place of its type's; `contains` on any type, gt to lte on a string, and `in` and `nin` on a date, beyond them */
+  operators?: readonly FilterOperator[] | undefined;
+  /** the type each value is checked and typed as */
+  type: FieldType;
+};
 
 /** A field of `validateFilter`'s map: a bare type, or a spec */
-type FilterField = FieldType | FilterFieldSpec
+type FilterField = FieldType | FilterFieldSpec;
 
 /** A checked filter, or every reason it was refused */
 type FilterValidationResult =
-	| {
-			/** the filter, each value typed as its field declares */
-			ast: FilterAST
-			/** true: the filter passed every check */
-			valid: true
-	  }
-	| {
-			/** one message per problem, each naming its field, for a 400's detail */
-			errors: string[]
-			/** false: the filter was refused */
-			valid: false
-	  }
+  | {
+      /** the filter, each value typed as its field declares */
+      ast: FilterAST;
+      /** true: the filter passed every check */
+      valid: true;
+    }
+  | {
+      /** one message per problem, each naming its field, for a 400's detail */
+      errors: string[];
+      /** false: the filter was refused */
+      valid: false;
+    };
 
 /** Bounds on one filter expression. Each condition is a predicate SQLite evaluates per row. */
 type FilterLimits = {
-	/** Conditions in the whole filter, every group counted */
-	maxConditions: number
-	/** Nested or()/and() groups below the top level; the parser reads no more than 256, whatever this is */
-	maxDepth: number
-	/** Members of one in/nin list */
-	maxInValues: number
-	/** Bytes of a like or ilike pattern, a value with an inner `*`, once escaped: D1 caps a pattern at 50 */
-	maxPatternBytes: number
-	/** Values the whole filter binds, every in/nin member counted: D1 binds at most 100 per statement */
-	maxValues: number
-}
+  /** Conditions in the whole filter, every group counted */
+  maxConditions: number;
+  /** Nested or()/and() groups below the top level; the parser reads no more than 256, whatever this is */
+  maxDepth: number;
+  /** Members of one in/nin list */
+  maxInValues: number;
+  /** Bytes of a like or ilike pattern, a value with an inner `*`, once escaped: D1 caps a pattern at 50 */
+  maxPatternBytes: number;
+  /** Values the whole filter binds, every in/nin member counted: D1 binds at most 100 per statement */
+  maxValues: number;
+};
 
 /** The default filter bounds: 20 conditions, 3 nested groups, 50 in/nin members, 50 pattern bytes and 60 values */
 const FILTER_LIMITS: FilterLimits = {
-	maxConditions: 20,
-	maxDepth: 3,
-	maxInValues: 50,
-	maxPatternBytes: 50,
-	maxValues: 60,
-}
+  maxConditions: 20,
+  maxDepth: 3,
+  maxInValues: 50,
+  maxPatternBytes: 50,
+  maxValues: 60,
+};
 
 /** Bounds as a caller gives them: a key left out or set to undefined keeps its default, and any other is a whole number from 0 */
-type LimitsGiven<T> = { [K in keyof T]?: number | undefined }
+type LimitsGiven<T> = { [K in keyof T]?: number | undefined };
 
 /** A key's lowest value, and where it holds when that is not everywhere */
-type Floor = readonly [number, string]
+type Floor = readonly [number, string];
 
 /** Whose limits these are, as a refusal names it, their defaults, and each key's floor where it is not 0 */
-type LimitsRule<T> = { defaults: T; floors?: { [K in keyof T]?: Floor | undefined } | undefined; owner: string }
+type LimitsRule<T> = { defaults: T; floors?: { [K in keyof T]?: Floor | undefined } | undefined; owner: string };
 
 /**
  * `given` over `defaults`, a key set to undefined left out as every other option bag reads it, each
@@ -101,104 +101,130 @@ type LimitsRule<T> = { defaults: T; floors?: { [K in keyof T]?: Floor | undefine
  * off, and a misspelled key kept the cap it meant to set. No cap is a large whole number
  */
 function limitsOver<T extends Record<string, number>>(
-	{ defaults, floors = {}, owner }: LimitsRule<T>,
-	given: LimitsGiven<T> | undefined,
+  { defaults, floors = {}, owner }: LimitsRule<T>,
+  given: LimitsGiven<T> | undefined,
 ): T {
-	const unknown = Object.keys(given ?? {}).find((key) => !Object.hasOwn(defaults, key))
-	if (unknown !== undefined)
-		throw new TypeError(
-			`${owner}: limits.${unknown} is not a limit; the limits are ${Object.keys(defaults).join(", ")}`,
-		)
-	const set = Object.entries(given ?? {}).filter((entry): entry is [string, number] => entry[1] !== undefined)
-	for (const [key, value] of set) {
-		const [floor, where] = floors[key] ?? [0, ""]
-		if (!Number.isSafeInteger(value) || value < floor)
-			throw new TypeError(
-				`${owner}: limits.${key} must be a whole number from ${floor}${where}; got ${typeof value === "number" ? value : JSON.stringify(value)}`,
-			)
-	}
-	return { ...defaults, ...Object.fromEntries(set) }
+  const unknown = Object.keys(given ?? {}).find((key) => !Object.hasOwn(defaults, key));
+
+  if (unknown !== undefined) {
+    throw new TypeError(
+      `${owner}: limits.${unknown} is not a limit; the limits are ${Object.keys(defaults).join(", ")}`,
+    );
+  }
+
+  const set = Object.entries(given ?? {}).filter((entry): entry is [string, number] => entry[1] !== undefined);
+
+  for (const [key, value] of set) {
+    const [floor, where] = floors[key] ?? [0, ""];
+
+    if (!Number.isSafeInteger(value) || value < floor) {
+      throw new TypeError(
+        `${owner}: limits.${key} must be a whole number from ${floor}${where}; got ${typeof value === "number" ? value : JSON.stringify(value)}`,
+      );
+    }
+  }
+
+  return { ...defaults, ...Object.fromEntries(set) };
 }
 
 /** The parameters one condition binds */
 const boundBy = ({ operator, value }: FilterCondition) =>
-	Array.isArray(value) ? value.length : operator === "is" && typeof value !== "boolean" ? 0 : 1
+  Array.isArray(value) ? value.length : operator === "is" && typeof value !== "boolean" ? 0 : 1;
 
-type Check = { errors: string[]; fields: Record<string, CheckedField>; limits: FilterLimits }
+type Check = { errors: string[]; fields: Record<string, CheckedField>; limits: FilterLimits };
 
 /** Each field with its operators resolved; a TypeError for a spec its type cannot take, a caller's mistake */
 function checkedFields(fields: Record<string, FilterField>): Record<string, CheckedField> {
-	const checked: Record<string, CheckedField> = {}
-	for (const [name, field] of Object.entries(fields)) {
-		const { format, operators, type } = typeof field === "string" ? { type: field } : (field as FilterFieldSpec)
-		if (format !== undefined && (format !== "iso" || type !== "date"))
-			throw new TypeError(`validateFilter: field '${name}' has format '${format}', which only a date field takes`)
-		const misfit = operators?.find((operator) => !TYPABLE_BY_TYPE[type].includes(operator))
-		if (misfit !== undefined)
-			throw new TypeError(
-				`validateFilter: field '${name}' lists operator '${misfit}', which a ${type} field cannot take`,
-			)
-		Object.defineProperty(checked, name, {
-			enumerable: true,
-			value: { format, operators: operators ?? OPERATORS_BY_TYPE[type], type },
-		})
-	}
-	return checked
+  const checked: Record<string, CheckedField> = {};
+
+  for (const [name, field] of Object.entries(fields)) {
+    const { format, operators, type } = typeof field === "string" ? { type: field } : field;
+
+    if (format !== undefined && (format !== "iso" || type !== "date"))
+      throw new TypeError(`validateFilter: field '${name}' has format '${format}', which only a date field takes`);
+    const misfit = operators?.find((operator) => !TYPABLE_BY_TYPE[type].includes(operator));
+
+    if (misfit !== undefined) {
+      throw new TypeError(
+        `validateFilter: field '${name}' lists operator '${misfit}', which a ${type} field cannot take`,
+      );
+    }
+
+    Object.defineProperty(checked, name, {
+      enumerable: true,
+      value: { format, operators: operators ?? OPERATORS_BY_TYPE[type], type },
+    });
+  }
+
+  return checked;
 }
 
 /** A like or ilike pattern past maxPatternBytes, as SQLite reads it, escaped: D1 refuses it only once it evaluates a row */
 function refuseLongPattern({ field, operator, value }: FilterCondition, check: Check): void {
-	if ((operator !== "like" && operator !== "ilike") || typeof value !== "string") return
-	const pattern = patternOf(operator, value)
-	const bytes = pattern === null ? 0 : new TextEncoder().encode(pattern).length
-	if (bytes > check.limits.maxPatternBytes)
-		check.errors.push(
-			`Filter pattern too long for '${field}': ${bytes} bytes once escaped (max ${check.limits.maxPatternBytes})`,
-		)
+  if ((operator !== "like" && operator !== "ilike") || typeof value !== "string") return;
+  const pattern = patternOf(operator, value);
+  const bytes = pattern === null ? 0 : new TextEncoder().encode(pattern).length;
+
+  if (bytes > check.limits.maxPatternBytes) {
+    check.errors.push(
+      `Filter pattern too long for '${field}': ${bytes} bytes once escaped (max ${check.limits.maxPatternBytes})`,
+    );
+  }
 }
 
 function checkCondition(condition: FilterCondition, check: Check): FilterCondition {
-	const { field, operator } = condition
-	if (!Object.hasOwn(check.fields, field)) {
-		check.errors.push(`Unknown filter field: ${field}`)
-		return condition
-	}
-	const spec = check.fields[field] as CheckedField
-	if (!spec.operators.includes(operator)) {
-		check.errors.push(`Invalid operator '${operator}' for field '${field}' (type: ${spec.type})`)
-		return condition
-	}
-	if (Array.isArray(condition.value) && condition.value.length > check.limits.maxInValues) {
-		check.errors.push(
-			`in/nin list too large for '${field}': ${condition.value.length} (max ${check.limits.maxInValues})`,
-		)
-	}
-	refuseLongPattern(condition, check)
-	const typed = typedValue(spec, condition)
-	if ("error" in typed) {
-		check.errors.push(`Invalid value for '${field}': ${typed.error}`)
-		return condition
-	}
-	return { ...condition, value: typed.value }
+  const { field, operator } = condition;
+
+  if (!Object.hasOwn(check.fields, field)) {
+    check.errors.push(`Unknown filter field: ${field}`);
+
+    return condition;
+  }
+
+  const spec = check.fields[field] as CheckedField;
+
+  if (!spec.operators.includes(operator)) {
+    check.errors.push(`Invalid operator '${operator}' for field '${field}' (type: ${spec.type})`);
+
+    return condition;
+  }
+
+  if (Array.isArray(condition.value) && condition.value.length > check.limits.maxInValues) {
+    check.errors.push(
+      `in/nin list too large for '${field}': ${condition.value.length} (max ${check.limits.maxInValues})`,
+    );
+  }
+
+  refuseLongPattern(condition, check);
+  const typed = typedValue(spec, condition);
+
+  if ("error" in typed) {
+    check.errors.push(`Invalid value for '${field}': ${typed.error}`);
+
+    return condition;
+  }
+
+  return { ...condition, value: typed.value };
 }
 
 /** The group with every condition checked and typed, and how many conditions and values it holds */
-type Shape = { conditions: number; group: FilterGroup; values: number }
+type Shape = { conditions: number; group: FilterGroup; values: number };
 
 function checkGroup(group: FilterGroup, check: Check): Shape {
-	const subgroups = group.subgroups.map((subgroup) => checkGroup(subgroup, check))
-	/* counted on the typed conditions: is.true binds its boolean, is.null nothing */
-	const conditions = group.conditions.map((condition) => checkCondition(condition, check))
-	const values = conditions.reduce((total, condition) => total + boundBy(condition), 0)
-	return {
-		conditions: subgroups.reduce((total, sub) => total + sub.conditions, group.conditions.length),
-		values: subgroups.reduce((total, sub) => total + sub.values, values),
-		group: {
-			conditions,
-			logic: group.logic,
-			subgroups: subgroups.map((sub) => sub.group),
-		},
-	}
+  const subgroups = group.subgroups.map((subgroup) => checkGroup(subgroup, check));
+  // counted on the typed conditions: is.true binds its boolean, is.null nothing
+  const conditions = group.conditions.map((condition) => checkCondition(condition, check));
+  const values = conditions.reduce((total, condition) => total + boundBy(condition), 0);
+
+  return {
+    conditions: subgroups.reduce((total, sub) => total + sub.conditions, group.conditions.length),
+    group: {
+      conditions,
+      logic: group.logic,
+      subgroups: subgroups.map((sub) => sub.group),
+    },
+    values: subgroups.reduce((total, sub) => total + sub.values, values),
+  };
 }
 
 /**
@@ -207,49 +233,52 @@ function checkGroup(group: FilterGroup, check: Check): Shape {
  * that lists an operator its type cannot take, or a format on no date, throws a TypeError.
  */
 function validateFilter(
-	filterString: string | null | undefined,
-	allowedFields: Record<string, FilterField>,
-	limits?: LimitsGiven<FilterLimits> | undefined,
+  filterString: string | null | undefined,
+  allowedFields: Record<string, FilterField>,
+  limits?: LimitsGiven<FilterLimits> | undefined,
 ): FilterValidationResult | null {
-	return checkFilter(
-		filterString,
-		allowedFields,
-		limitsOver({ defaults: FILTER_LIMITS, owner: "validateFilter" }, limits),
-	)
+  return checkFilter(
+    filterString,
+    allowedFields,
+    limitsOver({ defaults: FILTER_LIMITS, owner: "validateFilter" }, limits),
+  );
 }
 
 /** validateFilter under `caps` its caller has already checked, as a list schema's limits are */
 function checkFilter(
-	filterString: string | null | undefined,
-	allowedFields: Record<string, FilterField>,
-	caps: FilterLimits,
+  filterString: string | null | undefined,
+  allowedFields: Record<string, FilterField>,
+  caps: FilterLimits,
 ): FilterValidationResult | null {
-	const fields = checkedFields(allowedFields)
-	if (!filterString || filterString.trim() === "") return null
-	const read = readFilter(filterString, caps.maxDepth)
-	if ("error" in read) return { errors: [read.error], valid: false }
-	const ast = read.ast
+  const fields = checkedFields(allowedFields);
 
-	const check: Check = { errors: [], fields, limits: caps }
-	const shape = checkGroup(ast.root, check)
-	if (shape.conditions > check.limits.maxConditions) {
-		check.errors.push(`Too many filter conditions: ${shape.conditions} (max ${check.limits.maxConditions})`)
-	}
-	if (shape.values > check.limits.maxValues) {
-		check.errors.push(`Filter binds too many values: ${shape.values} (max ${check.limits.maxValues})`)
-	}
-	return check.errors.length > 0 ? { errors: check.errors, valid: false } : { ast: { root: shape.group }, valid: true }
+  if (!filterString || filterString.trim() === "") return null;
+  const read = readFilter(filterString, caps.maxDepth);
+
+  if ("error" in read) return { errors: [read.error], valid: false };
+  const ast = read.ast;
+
+  const check: Check = { errors: [], fields, limits: caps };
+  const shape = checkGroup(ast.root, check);
+
+  if (shape.conditions > check.limits.maxConditions)
+    check.errors.push(`Too many filter conditions: ${shape.conditions} (max ${check.limits.maxConditions})`);
+
+  if (shape.values > check.limits.maxValues)
+    check.errors.push(`Filter binds too many values: ${shape.values} (max ${check.limits.maxValues})`);
+
+  return check.errors.length > 0 ? { errors: check.errors, valid: false } : { ast: { root: shape.group }, valid: true };
 }
 
 export {
-	checkFilter,
-	FILTER_LIMITS,
-	limitsOver,
-	OPERATORS_BY_TYPE,
-	validateFilter,
-	type FilterField,
-	type FilterFieldSpec,
-	type FilterLimits,
-	type LimitsGiven,
-	type FilterValidationResult,
-}
+  checkFilter,
+  FILTER_LIMITS,
+  limitsOver,
+  OPERATORS_BY_TYPE,
+  validateFilter,
+  type FilterField,
+  type FilterFieldSpec,
+  type FilterLimits,
+  type LimitsGiven,
+  type FilterValidationResult,
+};

@@ -1,10 +1,11 @@
 /** Reading a consumer package.json's `exports` before a generator adds its subpaths. */
-import fs from "node:fs"
-import path from "node:path"
-import { readStaged, type Staged, writeJsonAtomic } from "./fs.ts"
+import fs from "node:fs";
+import path from "node:path";
+
+import { readStaged, type Staged, writeJsonAtomic } from "./fs.ts";
 
 /** A subpath's target: a path, a condition map, or a fallback list. */
-export type ExportTarget = unknown
+export type ExportTarget = unknown;
 
 /**
  * The `exports` field as a subpath map. Node accepts three forms: a single target (`"./x.ts"`),
@@ -12,12 +13,16 @@ export type ExportTarget = unknown
  * package's `.` export, which a generator adding subpaths must keep.
  */
 export function readExports(pkg: Record<string, unknown>): Record<string, ExportTarget> {
-	const exports = pkg["exports"]
-	if (exports === undefined || exports === null) return {}
-	if (typeof exports !== "object" || Array.isArray(exports)) return { ".": exports }
-	const keys = Object.keys(exports)
-	if (keys.length > 0 && keys.every((key) => !key.startsWith("."))) return { ".": exports }
-	return { ...(exports as Record<string, ExportTarget>) }
+  const exports = pkg["exports"];
+
+  if (exports === undefined || exports === null) return {};
+
+  if (typeof exports !== "object" || Array.isArray(exports)) return { ".": exports };
+  const keys = Object.keys(exports);
+
+  if (keys.length > 0 && keys.every((key) => !key.startsWith("."))) return { ".": exports };
+
+  return { ...(exports as Record<string, ExportTarget>) };
 }
 
 /**
@@ -25,18 +30,22 @@ export function readExports(pkg: Record<string, unknown>): Record<string, Export
  * there is none. Codegen passes the project root, so it never rewrites a package above the project.
  */
 export function findNearestPackageJson(dir: string, root?: string): string | null {
-	const stop = root === undefined ? undefined : path.resolve(root)
-	for (let current = path.resolve(dir); current !== path.dirname(current); current = path.dirname(current)) {
-		const candidate = path.join(current, "package.json")
-		if (fs.existsSync(candidate)) return candidate
-		if (current === stop) return null
-	}
-	return null
+  const stop = root === undefined ? undefined : path.resolve(root);
+
+  for (let current = path.resolve(dir); current !== path.dirname(current); current = path.dirname(current)) {
+    const candidate = path.join(current, "package.json");
+
+    if (fs.existsSync(candidate)) return candidate;
+
+    if (current === stop) return null;
+  }
+
+  return null;
 }
 
 /** A generated subpath (`./x`) under the database's namespace when it has one (`./<namespace>/x`) */
 export const exportKey = (namespace: string | undefined, key: string): string =>
-	namespace === undefined ? key : `./${namespace}/${key.slice(2)}`
+  namespace === undefined ? key : `./${namespace}/${key.slice(2)}`;
 
 /**
  * Whether `key` is a subpath this generator writes for its database, and so rewrites: one `own`
@@ -44,9 +53,10 @@ export const exportKey = (namespace: string | undefined, key: string): string =>
  * under the database's namespace. Another database's namespace is never touched.
  */
 export function ownsKey(namespace: string | undefined, key: string, own: (bare: string) => boolean): boolean {
-	if (own(key)) return true
-	const prefix = namespace === undefined ? undefined : `./${namespace}/`
-	return prefix !== undefined && key.startsWith(prefix) && own(`./${key.slice(prefix.length)}`)
+  if (own(key)) return true;
+  const prefix = namespace === undefined ? undefined : `./${namespace}/`;
+
+  return prefix !== undefined && key.startsWith(prefix) && own(`./${key.slice(prefix.length)}`);
 }
 
 /**
@@ -54,18 +64,18 @@ export function ownsKey(namespace: string | undefined, key: string, own: (bare: 
  * end of the map so reruns write the same order; the unnamespaced key goes too.
  */
 export function setPackageExport(
-	packageJsonPath: string,
-	{ namespace, staged, subpath }: { namespace?: string | undefined; staged?: Staged | undefined; subpath: string },
-	file: string,
+  packageJsonPath: string,
+  { namespace, staged, subpath }: { namespace?: string | undefined; staged?: Staged | undefined; subpath: string },
+  file: string,
 ): void {
-	const pkg = JSON.parse(readStaged(packageJsonPath, staged)) as Record<string, unknown>
-	const exports = readExports(pkg)
-	delete exports[subpath]
-	subpath = exportKey(namespace, subpath)
-	delete exports[subpath]
-	exports[subpath] = `./${path.relative(path.dirname(packageJsonPath), file)}`
-	pkg["exports"] = orderedExports(exports)
-	writeJsonAtomic(packageJsonPath, pkg, staged)
+  const pkg = JSON.parse(readStaged(packageJsonPath, staged)) as Record<string, unknown>;
+  const exports = readExports(pkg);
+  delete exports[subpath];
+  subpath = exportKey(namespace, subpath);
+  delete exports[subpath];
+  exports[subpath] = `./${path.relative(path.dirname(packageJsonPath), file)}`;
+  pkg["exports"] = orderedExports(exports);
+  writeJsonAtomic(packageJsonPath, pkg, staged);
 }
 
 /**
@@ -74,10 +84,11 @@ export function setPackageExport(
  * map holds them in changes nothing it resolves.
  */
 export function orderedExports<T>(exports: Record<string, T>): Record<string, T> {
-	const keys = Object.keys(exports)
-		.filter((key) => key !== ".")
-		.sort()
-	return Object.fromEntries(
-		[...(Object.hasOwn(exports, ".") ? ["."] : []), ...keys].map((key) => [key, exports[key] as T]),
-	)
+  const keys = Object.keys(exports)
+    .filter((key) => key !== ".")
+    .sort();
+
+  return Object.fromEntries(
+    [...(Object.hasOwn(exports, ".") ? ["."] : []), ...keys].map((key) => [key, exports[key] as T]),
+  );
 }

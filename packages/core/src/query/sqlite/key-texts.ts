@@ -4,32 +4,33 @@
  * (`_cursorKeyTexts`), and a SQLite key's value its mode reads as another (`_cursorTextKeys`). list-finish.ts picks which a list
  * selects; listOptions selects the texts on every sorted page.
  */
-import { Column, is, type SQL, type SQLWrapper, sql } from "drizzle-orm"
-import type { ListDialect } from "../list-dialect.ts"
-import { carriesOpaque, DateKey, readsRounded } from "./cursor-fit.ts"
-import type { SortKey } from "./keyset.ts"
-import { heldApart, holdsText, storedReads } from "./timestamp-column.ts"
+import { Column, is, type SQL, type SQLWrapper, sql } from "drizzle-orm";
+
+import type { ListDialect } from "../list-dialect.ts";
+import { carriesOpaque, DateKey, readsRounded } from "./cursor-fit.ts";
+import type { SortKey } from "./keyset.ts";
+import { heldApart, holdsText, storedReads } from "./timestamp-column.ts";
 
 /**
  * The storage class SQLite holds a key in, a REAL ±Infinity as `+inf` or `-inf`, which D1's JSON
  * transport reads as null
  */
 const storageOf = (column: SQLWrapper): SQL =>
-	sql`case typeof(${column}) when 'real' then case ${column} when 9e999 then '+inf' when -9e999 then '-inf' else 'real' end else typeof(${column}) end`
+  sql`case typeof(${column}) when 'real' then case ${column} when 9e999 then '+inf' when -9e999 then '-inf' else 'real' end else typeof(${column}) end`;
 
-/* whether `column`'s Postgres type is one a driver reads as a JS Date, which keeps milliseconds where it keeps microseconds */
+// whether `column`'s Postgres type is one a driver reads as a JS Date, which keeps milliseconds where it keeps microseconds
 const isTime = (column: SQLWrapper): SQL =>
-	sql`pg_typeof(${column}) in ('timestamp without time zone'::regtype, 'timestamp with time zone'::regtype, 'date'::regtype)`
+  sql`pg_typeof(${column}) in ('timestamp without time zone'::regtype, 'timestamp with time zone'::regtype, 'date'::regtype)`;
 
-const floatTypes = () => sql`'double precision'::regtype, 'real'::regtype`
-const fixedTypes = () => sql`'smallint'::regtype, 'integer'::regtype, 'bigint'::regtype, 'numeric'::regtype`
+const floatTypes = () => sql`'double precision'::regtype, 'real'::regtype`;
+const fixedTypes = () => sql`'smallint'::regtype, 'integer'::regtype, 'bigint'::regtype, 'numeric'::regtype`;
 
 /**
  * Whether a key's type is a domain whose base, through domains of domains, is one of `types`: none is
  * built in (below 16384, FirstNormalObjectId), so the domains are read only for a key of another type
  */
 const isDomainOver = (column: SQLWrapper, types: SQL): SQL =>
-	sql`(pg_typeof(${column})::oid >= 16384 and pg_typeof(${column})::oid = any(array(with recursive d(oid, base) as (select oid, typbasetype from pg_type where typtype = 'd' union all select d.oid, p.typbasetype from d join pg_type p on p.oid = d.base where p.typtype = 'd') select d.oid from d where d.base::regtype in (${types}))))`
+  sql`(pg_typeof(${column})::oid >= 16384 and pg_typeof(${column})::oid = any(array(with recursive d(oid, base) as (select oid, typbasetype from pg_type where typtype = 'd' union all select d.oid, p.typbasetype from d join pg_type p on p.oid = d.base where p.typtype = 'd') select d.oid from d where d.base::regtype in (${types}))))`;
 
 /**
  * Postgres's family of a key: `float` for a double precision or real, a double the driver reads
@@ -40,7 +41,7 @@ const isDomainOver = (column: SQLWrapper, types: SQL): SQL =>
  * text
  */
 const familyOf = (column: SQLWrapper): SQL =>
-	sql`case when pg_typeof(${column}) in (${floatTypes()}) then 'float' when pg_typeof(${column}) in (${fixedTypes()}) then 'fixed' when ${isTime(column)} then 'time' when ${isDomainOver(column, floatTypes())} then 'float' when ${isDomainOver(column, fixedTypes())} then 'fixed' else 'other' end`
+  sql`case when pg_typeof(${column}) in (${floatTypes()}) then 'float' when pg_typeof(${column}) in (${fixedTypes()}) then 'fixed' when ${isTime(column)} then 'time' when ${isDomainOver(column, floatTypes())} then 'float' when ${isDomainOver(column, fixedTypes())} then 'fixed' else 'other' end`;
 
 /**
  * A key's stored time as text, where a Date can't hold it, or null for a key that is no
@@ -56,32 +57,41 @@ const familyOf = (column: SQLWrapper): SQL =>
  * apart, never joined (textKeysSQL)
  */
 function storedTextOf(dialect: ListDialect, column: SQLWrapper, asRead: boolean): SQL | null {
-	if (readsRounded(column)) return sql`coalesce((${column})::text, '')`
-	if (dialect === "sqlite") {
-		if (!asRead) return null
-		const reads = readsAsStored(column)
-		if (reads === undefined) return null
-		const time = holdsText(column)
-			? sql`when typeof(${column}) in ('integer', 'real') and abs(${column}) < 9e999 then ${readBackText(column, (text) => text)} `
-			: sql``
-		return sql`case ${time}when ${reads} then '' else '!' || typeof(${column}) end`
-	}
-	if (column instanceof DateKey) return null
-	if (is(column, Column) && !carriesOpaque(column)) {
-		if (FLOATS.has(column.dataType)) return sql`case when ${unprinted(column)} then '!f' else '' end`
-		return DATESTYLED.has(column.dataType) ? sql`coalesce(${isoText(column)}, '')` : null
-	}
-	const time = carriesOpaque(column) ? sql`` : sql` when ${isTime(column)} then ${isoText(column)}`
-	const float = sql` when ${isFloat(column)} and ${unprinted(column)} then '!f'`
-	return sql`coalesce(case when ${roundsOnRead(column)} then (${column})::text${float}${time} end, '')`
+  if (readsRounded(column)) return sql`coalesce((${column})::text, '')`;
+
+  if (dialect === "sqlite") {
+    if (!asRead) return null;
+    const reads = readsAsStored(column);
+
+    if (reads === undefined) return null;
+
+    const time = holdsText(column)
+      ? sql`when typeof(${column}) in ('integer', 'real') and abs(${column}) < 9e999 then ${readBackText(column, (text) => text)} `
+      : sql``;
+
+    return sql`case ${time}when ${reads} then '' else '!' || typeof(${column}) end`;
+  }
+
+  if (column instanceof DateKey) return null;
+
+  if (is(column, Column) && !carriesOpaque(column)) {
+    if (FLOATS.has(column.dataType)) return sql`case when ${unprinted(column)} then '!f' else '' end`;
+
+    return DATESTYLED.has(column.dataType) ? sql`coalesce(${isoText(column)}, '')` : null;
+  }
+
+  const time = carriesOpaque(column) ? sql`` : sql` when ${isTime(column)} then ${isoText(column)}`;
+  const float = sql` when ${isFloat(column)} and ${unprinted(column)} then '!f'`;
+
+  return sql`coalesce(case when ${roundsOnRead(column)} then (${column})::text${float}${time} end, '')`;
 }
 
 // lookup-table: drizzle's Postgres float columns, which a driver reads from the text extra_float_digits prints
-const FLOATS = /* @__PURE__ */ new Set(["number double", "number float"])
+const FLOATS = /* @__PURE__ */ new Set(["number double", "number float"]);
 
-/* whether a Postgres expression's type is a double precision or real, or a domain over one */
+// whether a Postgres expression's type is a double precision or real, or a domain over one
 const isFloat = (column: SQLWrapper): SQL =>
-	sql`(pg_typeof(${column}) in (${floatTypes()}) or ${isDomainOver(column, floatTypes())})`
+  sql`(pg_typeof(${column}) in (${floatTypes()}) or ${isDomainOver(column, floatTypes())})`;
 
 /**
  * Whether a Postgres float key's value reaches the driver rounded: every text Postgres prints a float
@@ -90,7 +100,7 @@ const isFloat = (column: SQLWrapper): SQL =>
  * carries `!f`, which paginate refuses on the page that serves it, as it does a SQLite TEXT's `!`
  */
 const unprinted = (column: SQLWrapper): SQL =>
-	sql`(${column} is not null and current_setting('extra_float_digits')::int <= 0)`
+  sql`(${column} is not null and current_setting('extra_float_digits')::int <= 0)`;
 
 /**
  * A SQLite number's text that SQLite reads back as it, in the same query, as `held` wraps it, else
@@ -100,29 +110,37 @@ const unprinted = (column: SQLWrapper): SQL =>
  * stands in for the value; a merge orders an unheld one by its printed text, and the page that serves it refuses
  */
 function readBackText(column: SQLWrapper, held: (text: SQL) => SQL): SQL {
-	const cast = sql`cast(${column} as text)`
-	const printed = sql`printf('%!.17g', ${column})`
-	return sql`case when cast(${cast} as real) = ${column} then ${held(cast)} when cast(${printed} as real) = ${column} then ${held(printed)} else '!n' || ${printed} end`
+  const cast = sql`cast(${column} as text)`;
+  const printed = sql`printf('%!.17g', ${column})`;
+
+  return sql`case when cast(${cast} as real) = ${column} then ${held(cast)} when cast(${printed} as real) = ${column} then ${held(printed)} else '!n' || ${printed} end`;
 }
 
-type StoredClass = "blob" | "integer" | "real" | "text"
+type StoredClass = "blob" | "integer" | "real" | "text";
 
-/* a storage class but NULL as SQLite's typeof() names it, a literal, so no set spends a bound parameter */
+// a storage class but NULL as SQLite's typeof() names it, a literal, so no set spends a bound parameter
 function className(stored: StoredClass): SQL {
-	switch (stored) {
-		case "blob":
-			return sql`'blob'`
-		case "integer":
-			return sql`'integer'`
-		case "real":
-			return sql`'real'`
-		default:
-			return sql`'text'`
-	}
+  switch (stored) {
+    case "blob": {
+      return sql`'blob'`;
+    }
+
+    case "integer": {
+      return sql`'integer'`;
+    }
+
+    case "real": {
+      return sql`'real'`;
+    }
+
+    default: {
+      return sql`'text'`;
+    }
+  }
 }
 
-/* the classes of a StoredReads set, as typeof() names them */
-const classList = (classes: readonly StoredClass[]): SQL => sql.join(classes.map(className), sql`, `)
+// the classes of a StoredReads set, as typeof() names them
+const classList = (classes: readonly StoredClass[]): SQL => sql.join(classes.map(className), sql`, `);
 
 /**
  * Whether a SQLite key's row holds what its mode reads back as stored (storedReads): NULL, or a value
@@ -130,13 +148,16 @@ const classList = (classes: readonly StoredClass[]): SQL => sql.join(classes.map
  * Undefined for a column with no set
  */
 function readsAsStored(column: SQLWrapper): SQL | undefined {
-	const reads = storedReads(column)
-	if (reads === undefined) return undefined
-	if (reads === "boolean")
-		return sql`(${column} is null or (typeof(${column}) in ('integer', 'real') and ${column} in (0, 1)))`
-	const classes = reads.filter((each): each is StoredClass => each !== "finite")
-	const finite = reads.includes("finite") ? sql` or (typeof(${column}) = 'real' and abs(${column}) < 9e999)` : sql``
-	return sql`(typeof(${column}) in ('null', ${classList(classes)})${finite})`
+  const reads = storedReads(column);
+
+  if (reads === undefined) return undefined;
+
+  if (reads === "boolean")
+    return sql`(${column} is null or (typeof(${column}) in ('integer', 'real') and ${column} in (0, 1)))`;
+  const classes = reads.filter((each): each is StoredClass => each !== "finite");
+  const finite = reads.includes("finite") ? sql` or (typeof(${column}) = 'real' and abs(${column}) < 9e999)` : sql``;
+
+  return sql`(typeof(${column}) in ('null', ${classList(classes)})${finite})`;
 }
 
 /**
@@ -146,13 +167,13 @@ function readsAsStored(column: SQLWrapper): SQL | undefined {
  * a blob's hex; null where the mode reads it back
  */
 const heldStored = (column: SQLWrapper, reads: SQL): SQL =>
-	sql`case when ${reads} then null when typeof(${column}) = 'integer' then json_array('integer', cast(${column} as text)) when typeof(${column}) = 'real' then case when abs(${column}) < 9e999 then ${readBackText(column, (text) => sql`json_array('real', ${text})`)} else json_array('real', case when ${column} > 0 then '9e999' else '-9e999' end) end when typeof(${column}) = 'text' then json_array('text', ${column}) else json_array('blob', hex(${column})) end`
+  sql`case when ${reads} then null when typeof(${column}) = 'integer' then json_array('integer', cast(${column} as text)) when typeof(${column}) = 'real' then case when abs(${column}) < 9e999 then ${readBackText(column, (text) => sql`json_array('real', ${text})`)} else json_array('real', case when ${column} > 0 then '9e999' else '-9e999' end) end when typeof(${column}) = 'text' then json_array('text', ${column}) else json_array('blob', hex(${column})) end`;
 
 // lookup-table: the Postgres columns whose read follows DateStyle, or keeps milliseconds of a time's microseconds
-const DATESTYLED = /* @__PURE__ */ new Set(["object date", "string date", "string timestamp"])
+const DATESTYLED = /* @__PURE__ */ new Set(["object date", "string date", "string timestamp"]);
 
-/* A time's ::text follows DateStyle, whose zone abbreviation (IST, PST) reads back as another zone */
-const isoText = (column: SQLWrapper): SQL => sql`(to_json(${column}) #>> '{}')`
+// A time's ::text follows DateStyle, whose zone abbreviation (IST, PST) reads back as another zone
+const isoText = (column: SQLWrapper): SQL => sql`(to_json(${column}) #>> '{}')`;
 
 /**
  * Whether a Postgres expression's type is a number no driver reads exactly: a numeric or a domain over
@@ -160,16 +181,17 @@ const isoText = (column: SQLWrapper): SQL => sql`(to_json(${column}) #>> '{}')`
  * a numeric's is digits, a sign, a point, NaN or Infinity; a time's is to_json's ISO 8601
  */
 const roundsOnRead = (column: SQLWrapper): SQL =>
-	sql`(pg_typeof(${column}) = 'numeric'::regtype or ${isDomainOver(column, sql`'numeric'::regtype`)})`
+  sql`(pg_typeof(${column}) = 'numeric'::regtype or ${isDomainOver(column, sql`'numeric'::regtype`)})`;
 
 /** Each of `keys`' stored text, comma-joined, empty for one no list carries; asRead SQLite keys carry their time too */
 function keyTextsSQL(
-	keys: readonly SortKey[],
-	dialect: ListDialect,
-	asRead: (column: SQLWrapper) => boolean = () => false,
+  keys: readonly SortKey[],
+  dialect: ListDialect,
+  asRead: (column: SQLWrapper) => boolean = () => false,
 ): SQL<string> {
-	const each = keys.map(({ column }) => storedTextOf(dialect, column, asRead(column)) ?? sql`''`)
-	return sql<string>`${sql.join(each, sql` || ',' || `)}`
+  const each = keys.map(({ column }) => storedTextOf(dialect, column, asRead(column)) ?? sql`''`);
+
+  return sql<string>`${sql.join(each, sql` || ',' || `)}`;
 }
 
 /**
@@ -182,12 +204,15 @@ function keyTextsSQL(
  * never is, and no Postgres before 16 has json_array
  */
 function textKeysSQL(keys: readonly SortKey[], held: (column: SQLWrapper) => boolean = heldApart): SQL<string> {
-	if (!keys.some(({ column }) => held(column))) return sql<string>`''`
-	const each = keys.map(({ column }) => {
-		const reads = held(column) ? readsAsStored(column) : undefined
-		return reads === undefined ? sql`null` : heldStored(column, reads)
-	})
-	return sql<string>`json_array(${sql.join(each, sql`, `)})`
+  if (!keys.some(({ column }) => held(column))) return sql<string>`''`;
+
+  const each = keys.map(({ column }) => {
+    const reads = held(column) ? readsAsStored(column) : undefined;
+
+    return reads === undefined ? sql`null` : heldStored(column, reads);
+  });
+
+  return sql<string>`json_array(${sql.join(each, sql`, `)})`;
 }
 
-export { familyOf, keyTextsSQL, storageOf, storedTextOf, textKeysSQL }
+export { familyOf, keyTextsSQL, storageOf, storedTextOf, textKeysSQL };

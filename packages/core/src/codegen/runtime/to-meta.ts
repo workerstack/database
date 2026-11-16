@@ -3,268 +3,291 @@
  * constraints checked and its facts named as the generators ask for them, each table's unique
  * indexes sorted into plain, partial and expression ones.
  */
-import path from "node:path"
-import type { ColumnMetaKind } from "../../meta/column.ts"
+import path from "node:path";
+
+import type { ColumnMetaKind } from "../../meta/column.ts";
 import type {
-	AnalysisResult,
-	FieldMeta,
-	ImportRef,
-	TableMeta,
-	TimestampsMeta,
-	PartialUniqueIndexMeta,
-	UniqueIndexMeta,
-} from "../analyzer-types.ts"
-import { fieldConstraintsOf } from "../annotations.ts"
-import { byCodeUnit } from "../utils/order.ts"
-import { extractDbName, getTablesImportPath } from "../utils/paths.ts"
-import type { ModuleExport, Snapshot, SnapshotColumn, SnapshotTable } from "./snapshot-types.ts"
+  AnalysisResult,
+  FieldMeta,
+  ImportRef,
+  TableMeta,
+  TimestampsMeta,
+  PartialUniqueIndexMeta,
+  UniqueIndexMeta,
+} from "../analyzer-types.ts";
+import { fieldConstraintsOf } from "../annotations.ts";
+import { byCodeUnit } from "../utils/order.ts";
+import { extractDbName, getTablesImportPath } from "../utils/paths.ts";
+import type { ModuleExport, Snapshot, SnapshotColumn, SnapshotTable } from "./snapshot-types.ts";
 
 // lookup-table: timestamp column names under either casing
 const TIMESTAMP_KEYS: Record<string, "createdAt" | "deletedAt" | "updatedAt"> = {
-	createdAt: "createdAt",
-	created_at: "createdAt",
-	deletedAt: "deletedAt",
-	deleted_at: "deletedAt",
-	updatedAt: "updatedAt",
-	updated_at: "updatedAt",
-}
+  createdAt: "createdAt",
+  created_at: "createdAt",
+  deletedAt: "deletedAt",
+  deleted_at: "deletedAt",
+  updatedAt: "updatedAt",
+  updated_at: "updatedAt",
+};
 
 // lookup-table: the helpers whose values are epoch milliseconds, which the shared timestamp schemas take
 const EPOCH_KINDS: ReadonlySet<string> = /* @__PURE__ */ new Set([
-	"createdAt",
-	"deletedAt",
-	"integer",
-	"timestamp",
-	"updatedAt",
-])
+  "createdAt",
+  "deletedAt",
+  "integer",
+  "timestamp",
+  "updatedAt",
+]);
 
 // lookup-table: the helpers that fill their own timestamp
-const TIMESTAMP_KINDS: ReadonlySet<string> = /* @__PURE__ */ new Set(["createdAt", "deletedAt", "updatedAt"])
+const TIMESTAMP_KINDS: ReadonlySet<string> = /* @__PURE__ */ new Set(["createdAt", "deletedAt", "updatedAt"]);
 
 /** Whether a column holds epoch milliseconds: a database timestamp or integer, or a plain integer column */
 const isEpoch = (field: FieldMeta) =>
-	field.databaseKind === null ? field.dataType.startsWith("number int") : EPOCH_KINDS.has(field.databaseKind)
+  field.databaseKind === null ? field.dataType.startsWith("number int") : EPOCH_KINDS.has(field.databaseKind);
 
 /** The timestamp columns a table declares, each under its own name, and the casing they share */
 function detectTimestamps(fields: FieldMeta[]): TimestampsMeta {
-	const names: TimestampsMeta["names"] = { createdAt: null, deletedAt: null, updatedAt: null }
-	for (const field of fields) {
-		const key = Object.hasOwn(TIMESTAMP_KEYS, field.name) ? TIMESTAMP_KEYS[field.name] : undefined
-		if (key !== undefined && isEpoch(field)) names[key] = field.name
-	}
-	const declared = Object.values(names).filter((name) => name !== null)
-	const snake = declared.filter((name) => name.includes("_")).length
-	const style = snake === 0 ? "camelCase" : snake === declared.length ? "snake_case" : "mixed"
-	/* the shared spread takes a column only when its own read schema is the spread's: database's
-	 * helper of that name, read back, NOT NULL but for deletedAt; any other is its own field */
-	const spread = (key: keyof TimestampsMeta["names"]) => {
-		const field = fields.find((each) => each.name === names[key])
-		return field?.databaseKind === key && !field.constraints.private && field.isNotNull === (key !== "deletedAt")
-	}
-	return {
-		createdAt: spread("createdAt"),
-		deletedAt: spread("deletedAt"),
-		names,
-		style,
-		updatedAt: spread("updatedAt"),
-	}
+  const names: TimestampsMeta["names"] = { createdAt: null, deletedAt: null, updatedAt: null };
+
+  for (const field of fields) {
+    const key = Object.hasOwn(TIMESTAMP_KEYS, field.name) ? TIMESTAMP_KEYS[field.name] : undefined;
+
+    if (key !== undefined && isEpoch(field)) names[key] = field.name;
+  }
+
+  const declared = Object.values(names).filter((name) => name !== null);
+  const snake = declared.filter((name) => name.includes("_")).length;
+  const style = snake === 0 ? "camelCase" : snake === declared.length ? "snake_case" : "mixed";
+
+  // the shared spread takes a column only when its own read schema is the spread's: database's
+  // helper of that name, read back, NOT NULL but for deletedAt; any other is its own field
+  const spread = (key: keyof TimestampsMeta["names"]) => {
+    const field = fields.find((each) => each.name === names[key]);
+
+    return field?.databaseKind === key && !field.constraints.private && field.isNotNull === (key !== "deletedAt");
+  };
+
+  return {
+    createdAt: spread("createdAt"),
+    deletedAt: spread("deletedAt"),
+    names,
+    style,
+    updatedAt: spread("updatedAt"),
+  };
 }
 
 /** The import a generated file names `at` by: a package by its specifier, a project file by its path */
 function importOf(at: ModuleExport): ImportRef {
-	if (at.external) return { from: at.module, imported: at.name, name: at.name, path: null }
-	return { from: `./${path.basename(at.module, ".ts")}`, imported: at.name, name: at.name, path: at.module }
+  if (at.external) return { from: at.module, imported: at.name, name: at.name, path: null };
+
+  return { from: `./${path.basename(at.module, ".ts")}`, imported: at.name, name: at.name, path: at.module };
 }
 
-type Build = { file: string; table: SnapshotTable; tables: readonly SnapshotTable[] }
+type Build = { file: string; table: SnapshotTable; tables: readonly SnapshotTable[] };
 
 /** A column's key into another table as FieldMeta names it, marked when it points at a c.id key */
 function foreignKeyOf(column: SnapshotColumn, tables: readonly SnapshotTable[]): FieldMeta["foreignKey"] {
-	const fk = column.foreignKey
-	if (fk === null) return null
-	const target = tables.find((each) => each.exportName === fk.table)
-	return {
-		column: column.key,
-		key: fk.key ?? undefined,
-		onDelete: fk.onDelete ?? undefined,
-		onUpdate: fk.onUpdate ?? undefined,
-		refColumn: fk.column,
-		refTable: fk.table,
-		toId: target?.columns.find((each) => each.key === fk.column)?.database?.kind === "id",
-	}
+  const fk = column.foreignKey;
+
+  if (fk === null) return null;
+  const target = tables.find((each) => each.exportName === fk.table);
+
+  return {
+    column: column.key,
+    key: fk.key ?? undefined,
+    onDelete: fk.onDelete ?? undefined,
+    onUpdate: fk.onUpdate ?? undefined,
+    refColumn: fk.column,
+    refTable: fk.table,
+    toId: target?.columns.find((each) => each.key === fk.column)?.database?.kind === "id",
+  };
 }
 
 /** Whether something other than the caller fills a timestamp: database's own helper, or a default or update hook under its name */
 const isFilled = (column: SnapshotColumn, kind: string | null) =>
-	TIMESTAMP_KINDS.has(kind ?? "") ||
-	(Object.hasOwn(TIMESTAMP_KEYS, column.key) && (column.hasDefault || column.onUpdate))
+  TIMESTAMP_KINDS.has(kind ?? "") ||
+  (Object.hasOwn(TIMESTAMP_KEYS, column.key) && (column.hasDefault || column.onUpdate));
 
-/*
- * The data types drizzle gives a column that database types with no c helper, each by its own rule: text,
- * numbers, a boolean and JSON on both dialects, and each Postgres type with one. Any other is
- * refused rather than typed as plain text, a type drizzle adds later among them.
- */
+// The data types drizzle gives a column that database types with no c helper, each by its own rule: text,
+// numbers, a boolean and JSON on both dialects, and each Postgres type with one. Any other is
+// refused rather than typed as plain text, a type drizzle adds later among them.
 // lookup-table: the data types a plain drizzle column may have
 const TYPABLE: ReadonlySet<string> = /* @__PURE__ */ new Set([
-	"boolean",
-	"number",
-	"number double",
-	"number float",
-	"number int16",
-	"number int32",
-	"number int53",
-	"object json",
-	"string",
-	"string binary",
-	"string cidr",
-	"string date",
-	"string enum",
-	"string inet",
-	"string int64",
-	"string interval",
-	"string macaddr",
-	"string macaddr8",
-	"string numeric",
-	"string time",
-	"string timestamp",
-	"string uuid",
-])
+  "boolean",
+  "number",
+  "number double",
+  "number float",
+  "number int16",
+  "number int32",
+  "number int53",
+  "object json",
+  "string",
+  "string binary",
+  "string cidr",
+  "string date",
+  "string enum",
+  "string inet",
+  "string int64",
+  "string interval",
+  "string macaddr",
+  "string macaddr8",
+  "string numeric",
+  "string time",
+  "string timestamp",
+  "string uuid",
+]);
 
-/* the plain drizzle columns database types, by dialect, as a refusal names them */
+// the plain drizzle columns database types, by dialect, as a refusal names them
 // lookup-table: a dialect's typable drizzle columns
 const TYPED_COLUMNS = {
-	postgres:
-		"text, varchar, char, uuid, date, timestamp, time and interval (in string mode), numeric, smallint, integer, bigint, serial, real, double precision, boolean, json, jsonb, inet, cidr, macaddr, macaddr8, bit or an enum",
-	sqlite: "text, integer, real, numeric, boolean or json",
-} as const
+  postgres:
+    "text, varchar, char, uuid, date, timestamp, time and interval (in string mode), numeric, smallint, integer, bigint, serial, real, double precision, boolean, json, jsonb, inet, cidr, macaddr, macaddr8, bit or an enum",
+  sqlite: "text, integer, real, numeric, boolean or json",
+} as const;
 
 /** What a column's `c` helper recorded, as FieldMeta names it; a plain drizzle column's own enum values */
 function databaseFactsOf(
-	column: SnapshotColumn,
+  column: SnapshotColumn,
 ): Pick<FieldMeta, "enumValues" | "jsonSchemaName" | "prefix" | "schemaImports" | "schemaJson" | "states"> {
-	const database = column.database
-	const schema = database?.schema ?? null
-	return {
-		enumValues: database?.values ?? column.enumValues,
-		jsonSchemaName: database?.kind === "json" ? (schema as ModuleExport).name : null,
-		prefix: database?.prefix ?? null,
-		schemaImports: schema === null ? [] : [importOf(schema)],
-		schemaJson: database?.schemaJson ?? null,
-		states: database?.states ?? null,
-	}
+  const database = column.database;
+  const schema = database?.schema ?? null;
+
+  return {
+    enumValues: database?.values ?? column.enumValues,
+    jsonSchemaName: database?.kind === "json" ? (schema as ModuleExport).name : null,
+    prefix: database?.prefix ?? null,
+    schemaImports: schema === null ? [] : [importOf(schema)],
+    schemaJson: database?.schemaJson ?? null,
+    states: database?.states ?? null,
+  };
 }
 
-/* the c helpers whose values are text, whose min and max bound a length */
+// the c helpers whose values are text, whose min and max bound a length
 // lookup-table: measuredBy's text kinds
-const TEXT_KINDS: ReadonlySet<ColumnMetaKind> = /* @__PURE__ */ new Set<ColumnMetaKind>(["enum", "id", "ref", "text"])
+const TEXT_KINDS: ReadonlySet<ColumnMetaKind> = /* @__PURE__ */ new Set<ColumnMetaKind>(["enum", "id", "ref", "text"]);
 
 /** Whether a column's min and max bound its length (text, a numeric column's digits aside) or its value */
 const measuredBy = (column: SnapshotColumn, kind: ColumnMetaKind | null): "length" | "value" =>
-	(kind === null ? column.dataType.startsWith("string") && column.dataType !== "string numeric" : TEXT_KINDS.has(kind))
-		? "length"
-		: "value"
+  (kind === null ? column.dataType.startsWith("string") && column.dataType !== "string numeric" : TEXT_KINDS.has(kind))
+    ? "length"
+    : "value";
 
 /** One column as FieldMeta; a constraint database cannot honour, or a column it cannot type, is an error naming it */
 function fieldOf(column: SnapshotColumn, { file, table, tables }: Build): FieldMeta {
-	const kind = (column.database?.kind ?? null) as ColumnMetaKind | null
-	const place = `${file}: ${table.exportName}.${column.key}`
-	if (kind === null && !TYPABLE.has(column.dataType))
-		throw new Error(
-			`${place}: database has no rule for a ${column.columnType} column (${column.dataType}); build it with a c helper, or as drizzle ${TYPED_COLUMNS[table.dialect]}`,
-		)
-	const filled = isFilled(column, kind)
-	const facts = databaseFactsOf(column)
-	const constraints = fieldConstraintsOf(column.database?.constraints ?? {}, {
-		fieldName: column.key,
-		filled,
-		helper: kind,
-		measure: measuredBy(column, kind),
-		place,
-		values: facts.enumValues,
-	})
-	if (constraints.mutable && column.foreignKey === null && kind !== "ref")
-		throw new Error(`${place}: mutable lets a reference move on update, and ${column.key} references nothing`)
-	if (constraints.relation !== null && column.foreignKey === null)
-		throw new Error(`${place}: relation names the relation of a key, and ${column.key} references nothing`)
-	return {
-		...facts,
-		autoIncrement: column.autoIncrement,
-		columnType: column.columnType,
-		databaseKind: kind,
-		constraints,
-		dataType: column.dataType,
-		drizzleHelper: kind ?? column.columnType,
-		foreignKey: foreignKeyOf(column, tables),
-		generated: column.generated,
-		hasDefault: column.hasDefault,
-		identity: column.identity,
-		inCompositeKey: table.compositeKey.includes(column.key),
-		intervalPrecision: column.intervalPrecision,
-		isNotNull: column.notNull,
-		isPrimaryKey: column.primary,
-		dimensions: column.dimensions,
-		nullElements: column.nullElements,
-		length: column.length,
-		name: column.key,
-		onUpdate: column.onUpdate,
-		sqlName: column.sqlName,
-		sqlType: column.sqlType,
-		unique: column.unique,
-	}
+  const kind = (column.database?.kind ?? null) as ColumnMetaKind | null;
+  const place = `${file}: ${table.exportName}.${column.key}`;
+
+  if (kind === null && !TYPABLE.has(column.dataType)) {
+    throw new Error(
+      `${place}: database has no rule for a ${column.columnType} column (${column.dataType}); build it with a c helper, or as drizzle ${TYPED_COLUMNS[table.dialect]}`,
+    );
+  }
+
+  const filled = isFilled(column, kind);
+  const facts = databaseFactsOf(column);
+
+  const constraints = fieldConstraintsOf(column.database?.constraints ?? {}, {
+    fieldName: column.key,
+    filled,
+    helper: kind,
+    measure: measuredBy(column, kind),
+    place,
+    values: facts.enumValues,
+  });
+
+  if (constraints.mutable && column.foreignKey === null && kind !== "ref")
+    throw new Error(`${place}: mutable lets a reference move on update, and ${column.key} references nothing`);
+
+  if (constraints.relation !== null && column.foreignKey === null)
+    throw new Error(`${place}: relation names the relation of a key, and ${column.key} references nothing`);
+
+  return {
+    ...facts,
+    autoIncrement: column.autoIncrement,
+    columnType: column.columnType,
+    constraints,
+    dataType: column.dataType,
+    databaseKind: kind,
+    dimensions: column.dimensions,
+    drizzleHelper: kind ?? column.columnType,
+    foreignKey: foreignKeyOf(column, tables),
+    generated: column.generated,
+    hasDefault: column.hasDefault,
+    identity: column.identity,
+    inCompositeKey: table.compositeKey.includes(column.key),
+    intervalPrecision: column.intervalPrecision,
+    isNotNull: column.notNull,
+    isPrimaryKey: column.primary,
+    length: column.length,
+    name: column.key,
+    nullElements: column.nullElements,
+    onUpdate: column.onUpdate,
+    sqlName: column.sqlName,
+    sqlType: column.sqlType,
+    unique: column.unique,
+  };
 }
 
 /** The table's unique indexes: on plain columns, on plain columns under a `.where()`, and on an expression */
 function uniquesOf(
-	table: SnapshotTable,
+  table: SnapshotTable,
 ): Pick<TableMeta, "expressionIndexes" | "partialUniqueIndexes" | "uniqueIndexes"> {
-	const uniqueIndexes: UniqueIndexMeta[] = table.uniques.map(({ columns, name }) => ({ columns, name }))
-	const partialUniqueIndexes: PartialUniqueIndexMeta[] = []
-	const expressionIndexes: TableMeta["expressionIndexes"] = []
-	for (const index of table.indexes.filter((each) => each.unique)) {
-		if (index.columns === null) expressionIndexes.push({ expression: index.expression, name: index.name })
-		else if (index.where === null) uniqueIndexes.push({ columns: index.columns, name: index.name })
-		else partialUniqueIndexes.push({ columns: index.columns, name: index.name, where: index.where })
-	}
-	return { expressionIndexes, partialUniqueIndexes, uniqueIndexes }
+  const uniqueIndexes: UniqueIndexMeta[] = table.uniques.map(({ columns, name }) => ({ columns, name }));
+  const partialUniqueIndexes: PartialUniqueIndexMeta[] = [];
+  const expressionIndexes: TableMeta["expressionIndexes"] = [];
+
+  for (const index of table.indexes.filter((each) => each.unique)) {
+    if (index.columns === null) expressionIndexes.push({ expression: index.expression, name: index.name });
+    else if (index.where === null) uniqueIndexes.push({ columns: index.columns, name: index.name });
+    else partialUniqueIndexes.push({ columns: index.columns, name: index.name, where: index.where });
+  }
+
+  return { expressionIndexes, partialUniqueIndexes, uniqueIndexes };
 }
 
 function tableOf(build: Build): TableMeta {
-	const { table } = build
-	const fields = table.columns.map((column) => fieldOf(column, build))
-	return {
-		...uniquesOf(table),
-		checkConstraints: table.checks.map(({ expression, name }) => ({ expression, name })),
-		fields,
-		hasCompositePrimaryKey: table.compositeKey.length > 0,
-		idPrefix: table.columns.find((column) => column.database?.kind === "id")?.database?.prefix ?? null,
-		schema: table.schema,
-		sqlName: table.sqlName,
-		timestamps: detectTimestamps(fields),
-		varName: table.exportName,
-	}
+  const { table } = build;
+  const fields = table.columns.map((column) => fieldOf(column, build));
+
+  return {
+    ...uniquesOf(table),
+    checkConstraints: table.checks.map(({ expression, name }) => ({ expression, name })),
+    fields,
+    hasCompositePrimaryKey: table.compositeKey.length > 0,
+    idPrefix: table.columns.find((column) => column.database?.kind === "id")?.database?.prefix ?? null,
+    schema: table.schema,
+    sqlName: table.sqlName,
+    timestamps: detectTimestamps(fields),
+    varName: table.exportName,
+  };
 }
 
 /** The analysis generators consume, from the snapshot of `tablesPath`; tables of both engines in one database are refused */
 function toAnalysis(snapshot: Snapshot, tablesPath: string): AnalysisResult {
-	const dialects = new Set(snapshot.tables.map((table) => table.dialect))
-	if (dialects.size > 1)
-		throw new Error(
-			`${tablesPath}: the database holds both Postgres and SQLite tables; give each engine its own database`,
-		)
-	const build = (table: SnapshotTable) => tableOf({ file: tablesPath, table, tables: snapshot.tables })
-	const tables = snapshot.tables.map(build).sort((a, b) => byCodeUnit(a.varName, b.varName))
-	const schemas = tables.flatMap((table) => table.fields.flatMap((field) => field.schemaImports))
-	return {
-		dbName: extractDbName(tablesPath),
-		dialect: [...dialects][0] ?? null,
-		imports: {
-			enumImports: new Map(),
-			identifiers: new Map(),
-			jsonSchemaImports: new Set(schemas.map((ref) => ref.name)),
-		},
-		tables,
-		tablesImportPath: getTablesImportPath(tablesPath),
-	}
+  const dialects = new Set(snapshot.tables.map((table) => table.dialect));
+
+  if (dialects.size > 1) {
+    throw new Error(
+      `${tablesPath}: the database holds both Postgres and SQLite tables; give each engine its own database`,
+    );
+  }
+
+  const build = (table: SnapshotTable) => tableOf({ file: tablesPath, table, tables: snapshot.tables });
+  const tables = snapshot.tables.map(build).sort((a, b) => byCodeUnit(a.varName, b.varName));
+  const schemas = tables.flatMap((table) => table.fields.flatMap((field) => field.schemaImports));
+
+  return {
+    dbName: extractDbName(tablesPath),
+    dialect: [...dialects][0] ?? null,
+    imports: {
+      enumImports: new Map(),
+      identifiers: new Map(),
+      jsonSchemaImports: new Set(schemas.map((ref) => ref.name)),
+    },
+    tables,
+    tablesImportPath: getTablesImportPath(tablesPath),
+  };
 }
 
-export { toAnalysis }
+export { toAnalysis };

@@ -7,31 +7,35 @@
  * batches of the caller's size. The table needs its rowid, which every table but a WITHOUT ROWID
  * one has.
  */
-import { type SQL, sql } from "drizzle-orm"
-import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core"
-import { searchText } from "./search-text.ts"
+import { type SQL, sql } from "drizzle-orm";
+import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
+
+import { searchText } from "./search-text.ts";
 
 /** The statements of one refold: the read, and the writes its rows call for */
 type SearchRefold = {
-	/** reads every row's rowid, stored fold and sources */
-	select: SQL
-	/** one UPDATE per row `select` read whose stored fold differs from its sources' fold; none for a row already folded */
-	updates(rows: ReadonlyArray<Record<string, unknown>>): SQL[]
-}
+  /** reads every row's rowid, stored fold and sources */
+  select: SQL;
+  /** one UPDATE per row `select` read whose stored fold differs from its sources' fold; none for a row already folded */
+  updates(rows: ReadonlyArray<Record<string, unknown>>): SQL[];
+};
 
 /** The refold of `column` from `sources`, in that order, on `table` */
 function refoldStatements(table: SQLiteTable, column: SQLiteColumn, sources: readonly SQLiteColumn[]): SearchRefold {
-	const read = sources.map((source, i) => sql`${source} AS ${sql.identifier(`s${i}`)}`)
-	const select = sql`SELECT rowid AS "rowid", ${column} AS "stored", ${sql.join(read, sql`, `)} FROM ${table}`
-	return {
-		select,
-		updates: (rows) =>
-			rows.flatMap((row) => {
-				const folded = searchText(...sources.map((_, i) => row[`s${i}`] as string | null))
-				if (row["stored"] === folded) return []
-				return [sql`UPDATE ${table} SET ${sql.identifier(column.name)} = ${folded} WHERE rowid = ${row["rowid"]}`]
-			}),
-	}
+  const read = sources.map((source, i) => sql`${source} AS ${sql.identifier(`s${i}`)}`);
+  const select = sql`SELECT rowid AS "rowid", ${column} AS "stored", ${sql.join(read, sql`, `)} FROM ${table}`;
+
+  return {
+    select,
+    updates: (rows) =>
+      rows.flatMap((row) => {
+        const folded = searchText(...sources.map((_, i) => row[`s${i}`] as string | null));
+
+        if (row["stored"] === folded) return [];
+
+        return [sql`UPDATE ${table} SET ${sql.identifier(column.name)} = ${folded} WHERE rowid = ${row["rowid"]}`];
+      }),
+  };
 }
 
-export { type SearchRefold, refoldStatements }
+export { type SearchRefold, refoldStatements };

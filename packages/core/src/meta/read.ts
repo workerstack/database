@@ -1,30 +1,30 @@
+import {
+  FILTER_GRAMMAR,
+  DATABASE_META_KEY,
+  DATABASE_META_VERSION,
+  type EntityMeta,
+  type FilterFieldMeta,
+  type DatabaseMeta,
+  type QueryMeta,
+  type StatesMeta,
+} from "./contract.ts";
 /**
  * Reading database's facts off a JSON Schema. Returns null, never throws: a refused or malformed
  * payload degrades to "no facts", never to a confident wrong answer. See docs/meta-contract.md §4.
  */
-import { isRecord, isStringArray, readPartialUniqueIndexes, readUniqueIndexes } from "./read-indexes.ts"
-import {
-	FILTER_GRAMMAR,
-	DATABASE_META_KEY,
-	DATABASE_META_VERSION,
-	type EntityMeta,
-	type FilterFieldMeta,
-	type DatabaseMeta,
-	type QueryMeta,
-	type StatesMeta,
-} from "./contract.ts"
+import { isRecord, isStringArray, readPartialUniqueIndexes, readUniqueIndexes } from "./read-indexes.ts";
 
 /** How readDatabaseMeta, readEntityMeta and readQueryMeta read a payload */
 type ReadOptions = {
-	/**
-	 * Highest contract version this reader understands. A payload newer than
-	 * this is refused rather than partially read — see docs §4.2.
-	 * Defaults to the version of the database build doing the reading.
-	 */
-	maxVersion?: number | undefined
-	/** Called instead of throwing when a payload is refused or malformed. */
-	onDiagnostic?: ((message: string) => void) | undefined
-}
+  /**
+   * Highest contract version this reader understands. A payload newer than
+   * this is refused rather than partially read — see docs §4.2.
+   * Defaults to the version of the database build doing the reading.
+   */
+  maxVersion?: number | undefined;
+  /** Called instead of throwing when a payload is refused or malformed. */
+  onDiagnostic?: ((message: string) => void) | undefined;
+};
 
 /**
  * Read database's facts off the ROOT of a JSON Schema.
@@ -37,78 +37,85 @@ type ReadOptions = {
  * confident wrong answer.
  */
 function readDatabaseMeta(jsonSchema: unknown, options: ReadOptions = {}): DatabaseMeta | null {
-	const { maxVersion = DATABASE_META_VERSION, onDiagnostic } = options
+  const { maxVersion = DATABASE_META_VERSION, onDiagnostic } = options;
 
-	if (!isRecord(jsonSchema)) return null
-	const raw = jsonSchema[DATABASE_META_KEY]
-	if (raw === undefined) return null
+  if (!isRecord(jsonSchema)) return null;
+  const raw = jsonSchema[DATABASE_META_KEY];
 
-	const diagnose = (message: string): null => {
-		onDiagnostic?.(`${DATABASE_META_KEY}: ${message}`)
-		return null
-	}
+  if (raw === undefined) return null;
 
-	if (!isRecord(raw)) return diagnose("payload is not an object")
+  const diagnose = (message: string): null => {
+    onDiagnostic?.(`${DATABASE_META_KEY}: ${message}`);
 
-	const v = raw["v"]
-	if (typeof v !== "number" || !Number.isInteger(v) || v < 1) {
-		return diagnose("payload has no valid integer `v`")
-	}
-	if (v > maxVersion) {
-		return diagnose(`payload is v${v}, this reader understands up to v${maxVersion} — refusing to guess`)
-	}
+    return null;
+  };
 
-	const kind = raw["kind"]
-	if (kind === "entity") return readEntity(raw, v, diagnose)
-	if (kind === "query") return readQuery(raw, v, diagnose)
-	return diagnose(`unknown kind ${JSON.stringify(kind)}`)
+  if (!isRecord(raw)) return diagnose("payload is not an object");
+
+  const v = raw["v"];
+
+  if (typeof v !== "number" || !Number.isInteger(v) || v < 1) return diagnose("payload has no valid integer `v`");
+
+  if (v > maxVersion)
+    return diagnose(`payload is v${v}, this reader understands up to v${maxVersion} — refusing to guess`);
+
+  const kind = raw["kind"];
+
+  if (kind === "entity") return readEntity(raw, v, diagnose);
+
+  if (kind === "query") return readQuery(raw, v, diagnose);
+
+  return diagnose(`unknown kind ${JSON.stringify(kind)}`);
 }
 
 function readEntity(raw: Record<string, unknown>, v: number, diagnose: (m: string) => null): EntityMeta | null {
-	const name = raw["name"]
-	const identity = raw["identity"]
-	if (typeof name !== "string" || typeof identity !== "string") {
-		return diagnose("entity payload needs string `name` and `identity`")
-	}
+  const name = raw["name"];
+  const identity = raw["identity"];
 
-	const generated = raw["generated"]
-	const immutable = raw["immutable"]
-	if (!isStringArray(generated) || !isStringArray(immutable)) {
-		return diagnose("entity payload needs string[] `generated` and `immutable`")
-	}
+  if (typeof name !== "string" || typeof identity !== "string")
+    return diagnose("entity payload needs string `name` and `identity`");
 
-	const softDelete = raw["softDelete"]
-	const tenantColumn = raw["tenantColumn"]
-	if (
-		(softDelete !== null && typeof softDelete !== "string") ||
-		(tenantColumn !== null && typeof tenantColumn !== "string")
-	) {
-		return diagnose("entity payload needs string-or-null `softDelete` and `tenantColumn`")
-	}
+  const generated = raw["generated"];
+  const immutable = raw["immutable"];
 
-	const states = readStates(raw["states"])
-	if (states === "invalid") return diagnose("entity payload has a malformed `states`")
+  if (!isStringArray(generated) || !isStringArray(immutable))
+    return diagnose("entity payload needs string[] `generated` and `immutable`");
 
-	const uniqueIndexes = readUniqueIndexes(raw["uniqueIndexes"])
-	if (uniqueIndexes === "invalid") return diagnose("entity payload has a malformed `uniqueIndexes`")
-	const partialUniqueIndexes = readPartialUniqueIndexes(raw["partialUniqueIndexes"])
-	if (partialUniqueIndexes === "invalid") return diagnose("entity payload has a malformed `partialUniqueIndexes`")
+  const softDelete = raw["softDelete"];
+  const tenantColumn = raw["tenantColumn"];
 
-	/* Unknown fields are dropped, not rejected — that is what makes additive
-	   growth free for a producer newer than this reader. */
-	return {
-		generated,
-		identity,
-		immutable,
-		kind: "entity",
-		name,
-		partialUniqueIndexes,
-		softDelete,
-		states,
-		tenantColumn,
-		uniqueIndexes,
-		v,
-	}
+  if (
+    (softDelete !== null && typeof softDelete !== "string") ||
+    (tenantColumn !== null && typeof tenantColumn !== "string")
+  )
+    return diagnose("entity payload needs string-or-null `softDelete` and `tenantColumn`");
+
+  const states = readStates(raw["states"]);
+
+  if (states === "invalid") return diagnose("entity payload has a malformed `states`");
+
+  const uniqueIndexes = readUniqueIndexes(raw["uniqueIndexes"]);
+
+  if (uniqueIndexes === "invalid") return diagnose("entity payload has a malformed `uniqueIndexes`");
+  const partialUniqueIndexes = readPartialUniqueIndexes(raw["partialUniqueIndexes"]);
+
+  if (partialUniqueIndexes === "invalid") return diagnose("entity payload has a malformed `partialUniqueIndexes`");
+
+  // Unknown fields are dropped, not rejected — that is what makes additive
+  // growth free for a producer newer than this reader.
+  return {
+    generated,
+    identity,
+    immutable,
+    kind: "entity",
+    name,
+    partialUniqueIndexes,
+    softDelete,
+    states,
+    tenantColumn,
+    uniqueIndexes,
+    v,
+  };
 }
 
 /**
@@ -117,146 +124,168 @@ function readEntity(raw: Record<string, unknown>, v: number, diagnose: (m: strin
  * value is.
  */
 function readStates(raw: unknown): StatesMeta | null | "invalid" {
-	if (raw === undefined || raw === null) return null
-	if (!isRecord(raw)) return "invalid"
+  if (raw === undefined || raw === null) return null;
 
-	const column = raw["column"]
-	const values = raw["values"]
-	const terminal = raw["terminal"]
-	const initial = raw["initial"]
+  if (!isRecord(raw)) return "invalid";
 
-	if (typeof column !== "string" || !isStringArray(values) || !isStringArray(terminal)) return "invalid"
-	if (initial !== null && initial !== undefined && typeof initial !== "string") return "invalid"
-	/* a machine naming a state it does not declare is malformed, not partially trusted (docs §4.2) */
-	if (typeof initial === "string" && !values.includes(initial)) return "invalid"
-	if (!terminal.every((state) => values.includes(state))) return "invalid"
+  const column = raw["column"];
+  const values = raw["values"];
+  const terminal = raw["terminal"];
+  const initial = raw["initial"];
 
-	return { column, initial: initial ?? null, terminal, values }
+  if (typeof column !== "string" || !isStringArray(values) || !isStringArray(terminal)) return "invalid";
+
+  if (initial !== null && initial !== undefined && typeof initial !== "string") return "invalid";
+
+  // a machine naming a state it does not declare is malformed, not partially trusted (docs §4.2)
+  if (typeof initial === "string" && !values.includes(initial)) return "invalid";
+
+  if (!terminal.every((state) => values.includes(state))) return "invalid";
+
+  return { column, initial: initial ?? null, terminal, values };
 }
 
-type Diagnose = (m: string) => null
+type Diagnose = (m: string) => null;
+
 type QueryRequired = Omit<
-	QueryMeta,
-	| "filterFields"
-	| "kind"
-	| "maxFilterConditions"
-	| "maxFilterDepth"
-	| "maxFilterValues"
-	| "maxInValues"
-	| "maxPatternBytes"
-	| "maxPage"
-	| "maxFilterBytes"
-	| "maxQueryBytes"
-	| "maxSearchBytes"
-	| "maxSearchTerms"
-	| "maxSortKeys"
-	| "nulls"
-	| "v"
->
+  QueryMeta,
+  | "filterFields"
+  | "kind"
+  | "maxFilterConditions"
+  | "maxFilterDepth"
+  | "maxFilterValues"
+  | "maxInValues"
+  | "maxPatternBytes"
+  | "maxPage"
+  | "maxFilterBytes"
+  | "maxQueryBytes"
+  | "maxSearchBytes"
+  | "maxSearchTerms"
+  | "maxSortKeys"
+  | "nulls"
+  | "v"
+>;
+
 type QueryOptional = Pick<
-	QueryMeta,
-	| "filterFields"
-	| "maxFilterConditions"
-	| "maxFilterDepth"
-	| "maxFilterValues"
-	| "maxInValues"
-	| "maxPatternBytes"
-	| "maxPage"
-	| "maxFilterBytes"
-	| "maxQueryBytes"
-	| "maxSearchBytes"
-	| "maxSearchTerms"
-	| "maxSortKeys"
-	| "nulls"
->
+  QueryMeta,
+  | "filterFields"
+  | "maxFilterConditions"
+  | "maxFilterDepth"
+  | "maxFilterValues"
+  | "maxInValues"
+  | "maxPatternBytes"
+  | "maxPage"
+  | "maxFilterBytes"
+  | "maxQueryBytes"
+  | "maxSearchBytes"
+  | "maxSearchTerms"
+  | "maxSortKeys"
+  | "nulls"
+>;
 
 const isPositiveInt = (value: unknown): value is number =>
-	typeof value === "number" && Number.isInteger(value) && value >= 1
-const isCount = (value: unknown): value is number => typeof value === "number" && Number.isInteger(value) && value >= 0
+  typeof value === "number" && Number.isInteger(value) && value >= 1;
 
-/* the fields every query payload carries */
+const isCount = (value: unknown): value is number => typeof value === "number" && Number.isInteger(value) && value >= 0;
+
+// the fields every query payload carries
 function readQueryRequired(raw: Record<string, unknown>, diagnose: Diagnose): QueryRequired | null {
-	const { defaultOrder, filterable, grammar, maxLimit, searchable, selectable, sortable, stableTiebreak } = raw
-	if (!isStringArray(filterable) || !isStringArray(sortable) || !isStringArray(selectable)) {
-		return diagnose("query payload needs string[] `filterable`, `sortable`, `selectable`")
-	}
-	if (searchable !== null && !isStringArray(searchable))
-		return diagnose("query payload needs string[]-or-null `searchable`")
-	if (!isPositiveInt(maxLimit)) return diagnose("query payload needs a positive integer `maxLimit`")
-	if (typeof defaultOrder !== "string" || typeof stableTiebreak !== "string" || typeof grammar !== "string") {
-		return diagnose("query payload needs string `defaultOrder`, `stableTiebreak`, `grammar`")
-	}
-	if (grammar !== FILTER_GRAMMAR) {
-		return diagnose(
-			`query payload \`grammar\` is ${JSON.stringify(grammar)}, this reader understands "${FILTER_GRAMMAR}"`,
-		)
-	}
-	return { defaultOrder, filterable, grammar, maxLimit, searchable, selectable, sortable, stableTiebreak }
+  const { defaultOrder, filterable, grammar, maxLimit, searchable, selectable, sortable, stableTiebreak } = raw;
+
+  if (!isStringArray(filterable) || !isStringArray(sortable) || !isStringArray(selectable))
+    return diagnose("query payload needs string[] `filterable`, `sortable`, `selectable`");
+
+  if (searchable !== null && !isStringArray(searchable))
+    return diagnose("query payload needs string[]-or-null `searchable`");
+
+  if (!isPositiveInt(maxLimit)) return diagnose("query payload needs a positive integer `maxLimit`");
+
+  if (typeof defaultOrder !== "string" || typeof stableTiebreak !== "string" || typeof grammar !== "string")
+    return diagnose("query payload needs string `defaultOrder`, `stableTiebreak`, `grammar`");
+
+  if (grammar !== FILTER_GRAMMAR) {
+    return diagnose(
+      `query payload \`grammar\` is ${JSON.stringify(grammar)}, this reader understands "${FILTER_GRAMMAR}"`,
+    );
+  }
+
+  return { defaultOrder, filterable, grammar, maxLimit, searchable, selectable, sortable, stableTiebreak };
 }
 
 const isFilterField = (entry: unknown) =>
-	isRecord(entry) &&
-	typeof entry["field"] === "string" &&
-	typeof entry["type"] === "string" &&
-	isStringArray(entry["ops"])
+  isRecord(entry) &&
+  typeof entry["field"] === "string" &&
+  typeof entry["type"] === "string" &&
+  isStringArray(entry["ops"]);
 
-/* fields added after v1: absent is normal, malformed is refused */
+// fields added after v1: absent is normal, malformed is refused
 function readQueryOptional(raw: Record<string, unknown>, diagnose: Diagnose): QueryOptional | null {
-	const optional: QueryOptional = {}
-	const { filterFields, nulls } = raw
-	if (filterFields !== undefined) {
-		if (!Array.isArray(filterFields) || !filterFields.every(isFilterField)) {
-			return diagnose("query payload `filterFields` needs {field, type, ops: string[]}[]")
-		}
-		optional.filterFields = filterFields as FilterFieldMeta[]
-	}
-	if (nulls !== undefined) {
-		if (!isStringArray(nulls) || !nulls.every((n) => n === "first" || n === "last")) {
-			return diagnose('query payload `nulls` needs ("first" | "last")[]')
-		}
-		optional.nulls = nulls as Array<"first" | "last">
-	}
-	for (const key of [
-		"maxFilterConditions",
-		"maxFilterDepth",
-		"maxFilterValues",
-		"maxInValues",
-		"maxPatternBytes",
-		"maxFilterBytes",
-		"maxQueryBytes",
-		"maxSearchBytes",
-		"maxSearchTerms",
-		"maxSortKeys",
-	] as const) {
-		const value = raw[key]
-		if (value === undefined) continue
-		if (!isCount(value)) return diagnose(`query payload \`${key}\` needs a non-negative integer`)
-		optional[key] = value
-	}
-	const { maxPage } = raw
-	if (maxPage !== undefined) {
-		if (!isPositiveInt(maxPage)) return diagnose("query payload `maxPage` needs a positive integer")
-		optional.maxPage = maxPage
-	}
-	return optional
+  const optional: QueryOptional = {};
+  const { filterFields, nulls } = raw;
+
+  if (filterFields !== undefined) {
+    if (!Array.isArray(filterFields) || !filterFields.every(isFilterField))
+      return diagnose("query payload `filterFields` needs {field, type, ops: string[]}[]");
+
+    optional.filterFields = filterFields as FilterFieldMeta[];
+  }
+
+  if (nulls !== undefined) {
+    if (!isStringArray(nulls) || !nulls.every((n) => n === "first" || n === "last"))
+      return diagnose('query payload `nulls` needs ("first" | "last")[]');
+
+    optional.nulls = nulls;
+  }
+
+  for (const key of [
+    "maxFilterConditions",
+    "maxFilterDepth",
+    "maxFilterValues",
+    "maxInValues",
+    "maxPatternBytes",
+    "maxFilterBytes",
+    "maxQueryBytes",
+    "maxSearchBytes",
+    "maxSearchTerms",
+    "maxSortKeys",
+  ] as const) {
+    const value = raw[key];
+
+    if (value === undefined) continue;
+
+    if (!isCount(value)) return diagnose(`query payload \`${key}\` needs a non-negative integer`);
+    optional[key] = value;
+  }
+
+  const { maxPage } = raw;
+
+  if (maxPage !== undefined) {
+    if (!isPositiveInt(maxPage)) return diagnose("query payload `maxPage` needs a positive integer");
+    optional.maxPage = maxPage;
+  }
+
+  return optional;
 }
 
 function readQuery(raw: Record<string, unknown>, v: number, diagnose: Diagnose): QueryMeta | null {
-	const required = readQueryRequired(raw, diagnose)
-	const optional = required === null ? null : readQueryOptional(raw, diagnose)
-	return required === null || optional === null ? null : { ...required, kind: "query", v, ...optional }
+  const required = readQueryRequired(raw, diagnose);
+  const optional = required === null ? null : readQueryOptional(raw, diagnose);
+
+  return required === null || optional === null ? null : { ...required, kind: "query", v, ...optional };
 }
 
 /** Narrowing convenience — null when absent, refused, or the other kind. */
 function readEntityMeta(jsonSchema: unknown, options?: ReadOptions): EntityMeta | null {
-	const meta = readDatabaseMeta(jsonSchema, options)
-	return meta?.kind === "entity" ? meta : null
+  const meta = readDatabaseMeta(jsonSchema, options);
+
+  return meta?.kind === "entity" ? meta : null;
 }
 
 /** Narrowing convenience — null when absent, refused, or the other kind. */
 function readQueryMeta(jsonSchema: unknown, options?: ReadOptions): QueryMeta | null {
-	const meta = readDatabaseMeta(jsonSchema, options)
-	return meta?.kind === "query" ? meta : null
+  const meta = readDatabaseMeta(jsonSchema, options);
+
+  return meta?.kind === "query" ? meta : null;
 }
 
-export { isRecord, type ReadOptions, readEntityMeta, readDatabaseMeta, readQueryMeta }
+export { isRecord, type ReadOptions, readEntityMeta, readDatabaseMeta, readQueryMeta };

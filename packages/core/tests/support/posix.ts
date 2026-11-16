@@ -8,20 +8,20 @@
  * left out; every suite here runs on Linux too.
  */
 export const POSIX_UNIT: string[] = [
-	"src/cli/**/*.test.ts",
-	"src/codegen/runtime/**/*.test.ts",
-	"src/migrate/core/process.test.ts",
-	"tests/structure/codegen-loads-in-child.test.ts",
-]
+  "src/cli/**/*.test.ts",
+  "src/codegen/runtime/**/*.test.ts",
+  "src/migrate/core/process.test.ts",
+  "tests/structure/codegen-loads-in-child.test.ts",
+];
 
 export const POSIX_INTEGRATION: string[] = [
-	"tests/integration/codegen/**/*.test.ts",
-	"tests/integration/d1/migrate-cli.test.ts",
-	"tests/integration/libsql/migrate-cli.test.ts",
-	"tests/integration/sqlite/atlas-*.test.ts",
-	"tests/integration/sqlite/own-output.test.ts",
-	"tests/integration/sqlite/rebuild-copy.test.ts",
-]
+  "tests/integration/codegen/**/*.test.ts",
+  "tests/integration/d1/migrate-cli.test.ts",
+  "tests/integration/libsql/migrate-cli.test.ts",
+  "tests/integration/sqlite/atlas-*.test.ts",
+  "tests/integration/sqlite/own-output.test.ts",
+  "tests/integration/sqlite/rebuild-copy.test.ts",
+];
 
-/* the codegen suites that read from a Postgres server */
-export const POSIX_EXCLUDE: string[] = ["tests/integration/codegen/pg-*.test.ts"]
+// the codegen suites that read from a Postgres server
+export const POSIX_EXCLUDE: string[] = ["tests/integration/codegen/pg-*.test.ts"];

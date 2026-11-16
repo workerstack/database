@@ -1,22 +1,23 @@
 /** `database migrate`: init, diff, check, apply, baseline and status. */
-import fs from "node:fs"
-import path from "node:path"
-import { parseArgs, refuseFurther, usageOf } from "./args.ts"
-import { binOf } from "../migrate/core/optional-peer.ts"
-import { declaredFts, ftsSql } from "./database-config.ts"
+import fs from "node:fs";
+import path from "node:path";
+
+import { scratchDir } from "../migrate/core/cleanup.ts";
+import { binOf } from "../migrate/core/optional-peer.ts";
+import { parseArgs, refuseFurther, usageOf } from "./args.ts";
+import { declaredFts, ftsSql } from "./database-config.ts";
 import {
-	checkDialect,
-	DIALECT_NAMES,
-	type Dialect,
-	type Expected,
-	literalDialect,
-	statedDialect,
-} from "./drizzle-dialect.ts"
-import { migrateApply, needPeers } from "./migrate-apply.ts"
-import { type MigrateTarget, refuseBlank, refuseNoDir, resolveMigrateTarget } from "./migrate-target.ts"
-import { refusePathName } from "./file-path.ts"
-import { CliError, type CliContext, ShowHelp } from "./output.ts"
-import { scratchDir } from "../migrate/core/cleanup.ts"
+  checkDialect,
+  DIALECT_NAMES,
+  type Dialect,
+  type Expected,
+  literalDialect,
+  statedDialect,
+} from "./drizzle-dialect.ts";
+import { refusePathName } from "./file-path.ts";
+import { migrateApply, needPeers } from "./migrate-apply.ts";
+import { type MigrateTarget, refuseBlank, refuseNoDir, resolveMigrateTarget } from "./migrate-target.ts";
+import { CliError, type CliContext, ShowHelp } from "./output.ts";
 
 const DRIZZLE_CONFIG = `import { defineConfig } from "drizzle-kit"
 
@@ -25,7 +26,7 @@ export default defineConfig({
 	out: "./atlas-migrations",
 	schema: "./src/**/*.tables.ts",
 })
-`
+`;
 
 const PG_DRIZZLE_CONFIG = `import { defineConfig } from "drizzle-kit"
 
@@ -35,9 +36,9 @@ export default defineConfig({
 	out: "./atlas-migrations",
 	schema: "./src/**/*.tables.ts",
 })
-`
+`;
 
-/* the type alone, which erases, so the config loads where database does not resolve, as in a compiled executable */
+// the type alone, which erases, so the config loads where database does not resolve, as in a compiled executable
 const PG_MIGRATE_CONFIG = `import type { MigrateConfig } from "@workerstack/database/migrate"
 
 export default {
@@ -54,22 +55,23 @@ export default {
 		},
 	},
 } satisfies MigrateConfig
-`
+`;
 
 /**
  * The starter files of each dialect, in the order they are written. No atlas.hcl: database runs Atlas
  * with a config of its own, so a project's would hold a guard no database command reads
  */
 function starterFiles(dialect: Dialect): ReadonlyArray<readonly [string, string]> {
-	if (dialect === "sqlite") return [["drizzle.config.ts", DRIZZLE_CONFIG]]
-	return [
-		["drizzle.config.ts", PG_DRIZZLE_CONFIG],
-		["database.migrate.config.ts", PG_MIGRATE_CONFIG],
-	]
+  if (dialect === "sqlite") return [["drizzle.config.ts", DRIZZLE_CONFIG]];
+
+  return [
+    ["drizzle.config.ts", PG_DRIZZLE_CONFIG],
+    ["database.migrate.config.ts", PG_MIGRATE_CONFIG],
+  ];
 }
 
 // lookup-table: the drizzle config names a project without a configured one is looked up by, in order
-const DRIZZLE_CONFIGS = ["drizzle.config.ts", "drizzle.config.js", "drizzle.config.mjs", "drizzle.config.json"]
+const DRIZZLE_CONFIGS = ["drizzle.config.ts", "drizzle.config.js", "drizzle.config.mjs", "drizzle.config.json"];
 
 /**
  * Write each starter file of the dialect --dialect names that does not exist yet, refused when the
@@ -77,27 +79,33 @@ const DRIZZLE_CONFIGS = ["drizzle.config.ts", "drizzle.config.js", "drizzle.conf
  * beside one, it writes no drizzle.config.ts, which diff would read in its place
  */
 function migrateInit(argv: readonly string[], io: CliContext): void {
-	const option = parseArgs(argv, "migrate init").options["dialect"] ?? "sqlite"
-	if (option !== "sqlite" && option !== "postgres")
-		throw new CliError(`Unknown --dialect "${String(option)}": use sqlite or postgres`)
-	const dialect: Dialect = option
-	const config = DRIZZLE_CONFIGS.map((name) => path.join(io.cwd, name)).find((file) => fs.existsSync(file))
-	const stated = config === undefined ? undefined : literalDialect(fs.readFileSync(config, "utf8"))
-	if (config !== undefined && stated !== undefined) {
-		const but = `migrate init --dialect ${dialect} writes a ${DIALECT_NAMES[dialect]} project`
-		checkDialect(config, stated, { but, dialect, otherwise: ", or remove it and run init again" })
-	}
-	for (const [name, content] of starterFiles(dialect)) {
-		const file = path.join(io.cwd, name)
-		if (fs.existsSync(file) || (name === "drizzle.config.ts" && config !== undefined)) continue
-		fs.writeFileSync(file, content)
-		io.out(`Created: ${name}`)
-	}
-	const migrationsDir = path.join(io.cwd, "atlas-migrations")
-	if (!fs.existsSync(migrationsDir)) {
-		fs.mkdirSync(migrationsDir, { recursive: true })
-		io.out("Created: atlas-migrations/")
-	}
+  const option = parseArgs(argv, "migrate init").options["dialect"] ?? "sqlite";
+
+  if (option !== "sqlite" && option !== "postgres")
+    throw new CliError(`Unknown --dialect "${String(option)}": use sqlite or postgres`);
+  const dialect: Dialect = option;
+  const config = DRIZZLE_CONFIGS.map((name) => path.join(io.cwd, name)).find((file) => fs.existsSync(file));
+  const stated = config === undefined ? undefined : literalDialect(fs.readFileSync(config, "utf8"));
+
+  if (config !== undefined && stated !== undefined) {
+    const but = `migrate init --dialect ${dialect} writes a ${DIALECT_NAMES[dialect]} project`;
+    checkDialect(config, stated, { but, dialect, otherwise: ", or remove it and run init again" });
+  }
+
+  for (const [name, content] of starterFiles(dialect)) {
+    const file = path.join(io.cwd, name);
+
+    if (fs.existsSync(file) || (name === "drizzle.config.ts" && config !== undefined)) continue;
+    fs.writeFileSync(file, content);
+    io.out(`Created: ${name}`);
+  }
+
+  const migrationsDir = path.join(io.cwd, "atlas-migrations");
+
+  if (!fs.existsSync(migrationsDir)) {
+    fs.mkdirSync(migrationsDir, { recursive: true });
+    io.out("Created: atlas-migrations/");
+  }
 }
 
 /**
@@ -107,45 +115,51 @@ function migrateInit(argv: readonly string[], io: CliContext): void {
  * ./atlas-migrations.
  */
 async function runDiff(argv: readonly string[], io: CliContext): Promise<void> {
-	const args = parseArgs(argv, "migrate diff")
-	/* parseArgs refuses a diff that names no database */
-	const [db, name] = args.positionals as [string, (string | undefined)?]
-	/* Atlas makes the file's name from it: a path would land outside the directory, or nowhere */
-	if (name !== undefined) refusePathName(name, "Migration name", usageOf("migrate diff"))
-	const env = args.options["env"] as string | undefined
-	const { d1, expected, exported, fts, migrationsDir, pg, provider, target } = await diffTarget(db, env, io)
-	/* a diff starts a missing directory, and refuses a file before anything runs */
-	refuseNoDir(migrationsDir, { allowMissing: true })
-	/* Atlas diffs on the dev database */
-	if (target?.provider.type === "postgres") refuseBlank(target, { devUrl: target.provider.devUrl })
-	/* every peer the diff needs, Atlas and a declared FTS's ts-morph among them, before Atlas or drizzle-kit runs */
-	const peers = await needPeers(io, "diff", { fts: fts !== undefined, provider })
-	/* after the peers, since a drizzle config imports drizzle-kit; before drizzle-kit exports none of the other dialect's tables */
-	checkDialect(exported.configPath, await statedDialect(exported.configPath), expected)
-	const { exportWith, generateIncrementalMigration } = await import("../migrate/core/atlas.ts")
-	/* a D1 diff writes beside the files wrangler runs, refused where it would run them otherwise than Atlas */
-	if (d1 && fs.existsSync(migrationsDir)) (await import("../migrate/core/d1-files.ts")).d1Files(migrationsDir)
-	const dialect = exported.dialect
-	const dryRun = args.options["dry-run"] === true
-	/* a Postgres diff reads the history and the export as the statements Postgres runs */
-	if (dialect === "postgres") await (await import("../migrate/core/pg-parser.ts")).loadPostgresParser()
-	await diffIn(migrationsDir, dryRun, async (dir) => {
-		const { files, notices, synced } = await generateIncrementalMigration({
-			dialect,
-			ftsSql: fts === undefined ? undefined : await ftsSql(io.cwd, fts, io),
-			migrationName: name ?? `migration_${Date.now()}`,
-			migrationsDir: dir,
-			readyDev: io.readyPgDev,
-			run: io.run,
-			target: pg,
-			targetSchema: await exportWith(binOf(peers, "drizzle-kit"), exported),
-		})
-		/* Atlas OSS may say it left part of the schema out of the diff */
-		for (const notice of notices) io.err(`Warning: Atlas: ${notice}`)
-		if (synced) io.out("Schema is already in sync — no migration needed")
-		else if (dryRun) reportDrift(db, files, io)
-		else for (const file of files) io.out(`Generated: ${file}`)
-	})
+  const args = parseArgs(argv, "migrate diff");
+  // parseArgs refuses a diff that names no database
+  const [db, name] = args.positionals as [string, (string | undefined)?];
+
+  // Atlas makes the file's name from it: a path would land outside the directory, or nowhere
+  if (name !== undefined) refusePathName(name, "Migration name", usageOf("migrate diff"));
+  const env = args.options["env"] as string | undefined;
+  const { d1, expected, exported, fts, migrationsDir, pg, provider, target } = await diffTarget(db, env, io);
+  // a diff starts a missing directory, and refuses a file before anything runs
+  refuseNoDir(migrationsDir, { allowMissing: true });
+
+  // Atlas diffs on the dev database
+  if (target?.provider.type === "postgres") refuseBlank(target, { devUrl: target.provider.devUrl });
+  // every peer the diff needs, Atlas and a declared FTS's ts-morph among them, before Atlas or drizzle-kit runs
+  const peers = await needPeers(io, "diff", { fts: fts !== undefined, provider });
+  // after the peers, since a drizzle config imports drizzle-kit; before drizzle-kit exports none of the other dialect's tables
+  checkDialect(exported.configPath, await statedDialect(exported.configPath), expected);
+  const { exportWith, generateIncrementalMigration } = await import("../migrate/core/atlas.ts");
+
+  // a D1 diff writes beside the files wrangler runs, refused where it would run them otherwise than Atlas
+  if (d1 && fs.existsSync(migrationsDir)) (await import("../migrate/core/d1-files.ts")).d1Files(migrationsDir);
+  const dialect = exported.dialect;
+  const dryRun = args.options["dry-run"] === true;
+
+  // a Postgres diff reads the history and the export as the statements Postgres runs
+  if (dialect === "postgres") await (await import("../migrate/core/pg-parser.ts")).loadPostgresParser();
+  await diffIn(migrationsDir, dryRun, async (dir) => {
+    const { files, notices, synced } = await generateIncrementalMigration({
+      dialect,
+      ftsSql: fts === undefined ? undefined : await ftsSql(io.cwd, fts, io),
+      migrationName: name ?? `migration_${Date.now()}`,
+      migrationsDir: dir,
+      readyDev: io.readyPgDev,
+      run: io.run,
+      target: pg,
+      targetSchema: await exportWith(binOf(peers, "drizzle-kit"), exported),
+    });
+
+    // Atlas OSS may say it left part of the schema out of the diff
+    for (const notice of notices) io.err(`Warning: Atlas: ${notice}`);
+
+    if (synced) io.out("Schema is already in sync — no migration needed");
+    else if (dryRun) reportDrift(db, files, io);
+    else for (const file of files) io.out(`Generated: ${file}`);
+  });
 }
 
 /**
@@ -154,14 +168,15 @@ async function runDiff(argv: readonly string[], io: CliContext): Promise<void> {
  * directory, and removed however the copying or the diff ends.
  */
 async function diffIn(migrationsDir: string, dryRun: boolean, diff: (dir: string) => Promise<void>): Promise<void> {
-	if (!dryRun) return diff(migrationsDir)
-	const { dir: copy, remove: removeCopy } = scratchDir("database-migrate-dry-run-")
-	try {
-		if (fs.existsSync(migrationsDir)) fs.cpSync(migrationsDir, copy, { recursive: true })
-		await diff(copy)
-	} finally {
-		removeCopy()
-	}
+  if (!dryRun) return diff(migrationsDir);
+  const { dir: copy, remove: removeCopy } = scratchDir("database-migrate-dry-run-");
+
+  try {
+    if (fs.existsSync(migrationsDir)) fs.cpSync(migrationsDir, copy, { recursive: true });
+    await diff(copy);
+  } finally {
+    removeCopy();
+  }
 }
 
 /**
@@ -170,71 +185,81 @@ async function diffIn(migrationsDir: string, dryRun: boolean, diff: (dir: string
  * never writes
  */
 function drizzleConfig(configured: string | undefined, cwd: string): string {
-	if (configured !== undefined) {
-		if (!fs.existsSync(configured)) throw new CliError(`drizzleConfigPath ${configured} does not exist`)
-		if (!fs.statSync(configured).isFile())
-			throw new CliError(`drizzleConfigPath ${configured} is a directory, not a drizzle config`)
-		return configured
-	}
-	const found = DRIZZLE_CONFIGS.map((name) => path.join(cwd, name)).find((file) => fs.existsSync(file))
-	if (found !== undefined) return found
-	throw new CliError(
-		`no drizzle config in ${cwd} (drizzle.config.ts, .js, .mjs or .json): run database migrate init, or set drizzleConfigPath on the database in database.migrate.config.ts`,
-	)
+  if (configured !== undefined) {
+    if (!fs.existsSync(configured)) throw new CliError(`drizzleConfigPath ${configured} does not exist`);
+
+    if (!fs.statSync(configured).isFile())
+      throw new CliError(`drizzleConfigPath ${configured} is a directory, not a drizzle config`);
+
+    return configured;
+  }
+
+  const found = DRIZZLE_CONFIGS.map((name) => path.join(cwd, name)).find((file) => fs.existsSync(file));
+
+  if (found !== undefined) return found;
+  throw new CliError(
+    `no drizzle config in ${cwd} (drizzle.config.ts, .js, .mjs or .json): run database migrate init, or set drizzleConfigPath on the database in database.migrate.config.ts`,
+  );
 }
 
-/* without database.migrate.config.ts the migrations are SQLite's, whose diff needs what a D1 one does */
-const providerOf = (target: MigrateTarget | undefined) => target?.provider.type ?? "d1"
+// without database.migrate.config.ts the migrations are SQLite's, whose diff needs what a D1 one does
+const providerOf = (target: MigrateTarget | undefined) => target?.provider.type ?? "d1";
 
 /** What a diff of `db` reads: its Postgres provider if it has one, its drizzle export, the FTS it declares, and its migrations */
 async function diffTarget(db: string, env: string | undefined, io: CliContext) {
-	const target = await resolveMigrateTarget({ cwd: io.cwd, db, env, mode: "diff" })
-	const pg = target?.provider.type === "postgres" ? target.provider : undefined
-	const exported = {
-		configPath: drizzleConfig(target?.drizzleConfigPath, io.cwd),
-		cwd: io.cwd,
-		dialect: pg === undefined ? "sqlite" : "postgres",
-		run: io.run,
-		schema: pg?.schema,
-	} as const
-	/* the codegen database a migrate database maps to; a name with no mapping says how to give one */
-	const codegen = {
-		hint:
-			target === undefined || target.codegen !== target.database
-				? undefined
-				: `Set codegen: "<its database.config.ts name>" on ${target.database} in database.migrate.config.ts`,
-		name: target?.codegen ?? db,
-	}
-	const name = DIALECT_NAMES[exported.dialect]
-	/* the dialect its drizzle config must state */
-	const expected: Expected =
-		target === undefined
-			? { but: "a diff with no database.migrate.config.ts is SQLite", dialect: "sqlite" }
-			: {
-					but: `database ${db} is ${name}`,
-					dialect: exported.dialect,
-					otherwise: `, or set drizzleConfigPath on ${db} in database.migrate.config.ts to a ${name} drizzle config`,
-				}
-	return {
-		d1: target?.provider.type === "d1",
-		expected,
-		exported,
-		/* Postgres has no FTS of database's: its diff never reads database.config.ts */
-		fts: pg === undefined ? await declaredFts(io.cwd, codegen) : undefined,
-		migrationsDir: target?.migrationsDir ?? path.resolve(io.cwd, "atlas-migrations"),
-		pg,
-		provider: providerOf(target),
-		target,
-	}
+  const target = await resolveMigrateTarget({ cwd: io.cwd, db, env, mode: "diff" });
+  const pg = target?.provider.type === "postgres" ? target.provider : undefined;
+
+  const exported = {
+    configPath: drizzleConfig(target?.drizzleConfigPath, io.cwd),
+    cwd: io.cwd,
+    dialect: pg === undefined ? "sqlite" : "postgres",
+    run: io.run,
+    schema: pg?.schema,
+  } as const;
+
+  // the codegen database a migrate database maps to; a name with no mapping says how to give one
+  const codegen = {
+    hint:
+      target === undefined || target.codegen !== target.database
+        ? undefined
+        : `Set codegen: "<its database.config.ts name>" on ${target.database} in database.migrate.config.ts`,
+    name: target?.codegen ?? db,
+  };
+
+  const name = DIALECT_NAMES[exported.dialect];
+
+  // the dialect its drizzle config must state
+  const expected: Expected =
+    target === undefined
+      ? { but: "a diff with no database.migrate.config.ts is SQLite", dialect: "sqlite" }
+      : {
+          but: `database ${db} is ${name}`,
+          dialect: exported.dialect,
+          otherwise: `, or set drizzleConfigPath on ${db} in database.migrate.config.ts to a ${name} drizzle config`,
+        };
+
+  return {
+    d1: target?.provider.type === "d1",
+    expected,
+    exported,
+    // Postgres has no FTS of database's: its diff never reads database.config.ts
+    fts: pg === undefined ? await declaredFts(io.cwd, codegen) : undefined,
+    migrationsDir: target?.migrationsDir ?? path.resolve(io.cwd, "atlas-migrations"),
+    pg,
+    provider: providerOf(target),
+    target,
+  };
 }
 
 /** Print the files a diff would write, and fail: the schema drifted from the migrations */
 function reportDrift(db: string, files: readonly string[], io: CliContext): never {
-	for (const file of files) {
-		io.out(`-- ${path.basename(file)}`)
-		io.out(fs.readFileSync(file, "utf8"))
-	}
-	throw new Drifted(`${db} has drifted from its migrations: database migrate diff ${db} would write the SQL above`)
+  for (const file of files) {
+    io.out(`-- ${path.basename(file)}`);
+    io.out(fs.readFileSync(file, "utf8"));
+  }
+
+  throw new Drifted(`${db} has drifted from its migrations: database migrate diff ${db} would write the SQL above`);
 }
 
 /** A dry run's refusal for drift, which exits 1 */
@@ -246,41 +271,58 @@ class Drifted extends CliError {}
  * the CLI reads --json, so that refusal knows it is a dry run's
  */
 async function migrateDiff(argv: readonly string[], io: CliContext): Promise<void> {
-	if (!argv.includes("--dry-run")) return runDiff(argv, io)
-	try {
-		await runDiff(argv, io)
-	} catch (error) {
-		if (error instanceof Drifted || error instanceof ShowHelp) throw error
-		/* an Error: database throws only Errors, and a config's load wraps whatever the config throws (migrate/config.ts) */
-		throw new CliError((error as Error).message, 2, { cause: error })
-	}
+  if (!argv.includes("--dry-run")) return runDiff(argv, io);
+
+  try {
+    await runDiff(argv, io);
+  } catch (error) {
+    if (error instanceof Drifted || error instanceof ShowHelp) throw error;
+    // an Error: database throws only Errors, and a config's load wraps whatever the config throws (migrate/config.ts)
+    throw new CliError((error as Error).message, 2, { cause: error });
+  }
 }
 
 export async function cmdMigrate(argv: readonly string[], io: CliContext, help: string): Promise<void> {
-	const [command, ...rest] = argv
-	switch (command) {
-		/* a bare migrate names no command: it fails, with the commands to pick from */
-		case undefined:
-			throw new CliError(help)
-		case "help":
-		case "-h":
-		case "--help":
-			refuseFurther(rest, `migrate ${command}`)
-			io.out(help)
-			return
-		case "init":
-			migrateInit(rest, io)
-			return
-		case "diff":
-			await migrateDiff(rest, io)
-			return
-		case "apply":
-		case "baseline":
-		case "check":
-		case "status":
-			await migrateApply(command, rest, io)
-			return
-		default:
-			throw new CliError(`Unknown migrate command: ${command}`)
-	}
+  const [command, ...rest] = argv;
+
+  switch (command) {
+    // a bare migrate names no command: it fails, with the commands to pick from
+    case undefined: {
+      throw new CliError(help);
+    }
+
+    case "help":
+    case "-h":
+    case "--help": {
+      refuseFurther(rest, `migrate ${command}`);
+      io.out(help);
+
+      return;
+    }
+
+    case "init": {
+      migrateInit(rest, io);
+
+      return;
+    }
+
+    case "diff": {
+      await migrateDiff(rest, io);
+
+      return;
+    }
+
+    case "apply":
+    case "baseline":
+    case "check":
+    case "status": {
+      await migrateApply(command, rest, io);
+
+      return;
+    }
+
+    default: {
+      throw new CliError(`Unknown migrate command: ${command}`);
+    }
+  }
 }

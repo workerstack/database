@@ -5,12 +5,12 @@
  * each is refused up front with what it needs.
  */
 
-/* where a Bun single-file executable embeds its modules, on posix and on windows */
-const EMBEDDED = /\/\$bunfs\/|\/~BUN\//
+// where a Bun single-file executable embeds its modules, on posix and on windows
+const EMBEDDED = /\/\$bunfs\/|\/~BUN\//;
 
 /** Throws `refusal` when a Bun single-file executable embeds the module at `moduleUrl` */
 export function refuseCompiled(moduleUrl: string, refusal: string): void {
-	if (EMBEDDED.test(moduleUrl)) throw new Error(refusal)
+  if (EMBEDDED.test(moduleUrl)) throw new Error(refusal);
 }
 
 /**
@@ -19,11 +19,11 @@ export function refuseCompiled(moduleUrl: string, refusal: string): void {
  * resolves or loads
  */
 export const compiledRefusal = (peers: readonly string[]): string =>
-	`database loads ${peers.join(" and ")} from the project, which a Bun single-file executable cannot do: run it with bun or node, not from a compiled executable`
+  `database loads ${peers.join(" and ")} from the project, which a Bun single-file executable cannot do: run it with bun or node, not from a compiled executable`;
 
 /**
  * What database says when a Bun single-file executable runs `command`, whose tables file loads in a
  * child process: the child is the executable itself, as codegen says of its own load
  */
 export const childRefusal = (command: string): string =>
-	`database migrate ${command} loads the tables file in a child process, which cannot read the modules a Bun single-file executable embeds: run database migrate with bun or node, not from a compiled executable`
+  `database migrate ${command} loads the tables file in a child process, which cannot read the modules a Bun single-file executable embeds: run database migrate with bun or node, not from a compiled executable`;

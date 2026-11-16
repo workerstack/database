@@ -5,44 +5,46 @@
  * the schema marks its output `validated: true` and the builders refuse a filter or an order
  * without it. Code that checked a filter against its own fields sets the flag itself.
  */
-import { DatabaseError } from "../error.ts"
-import { databaseErrorKeys } from "../types.ts"
-import { PAGINATION_DEFAULTS } from "./schema-limits.ts"
+import { DatabaseError } from "../error.ts";
+import { databaseErrorKeys } from "../types.ts";
+import { PAGINATION_DEFAULTS } from "./schema-limits.ts";
 
-type Parsed = { filterAst?: unknown; parsedSort: readonly unknown[]; validated?: true | undefined }
+type Parsed = { filterAst?: unknown; parsedSort: readonly unknown[]; validated?: true | undefined };
 
 const CAUSE =
-	"takes createListQuerySchema's output; set validated: true only on a filter and order you checked yourself"
+  "takes createListQuerySchema's output; set validated: true only on a filter and order you checked yourself";
 
 /** Throw a 500 when `parsed` carries a filter or an order that no schema checked */
 function assertSchemaParsed(parsed: Parsed): void {
-	if (parsed.validated === true) return
-	if (parsed.filterAst !== null && parsed.filterAst !== undefined) {
-		throw new DatabaseError({
-			cause: `The list query builder ${CAUSE}`,
-			errorKey: databaseErrorKeys.FILTER_NOT_WIRED,
-			status: "internal_server_error",
-		})
-	}
-	if (parsed.parsedSort.length > 0) {
-		throw new DatabaseError({
-			cause: `The list query builder ${CAUSE}`,
-			errorKey: databaseErrorKeys.SORT_NOT_WIRED,
-			status: "internal_server_error",
-		})
-	}
+  if (parsed.validated === true) return;
+
+  if (parsed.filterAst !== null && parsed.filterAst !== undefined) {
+    throw new DatabaseError({
+      cause: `The list query builder ${CAUSE}`,
+      errorKey: databaseErrorKeys.FILTER_NOT_WIRED,
+      status: "internal_server_error",
+    });
+  }
+
+  if (parsed.parsedSort.length > 0) {
+    throw new DatabaseError({
+      cause: `The list query builder ${CAUSE}`,
+      errorKey: databaseErrorKeys.SORT_NOT_WIRED,
+      status: "internal_server_error",
+    });
+  }
 }
 
 /** The maxPage and maxLimit a list schema states on its output; either absent is the default */
-type Bounds = { limitBound?: number | undefined; pageBound?: number | undefined }
+type Bounds = { limitBound?: number | undefined; pageBound?: number | undefined };
 
 /** The 500 for a stated bound no list schema could state, which would hold the page or the limit to nothing */
 function boundNotWired(cause: string): DatabaseError {
-	return new DatabaseError({
-		cause: `${cause}: spread createListQuerySchema's output, or state bounds its pagination config would take`,
-		errorKey: databaseErrorKeys.PAGE_NOT_WIRED,
-		status: "internal_server_error",
-	})
+  return new DatabaseError({
+    cause: `${cause}: spread createListQuerySchema's output, or state bounds its pagination config would take`,
+    errorKey: databaseErrorKeys.PAGE_NOT_WIRED,
+    status: "internal_server_error",
+  });
 }
 
 /**
@@ -51,20 +53,24 @@ function boundNotWired(cause: string): DatabaseError {
  * holds its config to
  */
 function boundsOf(parsed: Bounds): { limitBound: number; pageBound: number } {
-	const pageBound = parsed.pageBound ?? PAGINATION_DEFAULTS.maxPage
-	const limitBound = parsed.limitBound ?? PAGINATION_DEFAULTS.maxLimit
-	for (const [key, bound] of [
-		["pageBound", pageBound],
-		["limitBound", limitBound],
-	] as const) {
-		if (!Number.isSafeInteger(bound) || bound < 1)
-			throw boundNotWired(`${key} ${String(bound)} is not a safe whole number from 1`)
-	}
-	if ((pageBound - 1) * limitBound > Number.MAX_SAFE_INTEGER)
-		throw boundNotWired(
-			`pageBound ${pageBound} and limitBound ${limitBound} put the last offset, (pageBound - 1) * limitBound, past 2^53 - 1`,
-		)
-	return { limitBound, pageBound }
+  const pageBound = parsed.pageBound ?? PAGINATION_DEFAULTS.maxPage;
+  const limitBound = parsed.limitBound ?? PAGINATION_DEFAULTS.maxLimit;
+
+  for (const [key, bound] of [
+    ["pageBound", pageBound],
+    ["limitBound", limitBound],
+  ] as const) {
+    if (!Number.isSafeInteger(bound) || bound < 1)
+      throw boundNotWired(`${key} ${String(bound)} is not a safe whole number from 1`);
+  }
+
+  if ((pageBound - 1) * limitBound > Number.MAX_SAFE_INTEGER) {
+    throw boundNotWired(
+      `pageBound ${pageBound} and limitBound ${limitBound} put the last offset, (pageBound - 1) * limitBound, past 2^53 - 1`,
+    );
+  }
+
+  return { limitBound, pageBound };
 }
 
 /**
@@ -75,16 +81,18 @@ function boundsOf(parsed: Bounds): { limitBound: number; pageBound: number } {
  * number; `validated` says the filter and the order were checked, never the page.
  */
 function assertPageWithin(
-	parsed: Bounds & {
-		page?: number | null | undefined
-		/** the filter's and the order's check, which says nothing of the page: not read here */
-		validated?: true | undefined
-	},
+  parsed: Bounds & {
+    page?: number | null | undefined;
+    /** the filter's and the order's check, which says nothing of the page: not read here */
+    validated?: true | undefined;
+  },
 ): void {
-	const page = parsed.page ?? 1
-	if (!Number.isInteger(page) || page < 1) throw invalidPage(page)
-	const bound = boundsOf(parsed).pageBound
-	if (page > bound) throw pageTooDeep(page, bound)
+  const page = parsed.page ?? 1;
+
+  if (!Number.isInteger(page) || page < 1) throw invalidPage(page);
+  const bound = boundsOf(parsed).pageBound;
+
+  if (page > bound) throw pageTooDeep(page, bound);
 }
 
 /**
@@ -93,44 +101,47 @@ function assertPageWithin(
  * map of error keys needs no new one
  */
 function assertLimitWithin(parsed: Bounds & { limit: number }): void {
-	if (!Number.isInteger(parsed.limit) || parsed.limit < 1) {
-		throw new DatabaseError({
-			cause: `limit ${String(parsed.limit)} is not a whole number from 1`,
-			errorKey: databaseErrorKeys.INVALID_PAGE,
-			status: "bad_request",
-		})
-	}
-	/* a limit no schema bounded is held to the default maxLimit, as such a page is to maxPage */
-	const bound = boundsOf(parsed).limitBound
-	if (parsed.limit <= bound) return
-	throw new DatabaseError({
-		cause: `limit ${parsed.limit} is past ${bound}; page by cursor, or bound it in the list schema`,
-		errorKey: databaseErrorKeys.INVALID_PAGE,
-		status: "bad_request",
-	})
+  if (!Number.isInteger(parsed.limit) || parsed.limit < 1) {
+    throw new DatabaseError({
+      cause: `limit ${String(parsed.limit)} is not a whole number from 1`,
+      errorKey: databaseErrorKeys.INVALID_PAGE,
+      status: "bad_request",
+    });
+  }
+
+  // a limit no schema bounded is held to the default maxLimit, as such a page is to maxPage
+  const bound = boundsOf(parsed).limitBound;
+
+  if (parsed.limit <= bound) return;
+  throw new DatabaseError({
+    cause: `limit ${parsed.limit} is past ${bound}; page by cursor, or bound it in the list schema`,
+    errorKey: databaseErrorKeys.INVALID_PAGE,
+    status: "bad_request",
+  });
 }
 
 /** The 400 for a page that is no whole number from 1, from a list schema or from a builder */
 function invalidPage(page: unknown): DatabaseError {
-	return new DatabaseError({
-		cause: `page ${typeof page === "string" ? JSON.stringify(page) : String(page)} is not a whole number from 1`,
-		errorKey: databaseErrorKeys.INVALID_PAGE,
-		status: "bad_request",
-	})
+  return new DatabaseError({
+    cause: `page ${typeof page === "string" ? JSON.stringify(page) : String(page)} is not a whole number from 1`,
+    errorKey: databaseErrorKeys.INVALID_PAGE,
+    status: "bad_request",
+  });
 }
 
 /** The most digits of a page past `maxPage` its message names */
-const PAGE_SHOWN = 24
+const PAGE_SHOWN = 24;
 
 /** The 400 for a page past `maxPage`, from a list schema or from a list no schema bounded */
 function pageTooDeep(page: number | string, maxPage: number): DatabaseError {
-	/* a page of any size reaches here as digits, so the message keeps the front of it, not all */
-	const shown = String(page)
-	return new DatabaseError({
-		cause: `page ${shown.length > PAGE_SHOWN ? `${shown.slice(0, PAGE_SHOWN)}…` : shown} is past ${maxPage}; page further by cursor`,
-		errorKey: databaseErrorKeys.PAGE_TOO_DEEP,
-		status: "bad_request",
-	})
+  // a page of any size reaches here as digits, so the message keeps the front of it, not all
+  const shown = String(page);
+
+  return new DatabaseError({
+    cause: `page ${shown.length > PAGE_SHOWN ? `${shown.slice(0, PAGE_SHOWN)}…` : shown} is past ${maxPage}; page further by cursor`,
+    errorKey: databaseErrorKeys.PAGE_TOO_DEEP,
+    status: "bad_request",
+  });
 }
 
-export { assertLimitWithin, assertPageWithin, assertSchemaParsed, invalidPage, pageTooDeep }
+export { assertLimitWithin, assertPageWithin, assertSchemaParsed, invalidPage, pageTooDeep };

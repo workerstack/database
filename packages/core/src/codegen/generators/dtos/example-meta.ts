@@ -2,103 +2,112 @@
  * The `.meta({ examples })` a field's schema carries for OpenAPI, preferring the shared `_m.*`
  * objects over inline ones.
  */
-import type { FieldMeta } from "../../analyzer-types.ts"
-import { declaredBounds } from "./number-range.ts"
-import { textFormatOf } from "./text-format.ts"
-import { textRules } from "./text-schema.ts"
+import type { FieldMeta } from "../../analyzer-types.ts";
+import { declaredBounds } from "./number-range.ts";
+import { textFormatOf } from "./text-format.ts";
+import { textRules } from "./text-schema.ts";
 
-const EXAMPLE_ULID = "01h5a3g8k9m2n4p6q8r0t2v4x6"
-const ALPHANUMERIC_CYCLE = "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0"
+const EXAMPLE_ULID = "01h5a3g8k9m2n4p6q8r0t2v4x6";
+const ALPHANUMERIC_CYCLE = "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0";
 
 /**
  * Shared meta example keys emitted in _shared/index.gen.ts.
  * Entity files reference `_m.string` instead of inline `{ examples: ["string"] }`.
  */
 export const SHARED_META_KEYS = [
-	"boolean",
-	"email",
-	"integer",
-	"real",
-	"serialId",
-	"string",
-	"timestamp",
-	"url",
-] as const
-type SharedMetaKey = (typeof SHARED_META_KEYS)[number]
+  "boolean",
+  "email",
+  "integer",
+  "real",
+  "serialId",
+  "string",
+  "timestamp",
+  "url",
+] as const;
+
+type SharedMetaKey = (typeof SHARED_META_KEYS)[number];
 
 export const SHARED_META_VALUES: Record<SharedMetaKey, string> = {
-	boolean: "{ examples: [true] }",
-	email: `{ examples: ["user@example.com"] }`,
-	integer: "{ examples: [42] }",
-	real: "{ examples: [0.5] }",
-	serialId: "{ examples: [1] }",
-	string: `{ examples: ["string"] }`,
-	timestamp: "{ examples: [1711468800000] }",
-	url: `{ examples: ["https://example.com"] }`,
-}
+  boolean: "{ examples: [true] }",
+  email: `{ examples: ["user@example.com"] }`,
+  integer: "{ examples: [42] }",
+  real: "{ examples: [0.5] }",
+  serialId: "{ examples: [1] }",
+  string: `{ examples: ["string"] }`,
+  timestamp: "{ examples: [1711468800000] }",
+  url: `{ examples: ["https://example.com"] }`,
+};
 
 /**
  * Shared complete schemas emitted in _shared/index.gen.ts.
  * Identical schemas reused across all entities (no per-field constraints).
  */
 export const SHARED_SCHEMAS = {
-	boolean: "z.boolean().meta(_m.boolean)",
-	real: "z.number().meta(_m.real)",
-} as const
+  boolean: "z.boolean().meta(_m.boolean)",
+  real: "z.number().meta(_m.real)",
+} as const;
 
 export type ExampleResult = {
-	/** Code to append: `.meta(_m.string)` or `.meta({ examples: ["custom"] })` */
-	code: string
-	/** Shared import needed: "_m" for shared meta, specific schema name, or null */
-	needsSharedMeta: boolean
-}
+  /** Code to append: `.meta(_m.string)` or `.meta({ examples: ["custom"] })` */
+  code: string;
+  /** Shared import needed: "_m" for shared meta, specific schema name, or null */
+  needsSharedMeta: boolean;
+};
 
-const shared = (key: SharedMetaKey): ExampleResult => ({ code: `.meta(_m.${key})`, needsSharedMeta: true })
+const shared = (key: SharedMetaKey): ExampleResult => ({ code: `.meta(_m.${key})`, needsSharedMeta: true });
+
 const inline = (example: string): ExampleResult => ({
-	code: `.meta({ examples: [${example}] })`,
-	needsSharedMeta: false,
-})
+  code: `.meta({ examples: [${example}] })`,
+  needsSharedMeta: false,
+});
 
 // lookup-table: the helpers whose values get no example: a reference, a JSON document, a timestamp database fills
 const NO_EXAMPLE_KINDS: ReadonlySet<string> = /* @__PURE__ */ new Set([
-	"createdAt",
-	"deletedAt",
-	"json",
-	"ref",
-	"updatedAt",
-])
+  "createdAt",
+  "deletedAt",
+  "json",
+  "ref",
+  "updatedAt",
+]);
 
-/* sensitive or structured values get no example: the schema says enough, the value would leak */
+// sensitive or structured values get no example: the schema says enough, the value would leak
 function hasNoExample({ databaseKind, constraints, dataType, dimensions, foreignKey, schemaJson }: FieldMeta): boolean {
-	/* a pattern decides what the value looks like, which no generic example can know; an array's
-	 * example would be its element's, of the wrong shape */
-	if (constraints.private || constraints.password || constraints.pattern !== null || foreignKey !== null) return true
-	/* a schema's rule may be a refine its published JSON Schema does not state, so database knows no value it takes */
-	if (schemaJson !== null) return true
-	if ((dimensions ?? 0) > 0) return true
-	if (databaseKind === null) return dataType === "object json"
-	return NO_EXAMPLE_KINDS.has(databaseKind)
+  // a pattern decides what the value looks like, which no generic example can know; an array's
+  // example would be its element's, of the wrong shape
+  if (constraints.private || constraints.password || constraints.pattern !== null || foreignKey !== null) return true;
+
+  // a schema's rule may be a refine its published JSON Schema does not state, so database knows no value it takes
+  if (schemaJson !== null) return true;
+
+  if ((dimensions ?? 0) > 0) return true;
+
+  if (databaseKind === null) return dataType === "object json";
+
+  return NO_EXAMPLE_KINDS.has(databaseKind);
 }
 
-/* the shared examples' own values, which a bound may refuse */
-const SHARED_NUMBER = { integer: 42, real: 0.5, timestamp: 1_711_468_800_000 }
+// the shared examples' own values, which a bound may refuse
+const SHARED_NUMBER = { integer: 42, real: 0.5, timestamp: 1_711_468_800_000 };
 
 /**
  * A number its bounds accept: the shared example when it fits, else the midpoint of two bounds,
  * or the one bound it misses
  */
 function midpoint(field: FieldMeta, key: keyof typeof SHARED_NUMBER): ExampleResult {
-	/* an integer format's range is a declared bound, as the DTO checks it */
-	const { max, min } = declaredBounds(field.constraints)
-	const fits = (value: number) => (min === null || value >= min) && (max === null || value <= max)
-	if (fits(SHARED_NUMBER[key])) return shared(key)
-	/* an integer's example is an integer within its bounds, a fractional bound rounded inward */
-	const whole = key !== "real"
-	const low = min === null || !whole ? min : Math.ceil(min)
-	const high = max === null || !whole ? max : Math.floor(max)
-	if (low !== null && high !== null)
-		return inline(String(whole ? Math.floor((low + high) / 2) : shortestBetween(low, high)))
-	return inline(String(low ?? high))
+  // an integer format's range is a declared bound, as the DTO checks it
+  const { max, min } = declaredBounds(field.constraints);
+  const fits = (value: number) => (min === null || value >= min) && (max === null || value <= max);
+
+  if (fits(SHARED_NUMBER[key])) return shared(key);
+  // an integer's example is an integer within its bounds, a fractional bound rounded inward
+  const whole = key !== "real";
+  const low = min === null || !whole ? min : Math.ceil(min);
+  const high = max === null || !whole ? max : Math.floor(max);
+
+  if (low !== null && high !== null)
+    return inline(String(whole ? Math.floor((low + high) / 2) : shortestBetween(low, high)));
+
+  return inline(String(low ?? high));
 }
 
 /**
@@ -106,24 +115,30 @@ function midpoint(field: FieldMeta, key: keyof typeof SHARED_NUMBER): ExampleRes
  * them, so a float's example reads 0.15, never 0.15000000000000002; `low` when they meet
  */
 function shortestBetween(low: number, high: number): number {
-	const mid = (low + high) / 2
-	if (low === high) return low
-	for (let digits = 1; digits < 17; digits++) {
-		const rounded = Number(mid.toPrecision(digits))
-		if (rounded > low && rounded < high) return rounded
-	}
-	return mid
+  const mid = (low + high) / 2;
+
+  if (low === high) return low;
+
+  for (let digits = 1; digits < 17; digits++) {
+    const rounded = Number(mid.toPrecision(digits));
+
+    if (rounded > low && rounded < high) return rounded;
+  }
+
+  return mid;
 }
 
 /** `length` characters of the alphanumeric cycle, repeated as far as it takes */
 const cycleOf = (length: number) =>
-	ALPHANUMERIC_CYCLE.repeat(Math.ceil(length / ALPHANUMERIC_CYCLE.length)).slice(0, length)
+  ALPHANUMERIC_CYCLE.repeat(Math.ceil(length / ALPHANUMERIC_CYCLE.length)).slice(0, length);
 
 /** A text example its length bounds accept: the shared "string" when it fits, else the cycle at the length they allow */
 function textExample({ constraints: { max, min } }: FieldMeta): ExampleResult {
-	const word = "string".length
-	if ((min === null || min <= word) && (max === null || max >= word)) return shared("string")
-	return inline(JSON.stringify(cycleOf(max !== null && max < word ? max : (min as number))))
+  const word = "string".length;
+
+  if ((min === null || min <= word) && (max === null || max >= word)) return shared("string");
+
+  return inline(JSON.stringify(cycleOf(max !== null && max < word ? max : (min as number))));
 }
 
 /**
@@ -131,60 +146,69 @@ function textExample({ constraints: { max, min } }: FieldMeta): ExampleResult {
  * none where the column's own range, its declared bounds and length, leaves it out
  */
 function formatExample(field: FieldMeta): ExampleResult | null | undefined {
-	const format = textFormatOf(field.constraints)
-	if (format === null) return undefined
-	const { max, min } = textRules(field.constraints, field)
-	const { length } = format.spec.example
-	if ((max !== null && length > max) || (min !== null && length < min)) return null
-	return inline(JSON.stringify(format.spec.example))
+  const format = textFormatOf(field.constraints);
+
+  if (format === null) return undefined;
+  const { max, min } = textRules(field.constraints, field);
+  const { length } = format.spec.example;
+
+  if ((max !== null && length > max) || (min !== null && length < min)) return null;
+
+  return inline(JSON.stringify(format.spec.example));
 }
 
 /** A rule's answer: an example, `null` for none at all, `undefined` when the field is not its kind */
-type Rule = (field: FieldMeta) => ExampleResult | null | undefined
+type Rule = (field: FieldMeta) => ExampleResult | null | undefined;
 
-/* each text kind's example, which its own check accepts: an image URI is an HTTPS URL to an image */
-const KIND_EXAMPLES = { email: "user@example.com", imageUri: "https://example.com/a.png", url: "https://example.com" }
+// each text kind's example, which its own check accepts: an image URI is an HTTPS URL to an image
+const KIND_EXAMPLES = { email: "user@example.com", imageUri: "https://example.com/a.png", url: "https://example.com" };
 
 /** The example of a text kind, or none when the column is shorter than it or needs more */
 function kindExample(field: FieldMeta): ExampleResult | null | undefined {
-	const { constraints } = field
-	const kind = constraints.email ? "email" : constraints.url ? "url" : constraints.imageUri ? "imageUri" : undefined
-	if (kind === undefined) return undefined
-	const max = constraints.max ?? field.length
-	const length = KIND_EXAMPLES[kind].length
-	if ((max !== null && max < length) || (constraints.min !== null && constraints.min > length)) return null
-	return kind === "imageUri" ? inline(JSON.stringify(KIND_EXAMPLES.imageUri)) : shared(kind)
+  const { constraints } = field;
+  const kind = constraints.email ? "email" : constraints.url ? "url" : constraints.imageUri ? "imageUri" : undefined;
+
+  if (kind === undefined) return undefined;
+  const max = constraints.max ?? field.length;
+  const length = KIND_EXAMPLES[kind].length;
+
+  if ((max !== null && max < length) || (constraints.min !== null && constraints.min > length)) return null;
+
+  return kind === "imageUri" ? inline(JSON.stringify(KIND_EXAMPLES.imageUri)) : shared(kind);
 }
 
 const RULES: Rule[] = [
-	kindExample,
-	/* an id with a prefix is unique per table */
-	({ databaseKind, prefix }) => (databaseKind === "id" ? inline(`"${prefix ?? "id"}_${EXAMPLE_ULID}"`) : undefined),
-	({ databaseKind }) =>
-		databaseKind === "serialId" ? shared("serialId") : databaseKind === "boolean" ? shared("boolean") : undefined,
-	/* a state column's example is the value a row starts at, which its create alone takes */
-	({ enumValues, states }) =>
-		enumValues !== null && enumValues.length > 0 ? inline(JSON.stringify(states?.initial ?? enumValues[0])) : undefined,
-	formatExample,
-	(field) =>
-		field.databaseKind === "integer" || field.databaseKind === "real" || field.databaseKind === "timestamp"
-			? midpoint(field, field.databaseKind)
-			: undefined,
-	(field) =>
-		field.databaseKind === "text" || field.databaseKind === "id" || field.databaseKind === "enum"
-			? textExample(field)
-			: undefined,
-]
+  kindExample,
+  // an id with a prefix is unique per table
+  ({ databaseKind, prefix }) => (databaseKind === "id" ? inline(`"${prefix ?? "id"}_${EXAMPLE_ULID}"`) : undefined),
+  ({ databaseKind }) =>
+    databaseKind === "serialId" ? shared("serialId") : databaseKind === "boolean" ? shared("boolean") : undefined,
+  // a state column's example is the value a row starts at, which its create alone takes
+  ({ enumValues, states }) =>
+    enumValues !== null && enumValues.length > 0 ? inline(JSON.stringify(states?.initial ?? enumValues[0])) : undefined,
+  formatExample,
+  (field) =>
+    field.databaseKind === "integer" || field.databaseKind === "real" || field.databaseKind === "timestamp"
+      ? midpoint(field, field.databaseKind)
+      : undefined,
+  (field) =>
+    field.databaseKind === "text" || field.databaseKind === "id" || field.databaseKind === "enum"
+      ? textExample(field)
+      : undefined,
+];
 
 /**
  * The `.meta()` with an OpenAPI example for a field, preferring the shared `_m.*` objects over
  * inline ones; null when the field gets none.
  */
 export function generateExampleMeta(field: FieldMeta): ExampleResult | null {
-	if (hasNoExample(field)) return null
-	for (const rule of RULES) {
-		const result = rule(field)
-		if (result !== undefined) return result
-	}
-	return null
+  if (hasNoExample(field)) return null;
+
+  for (const rule of RULES) {
+    const result = rule(field);
+
+    if (result !== undefined) return result;
+  }
+
+  return null;
 }

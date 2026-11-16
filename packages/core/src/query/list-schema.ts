@@ -2,67 +2,67 @@
  * The list query schema: validates `filter`, `order`, `cursor`, `page`, `limit` and the optional
  * params an endpoint declares, and returns them parsed, stamped with the facts it enforces.
  */
-import * as z from "zod"
+import * as z from "zod";
 
-import { EMPTY_OBJ } from "../empty.ts"
-import { filterParamMeta, orderParamMeta, searchParamMeta } from "./descriptions.ts"
-import { OPERATORS_BY_TYPE } from "./filter.ts"
-import { limitsOver } from "./filter-validate.ts"
-import { listQueryStamp, tiebreakOf } from "./list-meta.ts"
-import { refuseUnspelledNames } from "./list-names.ts"
-import { filterAstOf, parsedSortOf, reportOutputIssues, sortOrderByOf } from "./list-transform.ts"
-import { encodedMessage, LIST_QUERY_LIMITS, PAGINATION_DEFAULTS, REQUEST_BYTES, withinBytes } from "./schema-limits.ts"
+import { EMPTY_OBJ } from "../empty.ts";
+import { filterParamMeta, orderParamMeta, searchParamMeta } from "./descriptions.ts";
+import { limitsOver } from "./filter-validate.ts";
+import { OPERATORS_BY_TYPE } from "./filter.ts";
+import { listQueryStamp, tiebreakOf } from "./list-meta.ts";
+import { refuseUnspelledNames } from "./list-names.ts";
+import { filterAstOf, parsedSortOf, reportOutputIssues, sortOrderByOf } from "./list-transform.ts";
+import { encodedMessage, LIST_QUERY_LIMITS, PAGINATION_DEFAULTS, REQUEST_BYTES, withinBytes } from "./schema-limits.ts";
 import {
-	assertNotReserved,
-	baseListQueryShape,
-	filterAstSchema,
-	langQueryField,
-	limitSchemaFor,
-	pageSchemaFor,
-	parsedFieldsSchema,
-	pickExtended,
-	RESERVED_LIST_KEYS,
-	selectQueryFieldFor,
-	sortDirectionEnum,
-} from "./schema-params.ts"
-import type { ListQueryConfig, ListQueryLimits, ListQueryOutput, OutputStableShape } from "./schema-types.ts"
-import { validateSelectWithConfig } from "./select-validate.ts"
-import type { FieldType } from "./types.ts"
+  assertNotReserved,
+  baseListQueryShape,
+  filterAstSchema,
+  langQueryField,
+  limitSchemaFor,
+  pageSchemaFor,
+  parsedFieldsSchema,
+  pickExtended,
+  RESERVED_LIST_KEYS,
+  selectQueryFieldFor,
+  sortDirectionEnum,
+} from "./schema-params.ts";
+import type { ListQueryConfig, ListQueryLimits, ListQueryOutput, OutputStableShape } from "./schema-types.ts";
+import { validateSelectWithConfig } from "./select-validate.ts";
+import type { FieldType } from "./types.ts";
 
-type AdvertisedConfig = Pick<ListQueryConfig, "fields" | "filter" | "lang" | "search" | "sort">
+type AdvertisedConfig = Pick<ListQueryConfig, "fields" | "filter" | "lang" | "search" | "sort">;
 
 // Partial, not `?:`, as a zod shape's key is absent or a schema, never undefined
 /** The params beside cursor, page and limit, each present only where the config declares it */
 type OptionalShape = Partial<{
-	/** the sort, `field[.asc|.desc][.nullsfirst|.nullslast]` keys joined by commas, present where the config's `sort` names a field */
-	order: z.ZodOptional<z.ZodString>
-	/** the filter expression, present where the config's `filter` names a field */
-	filter: z.ZodOptional<z.ZodString>
-	/** the search text, present where the config has `search` */
-	q: z.ZodOptional<z.ZodString>
-	/** the language tag, present where the config sets `lang` */
-	lang: z.ZodOptional<z.ZodString>
-	/** the sparse fieldset, present where the config has `fields` */
-	select: z.ZodOptional<z.ZodString>
-}>
+  /** the sort, `field[.asc|.desc][.nullsfirst|.nullslast]` keys joined by commas, present where the config's `sort` names a field */
+  order: z.ZodOptional<z.ZodString>;
+  /** the filter expression, present where the config's `filter` names a field */
+  filter: z.ZodOptional<z.ZodString>;
+  /** the search text, present where the config has `search` */
+  q: z.ZodOptional<z.ZodString>;
+  /** the language tag, present where the config sets `lang` */
+  lang: z.ZodOptional<z.ZodString>;
+  /** the sparse fieldset, present where the config has `fields` */
+  select: z.ZodOptional<z.ZodString>;
+}>;
 
 /** The query params a list endpoint takes, as zod schemas of their query-string text */
 export type ListQueryShape = typeof baseListQueryShape &
-	OptionalShape & {
-		/** the page size, decimal digits from 1 to maxLimit; the default limit when absent */
-		limit: z.ZodDefault<z.ZodCoercedNumber<unknown>>
-		/** the page number, decimal digits from 1 to maxPage */
-		page: z.ZodOptional<z.ZodCoercedNumber<unknown>>
-	}
+  OptionalShape & {
+    /** the page size, decimal digits from 1 to maxLimit; the default limit when absent */
+    limit: z.ZodDefault<z.ZodCoercedNumber<unknown>>;
+    /** the page number, decimal digits from 1 to maxPage */
+    page: z.ZodOptional<z.ZodCoercedNumber<unknown>>;
+  };
 
 /** A list endpoint's request object, before it is parsed: strict, so any param it does not take is a 400 */
-export type ListQueryRequest = z.ZodObject<ListQueryShape, z.core.$strict>
+export type ListQueryRequest = z.ZodObject<ListQueryShape, z.core.$strict>;
 
 /** What createListQuerySchema returns: the strict request object piped into its parsed output */
 type ListQuerySchema<T extends OutputStableShape<T>, TSortField extends string> = z.ZodPipe<
-	ListQueryRequest,
-	z.ZodTransform<Awaited<ListQueryOutput<TSortField> & { [K in keyof T]: z.infer<T[K]> }>, z.output<ListQueryRequest>>
->
+  ListQueryRequest,
+  z.ZodTransform<Awaited<ListQueryOutput<TSortField> & { [K in keyof T]: z.infer<T[K]> }>, z.output<ListQueryRequest>>
+>;
 
 /**
  * The params advertised beside cursor, page and limit. Each optional param exists only when the
@@ -70,76 +70,81 @@ type ListQuerySchema<T extends OutputStableShape<T>, TSortField extends string> 
  * list — and the object is strict, so a param that is not advertised is a 400.
  */
 function optionalShapeFor(config: AdvertisedConfig, limits: ListQueryLimits): OptionalShape {
-	const filterConfig: Record<string, FieldType> = config.filter ?? EMPTY_OBJ
-	const search = config.search
-	const filter = z
-		.string()
-		.max(limits.maxFilterLength)
-		.refine(withinBytes(REQUEST_BYTES.filter), { message: encodedMessage(REQUEST_BYTES.filter) })
-		.optional()
-		.meta(filterParamMeta(filterConfig, (type) => OPERATORS_BY_TYPE[type], limits))
-	const q = (terms: readonly string[]) =>
-		z
-			.string()
-			.max(200)
-			.refine(withinBytes(REQUEST_BYTES.q), { message: encodedMessage(REQUEST_BYTES.q) })
-			.refine((value) => value.split(/\s+/u).filter(Boolean).length <= limits.maxSearchTerms, {
-				message: `At most ${limits.maxSearchTerms} search terms`,
-			})
-			.optional()
-			.meta(searchParamMeta(terms, limits.maxSearchTerms))
-	const [first, ...rest] = config.sort
-	return {
-		...(first === undefined
-			? {}
-			: {
-					order: z
-						.string()
-						.max(200)
-						.refine(withinBytes(REQUEST_BYTES.order), { message: encodedMessage(REQUEST_BYTES.order) })
-						.optional()
-						.meta(orderParamMeta([first, ...rest], limits.maxSortKeys)),
-				}),
-		...(Object.keys(filterConfig).length > 0 ? { filter } : {}),
-		...(search ? { q: q(search) } : {}),
-		...(config.lang ? { lang: langQueryField } : {}),
-		...(config.fields
-			? {
-					select: selectQueryFieldFor(config.fields).refine(
-						(value) => value === undefined || withinBytes(REQUEST_BYTES.select)(value),
-						{
-							message: encodedMessage(REQUEST_BYTES.select),
-						},
-					),
-				}
-			: {}),
-	}
+  const filterConfig: Record<string, FieldType> = config.filter ?? EMPTY_OBJ;
+  const search = config.search;
+
+  const filter = z
+    .string()
+    .max(limits.maxFilterLength)
+    .refine(withinBytes(REQUEST_BYTES.filter), { message: encodedMessage(REQUEST_BYTES.filter) })
+    .optional()
+    .meta(filterParamMeta(filterConfig, (type) => OPERATORS_BY_TYPE[type], limits));
+
+  const q = (terms: readonly string[]) =>
+    z
+      .string()
+      .max(200)
+      .refine(withinBytes(REQUEST_BYTES.q), { message: encodedMessage(REQUEST_BYTES.q) })
+      .refine((value) => value.split(/\s+/u).filter(Boolean).length <= limits.maxSearchTerms, {
+        message: `At most ${limits.maxSearchTerms} search terms`,
+      })
+      .optional()
+      .meta(searchParamMeta(terms, limits.maxSearchTerms));
+
+  const [first, ...rest] = config.sort;
+
+  return {
+    ...(first === undefined
+      ? {}
+      : {
+          order: z
+            .string()
+            .max(200)
+            .refine(withinBytes(REQUEST_BYTES.order), { message: encodedMessage(REQUEST_BYTES.order) })
+            .optional()
+            .meta(orderParamMeta([first, ...rest], limits.maxSortKeys)),
+        }),
+    ...(Object.keys(filterConfig).length > 0 ? { filter } : {}),
+    ...(search ? { q: q(search) } : {}),
+    ...(config.lang ? { lang: langQueryField } : {}),
+    ...(config.fields
+      ? {
+          select: selectQueryFieldFor(config.fields).refine(
+            (value) => value === undefined || withinBytes(REQUEST_BYTES.select)(value),
+            {
+              message: encodedMessage(REQUEST_BYTES.select),
+            },
+          ),
+        }
+      : {}),
+  };
 }
 
 /** What the transform returns, as a schema the pipe checks it against */
 function outputSchemaFor(sortConfig: readonly string[], extendFields: Record<string, z.ZodType> | undefined) {
-	const sortFieldSchema = z.enum(sortConfig as [string, ...string[]])
-	return z.object({
-		cursor: z.string().optional(),
-		filterAst: filterAstSchema.nullable(),
-		lang: z.string().optional(),
-		limit: z.number(),
-		page: z.number().optional(),
-		parsedFields: parsedFieldsSchema.nullable(),
-		parsedSort: z
-			.object({ direction: sortDirectionEnum, field: sortFieldSchema, nulls: z.enum(["first", "last"]).optional() })
-			.array(),
-		q: z.string().optional(),
-		sortOrderBy: z.partialRecord(sortFieldSchema, sortDirectionEnum),
-		/* set on every parse; optional, as ListQueryOutput types it, so a handler's input takes a hand-built object */
-		pageBound: z.number().optional(),
-		/* the limit's bound, as the page's: the schema's own maxLimit */
-		limitBound: z.number().optional(),
-		/* the tiebreak the schema publishes, which a derived list's idColumn must name */
-		tiebreak: z.string().optional(),
-		validated: z.literal(true),
-		...extendFields,
-	})
+  const sortFieldSchema = z.enum(sortConfig as [string, ...string[]]);
+
+  return z.object({
+    cursor: z.string().optional(),
+    filterAst: filterAstSchema.nullable(),
+    lang: z.string().optional(),
+    limit: z.number(),
+    page: z.number().optional(),
+    parsedFields: parsedFieldsSchema.nullable(),
+    parsedSort: z
+      .object({ direction: sortDirectionEnum, field: sortFieldSchema, nulls: z.enum(["first", "last"]).optional() })
+      .array(),
+    q: z.string().optional(),
+    sortOrderBy: z.partialRecord(sortFieldSchema, sortDirectionEnum),
+    // set on every parse; optional, as ListQueryOutput types it, so a handler's input takes a hand-built object
+    pageBound: z.number().optional(),
+    // the limit's bound, as the page's: the schema's own maxLimit
+    limitBound: z.number().optional(),
+    // the tiebreak the schema publishes, which a derived list's idColumn must name
+    tiebreak: z.string().optional(),
+    validated: z.literal(true),
+    ...extendFields,
+  });
 }
 
 /**
@@ -148,28 +153,28 @@ function outputSchemaFor(sortConfig: readonly string[], extendFields: Record<str
  * q one of 0 terms, while each param publishes examples
  */
 function listLimitsOf({ filter = EMPTY_OBJ, limits: given, search }: ListQueryConfig): ListQueryLimits {
-	return limitsOver(
-		{
-			defaults: LIST_QUERY_LIMITS,
-			floors: {
-				maxSortKeys: [1, ""],
-				...(Object.keys(filter).length > 0 && { maxConditions: [1, " where filter names a field"] }),
-				...(search && { maxSearchTerms: [1, " where search names a field"] }),
-			},
-			owner: "createListQuerySchema",
-		},
-		given,
-	)
+  return limitsOver(
+    {
+      defaults: LIST_QUERY_LIMITS,
+      floors: {
+        maxSortKeys: [1, ""],
+        ...(Object.keys(filter).length > 0 && { maxConditions: [1, " where filter names a field"] }),
+        ...(search && { maxSearchTerms: [1, " where search names a field"] }),
+      },
+      owner: "createListQuerySchema",
+    },
+    given,
+  );
 }
 
 /** The optional params as the request object holds them: each one only where the config publishes it */
 type OptionalParams = {
-	filter?: string | undefined
-	order?: string | undefined
-	lang?: string | undefined
-	q?: string | undefined
-	select?: unknown
-}
+  filter?: string | undefined;
+  order?: string | undefined;
+  lang?: string | undefined;
+  q?: string | undefined;
+  select?: unknown;
+};
 
 /**
  * The config's limits, a whole number from 0 each, which the query stamp publishes and its reader
@@ -177,10 +182,11 @@ type OptionalParams = {
  * spell, and no `extend` key the schema owns
  */
 function checkedLimits(config: ListQueryConfig): ListQueryLimits {
-	const limits = listLimitsOf(config)
-	refuseUnspelledNames(config.sort, Object.keys(config.filter ?? EMPTY_OBJ))
-	assertNotReserved("createListQuerySchema", config.extend as Record<string, z.ZodType> | undefined, RESERVED_LIST_KEYS)
-	return limits
+  const limits = listLimitsOf(config);
+  refuseUnspelledNames(config.sort, Object.keys(config.filter ?? EMPTY_OBJ));
+  assertNotReserved("createListQuerySchema", config.extend, RESERVED_LIST_KEYS);
+
+  return limits;
 }
 
 /**
@@ -189,59 +195,69 @@ function checkedLimits(config: ListQueryConfig): ListQueryLimits {
  * take, a bound out of range or an `extend` key the schema owns, throws a TypeError at build
  */
 function createListQuerySchema<
-	T extends OutputStableShape<T> = Record<never, never>,
-	const TSortFields extends readonly string[] = readonly string[],
+  T extends OutputStableShape<T> = Record<never, never>,
+  const TSortFields extends readonly string[] = readonly string[],
 >(config: ListQueryConfig<T, TSortFields>): ListQuerySchema<T, TSortFields[number]> {
-	type TSortField = TSortFields[number]
-	type ExtendedOutput = ListQueryOutput<TSortField> & { [K in keyof T]: z.infer<T[K]> }
-	const { extend: extendFields, fields: fieldsConfig, filter: filterConfig = EMPTY_OBJ, sort: sortConfig } = config
-	const limits = checkedLimits(config)
-	const extensions = extendFields as Record<string, z.ZodType> | undefined
+  type TSortField = TSortFields[number];
 
-	const shape = {
-		...baseListQueryShape,
-		...optionalShapeFor(config, limits),
-		limit: limitSchemaFor(config.pagination),
-		page: pageSchemaFor(config.pagination),
-	}
-	const schema = extendFields ? z.strictObject({ ...shape, ...extendFields }) : z.strictObject(shape)
-	const outputSchema = outputSchemaFor(sortConfig, extensions)
+  type ExtendedOutput = ListQueryOutput<TSortField> & { [K in keyof T]: z.infer<T[K]> };
 
-	const { maxLimit = PAGINATION_DEFAULTS.maxLimit, maxPage = PAGINATION_DEFAULTS.maxPage } = config.pagination ?? {}
-	const piped = schema.transform((data, ctx): ExtendedOutput => {
-		const optional = data as OptionalParams
-		const filterAst = filterAstOf(optional.filter, { fields: filterConfig, limits }, ctx)
-		const parsedSort = parsedSortOf<TSortField>(
-			optional.order,
-			{ maxSortKeys: limits.maxSortKeys, sort: sortConfig },
-			ctx,
-		)
-		/* cursor takes precedence over page — both accepted gracefully */
-		const select = typeof optional.select === "string" ? optional.select : undefined
-		const output = {
-			cursor: data.cursor,
-			filterAst,
-			lang: optional.lang,
-			limit: data.limit,
-			page: data.page,
-			parsedFields: fieldsConfig ? validateSelectWithConfig(select, fieldsConfig, ctx) : null,
-			parsedSort,
-			q: optional.q,
-			sortOrderBy: sortOrderByOf(parsedSort),
-			pageBound: maxPage,
-			limitBound: maxLimit,
-			tiebreak: tiebreakOf(config.tiebreak),
-			validated: true as const,
-			...(pickExtended(extensions, data) as { [K in keyof T]: z.infer<T[K]> }),
-		}
-		reportOutputIssues(outputSchema, output, ctx)
-		return output
-	})
-	const withPipe: typeof piped = piped.pipe(outputSchema as never) as {} as typeof piped
+  const { extend: extendFields, fields: fieldsConfig, filter: filterConfig = EMPTY_OBJ, sort: sortConfig } = config;
+  const limits = checkedLimits(config);
+  const extensions = extendFields as Record<string, z.ZodType> | undefined;
 
-	/* Stamp the schema we RETURN. Metadata on `schema` or `piped` survives the
-	   input view but is lost on the output view — see docs/meta-contract.md §3.1. */
-	return withPipe.meta(listQueryStamp(config, limits)) as {} as ListQuerySchema<T, TSortField>
+  const shape = {
+    ...baseListQueryShape,
+    ...optionalShapeFor(config, limits),
+    limit: limitSchemaFor(config.pagination),
+    page: pageSchemaFor(config.pagination),
+  };
+
+  const schema = extendFields ? z.strictObject({ ...shape, ...extendFields }) : z.strictObject(shape);
+  const outputSchema = outputSchemaFor(sortConfig, extensions);
+
+  const { maxLimit = PAGINATION_DEFAULTS.maxLimit, maxPage = PAGINATION_DEFAULTS.maxPage } = config.pagination ?? {};
+
+  const piped = schema.transform((data, ctx): ExtendedOutput => {
+    const optional = data as OptionalParams;
+    const filterAst = filterAstOf(optional.filter, { fields: filterConfig, limits }, ctx);
+
+    const parsedSort = parsedSortOf<TSortField>(
+      optional.order,
+      { maxSortKeys: limits.maxSortKeys, sort: sortConfig },
+      ctx,
+    );
+
+    // cursor takes precedence over page — both accepted gracefully
+    const select = typeof optional.select === "string" ? optional.select : undefined;
+
+    const output = {
+      cursor: data.cursor,
+      filterAst,
+      lang: optional.lang,
+      limit: data.limit,
+      limitBound: maxLimit,
+      page: data.page,
+      pageBound: maxPage,
+      parsedFields: fieldsConfig ? validateSelectWithConfig(select, fieldsConfig, ctx) : null,
+      parsedSort,
+      q: optional.q,
+      sortOrderBy: sortOrderByOf(parsedSort),
+      tiebreak: tiebreakOf(config.tiebreak),
+      validated: true as const,
+      ...(pickExtended(extensions, data) as { [K in keyof T]: z.infer<T[K]> }),
+    };
+
+    reportOutputIssues(outputSchema, output, ctx);
+
+    return output;
+  });
+
+  const withPipe: typeof piped = piped.pipe(outputSchema as never) as {} as typeof piped;
+
+  // Stamp the schema we RETURN. Metadata on `schema` or `piped` survives the
+  // input view but is lost on the output view — see docs/meta-contract.md §3.1.
+  return withPipe.meta(listQueryStamp(config, limits)) as {} as ListQuerySchema<T, TSortField>;
 }
 
-export { createListQuerySchema, type ListQuerySchema }
+export { createListQuerySchema, type ListQuerySchema };

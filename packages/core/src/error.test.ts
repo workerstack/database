@@ -1,114 +1,123 @@
-import { describe, expect, it } from "vitest"
-import { DatabaseError } from "./error.ts"
+import { describe, expect, it } from "vitest";
+
+import { DatabaseError } from "./error.ts";
 
 describe("DatabaseError", () => {
-	it("sets status from statusKey", () => {
-		const err = new DatabaseError({
-			errorKey: "unique_constraint_violation",
-			status: "conflict",
-		})
-		expect(err.status).toBe(409)
-		expect(err.statusKey).toBe("conflict")
-		expect(err.errorKey).toBe("unique_constraint_violation")
-		expect(err.message).toBe("unique_constraint_violation")
-	})
+  it("sets status from statusKey", () => {
+    const err = new DatabaseError({
+      errorKey: "unique_constraint_violation",
+      status: "conflict",
+    });
 
-	it("stores table and column metadata", () => {
-		const err = new DatabaseError({
-			column: "email",
-			errorKey: "unique_constraint_violation",
-			status: "conflict",
-			table: "user",
-		})
-		expect(err.table).toBe("user")
-		expect(err.column).toBe("email")
-	})
+    expect(err.status).toBe(409);
+    expect(err.statusKey).toBe("conflict");
+    expect(err.errorKey).toBe("unique_constraint_violation");
+    expect(err.message).toBe("unique_constraint_violation");
+  });
 
-	it("keeps the client message as cause and the original error as source", () => {
-		const source = new Error("original")
-		const err = new DatabaseError({
-			cause: "Database unavailable",
-			errorKey: "database_io_error",
-			source,
-			status: "internal_server_error",
-		})
-		expect(err.cause).toBe("Database unavailable")
-		expect(err.source).toBe(source)
-	})
+  it("stores table and column metadata", () => {
+    const err = new DatabaseError({
+      column: "email",
+      errorKey: "unique_constraint_violation",
+      status: "conflict",
+      table: "user",
+    });
 
-	it("omits cause option when undefined", () => {
-		const err = new DatabaseError({
-			errorKey: "database_io_error",
-			status: "internal_server_error",
-		})
-		expect(err.cause).toBeUndefined()
-	})
+    expect(err.table).toBe("user");
+    expect(err.column).toBe("email");
+  });
 
-	it("is an instance of Error", () => {
-		const err = new DatabaseError({
-			errorKey: "database_unavailable",
-			status: "service_unavailable",
-		})
-		expect(err).toBeInstanceOf(Error)
-		expect(err).toBeInstanceOf(DatabaseError)
-	})
-})
+  it("keeps the client message as cause and the original error as source", () => {
+    const source = new Error("original");
+
+    const err = new DatabaseError({
+      cause: "Database unavailable",
+      errorKey: "database_io_error",
+      source,
+      status: "internal_server_error",
+    });
+
+    expect(err.cause).toBe("Database unavailable");
+    expect(err.source).toBe(source);
+  });
+
+  it("omits cause option when undefined", () => {
+    const err = new DatabaseError({
+      errorKey: "database_io_error",
+      status: "internal_server_error",
+    });
+
+    expect(err.cause).toBeUndefined();
+  });
+
+  it("is an instance of Error", () => {
+    const err = new DatabaseError({
+      errorKey: "database_unavailable",
+      status: "service_unavailable",
+    });
+
+    expect(err).toBeInstanceOf(Error);
+    expect(err).toBeInstanceOf(DatabaseError);
+  });
+});
 
 describe("DatabaseError status", () => {
-	it("maps all status keys correctly", () => {
-		const cases: Array<[string, number]> = [
-			["bad_request", 400],
-			["conflict", 409],
-			["internal_server_error", 500],
-			["service_unavailable", 503],
-			["unprocessable_entity", 422],
-		]
-		for (const [key, code] of cases) {
-			const err = new DatabaseError({
-				errorKey: "test",
-				status: key as "bad_request",
-			})
-			expect(err.status).toBe(code)
-		}
-	})
-})
+  it("maps all status keys correctly", () => {
+    const cases: Array<[string, number]> = [
+      ["bad_request", 400],
+      ["conflict", 409],
+      ["internal_server_error", 500],
+      ["service_unavailable", 503],
+      ["unprocessable_entity", 422],
+    ];
+
+    for (const [key, code] of cases) {
+      const err = new DatabaseError({
+        errorKey: "test",
+        status: key as "bad_request",
+      });
+
+      expect(err.status).toBe(code);
+    }
+  });
+});
 
 describe("DatabaseError source", () => {
-	it("keeps the original error for logs without serializing it", () => {
-		const source = new Error("UNIQUE constraint failed: user.email; params: secret@x")
-		const err = new DatabaseError({ cause: "Email in use", errorKey: "user_email_taken", source, status: "conflict" })
-		expect(err.source).toBe(source)
-		expect(Object.keys(err)).not.toContain("source")
-		expect(JSON.stringify(err)).not.toContain("secret")
-	})
+  it("keeps the original error for logs without serializing it", () => {
+    const source = new Error("UNIQUE constraint failed: user.email; params: secret@x");
+    const err = new DatabaseError({ cause: "Email in use", errorKey: "user_email_taken", source, status: "conflict" });
+    expect(err.source).toBe(source);
+    expect(Object.keys(err)).not.toContain("source");
+    expect(JSON.stringify(err)).not.toContain("secret");
+  });
 
-	it("is undefined when not given", () => {
-		expect(new DatabaseError({ errorKey: "x", status: "conflict" }).source).toBeUndefined()
-	})
-})
+  it("is undefined when not given", () => {
+    expect(new DatabaseError({ errorKey: "x", status: "conflict" }).source).toBeUndefined();
+  });
+});
 
-/* KT5 of r22b: the body is the documented fields, defined rather than assigned; its Bun sibling is tests/bun/error-define-fields.test.ts */
+// KT5 of r22b: the body is the documented fields, defined rather than assigned; its Bun sibling is tests/bun/error-define-fields.test.ts
 describe("DatabaseError's JSON body", () => {
-	it("holds the documented fields, in order, and its spread the same keys", () => {
-		const err = new DatabaseError({ column: "email", errorKey: "user_email_taken", status: "conflict", table: "user" })
-		expect(JSON.stringify(err)).toBe(
-			'{"column":"email","errorKey":"user_email_taken","status":409,"statusKey":"conflict","table":"user"}',
-		)
-		expect(Object.keys({ ...err })).toEqual(["column", "errorKey", "status", "statusKey", "table"])
-	})
+  it("holds the documented fields, in order, and its spread the same keys", () => {
+    const err = new DatabaseError({ column: "email", errorKey: "user_email_taken", status: "conflict", table: "user" });
+    expect(JSON.stringify(err)).toBe(
+      '{"column":"email","errorKey":"user_email_taken","status":409,"statusKey":"conflict","table":"user"}',
+    );
+    expect(Object.keys({ ...err })).toEqual(["column", "errorKey", "status", "statusKey", "table"]);
+  });
 
-	it("leaves out a cause, column and table it was not given", () => {
-		const err = new DatabaseError({ errorKey: "post_locked", status: "forbidden" })
-		expect(err.toJSON()).toEqual({ errorKey: "post_locked", status: 403, statusKey: "forbidden" })
-		expect(JSON.stringify(err)).toBe('{"errorKey":"post_locked","status":403,"statusKey":"forbidden"}')
-	})
+  it("leaves out a cause, column and table it was not given", () => {
+    const err = new DatabaseError({ errorKey: "post_locked", status: "forbidden" });
+    expect(err.toJSON()).toEqual({ errorKey: "post_locked", status: 403, statusKey: "forbidden" });
+    expect(JSON.stringify(err)).toBe('{"errorKey":"post_locked","status":403,"statusKey":"forbidden"}');
+  });
 
-	/* KT1 of r23: cause is the message safe to show the client, so the body a client gets carries it */
-	it("carries the cause it was given, the message safe to show the client", () => {
-		const err = new DatabaseError({ cause: "Not yours", errorKey: "post_locked", status: "forbidden" })
-		expect(err.toJSON()).toEqual({ cause: "Not yours", errorKey: "post_locked", status: 403, statusKey: "forbidden" })
-		expect(JSON.stringify(err)).toBe(
-			'{"cause":"Not yours","errorKey":"post_locked","status":403,"statusKey":"forbidden"}',
-		)
-	})
-})
+  // KT1 of r23: cause is the message safe to show the client, so the body a client gets carries it
+  it("carries the cause it was given, the message safe to show the client", () => {
+    const err = new DatabaseError({ cause: "Not yours", errorKey: "post_locked", status: "forbidden" });
+    expect(err.toJSON()).toEqual({ cause: "Not yours", errorKey: "post_locked", status: 403, statusKey: "forbidden" });
+    expect(JSON.stringify(err)).toBe(
+      '{"cause":"Not yours","errorKey":"post_locked","status":403,"statusKey":"forbidden"}',
+    );
+  });
+});

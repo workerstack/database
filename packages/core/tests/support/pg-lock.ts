@@ -10,44 +10,47 @@
  * module on its own: a second session asking for the key would wait on the first forever. The last
  * release ends it. A run that crashes drops its session, and Postgres frees the lock with it.
  */
-import pg from "pg"
+import pg from "pg";
 
 /** The lock's key pair: database's test pair, apart from stale-replay.ts's ('database test', 'a replay left') */
-export const RUN_KEY = "hashtext('database test'), hashtext('a postgres run')"
+const RUN_KEY = "hashtext('database test'), hashtext('a postgres run')";
 
 /**
  * How long a suite's hook waits for the lock: past any one run of the Postgres suites, as their global
  * setup, which has no timeout, waits. A hook's own default (bun's 5s, a suite's setup budget) would
  * fail a suite that is only queued behind another run.
  */
-export const PG_LOCK_WAIT_MS = 60 * 60_000
+export const PG_LOCK_WAIT_MS = 60 * 60_000;
 
-type Held = { holders: number; session: Promise<pg.Client> }
+type Held = { holders: number; session: Promise<pg.Client> };
 
-const HELD = Symbol.for("database.test.pg-run-lock")
-const store = globalThis as typeof globalThis & { [HELD]?: Held }
+const HELD = Symbol.for("database.test.pg-run-lock");
+const store = globalThis as typeof globalThis & { [HELD]?: Held };
 
 /**
  * A session on `url` holding the lock, said once on stderr when another run holds it first; a
  * session that fails to take it is ended
  */
 async function take(url: string): Promise<pg.Client> {
-	const session = new pg.Client({ connectionString: url, keepAlive: true })
-	await session.connect()
-	try {
-		const { rows } = await session.query<{ got: boolean }>(`SELECT pg_try_advisory_lock(${RUN_KEY}) AS got`)
-		if (rows[0]?.got !== true) {
-			const { host, pathname } = new URL(url)
-			process.stderr.write(
-				`[database] waiting for another run's Postgres suites on ${host}${pathname}: advisory lock (${RUN_KEY})\n`,
-			)
-			await session.query(`SELECT pg_advisory_lock(${RUN_KEY})`)
-		}
-	} catch (error) {
-		await session.end()
-		throw error
-	}
-	return session
+  const session = new pg.Client({ connectionString: url, keepAlive: true });
+  await session.connect();
+
+  try {
+    const { rows } = await session.query<{ got: boolean }>(`SELECT pg_try_advisory_lock(${RUN_KEY}) AS got`);
+
+    if (rows[0]?.got !== true) {
+      const { host, pathname } = new URL(url);
+      process.stderr.write(
+        `[database] waiting for another run's Postgres suites on ${host}${pathname}: advisory lock (${RUN_KEY})\n`,
+      );
+      await session.query(`SELECT pg_advisory_lock(${RUN_KEY})`);
+    }
+  } catch (error) {
+    await session.end();
+    throw error;
+  }
+
+  return session;
 }
 
 /**
@@ -55,20 +58,22 @@ async function take(url: string): Promise<pg.Client> {
  * the process's session once no holder is left. Each call is one holder, released once
  */
 export async function acquirePgRunLock(url: string): Promise<() => Promise<void>> {
-	const held = (store[HELD] ??= { holders: 0, session: take(url) })
-	held.holders += 1
-	/* a session that never took the lock is no holder's: the next call opens its own */
-	await held.session.catch((error: unknown) => {
-		if (store[HELD] === held) delete store[HELD]
-		throw error
-	})
-	let released = false
-	return async () => {
-		if (released) return
-		released = true
-		held.holders -= 1
-		if (held.holders > 0) return
-		delete store[HELD]
-		await (await held.session).end()
-	}
+  const held = (store[HELD] ??= { holders: 0, session: take(url) });
+  held.holders += 1;
+  // a session that never took the lock is no holder's: the next call opens its own
+  await held.session.catch((error: unknown) => {
+    if (store[HELD] === held) delete store[HELD];
+    throw error;
+  });
+  let released = false;
+
+  return async () => {
+    if (released) return;
+    released = true;
+    held.holders -= 1;
+
+    if (held.holders > 0) return;
+    delete store[HELD];
+    await (await held.session).end();
+  };
 }

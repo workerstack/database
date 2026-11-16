@@ -12,56 +12,62 @@
  * other schema is adopted only once it holds what replaying the prefix leaves, its tables and every
  * kind COMPARED names (pg-live-catalog.ts's ARM_KINDS), and check proves it as apply does.
  */
-import { copyFileSync } from "node:fs"
-import { join } from "node:path"
-import { sqlFiles, sumHashes } from "./atlas-dir.ts"
-import { type AtlasStatus, setTo, versionOf } from "./atlas-history.ts"
-import type { PgTarget } from "./atlas-target.ts"
-import { readyDevSchema } from "./pg-dev-schema.ts"
-import { loadPostgresParser } from "./pg-parser.ts"
-import { type ObjectsCompare, refuseHistoryDrift } from "./baseline-compare.ts"
-import { holdsAnything, type ReadHeld } from "./pg-schema-members.ts"
-import { ReplayFailed } from "./replay-failed.ts"
-import type { MigrateRun } from "./process.ts"
-import { scratchDir } from "./cleanup.ts"
+import { copyFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { sqlFiles, sumHashes } from "./atlas-dir.ts";
+import { type AtlasStatus, setTo, versionOf } from "./atlas-history.ts";
+import type { PgTarget } from "./atlas-target.ts";
+import { type ObjectsCompare, refuseHistoryDrift } from "./baseline-compare.ts";
+import { scratchDir } from "./cleanup.ts";
+import { readyDevSchema } from "./pg-dev-schema.ts";
+import { loadPostgresParser } from "./pg-parser.ts";
+import { holdsAnything, type ReadHeld } from "./pg-schema-members.ts";
+import type { MigrateRun } from "./process.ts";
+import { ReplayFailed } from "./replay-failed.ts";
 
 /** The files of the snapshot `copy` that 0.12's `shared` history ran; refused when it ran them otherwise */
 function sharedPrefix(shared: AtlasStatus, copy: string): string[] {
-	const files = sqlFiles(copy)
-	const named = new Map(files.map((name) => [versionOf(name).version, name]))
-	const hashes = sumHashes(copy)
-	/* by name, as Atlas ran them, which atlasStatus orders them in */
-	const rows = shared.applied.filter((row) => named.has(row.version))
-	for (const [i, row] of rows.entries()) {
-		const name = named.get(row.version) as string
-		const due = files[i] as string
-		if (name !== due) {
-			throw new Error(
-				`0.12's shared history records ${name} but not ${due}, which comes before it, so database cannot tell what ran; record it by hand`,
-			)
-		}
-		if (row.applied < row.total || row.error !== "")
-			throw new Error(`${name} ran halfway under 0.12; finish or revert it by hand`)
-		if (hashes.get(name) !== row.hash) {
-			throw new Error(
-				`${name} is not the file 0.12 ran: its hash is not the one the shared history recorded; restore it, and apply adopts it`,
-			)
-		}
-	}
-	return files.slice(0, rows.length)
+  const files = sqlFiles(copy);
+  const named = new Map(files.map((name) => [versionOf(name).version, name]));
+  const hashes = sumHashes(copy);
+  // by name, as Atlas ran them, which atlasStatus orders them in
+  const rows = shared.applied.filter((row) => named.has(row.version));
+
+  for (const [i, row] of rows.entries()) {
+    const name = named.get(row.version) as string;
+    const due = files[i] as string;
+
+    if (name !== due) {
+      throw new Error(
+        `0.12's shared history records ${name} but not ${due}, which comes before it, so database cannot tell what ran; record it by hand`,
+      );
+    }
+
+    if (row.applied < row.total || row.error !== "")
+      throw new Error(`${name} ran halfway under 0.12; finish or revert it by hand`);
+
+    if (hashes.get(name) !== row.hash) {
+      throw new Error(
+        `${name} is not the file 0.12 ran: its hash is not the one the shared history recorded; restore it, and apply adopts it`,
+      );
+    }
+  }
+
+  return files.slice(0, rows.length);
 }
 
 /** `step()`, a dev database that could not be readied or replayed on refused by devUrl's name: proof needs one Atlas can reach */
 async function replayed<T>(step: () => T | Promise<T>, schema: string, ran: readonly string[]): Promise<T> {
-	try {
-		return await step()
-	} catch (error) {
-		if (!(error instanceof ReplayFailed)) throw error
-		throw new Error(
-			`adopting 0.12's shared history needs devUrl, an empty Postgres database Atlas can reach, to prove ${schema} holds what it ran (${ran.join(", ")}); devUrl could not be used: ${error.message}`,
-			{ cause: error },
-		)
-	}
+  try {
+    return await step();
+  } catch (error) {
+    if (!(error instanceof ReplayFailed)) throw error;
+    throw new Error(
+      `adopting 0.12's shared history needs devUrl, an empty Postgres database Atlas can reach, to prove ${schema} holds what it ran (${ran.join(", ")}); devUrl could not be used: ${error.message}`,
+      { cause: error },
+    );
+  }
 }
 
 /**
@@ -69,33 +75,37 @@ async function replayed<T>(step: () => T | Promise<T>, schema: string, ran: read
  * `atlas migrate set`, recording them, would record the file after them too, which never ran
  */
 function settable(copy: string, ran: string[]): string[] {
-	const { over, top } = setTo(copy, ran.length)
-	if (over !== undefined)
-		throw new Error(
-			`${over.Name} sorts after the files 0.12 ran, yet its version sorts below ${top.Name}'s, so atlas migrate set would record it with them, though it never ran; rename it so its version sorts above ${top.Version} and run atlas migrate hash`,
-		)
-	return ran
+  const { over, top } = setTo(copy, ran.length);
+
+  if (over !== undefined) {
+    throw new Error(
+      `${over.Name} sorts after the files 0.12 ran, yet its version sorts below ${top.Name}'s, so atlas migrate set would record it with them, though it never ran; rename it so its version sorts above ${top.Version} and run atlas migrate hash`,
+    );
+  }
+
+  return ran;
 }
 
 /** Refuse to adopt `ran`, the files of the snapshot `copy` 0.12's shared history ran, unless the schema holds what replaying them leaves */
 async function proveAdoption(
-	options: ObjectsCompare & { exec: MigrateRun; target: PgTarget },
-	copy: string,
-	ran: readonly string[],
+  options: ObjectsCompare & { exec: MigrateRun; target: PgTarget },
+  copy: string,
+  ran: readonly string[],
 ): Promise<void> {
-	/* the replay reads each file as the statements Postgres runs, on a dev database holding the schema */
-	await loadPostgresParser()
-	const { schema } = options.target
-	await replayed(() => (options.readyDev ?? readyDevSchema)(options.target), schema, ran)
-	const { dir: prefix, remove: removePrefix } = scratchDir("database-adopt-")
-	try {
-		for (const name of ran) copyFileSync(join(copy, name), join(prefix, name))
-		const refusal = `${schema} does not hold what 0.12's shared history ran (${ran.join(", ")}), so database adopts none of it`
-		/* database's replay, in a database of its own, dropped after it, and Atlas reading what it left */
-		await replayed(() => refuseHistoryDrift(options, prefix, refusal), schema, ran)
-	} finally {
-		removePrefix()
-	}
+  // the replay reads each file as the statements Postgres runs, on a dev database holding the schema
+  await loadPostgresParser();
+  const { schema } = options.target;
+  await replayed(() => (options.readyDev ?? readyDevSchema)(options.target), schema, ran);
+  const { dir: prefix, remove: removePrefix } = scratchDir("database-adopt-");
+
+  try {
+    for (const name of ran) copyFileSync(join(copy, name), join(prefix, name));
+    const refusal = `${schema} does not hold what 0.12's shared history ran (${ran.join(", ")}), so database adopts none of it`;
+    // database's replay, in a database of its own, dropped after it, and Atlas reading what it left
+    await replayed(() => refuseHistoryDrift(options, prefix, refusal), schema, ran);
+  } finally {
+    removePrefix();
+  }
 }
 
 /**
@@ -103,22 +113,22 @@ async function proveAdoption(
  * default privileges apart. Reads only
  */
 async function holdsNothing(options: { readHeld?: ReadHeld | undefined; target: PgTarget }): Promise<boolean> {
-	return !(await (options.readHeld ?? holdsAnything)(options.target))
+  return !(await (options.readHeld ?? holdsAnything)(options.target));
 }
 
 /** What status, check, apply and baseline say of shared rows matching `ran` in a schema that holds nothing */
 const theirs = (schema: string, ran: readonly string[]): string =>
-	`the rows 0.12's shared history holds for ${ran.join(", ")} are another schema's, public's where it migrates this directory: ${schema} holds nothing they make, so they are pending here`
+  `the rows 0.12's shared history holds for ${ran.join(", ")} are another schema's, public's where it migrates this directory: ${schema} holds nothing they make, so they are pending here`;
 
 /** What status says of the files 0.12 ran, which it does not prove */
 const adopts = (ran: readonly string[]): string =>
-	`${ran.length} file${ran.length === 1 ? "" : "s"} ran under 0.12's shared history; apply would adopt them, pending proof that the schema holds what they leave`
+  `${ran.length} file${ran.length === 1 ? "" : "s"} ran under 0.12's shared history; apply would adopt them, pending proof that the schema holds what they leave`;
 
 /** What check says once it proved them */
 const proven = (ran: readonly string[]): string =>
-	`${ran.length} file${ran.length === 1 ? "" : "s"} ran under 0.12's shared history, and the schema holds what they leave; apply would adopt them`
+  `${ran.length} file${ran.length === 1 ? "" : "s"} ran under 0.12's shared history, and the schema holds what they leave; apply would adopt them`;
 
 /** What apply and baseline say once they recorded them */
-const adopted = (ran: readonly string[]): string => `Adopted from 0.12's shared history: ${ran.join(", ")}`
+const adopted = (ran: readonly string[]): string => `Adopted from 0.12's shared history: ${ran.join(", ")}`;
 
-export { adopted, adopts, holdsNothing, proveAdoption, proven, settable, sharedPrefix, theirs }
+export { adopted, adopts, holdsNothing, proveAdoption, proven, settable, sharedPrefix, theirs };

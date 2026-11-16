@@ -5,64 +5,74 @@
  * covers each DTO codegen writes for a table of every kind that publishes a key, on both dialects,
  * and each root export that builds a schema.
  */
-import { readFileSync } from "node:fs"
-import { join } from "node:path"
-import { afterAll, describe, expect, it } from "vitest"
-import * as z from "zod"
-import * as root from "../../src/index.ts"
-import { CONTRACT_KEYS, CONTRACT_TRANSFORMS, contractReader } from "../../src/__fixtures__/contract-reader.ts"
-import { FORMATS, INTEGER_SPECS, type TextFormat } from "../../src/formats/catalog.ts"
-import { cleanGeneratedDtos, generatedDtos } from "../integration/support/dtos.ts"
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
-afterAll(() => cleanGeneratedDtos())
+import { afterAll, describe, expect, it } from "vitest";
+import * as z from "zod";
 
-const CONTRACT = readFileSync(join(import.meta.dirname, "../../docs/meta-contract.md"), "utf8")
-const FIELD_KEYS = CONTRACT.slice(CONTRACT.indexOf("### 2.1 Field keys"), CONTRACT.indexOf("## 3. Producer API"))
+import { CONTRACT_KEYS, CONTRACT_TRANSFORMS, contractReader } from "../../src/__fixtures__/contract-reader.ts";
+import { FORMATS, INTEGER_SPECS, type TextFormat } from "../../src/formats/catalog.ts";
+import * as root from "../../src/index.ts";
+import { cleanGeneratedDtos, generatedDtos } from "../integration/support/dtos.ts";
+
+afterAll(() => cleanGeneratedDtos());
+
+const CONTRACT = readFileSync(join(import.meta.dirname, "../../docs/meta-contract.md"), "utf8");
+const FIELD_KEYS = CONTRACT.slice(CONTRACT.indexOf("### 2.1 Field keys"), CONTRACT.indexOf("## 3. Producer API"));
 
 /** The keys §2.1 defines: the backticked names that head each of its top-level bullets, before the colon */
 function definedKeys(): string[] {
-	const bullets = FIELD_KEYS.split(/\n(?=- )/).filter((bullet) => bullet.startsWith("- `x-database-"))
-	return bullets.flatMap((bullet) => {
-		const head = bullet.slice(0, bullet.search(/`:/) + 1)
-		return [...head.matchAll(/`(x-database-[A-Za-z0-9]+)`/g)].map(([, key]) => key as string)
-	})
+  const bullets = FIELD_KEYS.split(/\n(?=- )/).filter((bullet) => bullet.startsWith("- `x-database-"));
+
+  return bullets.flatMap((bullet) => {
+    const head = bullet.slice(0, bullet.search(/`:/) + 1);
+
+    return [...head.matchAll(/`(x-database-[A-Za-z0-9]+)`/g)].map(([, key]) => key as string);
+  });
 }
 
 /** Each id the `x-database-format` bullet of §2.1 lists, one sub-bullet each, with the text after it */
 function definedFormats(): Array<[string, string]> {
-	const bullet = FIELD_KEYS.split(/\n(?=- )/).find((each) => each.startsWith("- `x-database-format`:")) ?? ""
-	return [...bullet.matchAll(/^ {2}- `([\w-]+)`: (.+)$/gm)].map(([, id, text]) => [id as string, text as string])
+  const bullet = FIELD_KEYS.split(/\n(?=- )/).find((each) => each.startsWith("- `x-database-format`:")) ?? "";
+
+  return [...bullet.matchAll(/^ {2}- `([\w-]+)`: (.+)$/gm)].map(([, id, text]) => [id as string, text as string]);
 }
 
-/* the root predicate of a format that reads no registry, which the catalog its predicate reads cannot name */
-const PREDICATES: { readonly [F in TextFormat]?: string } = { bcp47: "isBcp47" }
+// the root predicate of a format that reads no registry, which the catalog its predicate reads cannot name
+const PREDICATES: { readonly [F in TextFormat]?: string } = { bcp47: "isBcp47" };
 
 /** The sub-bullet §2.1 gives each format, from the catalog: its standard, the registry a reader checks, and its predicate */
 const catalogFormats = (): Array<[string, string]> => [
-	...Object.entries(FORMATS).map(([id, spec]): [string, string] => {
-		const registry = spec.member === null ? "" : ` Registry: \`${spec.member}\`.`
-		const predicate = PREDICATES[id as TextFormat]
-		return [id, `${spec.standard}.${registry}${predicate === undefined ? "" : ` Predicate: \`${predicate}\`.`}`]
-	}),
-	...Object.entries(INTEGER_SPECS).map(([id, spec]): [string, string] => [id, `${spec.standard}.`]),
-]
+  ...Object.entries(FORMATS).map(([id, spec]): [string, string] => {
+    const registry = spec.member === null ? "" : ` Registry: \`${spec.member}\`.`;
+    const predicate = PREDICATES[id as TextFormat];
+
+    return [id, `${spec.standard}.${registry}${predicate === undefined ? "" : ` Predicate: \`${predicate}\`.`}`];
+  }),
+  ...Object.entries(INTEGER_SPECS).map(([id, spec]): [string, string] => [id, `${spec.standard}.`]),
+];
 
 /** The transforms §2.1 defines, one sub-bullet each */
 const definedTransforms = (): string[] =>
-	[...FIELD_KEYS.matchAll(/^ {2}- `"([\w-]+)"`:/gm)].map(([, name]) => name as string)
+  [...FIELD_KEYS.matchAll(/^ {2}- `"([\w-]+)"`:/gm)].map(([, name]) => name as string);
 
-type Found = { keys: Set<string>; transforms: Set<string> }
+type Found = { keys: Set<string>; transforms: Set<string> };
 
 /** Each `x-database-*` key anywhere in `node`, and each transform an `x-database-transform` lists */
 function collect(node: unknown, found: Found): Found {
-	if (Array.isArray(node)) for (const child of node) collect(child, found)
-	else if (node !== null && typeof node === "object")
-		for (const [key, child] of Object.entries(node)) {
-			if (key.startsWith("x-database-")) found.keys.add(key)
-			if (key === "x-database-transform") for (const name of child as string[]) found.transforms.add(name)
-			collect(child, found)
-		}
-	return found
+  if (Array.isArray(node)) {
+    for (const child of node) collect(child, found);
+  } else if (node !== null && typeof node === "object") {
+    for (const [key, child] of Object.entries(node)) {
+      if (key.startsWith("x-database-")) found.keys.add(key);
+
+      if (key === "x-database-transform") for (const name of child as string[]) found.transforms.add(name);
+      collect(child, found);
+    }
+  }
+
+  return found;
 }
 
 const PG = `import { cidr, inet, integer, interval, json, jsonb, macaddr, numeric, text, time, varchar } from "drizzle-orm/pg-core"
@@ -104,7 +114,7 @@ export const row = pgTable("row", {
 	mac: macaddr("mac"),
 	span: interval("span"),
 	clock: time("clock"),
-})`
+})`;
 
 const SQLITE = `import { integer, real, text } from "drizzle-orm/sqlite-core"
 import * as z from "zod"
@@ -127,22 +137,27 @@ export const row = sqliteTable("row", {
 	plain: text("plain", { length: 10 }),
 	n: integer("n"),
 	r: real("r"),
-})`
+})`;
 
 /** The JSON Schema of every DTO codegen writes for the fixture tables, on both dialects */
 async function codegenDocuments(): Promise<unknown[]> {
-	const documents: unknown[] = []
-	for (const [dialect, tables] of [
-		["postgres", PG],
-		["sqlite", SQLITE],
-	] as const) {
-		const dtos = await generatedDtos(`x-database-keys-${dialect}`, tables, { dialect })
-		for (const schema of Object.values(dtos["row"] as Record<string, unknown>))
-			if (schema instanceof z.ZodType)
-				for (const io of ["input", "output"] as const)
-					documents.push(z.toJSONSchema(schema, { io, unrepresentable: "any" }))
-	}
-	return documents
+  const documents: unknown[] = [];
+
+  for (const [dialect, tables] of [
+    ["postgres", PG],
+    ["sqlite", SQLITE],
+  ] as const) {
+    const dtos = await generatedDtos(`x-database-keys-${dialect}`, tables, { dialect });
+
+    for (const schema of Object.values(dtos["row"] as Record<string, unknown>)) {
+      if (schema instanceof z.ZodType) {
+        for (const io of ["input", "output"] as const)
+          documents.push(z.toJSONSchema(schema, { io, unrepresentable: "any" }));
+      }
+    }
+  }
+
+  return documents;
 }
 
 /**
@@ -150,93 +165,111 @@ async function codegenDocuments(): Promise<unknown[]> {
  * no arguments that gives a zod schema, and the option a factory's keys depend on
  */
 function rootSchemas(): Array<[string, z.ZodType]> {
-	const built: Array<[string, z.ZodType]> = []
-	for (const [name, value] of Object.entries(root)) {
-		if (typeof value !== "function") continue
-		let schema: unknown
-		try {
-			schema = (value as () => unknown)()
-		} catch {
-			continue
-		}
-		if (schema instanceof z.ZodType) built.push([`${name}()`, schema])
-	}
-	built.push(
-		['passwordText({ hash: "bcrypt" })', root.passwordText({ hash: "bcrypt" })],
-		["passwordText.typed()", root.passwordText.typed()],
-		['passwordText.typed({ hash: "bcrypt" })', root.passwordText.typed({ hash: "bcrypt" })],
-	)
-	return built
+  const built: Array<[string, z.ZodType]> = [];
+
+  for (const [name, value] of Object.entries(root)) {
+    if (typeof value !== "function") continue;
+    let schema: unknown;
+
+    try {
+      schema = (value as () => unknown)();
+    } catch {
+      continue;
+    }
+
+    if (schema instanceof z.ZodType) built.push([`${name}()`, schema]);
+  }
+
+  built.push(
+    ['passwordText({ hash: "bcrypt" })', root.passwordText({ hash: "bcrypt" })],
+    ["passwordText.typed()", root.passwordText.typed()],
+    ['passwordText.typed({ hash: "bcrypt" })', root.passwordText.typed({ hash: "bcrypt" })],
+  );
+
+  return built;
 }
 
-const published = (schema: z.ZodType) => z.toJSONSchema(schema, { io: "input" }) as Record<string, unknown>
+const published = (schema: z.ZodType) => z.toJSONSchema(schema, { io: "input" }) as Record<string, unknown>;
 
-/* values at the edges a published key binds: bcrypt's bytes as ASCII, a quote JSON escapes, NFD text */
+// values at the edges a published key binds: bcrypt's bytes as ASCII, a quote JSON escapes, NFD text
 const PROBES = [
-	"x".repeat(14),
-	"x".repeat(15),
-	"x".repeat(71),
-	"x".repeat(72),
-	"x".repeat(73),
-	`"${"x".repeat(70)}"`,
-	"e\u0301".repeat(8),
-	"e\u0301".repeat(36),
-	"e\u0301".repeat(128),
-	`${"x".repeat(15)}\u0000`,
-]
+  "x".repeat(14),
+  "x".repeat(15),
+  "x".repeat(71),
+  "x".repeat(72),
+  "x".repeat(73),
+  `"${"x".repeat(70)}"`,
+  "e\u0301".repeat(8),
+  "e\u0301".repeat(36),
+  "e\u0301".repeat(128),
+  `${"x".repeat(15)}\u0000`,
+];
 
 describe("the x-database keys database publishes (C1, C2; siblings: codegen's transforms and a read's stated bounds)", () => {
-	it("are each one meta-contract §2.1 defines, and the contract reader knows exactly those", async () => {
-		const found: Found = { keys: new Set(), transforms: new Set() }
-		for (const document of await codegenDocuments()) collect(document, found)
-		for (const [, schema] of rootSchemas()) collect(published(schema), found)
-		const keys = definedKeys()
-		expect([...found.keys].filter((key) => !keys.includes(key))).toEqual([])
-		expect([...found.transforms].filter((name) => !definedTransforms().includes(name))).toEqual([])
-		expect(keys.toSorted()).toEqual([...CONTRACT_KEYS].toSorted())
-		expect(definedTransforms().toSorted()).toEqual(Object.keys(CONTRACT_TRANSFORMS).toSorted())
-	})
+  it("are each one meta-contract §2.1 defines, and the contract reader knows exactly those", async () => {
+    const found: Found = { keys: new Set(), transforms: new Set() };
 
-	it("lists, under x-database-format, every format with its standard and the registry a reader must check", () => {
-		expect(definedFormats()).toEqual(catalogFormats())
-	})
+    for (const document of await codegenDocuments()) collect(document, found);
 
-	it("names as a format's predicate a root export that takes the format's example and refuses the empty string", () => {
-		const named = Object.entries(PREDICATES).map(([id, name]) => {
-			const predicate = (root as Record<string, unknown>)[name] as (value: string) => boolean
-			return [id, predicate(FORMATS[id as TextFormat].example), predicate("")]
-		})
-		expect(named).toEqual([["bcp47", true, false]])
-	})
+    for (const [, schema] of rootSchemas()) collect(published(schema), found);
+    const keys = definedKeys();
+    expect([...found.keys].filter((key) => !keys.includes(key))).toEqual([]);
+    expect([...found.transforms].filter((name) => !definedTransforms().includes(name))).toEqual([]);
+    expect(keys.toSorted()).toEqual([...CONTRACT_KEYS].toSorted());
+    expect(definedTransforms().toSorted()).toEqual(Object.keys(CONTRACT_TRANSFORMS).toSorted());
+  });
 
-	it("read as §2.1 defines them, take on a written format text what its parse takes", async () => {
-		const values = [...PROBES, " eur ", "EUR", "HRK", "eu", "AB1", "en-HR", "en_HR", " zh-Hant-TW ", "x", null]
-		for (const [dialect, tables] of [
-			["postgres", PG],
-			["sqlite", SQLITE],
-		] as const) {
-			const create = (await generatedDtos(`x-database-formats-${dialect}`, tables, { dialect }))["row"]?.[
-				"rowDtoCreateSchema"
-			] as z.ZodObject
-			const properties = published(create)["properties"] as Record<string, Record<string, unknown>>
-			for (const key of ["currency", "tag"])
-				for (const value of values)
-					expect(contractReader(properties[key] ?? {}, value), `${dialect} ${key} on ${JSON.stringify(value)}`).toBe(
-						(create.shape[key] as z.ZodType).safeParse(value).success,
-					)
-		}
-	})
+  it("lists, under x-database-format, every format with its standard and the registry a reader must check", () => {
+    expect(definedFormats()).toEqual(catalogFormats());
+  });
 
-	it("finds the root exports that build a schema, passwordText and storableText among them", () => {
-		const names = rootSchemas().map(([name]) => name)
-		expect(names).toEqual(expect.arrayContaining(["passwordText()", "storableText()"]))
-	})
+  it("names as a format's predicate a root export that takes the format's example and refuses the empty string", () => {
+    const named = Object.entries(PREDICATES).map(([id, name]) => {
+      const predicate = (root as Record<string, unknown>)[name] as (value: string) => boolean;
 
-	it("read as §2.1 defines them, take on a root export's schema what its parse takes", () => {
-		for (const [name, schema] of rootSchemas()) {
-			const keys = published(schema)
-			for (const value of PROBES)
-				expect(contractReader(keys, value), `${name} on ${JSON.stringify(value)}`).toBe(schema.safeParse(value).success)
-		}
-	})
-})
+      return [id, predicate(FORMATS[id as TextFormat].example), predicate("")];
+    });
+
+    expect(named).toEqual([["bcp47", true, false]]);
+  });
+
+  it("read as §2.1 defines them, take on a written format text what its parse takes", async () => {
+    const values = [...PROBES, " eur ", "EUR", "HRK", "eu", "AB1", "en-HR", "en_HR", " zh-Hant-TW ", "x", null];
+
+    for (const [dialect, tables] of [
+      ["postgres", PG],
+      ["sqlite", SQLITE],
+    ] as const) {
+      const create = (await generatedDtos(`x-database-formats-${dialect}`, tables, { dialect }))["row"]?.[
+        "rowDtoCreateSchema"
+      ] as z.ZodObject;
+
+      const properties = published(create)["properties"] as Record<string, Record<string, unknown>>;
+
+      for (const key of ["currency", "tag"]) {
+        for (const value of values) {
+          expect(contractReader(properties[key] ?? {}, value), `${dialect} ${key} on ${JSON.stringify(value)}`).toBe(
+            (create.shape[key] as z.ZodType).safeParse(value).success,
+          );
+        }
+      }
+    }
+  });
+
+  it("finds the root exports that build a schema, passwordText and storableText among them", () => {
+    const names = rootSchemas().map(([name]) => name);
+    expect(names).toEqual(expect.arrayContaining(["passwordText()", "storableText()"]));
+  });
+
+  it("read as §2.1 defines them, take on a root export's schema what its parse takes", () => {
+    for (const [name, schema] of rootSchemas()) {
+      const keys = published(schema);
+
+      for (const value of PROBES) {
+        expect(contractReader(keys, value), `${name} on ${JSON.stringify(value)}`).toBe(
+          schema.safeParse(value).success,
+        );
+      }
+    }
+  });
+});

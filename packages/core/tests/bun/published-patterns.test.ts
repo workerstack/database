@@ -5,11 +5,13 @@
  * literal's `source`, which zod publishes as `pattern`, holds escapes Go's RE2 refuses (it reads no
  * `\u`) and Rust's regex refuses (no surrogate). A pattern database publishes holds none.
  */
-import { afterAll, describe, expect, it } from "bun:test"
-import * as z from "zod"
-import { cleanGeneratedDtos, generatedDtos } from "../integration/support/dtos.ts"
+import { afterAll, describe, expect, it } from "bun:test";
 
-afterAll(() => cleanGeneratedDtos())
+import * as z from "zod";
+
+import { cleanGeneratedDtos, generatedDtos } from "../integration/support/dtos.ts";
+
+afterAll(() => cleanGeneratedDtos());
 
 const DECLARED = `export const row = sqliteTable("row", {
 	id: c.id("row"),
@@ -19,42 +21,47 @@ const DECLARED = `export const row = sqliteTable("row", {
 	accented: c.text("accented", { pattern: "/^[é😀]€$/u" }),
 	locale: c.text("locale", { format: "bcp47" }),
 	numbering: c.text("numbering", { format: "uts35-nu" }),
-})`
+})`;
 
 /** Each field's published patterns, keyed by field, from the create DTO's JSON Schema under Bun */
 async function publishedPatterns(): Promise<Record<string, string[]>> {
-	const dtos = (await generatedDtos("bun-published-patterns", DECLARED))["row"] ?? {}
-	const document = z.toJSONSchema(dtos["rowDtoCreateSchema"] as z.ZodObject, { io: "input" })
-	const found: Record<string, string[]> = {}
-	for (const [key, field] of Object.entries(document.properties ?? {})) {
-		const patterns: string[] = []
-		JSON.stringify(field, (name, value) => {
-			if (name === "pattern" && typeof value === "string") patterns.push(value)
-			return value
-		})
-		if (patterns.length > 0) found[key] = patterns
-	}
-	return found
+  const dtos = (await generatedDtos("bun-published-patterns", DECLARED))["row"] ?? {};
+  const document = z.toJSONSchema(dtos["rowDtoCreateSchema"] as z.ZodObject, { io: "input" });
+  const found: Record<string, string[]> = {};
+
+  for (const [key, field] of Object.entries(document.properties ?? {})) {
+    const patterns: string[] = [];
+    JSON.stringify(field, (name, value) => {
+      if (name === "pattern" && typeof value === "string") patterns.push(value);
+
+      return value;
+    });
+
+    if (patterns.length > 0) found[key] = patterns;
+  }
+
+  return found;
 }
 
 describe("the patterns database publishes, read under Bun (CS3 of r22b)", () => {
-	it("hold no \\u escape, which Go's RE2 does not compile, nor a surrogate, which Rust's regex refuses", async () => {
-		const held = Object.entries(await publishedPatterns()).filter(([, patterns]) =>
-			patterns.some((pattern) => /\\u/u.test(pattern)),
-		)
-		expect(held.map(([key]) => key)).toEqual([])
-	})
+  it("hold no \\u escape, which Go's RE2 does not compile, nor a surrogate, which Rust's regex refuses", async () => {
+    const held = Object.entries(await publishedPatterns()).filter(([, patterns]) =>
+      patterns.some((pattern) => /\\u/u.test(pattern)),
+    );
 
-	it("publish a General_Category by name, which each engine reads in its own Unicode version", async () => {
-		const patterns = await publishedPatterns()
-		expect([patterns["letters"], patterns["other"], patterns["label"]]).toEqual([
-			["^\\p{L}+$"],
-			["^[^\\P{L}\\p{Nd}]$"],
-			["^[\\p{L}\\p{M}\\p{N}\\p{Zs}\\p{P}]+$"],
-		])
-	})
+    expect(held.map(([key]) => key)).toEqual([]);
+  });
 
-	it("publish a declared non-ASCII character as itself, the one spelling ECMAScript, Go and Rust share", async () => {
-		expect((await publishedPatterns())["accented"]).toEqual(["^[é😀]€$"])
-	})
-})
+  it("publish a General_Category by name, which each engine reads in its own Unicode version", async () => {
+    const patterns = await publishedPatterns();
+    expect([patterns["letters"], patterns["other"], patterns["label"]]).toEqual([
+      ["^\\p{L}+$"],
+      ["^[^\\P{L}\\p{Nd}]$"],
+      ["^[\\p{L}\\p{M}\\p{N}\\p{Zs}\\p{P}]+$"],
+    ]);
+  });
+
+  it("publish a declared non-ASCII character as itself, the one spelling ECMAScript, Go and Rust share", async () => {
+    expect((await publishedPatterns())["accented"]).toEqual(["^[é😀]€$"]);
+  });
+});

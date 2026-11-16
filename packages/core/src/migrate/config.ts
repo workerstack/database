@@ -2,77 +2,91 @@
  * Standalone configuration for @workerstack/database migrations.
  * No ProjectConfig dependency — accepts a direct MigrateConfig object.
  */
-import { existsSync } from "node:fs"
-import { dirname, resolve } from "node:path"
-import { pathToFileURL } from "node:url"
-import * as z from "zod"
-import { type MigrateConfig, configInputSchema, DEFAULT_PG_DEV_URL } from "./config-schema.ts"
-import type { MigrateRun } from "./core/process.ts"
-import { createD1Provider } from "./drivers/d1.ts"
-import { createBunSqliteProvider, createLibsqlProvider, createTursoProvider } from "./drivers/sqlite.ts"
+import { existsSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+
+import * as z from "zod";
+
+import { type MigrateConfig, configInputSchema, DEFAULT_PG_DEV_URL } from "./config-schema.ts";
+import type { MigrateRun } from "./core/process.ts";
+import { createD1Provider } from "./drivers/d1.ts";
+import { createBunSqliteProvider, createLibsqlProvider, createTursoProvider } from "./drivers/sqlite.ts";
 import type {
-	ConnectionProvider,
-	ConnectionProviderConfig,
-	DatabaseConfig,
-	MigrationConfig,
-	ProviderConfig,
-	ResolvedDatabaseConfig,
-} from "./types.ts"
+  ConnectionProvider,
+  ConnectionProviderConfig,
+  DatabaseConfig,
+  MigrationConfig,
+  ProviderConfig,
+  ResolvedDatabaseConfig,
+} from "./types.ts";
 
-export { type MigrateConfig, DEFAULT_PG_DEV_URL }
+export { type MigrateConfig, DEFAULT_PG_DEV_URL };
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   RESOLVE PROVIDER CONFIG
-   ═══════════════════════════════════════════════════════════════════════════ */
+// ═══════════════════════════════════════════════════════════════════════════
+// RESOLVE PROVIDER CONFIG
+// ═══════════════════════════════════════════════════════════════════════════
 
 function resolveProviderConfig(input: ProviderConfig): ResolvedDatabaseConfig["provider"] {
-	switch (input.type) {
-		case "postgres":
-			return {
-				devUrl: input.devUrl ?? DEFAULT_PG_DEV_URL,
-				lockTimeout: input.lockTimeout ?? "5s",
-				schema: input.schema ?? "public",
-				type: "postgres",
-				url: input.url,
-			}
-		/* every other provider resolves to itself */
-		case "turso":
-		case "libsql":
-		case "bun-sqlite":
-		case "d1":
-			return { ...input }
-	}
+  switch (input.type) {
+    case "postgres": {
+      return {
+        devUrl: input.devUrl ?? DEFAULT_PG_DEV_URL,
+        lockTimeout: input.lockTimeout ?? "5s",
+        schema: input.schema ?? "public",
+        type: "postgres",
+        url: input.url,
+      };
+    }
+
+    // every other provider resolves to itself
+    case "turso":
+    case "libsql":
+    case "bun-sqlite":
+    case "d1": {
+      return { ...input };
+    }
+  }
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   CREATE PROVIDER
-   ═══════════════════════════════════════════════════════════════════════════ */
+// ═══════════════════════════════════════════════════════════════════════════
+// CREATE PROVIDER
+// ═══════════════════════════════════════════════════════════════════════════
 
 /** What a provider that shells out runs processes with: D1 drives wrangler */
 export type ProviderDeps = {
-	/** runs one command and resolves with its exit code and output; default: spawns the real process */
-	run?: MigrateRun | undefined
-}
+  /** runs one command and resolves with its exit code and output; default: spawns the real process */
+  run?: MigrateRun | undefined;
+};
 
 /** The connection for a provider database applies through itself; Postgres goes through Atlas instead */
 export function createProvider(config: ConnectionProviderConfig, deps: ProviderDeps = {}): ConnectionProvider {
-	switch (config.type) {
-		case "turso":
-			return createTursoProvider(config)
-		case "libsql":
-			return createLibsqlProvider(config)
-		case "bun-sqlite":
-			return createBunSqliteProvider(config)
-		case "d1":
-			return createD1Provider(config, deps.run)
-		default:
-			throw new Error("Atlas applies Postgres migrations; database opens no connection to postgres")
-	}
+  switch (config.type) {
+    case "turso": {
+      return createTursoProvider(config);
+    }
+
+    case "libsql": {
+      return createLibsqlProvider(config);
+    }
+
+    case "bun-sqlite": {
+      return createBunSqliteProvider(config);
+    }
+
+    case "d1": {
+      return createD1Provider(config, deps.run);
+    }
+
+    default: {
+      throw new Error("Atlas applies Postgres migrations; database opens no connection to postgres");
+    }
+  }
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   RESOLVE DATABASE CONFIG FOR ENVIRONMENT
-   ═══════════════════════════════════════════════════════════════════════════ */
+// ═══════════════════════════════════════════════════════════════════════════
+// RESOLVE DATABASE CONFIG FOR ENVIRONMENT
+// ═══════════════════════════════════════════════════════════════════════════
 
 /**
  * `dbConfig` resolved for one target: the environment `envName` names, its own name and provider
@@ -81,47 +95,49 @@ export function createProvider(config: ConnectionProviderConfig, deps: ProviderD
  * or when a database of one target gets an `envName`
  */
 export function resolveDatabaseConfig(dbConfig: DatabaseConfig, envName?: string): ResolvedDatabaseConfig {
-	/* New format: environments defined */
-	if (dbConfig.environments) {
-		if (!envName) {
-			const available = Object.keys(dbConfig.environments).join(", ")
-			throw new Error(`Database config has environments; pass -e/--env with one of: ${available}`)
-		}
+  // New format: environments defined
+  if (dbConfig.environments) {
+    if (!envName) {
+      const available = Object.keys(dbConfig.environments).join(", ");
+      throw new Error(`Database config has environments; pass -e/--env with one of: ${available}`);
+    }
 
-		/* own keys only: `constructor` or `__proto__` names no environment */
-		const envConfig = Object.hasOwn(dbConfig.environments, envName) ? dbConfig.environments[envName] : undefined
-		if (!envConfig) {
-			const available = Object.keys(dbConfig.environments).join(", ")
-			throw new Error(`Environment "${envName}" not found in config. Available: ${available}`)
-		}
+    // own keys only: `constructor` or `__proto__` names no environment
+    const envConfig = Object.hasOwn(dbConfig.environments, envName) ? dbConfig.environments[envName] : undefined;
 
-		const provider = envConfig.provider ?? dbConfig.provider
-		if (!provider) {
-			throw new Error(`No provider config for environment "${envName}". Define at database or environment level.`)
-		}
+    if (!envConfig) {
+      const available = Object.keys(dbConfig.environments).join(", ");
+      throw new Error(`Environment "${envName}" not found in config. Available: ${available}`);
+    }
 
-		return {
-			drizzleConfigPath: dbConfig.drizzleConfigPath,
-			migrationsDir: dbConfig.migrationsDir,
-			name: envConfig.name ?? envName,
-			provider: resolveProviderConfig(provider),
-		}
-	}
+    const provider = envConfig.provider ?? dbConfig.provider;
 
-	/* Legacy format: no environments, single name */
-	if (envName !== undefined)
-		throw new Error(`the database declares no environments, so -e ${envName} names none; drop -e`)
-	return {
-		drizzleConfigPath: dbConfig.drizzleConfigPath,
-		migrationsDir: dbConfig.migrationsDir,
-		name: dbConfig.name,
-		provider: resolveProviderConfig(dbConfig.provider),
-	}
+    if (!provider)
+      throw new Error(`No provider config for environment "${envName}". Define at database or environment level.`);
+
+    return {
+      drizzleConfigPath: dbConfig.drizzleConfigPath,
+      migrationsDir: dbConfig.migrationsDir,
+      name: envConfig.name ?? envName,
+      provider: resolveProviderConfig(provider),
+    };
+  }
+
+  // Legacy format: no environments, single name
+  if (envName !== undefined)
+    throw new Error(`the database declares no environments, so -e ${envName} names none; drop -e`);
+
+  return {
+    drizzleConfigPath: dbConfig.drizzleConfigPath,
+    migrationsDir: dbConfig.migrationsDir,
+    name: dbConfig.name,
+    provider: resolveProviderConfig(dbConfig.provider),
+  };
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   DEFINE CONFIG
-   ═══════════════════════════════════════════════════════════════════════════ */
+// ═══════════════════════════════════════════════════════════════════════════
+// DEFINE CONFIG
+// ═══════════════════════════════════════════════════════════════════════════
 
 /**
  * `input`, typed: database.migrate.config.ts's default export, or what a function export returns, as in
@@ -129,7 +145,7 @@ export function resolveDatabaseConfig(dbConfig: DatabaseConfig, envName?: string
  * known keys in either form. It checks nothing at runtime: `loadConfig` validates the config
  */
 export function defineConfig(input: MigrateConfig): MigrateConfig {
-	return input
+  return input;
 }
 
 /**
@@ -138,42 +154,45 @@ export function defineConfig(input: MigrateConfig): MigrateConfig {
  * with a ZodError naming where
  */
 export async function parseConfig(input: unknown): Promise<MigrationConfig> {
-	const exported: unknown = typeof input === "function" ? await (input as () => unknown)() : input
-	/* 0.19's `defineConfig(async () => …)` inside a function export; an untyped config gets the advice tsc gives */
-	if (typeof exported === "function")
-		throw new z.ZodError([
-			{
-				code: "custom",
-				input: exported,
-				message:
-					"a config function returned a function: export the config as `export default async () => defineConfig({…})`",
-				path: [],
-			},
-		])
-	return configInputSchema().parse(exported)
+  const exported: unknown = typeof input === "function" ? await (input as () => unknown)() : input;
+
+  // 0.19's `defineConfig(async () => …)` inside a function export; an untyped config gets the advice tsc gives
+  if (typeof exported === "function") {
+    throw new z.ZodError([
+      {
+        code: "custom",
+        input: exported,
+        message:
+          "a config function returned a function: export the config as `export default async () => defineConfig({…})`",
+        path: [],
+      },
+    ]);
+  }
+
+  return configInputSchema().parse(exported);
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   LOAD CONFIG
-   ═══════════════════════════════════════════════════════════════════════════ */
+// ═══════════════════════════════════════════════════════════════════════════
+// LOAD CONFIG
+// ═══════════════════════════════════════════════════════════════════════════
 
-const CONFIG_FILE_NAMES = ["database.migrate.config.ts", "database.migrate.config.js"]
+const CONFIG_FILE_NAMES = ["database.migrate.config.ts", "database.migrate.config.js"];
 
-/* names database read before 0.19, which other migration tools use too: refused, never run */
+// names database read before 0.19, which other migration tools use too: refused, never run
 const RETIRED_FILE_NAMES = [
-	"db-migration.config.ts",
-	"db-migration.config.js",
-	"migration.config.ts",
-	"migration.config.js",
-]
+  "db-migration.config.ts",
+  "db-migration.config.js",
+  "migration.config.ts",
+  "migration.config.js",
+];
 
 /** A migrate config `loadConfig` read and validated, with where it was found */
 export type LoadedConfig = {
-	/** the validated config */
-	config: MigrationConfig
-	/** the folder holding the config file, which its relative paths (`migrationsDir`, `drizzleConfigPath`, `wranglerConfig`) resolve against */
-	configDir: string
-}
+  /** the validated config */
+  config: MigrationConfig;
+  /** the folder holding the config file, which its relative paths (`migrationsDir`, `drizzleConfigPath`, `wranglerConfig`) resolve against */
+  configDir: string;
+};
 
 /**
  * The migrate config file in `cwd`, by the names database looks for in order; undefined when there is
@@ -182,42 +201,49 @@ export type LoadedConfig = {
  * another database.
  */
 export function findConfigFile(cwd: string): string | undefined {
-	const found = CONFIG_FILE_NAMES.map((name) => resolve(cwd, name)).find((candidate) => existsSync(candidate))
-	if (found !== undefined) return found
-	const retired = RETIRED_FILE_NAMES.find((name) => existsSync(resolve(cwd, name)))
-	if (retired !== undefined)
-		throw new Error(
-			`database no longer reads ${retired}, and did not run it: rename it to database.migrate.config.ts if it is database's migrate config, or add a database.migrate.config.ts beside it if it is another tool's`,
-		)
-	return undefined
+  const found = CONFIG_FILE_NAMES.map((name) => resolve(cwd, name)).find((candidate) => existsSync(candidate));
+
+  if (found !== undefined) return found;
+  const retired = RETIRED_FILE_NAMES.find((name) => existsSync(resolve(cwd, name)));
+
+  if (retired !== undefined) {
+    throw new Error(
+      `database no longer reads ${retired}, and did not run it: rename it to database.migrate.config.ts if it is database's migrate config, or add a database.migrate.config.ts beside it if it is another tool's`,
+    );
+  }
+
+  return undefined;
 }
 
-/* how node, bun and vitest each word an import of database that resolves from nowhere the config sits */
-const UNRESOLVED = /\bCannot find (?:package|module) '@workerstack\/database(?:\/[^']*)?'/
+// how node, bun and vitest each word an import of database that resolves from nowhere the config sits
+const UNRESOLVED = /\bCannot find (?:package|module) '@workerstack\/database(?:\/[^']*)?'/;
 
 /** What a config whose import of database resolved nowhere does instead, after the runtime's own message */
 const TYPE_ONLY =
-	'; a config that imports only database\'s type loads where database does not resolve, as in a compiled executable: import type { MigrateConfig } from "@workerstack/database/migrate", and end the object with satisfies MigrateConfig'
+  '; a config that imports only database\'s type loads where database does not resolve, as in a compiled executable: import type { MigrateConfig } from "@workerstack/database/migrate", and end the object with satisfies MigrateConfig';
 
 /** Load the migrate config at `configPath`, or the first one `findConfigFile` sees in `cwd` */
 export async function loadConfig(configPath?: string, cwd: string = process.cwd()): Promise<LoadedConfig> {
-	const resolvedPath = configPath === undefined ? findConfigFile(cwd) : resolve(cwd, configPath)
-	if (resolvedPath === undefined) {
-		throw new Error("No config file found. Create database.migrate.config.ts (or database.migrate.config.js)")
-	}
-	if (!existsSync(resolvedPath)) throw new Error(`Config file not found: ${resolvedPath}`)
+  const resolvedPath = configPath === undefined ? findConfigFile(cwd) : resolve(cwd, configPath);
 
-	try {
-		const module = (await import(pathToFileURL(resolvedPath).href)) as { default?: unknown }
-		return { config: await parseConfig(module.default ?? module), configDir: dirname(resolvedPath) }
-	} catch (error) {
-		/* a syntax error, or what a config function threw, names the file it came from */
-		if (!(error instanceof z.ZodError)) {
-			const message = error instanceof Error ? error.message : String(error)
-			throw new Error(`${resolvedPath} failed to load: ${message}${UNRESOLVED.test(message) ? TYPE_ONLY : ""}`, {
-				cause: error,
-			})
-		}
-		throw new Error(`${resolvedPath} is not a valid migrate config:\n${z.prettifyError(error)}`, { cause: error })
-	}
+  if (resolvedPath === undefined)
+    throw new Error("No config file found. Create database.migrate.config.ts (or database.migrate.config.js)");
+
+  if (!existsSync(resolvedPath)) throw new Error(`Config file not found: ${resolvedPath}`);
+
+  try {
+    const module = (await import(pathToFileURL(resolvedPath).href)) as { default?: unknown };
+
+    return { config: await parseConfig(module.default ?? module), configDir: dirname(resolvedPath) };
+  } catch (error) {
+    // a syntax error, or what a config function threw, names the file it came from
+    if (!(error instanceof z.ZodError)) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`${resolvedPath} failed to load: ${message}${UNRESOLVED.test(message) ? TYPE_ONLY : ""}`, {
+        cause: error,
+      });
+    }
+
+    throw new Error(`${resolvedPath} is not a valid migrate config:\n${z.prettifyError(error)}`, { cause: error });
+  }
 }

@@ -7,8 +7,8 @@
  * same declaration (§5 of docs/state-machines.md), but nothing here is shaped
  * around a consumer's predicate syntax.
  */
-import { DatabaseError } from "./error.ts"
-import { databaseErrorKeys } from "./types.ts"
+import { DatabaseError } from "./error.ts";
+import { databaseErrorKeys } from "./types.ts";
 
 /**
  * A declared machine over a column's values.
@@ -18,17 +18,17 @@ import { databaseErrorKeys } from "./types.ts"
  * most schemas want; `transitions` is what earns the runtime guard.
  */
 type StateMachine<TState extends string = string> = {
-	/** Every legal value, in declaration order */
-	values: readonly TState[]
-	/** The value a row starts at, when there is exactly one */
-	initial?: TState | undefined
-	/** Values from which no transition is legal */
-	terminal?: readonly TState[] | undefined
-	/** Legal moves, `from` → `to[]`. Omitted states are unconstrained. */
-	transitions?: { readonly [K in TState]?: readonly TState[] | undefined } | undefined
-	/** The column the machine governs, named in `assertTransition`'s error; `status` when omitted */
-	column?: string | undefined
-}
+  /** Every legal value, in declaration order */
+  values: readonly TState[];
+  /** The value a row starts at, when there is exactly one */
+  initial?: TState | undefined;
+  /** Values from which no transition is legal */
+  terminal?: readonly TState[] | undefined;
+  /** Legal moves, `from` → `to[]`. Omitted states are unconstrained. */
+  transitions?: { readonly [K in TState]?: readonly TState[] | undefined } | undefined;
+  /** The column the machine governs, named in `assertTransition`'s error; `status` when omitted */
+  column?: string | undefined;
+};
 
 /**
  * Declare a machine with its states inferred from `values` alone.
@@ -38,34 +38,35 @@ type StateMachine<TState extends string = string> = {
  * field may only name a declared value, and a typo is a type error.
  */
 function defineStateMachine<const TState extends string>(machine: {
-	/** Every legal value, in declaration order; the machine's states are inferred from it alone */
-	values: readonly TState[]
-	/** The value a row starts at, when there is exactly one; it must be one of `values` */
-	initial?: NoInfer<TState> | undefined
-	/** The values no transition may leave; each must be one of `values` */
-	terminal?: readonly NoInfer<TState>[] | undefined
-	/** Each state's legal next states, keyed and listed by `values` alone; a state left out may move to any state */
-	transitions?: { readonly [K in NoInfer<TState>]?: readonly NoInfer<TState>[] | undefined } | undefined
-	/** The column the machine governs, named in `assertTransition`'s error; `status` when omitted */
-	column?: string | undefined
+  /** Every legal value, in declaration order; the machine's states are inferred from it alone */
+  values: readonly TState[];
+  /** The value a row starts at, when there is exactly one; it must be one of `values` */
+  initial?: NoInfer<TState> | undefined;
+  /** The values no transition may leave; each must be one of `values` */
+  terminal?: readonly NoInfer<TState>[] | undefined;
+  /** Each state's legal next states, keyed and listed by `values` alone; a state left out may move to any state */
+  transitions?: { readonly [K in NoInfer<TState>]?: readonly NoInfer<TState>[] | undefined } | undefined;
+  /** The column the machine governs, named in `assertTransition`'s error; `status` when omitted */
+  column?: string | undefined;
 }): StateMachine<TState> {
-	return machine
+  return machine;
 }
 
 /** Whether a value is one the machine declares. */
 function isState<T extends string>(machine: StateMachine<T>, value: unknown): value is T {
-	return typeof value === "string" && (machine.values as readonly string[]).includes(value)
+  return typeof value === "string" && (machine.values as readonly string[]).includes(value);
 }
 
 /** The moves a machine declares out of `from`; undefined when it declares none (an inherited name is none). */
 function movesFrom<T extends string>(machine: StateMachine<T>, from: T): readonly T[] | undefined {
-	const transitions = machine.transitions
-	return transitions !== undefined && Object.hasOwn(transitions, from) ? transitions[from] : undefined
+  const transitions = machine.transitions;
+
+  return transitions !== undefined && Object.hasOwn(transitions, from) ? transitions[from] : undefined;
 }
 
 /** Whether no transition may leave this state. */
 function isTerminal<T extends string>(machine: StateMachine<T>, state: T): boolean {
-	return machine.terminal?.includes(state) ?? false
+  return machine.terminal?.includes(state) ?? false;
 }
 
 /**
@@ -77,14 +78,18 @@ function isTerminal<T extends string>(machine: StateMachine<T>, state: T): boole
  * unconstrained: that is how a schema declares only the part it knows.
  */
 function canTransition<T extends string>(machine: StateMachine<T>, from: T, to: T): boolean {
-	if (!isState(machine, from) || !isState(machine, to)) return false
-	/* Staying put is not a transition, including from a terminal state. */
-	if (from === to) return true
-	if (isTerminal(machine, from)) return false
+  if (!isState(machine, from) || !isState(machine, to)) return false;
 
-	const allowed = movesFrom(machine, from)
-	if (allowed === undefined) return true
-	return allowed.includes(to)
+  // Staying put is not a transition, including from a terminal state.
+  if (from === to) return true;
+
+  if (isTerminal(machine, from)) return false;
+
+  const allowed = movesFrom(machine, from);
+
+  if (allowed === undefined) return true;
+
+  return allowed.includes(to);
 }
 
 /**
@@ -100,30 +105,31 @@ function canTransition<T extends string>(machine: StateMachine<T>, from: T, to: 
  * cannot opt out of is worse than one you must remember to call.
  */
 function assertTransition<T extends string>(machine: StateMachine<T>, from: T, to: T): void {
-	if (canTransition(machine, from, to)) return
-	const column = machine.column ?? "status"
+  if (canTransition(machine, from, to)) return;
+  const column = machine.column ?? "status";
 
-	const reason = !isState(machine, to)
-		? `"${String(to)}" is not a declared state`
-		: !isState(machine, from)
-			? `"${String(from)}" is not a declared state`
-			: isTerminal(machine, from)
-				? `"${String(from)}" is terminal`
-				: `"${String(from)}" does not lead to "${String(to)}"`
+  const reason = isState(machine, to)
+    ? isState(machine, from)
+      ? isTerminal(machine, from)
+        ? `"${String(from)}" is terminal`
+        : `"${String(from)}" does not lead to "${String(to)}"`
+      : `"${String(from)}" is not a declared state`
+    : `"${String(to)}" is not a declared state`;
 
-	throw new DatabaseError({
-		cause: `${column}: ${reason}`,
-		column,
-		errorKey: databaseErrorKeys.INVALID_STATE_TRANSITION,
-		status: "unprocessable_entity",
-	})
+  throw new DatabaseError({
+    cause: `${column}: ${reason}`,
+    column,
+    errorKey: databaseErrorKeys.INVALID_STATE_TRANSITION,
+    status: "unprocessable_entity",
+  });
 }
 
 /** States reachable in one move, empty for a terminal or unknown state. */
 function nextStates<T extends string>(machine: StateMachine<T>, from: T): readonly T[] {
-	if (!isState(machine, from) || isTerminal(machine, from)) return []
-	const moves = movesFrom(machine, from) ?? machine.values.filter((v) => v !== from)
-	return moves.filter((to) => isState(machine, to))
+  if (!isState(machine, from) || isTerminal(machine, from)) return [];
+  const moves = movesFrom(machine, from) ?? machine.values.filter((v) => v !== from);
+
+  return moves.filter((to) => isState(machine, to));
 }
 
-export { assertTransition, canTransition, defineStateMachine, isState, isTerminal, nextStates, type StateMachine }
+export { assertTransition, canTransition, defineStateMachine, isState, isTerminal, nextStates, type StateMachine };

@@ -2,18 +2,18 @@
 
 // lookup-table: the codes Node, undici and @libsql/client give a connection that failed, timed out or was cut
 const NETWORK_CODES: ReadonlySet<string> = /* @__PURE__ */ new Set([
-	"EAI_AGAIN",
-	"ECONNREFUSED",
-	"ECONNRESET",
-	"EPIPE",
-	"ETIMEDOUT",
-	"UND_ERR_BODY_TIMEOUT",
-	"UND_ERR_CONNECT_TIMEOUT",
-	"UND_ERR_HEADERS_TIMEOUT",
-	"UND_ERR_SOCKET",
-	/* @libsql/client's for a WebSocket that failed or closed under a request, whose cause carries no code */
-	"HRANA_WEBSOCKET_ERROR",
-])
+  "EAI_AGAIN",
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "EPIPE",
+  "ETIMEDOUT",
+  "UND_ERR_BODY_TIMEOUT",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT",
+  "UND_ERR_SOCKET",
+  // @libsql/client's for a WebSocket that failed or closed under a request, whose cause carries no code
+  "HRANA_WEBSOCKET_ERROR",
+]);
 
 /**
  * Whether `error`, or an error it was caused by, failed transiently, read from its structured fields
@@ -23,11 +23,14 @@ const NETWORK_CODES: ReadonlySet<string> = /* @__PURE__ */ new Set([
  * never is, and no message is read: a SQL error that quotes "429" is not a rate limit.
  */
 function isTransient(error: unknown): boolean {
-	if (typeof error !== "object" || error === null) return false
-	const { cause, code, status } = error as { cause?: unknown; code?: unknown; status?: unknown }
-	if (typeof code === "string" && code.startsWith("SQLITE_")) return false
-	if (typeof status === "number" && (status === 429 || status >= 500)) return true
-	return (typeof code === "string" && NETWORK_CODES.has(code)) || isTransient(cause)
+  if (typeof error !== "object" || error === null) return false;
+  const { cause, code, status } = error as { cause?: unknown; code?: unknown; status?: unknown };
+
+  if (typeof code === "string" && code.startsWith("SQLITE_")) return false;
+
+  if (typeof status === "number" && (status === 429 || status >= 500)) return true;
+
+  return (typeof code === "string" && NETWORK_CODES.has(code)) || isTransient(cause);
 }
 
-export { isTransient }
+export { isTransient };

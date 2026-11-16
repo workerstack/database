@@ -1,3 +1,4 @@
+import { type Hidden, runsHidden } from "./pg-replay-hidden.ts";
 /**
  * The replay's transactions and the reads around them (pg-replay.ts): a file's or database's own
  * statement's transaction, refused before its COMMIT when this backend's counts show it wrote past
@@ -7,19 +8,18 @@
  * a `txmode none` file's statement in a transaction of its own first, bare only when
  * Postgres runs it outside a block alone.
  */
-import { adopt, bareAgain, type Run } from "./pg-replay-roles.ts"
-import { type Hidden, runsHidden } from "./pg-replay-hidden.ts"
-import { type Snapshot, snapshot, snapshotChanges, subscriptionsIn } from "./pg-server-snapshot.ts"
+import { adopt, bareAgain, type Run } from "./pg-replay-roles.ts";
+import { type Snapshot, snapshot, snapshotChanges, subscriptionsIn } from "./pg-server-snapshot.ts";
 import {
-	type Change,
-	catalogsOf,
-	counts,
-	type Own,
-	refusedChanges,
-	rowChanges,
-	writesSince,
-} from "./pg-server-writes.ts"
-import { ReplayFailed } from "./replay-failed.ts"
+  type Change,
+  catalogsOf,
+  counts,
+  type Own,
+  refusedChanges,
+  rowChanges,
+  writesSince,
+} from "./pg-server-writes.ts";
+import { ReplayFailed } from "./replay-failed.ts";
 
 /**
  * A transaction opened on the replay's connection, its counts so far taken as database's own: a backend
@@ -27,9 +27,9 @@ import { ReplayFailed } from "./replay-failed.ts"
  * never does inside a transaction
  */
 async function begin(run: Run): Promise<void> {
-	/* pipelined on the one connection: the read runs in the transaction BEGIN opens, a round trip saved */
-	const [, now] = await Promise.all([run.sql.unsafe("BEGIN", []), counts(run.sql)])
-	run.ours = { rows: new Map(), writes: now.writes }
+  // pipelined on the one connection: the read runs in the transaction BEGIN opens, a round trip saved
+  const [, now] = await Promise.all([run.sql.unsafe("BEGIN", []), counts(run.sql)]);
+  run.ours = { rows: new Map(), writes: now.writes };
 }
 
 /**
@@ -38,22 +38,24 @@ async function begin(run: Run): Promise<void> {
  * refusal stops; told each role the transaction adds that the replay adopts
  */
 type At = {
-	adopted?: ((role: string) => void) | undefined
-	hidden: Hidden
-	name: string
-	names: ReadonlySet<string>
-	sent: string | undefined
-	stops: string
-}
+  adopted?: ((role: string) => void) | undefined;
+  hidden: Hidden;
+  name: string;
+  names: ReadonlySet<string>;
+  sent: string | undefined;
+  stops: string;
+};
 
-/* the words that name devUrl's role in a file, as namesIn folds them: CURRENT_USER and its kin */
-const SESSION_ROLE = ["current_role", "current_user", "session_user", "user"]
+// the words that name devUrl's role in a file, as namesIn folds them: CURRENT_USER and its kin
+const SESSION_ROLE = ["current_role", "current_user", "session_user", "user"];
 
 /** The objects the file `names`, devUrl's role among them where it names that by keyword */
 function spelled(run: Run, names: ReadonlySet<string>): Set<string> {
-	const its = new Set(names)
-	if (SESSION_ROLE.some((word) => names.has(word))) its.add(run.role)
-	return its
+  const its = new Set(names);
+
+  if (SESSION_ROLE.some((word) => names.has(word))) its.add(run.role);
+
+  return its;
 }
 
 /**
@@ -66,13 +68,13 @@ function spelled(run: Run, names: ReadonlySet<string>): Set<string> {
  * that run only what their parse says, is another session's. `read` is that read when the caller took it
  */
 async function window(run: Run, at: At, read?: Snapshot): Promise<void> {
-	const now = read ?? (await snapshot(run.admin))
-	strayed(run, { ...at, hid: await hides(run, at, now) }, now)
+  const now = read ?? (await snapshot(run.admin));
+  strayed(run, { ...at, hid: await hides(run, at, now) }, now);
 }
 
-/* whether a change in `now` to an object the file names may be the file's, as its statements can run code database cannot read */
+// whether a change in `now` to an object the file names may be the file's, as its statements can run code database cannot read
 const hides = (run: Run, { hidden, names }: At, now: Snapshot): boolean | Promise<boolean> =>
-	snapshotChanges(run.seen, now, spelled(run, names)).length > 0 && runsHidden(run.sql, hidden)
+  snapshotChanges(run.seen, now, spelled(run, names)).length > 0 && runsHidden(run.sql, hidden);
 
 /**
  * window's verdict on `now`, the server's shared catalogs as committed after the file or `sent`,
@@ -80,37 +82,42 @@ const hides = (run: Run, { hidden, names }: At, now: Snapshot): boolean | Promis
  * kept apart from window's await, as v8 miscounts a branch after an await
  */
 function strayed(run: Run, { hid, name, names, sent, stops }: At & { hid: boolean }, now: Snapshot): void {
-	const replays = new Set([run.database])
-	const changes = snapshotChanges(run.seen, now, hid ? new Set([...spelled(run, names), ...replays]) : replays)
-	const own = new Set(snapshotChanges(run.seen, now, replays))
-	const within = subscriptionsIn(run.seen, now, run.database)
-	run.seen = now
-	if (changes.length === 0) return
-	const dropped =
-		own.size > 0
-			? `; database drops the database it replays in${within.length === 0 ? "" : `, and ${within.join(", ")} in it`}`
-			: ""
-	const kept = changes.filter((change) => !own.has(change))
-	const left =
-		kept.length === 0
-			? ""
-			: `; database leaves ${kept.join(", ")} on devUrl's server, as another session may have made ${kept.length === 1 ? "that change" : "those changes"}: undo there each that is the file's`
-	throw new ReplayFailed(
-		`${name}: devUrl's server changed past the database the replay runs in while ${sent === undefined ? "the file" : JSON.stringify(sent)} ran: ${changes.join(", ")}. A change made there, from inside a DO block, a function, EXECUTE or CALL, or over a second connection such as dblink's, apply would make on the target's server, so database refuses the file; write the change as a statement of its own, which the replay leaves out and apply runs${dropped}${left}; ${stops}`,
-	)
+  const replays = new Set([run.database]);
+  const changes = snapshotChanges(run.seen, now, hid ? new Set([...spelled(run, names), ...replays]) : replays);
+  const own = new Set(snapshotChanges(run.seen, now, replays));
+  const within = subscriptionsIn(run.seen, now, run.database);
+  run.seen = now;
+
+  if (changes.length === 0) return;
+
+  const dropped =
+    own.size > 0
+      ? `; database drops the database it replays in${within.length === 0 ? "" : `, and ${within.join(", ")} in it`}`
+      : "";
+
+  const kept = changes.filter((change) => !own.has(change));
+
+  const left =
+    kept.length === 0
+      ? ""
+      : `; database leaves ${kept.join(", ")} on devUrl's server, as another session may have made ${kept.length === 1 ? "that change" : "those changes"}: undo there each that is the file's`;
+
+  throw new ReplayFailed(
+    `${name}: devUrl's server changed past the database the replay runs in while ${sent === undefined ? "the file" : JSON.stringify(sent)} ran: ${changes.join(", ")}. A change made there, from inside a DO block, a function, EXECUTE or CALL, or over a second connection such as dblink's, apply would make on the target's server, so database refuses the file; write the change as a statement of its own, which the replay leaves out and apply runs${dropped}${left}; ${stops}`,
+  );
 }
 
 // lookup-table: the fields of a database's row whose change keeps the cleanup from dropping it: a template, another owner
-const UNDROPPABLE: ReadonlySet<string> = /* @__PURE__ */ new Set(["datdba", "datistemplate"])
+const UNDROPPABLE: ReadonlySet<string> = /* @__PURE__ */ new Set(["datdba", "datistemplate"]);
 
 // lookup-table: by a change's noun, where its row's names hold the roles whose drop takes the row with it
 const ROLE_AT: ReadonlyArray<[noun: string, at: readonly number[]]> = [
-	["comment on role ", [0]],
-	["membership ", [0, 1]],
-	["role ", [0]],
-	["security label on role ", [0]],
-	["setting ", [1]],
-]
+  ["comment on role ", [0]],
+  ["membership ", [0, 1]],
+  ["role ", [0]],
+  ["security label on role ", [0]],
+  ["setting ", [1]],
+];
 
 /**
  * Which changes are the replay's own, one rule: a change whose subject is what the replay drops
@@ -120,24 +127,25 @@ const ROLE_AT: ReadonlyArray<[noun: string, at: readonly number[]]> = [
  * membership in it or of it, its settings in any database, and its comment and security labels
  */
 function ownOf(run: Run, roles: ReadonlySet<string>): Own {
-	const database = `database ${run.database}`
-	return ({ fields, names, subject }) =>
-		(subject === database && fields.length > 0 && !fields.some((field) => UNDROPPABLE.has(field))) ||
-		subject.startsWith(`setting ${run.database} for `) ||
-		subject === `comment on ${database}` ||
-		subject.startsWith(`security label on ${database} by `) ||
-		(ROLE_AT.find(([noun]) => subject.startsWith(noun))?.[1] ?? []).some((at) => roles.has(names[at] ?? ""))
+  const database = `database ${run.database}`;
+
+  return ({ fields, names, subject }) =>
+    (subject === database && fields.length > 0 && !fields.some((field) => UNDROPPABLE.has(field))) ||
+    subject.startsWith(`setting ${run.database} for `) ||
+    subject === `comment on ${database}` ||
+    subject.startsWith(`security label on ${database} by `) ||
+    (ROLE_AT.find(([noun]) => subject.startsWith(noun))?.[1] ?? []).some((at) => roles.has(names[at] ?? ""));
 }
 
 /** The roles the `changes` to pg_authid added: a row no role held before, which the replay may adopt */
 const addedRoles = (changes: readonly Change[] = []): string[] =>
-	changes.filter((change) => change.kind === "added").map((change) => String(change.names[0]))
+  changes.filter((change) => change.kind === "added").map((change) => String(change.names[0]));
 
 /** The roles of `roles` whose own row `changes` to pg_authid added or changed, which the replay makes bare again */
 const touchedRoles = (roles: ReadonlySet<string>, changes: readonly Change[] = []): string[] =>
-	changes
-		.filter((change) => change.kind !== "removed" && roles.has(String(change.names[0])))
-		.map((change) => String(change.names[0]))
+  changes
+    .filter((change) => change.kind !== "removed" && roles.has(String(change.names[0])))
+    .map((change) => String(change.names[0]));
 
 /**
  * The open transaction committed, or refused, with nothing committed, when it wrote past its
@@ -145,59 +153,71 @@ const touchedRoles = (roles: ReadonlySet<string>, changes: readonly Change[] = [
  * that one statement's
  */
 async function commit(run: Run, at: At): Promise<void> {
-	const { name, sent, stops } = at
-	/* two connections, one moment before COMMIT: the counts on the replay's, the committed catalogs on admin's, a round trip saved */
-	const [now, read] = await Promise.all([counts(run.sql), snapshot(run.admin)])
-	/* Atlas writes a file's revision in the file's transaction, after its statements: a read-only one refuses it */
-	if (sent === undefined && now.readOnly)
-		throw new ReplayFailed(
-			`${name}: write revision: cannot execute INSERT in a read-only transaction (25006): the file leaves its transaction read-only, and Atlas writes the file's revision in that transaction, so apply would fail there; drop the statement that makes it read-only; ${stops}`,
-		)
-	/* a superuser's file can turn the counts off for its transaction or its session */
-	if (!now.on)
-		throw new ReplayFailed(
-			`${name}: the file turned track_counts off, so devUrl's server counted nothing it changed past the database the replay runs in, and database rolled it back and refuses the file; leave track_counts on; ${stops}`,
-		)
-	const counted = writesSince(now.writes, run.ours.writes)
-	const byCatalog =
-		counted.size === 0
-			? new Map<string, Change[]>()
-			: await rowChanges({ catalogs: catalogsOf(run.superuser), sql: run.sql, was: run.admin }, counted, run.ours.rows)
-	const adopting = addedRoles(byCatalog.get("pg_authid"))
-	const roles = new Set([...run.created, ...adopting])
-	const changes = refusedChanges(byCatalog, ownOf(run, roles))
-	if (changes.length > 0) {
-		const by = sent === undefined ? "" : `, made by ${JSON.stringify(sent)}`
-		throw new ReplayFailed(
-			`${name}: devUrl's server counted a change past the database the replay runs in${by}: ${changes.join(", ")}. It came from inside a statement the replay cannot leave out (a DO block, a function, EXECUTE or CALL), and apply would make it on the target's server, so database rolled it back and refuses the file. A role such a statement adds, and a change to a role the replay made, are the replay's own, as it drops them after; for any other change, write it as a statement of its own: the replay leaves out one that reaches past its database, and apply runs it, while a CREATE ROLE runs in the replay, the role made bare; ${stops}`,
-		)
-	}
-	await bareAgain(run, touchedRoles(roles, byCatalog.get("pg_authid")))
-	await adopt(run, adopting)
-	for (const role of adopting) at.adopted?.(role)
-	await window(run, at, read)
-	await run.sql.unsafe("COMMIT", [])
+  const { name, sent, stops } = at;
+  // two connections, one moment before COMMIT: the counts on the replay's, the committed catalogs on admin's, a round trip saved
+  const [now, read] = await Promise.all([counts(run.sql), snapshot(run.admin)]);
+
+  // Atlas writes a file's revision in the file's transaction, after its statements: a read-only one refuses it
+  if (sent === undefined && now.readOnly) {
+    throw new ReplayFailed(
+      `${name}: write revision: cannot execute INSERT in a read-only transaction (25006): the file leaves its transaction read-only, and Atlas writes the file's revision in that transaction, so apply would fail there; drop the statement that makes it read-only; ${stops}`,
+    );
+  }
+
+  // a superuser's file can turn the counts off for its transaction or its session
+  if (!now.on) {
+    throw new ReplayFailed(
+      `${name}: the file turned track_counts off, so devUrl's server counted nothing it changed past the database the replay runs in, and database rolled it back and refuses the file; leave track_counts on; ${stops}`,
+    );
+  }
+
+  const counted = writesSince(now.writes, run.ours.writes);
+
+  const byCatalog =
+    counted.size === 0
+      ? new Map<string, Change[]>()
+      : await rowChanges({ catalogs: catalogsOf(run.superuser), sql: run.sql, was: run.admin }, counted, run.ours.rows);
+
+  const adopting = addedRoles(byCatalog.get("pg_authid"));
+  const roles = new Set([...run.created, ...adopting]);
+  const changes = refusedChanges(byCatalog, ownOf(run, roles));
+
+  if (changes.length > 0) {
+    const by = sent === undefined ? "" : `, made by ${JSON.stringify(sent)}`;
+    throw new ReplayFailed(
+      `${name}: devUrl's server counted a change past the database the replay runs in${by}: ${changes.join(", ")}. It came from inside a statement the replay cannot leave out (a DO block, a function, EXECUTE or CALL), and apply would make it on the target's server, so database rolled it back and refuses the file. A role such a statement adds, and a change to a role the replay made, are the replay's own, as it drops them after; for any other change, write it as a statement of its own: the replay leaves out one that reaches past its database, and apply runs it, while a CREATE ROLE runs in the replay, the role made bare; ${stops}`,
+    );
+  }
+
+  await bareAgain(run, touchedRoles(roles, byCatalog.get("pg_authid")));
+  await adopt(run, adopting);
+
+  for (const role of adopting) at.adopted?.(role);
+  await window(run, at, read);
+  await run.sql.unsafe("COMMIT", []);
 }
 
 // lookup-table: the codes Postgres refuses a statement with in a transaction block that it runs bare: an outside-only class (25001), a COMMIT inside a DO block or a procedure (2D000)
-const BARE_ONLY: ReadonlySet<unknown> = /* @__PURE__ */ new Set(["25001", "2D000"])
+const BARE_ONLY: ReadonlySet<unknown> = /* @__PURE__ */ new Set(["25001", "2D000"]);
 
-/* each sequence of the replay's database, its last value null until a nextval: a trial's advance survives its ROLLBACK */
+// each sequence of the replay's database, its last value null until a nextval: a trial's advance survives its ROLLBACK
 const SEQUENCES =
-	"SELECT format('%I.%I', schemaname, sequencename) AS name, start_value::text AS start, last_value::text AS last FROM pg_sequences"
+  "SELECT format('%I.%I', schemaname, sequencename) AS name, start_value::text AS start, last_value::text AS last FROM pg_sequences";
 
-type Sequence = { last: string | null; name: string; start: string }
+type Sequence = { last: string | null; name: string; start: string };
 
 /** Set back each sequence of `before` a rolled-back trial advanced, so the bare run takes the values apply's does */
 async function rewind(run: Run, before: readonly Sequence[]): Promise<void> {
-	const now = new Map(((await run.sql.unsafe(SEQUENCES, [])) as Sequence[]).map(({ last, name }) => [name, last]))
-	for (const { last, name, start } of before)
-		if (now.has(name) && now.get(name) !== last)
-			await run.sql.unsafe("SELECT setval($1::regclass, $2::bigint, $3)", [name, last ?? start, last !== null])
+  const now = new Map(((await run.sql.unsafe(SEQUENCES, [])) as Sequence[]).map(({ last, name }) => [name, last]));
+
+  for (const { last, name, start } of before) {
+    if (now.has(name) && now.get(name) !== last)
+      await run.sql.unsafe("SELECT setval($1::regclass, $2::bigint, $3)", [name, last ?? start, last !== null]);
+  }
 }
 
 // lookup-table: the statements that run code, which may advance a sequence before Postgres refuses their COMMIT in a block
-const RUNS_CODE: ReadonlySet<string> = /* @__PURE__ */ new Set(["CallStmt", "DoStmt"])
+const RUNS_CODE: ReadonlySet<string> = /* @__PURE__ */ new Set(["CallStmt", "DoStmt"]);
 
 /**
  * A statement of a `txmode none` file `send` runs, first in a transaction of its own, refused before
@@ -207,18 +227,23 @@ const RUNS_CODE: ReadonlySet<string> = /* @__PURE__ */ new Set(["CallStmt", "DoS
  * Atlas sends it, with the server's catalogs read around it
  */
 async function guarded(run: Run, at: At, { send, type }: { send: () => Promise<void>; type: string }): Promise<void> {
-	await begin(run)
-	const before = RUNS_CODE.has(type) ? ((await run.sql.unsafe(SEQUENCES, [])) as Sequence[]) : undefined
-	const refused = await send().then(
-		() => undefined,
-		(error: unknown) => error,
-	)
-	if (refused === undefined) return commit(run, at)
-	if (!BARE_ONLY.has((refused as { cause?: { code?: unknown } | undefined }).cause?.code)) throw refused
-	await run.sql.unsafe("ROLLBACK", [])
-	if (before !== undefined) await rewind(run, before)
-	await send()
-	return window(run, at)
+  await begin(run);
+  const before = RUNS_CODE.has(type) ? ((await run.sql.unsafe(SEQUENCES, [])) as Sequence[]) : undefined;
+
+  const refused = await send().then(
+    () => {},
+    (error: unknown) => error,
+  );
+
+  if (refused === undefined) return commit(run, at);
+
+  if (!BARE_ONLY.has((refused as { cause?: { code?: unknown } | undefined }).cause?.code)) throw refused;
+  await run.sql.unsafe("ROLLBACK", []);
+
+  if (before !== undefined) await rewind(run, before);
+  await send();
+
+  return window(run, at);
 }
 
-export { type At, begin, commit, guarded, ownOf, window }
+export { type At, begin, commit, guarded, ownOf, window };

@@ -6,20 +6,23 @@
 
 /** `bytes` as unpadded base64url */
 function encodeBase64Url(bytes: Uint8Array): string {
-	let binary = ""
-	for (const byte of bytes) binary += String.fromCharCode(byte)
-	return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
+  let binary = "";
+
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+
+  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
 
 /** The bytes unpadded base64url `text` holds, or null when it is not that */
 function decodeBase64Url(text: string): Uint8Array | null {
-	/* a length of 1 mod 4 encodes no whole byte */
-	if (!/^[\w-]*$/.test(text) || text.length % 4 === 1) return null
-	const base64 = text.replace(/-/g, "+").replace(/_/g, "/")
-	const binary = atob(base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "="))
-	const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0))
-	/* the last character's unused low bits must be zero: "AB" and "AA" would both decode to [0] */
-	return encodeBase64Url(bytes) === text ? bytes : null
+  // a length of 1 mod 4 encodes no whole byte
+  if (!/^[\w-]*$/.test(text) || text.length % 4 === 1) return null;
+  const base64 = text.replaceAll("-", "+").replaceAll("_", "/");
+  const binary = atob(base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "="));
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+
+  // the last character's unused low bits must be zero: "AB" and "AA" would both decode to [0]
+  return encodeBase64Url(bytes) === text ? bytes : null;
 }
 
-export { decodeBase64Url, encodeBase64Url }
+export { decodeBase64Url, encodeBase64Url };

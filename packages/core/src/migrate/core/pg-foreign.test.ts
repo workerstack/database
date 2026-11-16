@@ -5,249 +5,254 @@
  * pg_locks; these hold the names Postgres gives a key, Postgres's own measured in the case comments,
  * and the history's keys through each statement that changes them.
  */
-import { beforeAll, describe, expect, it } from "vitest"
-import { classifyMigration } from "./classify.ts"
-import { historyFacts } from "./pg-history.ts"
-import { loadPostgresParser } from "./pg-parser.ts"
-import { extractSchema } from "./schema.ts"
+import { beforeAll, describe, expect, it } from "vitest";
 
-beforeAll(loadPostgresParser)
+import { classifyMigration } from "./classify.ts";
+import { historyFacts } from "./pg-history.ts";
+import { loadPostgresParser } from "./pg-parser.ts";
+import { extractSchema } from "./schema.ts";
 
-const [LONG_TABLE, LONG_COLUMN] = ["l".repeat(40), "c".repeat(40)]
-const [WIDE_TABLE, WIDE_COLUMN] = ["ž".repeat(30), "č".repeat(20)]
+beforeAll(loadPostgresParser);
+
+const [LONG_TABLE, LONG_COLUMN] = ["l".repeat(40), "c".repeat(40)];
+const [WIDE_TABLE, WIDE_COLUMN] = ["ž".repeat(30), "č".repeat(20)];
 
 const HISTORY = [
-	"CREATE TABLE users (id int PRIMARY KEY, n int);",
-	"CREATE TABLE orders (id int PRIMARY KEY, user_id int CONSTRAINT o_fk REFERENCES users (id));",
-	"CREATE TABLE items (id int, order_id int REFERENCES orders);",
-	"CREATE TABLE ev (id int NOT NULL, at date NOT NULL, user_id int REFERENCES users (id)) PARTITION BY RANGE (at);",
-	"CREATE TABLE ev_old PARTITION OF ev FOR VALUES FROM ('2020-01-01') TO ('2021-01-01');",
-	"CREATE TABLE ev_mid PARTITION OF ev FOR VALUES FROM ('2021-01-01') TO ('2022-01-01') PARTITION BY LIST (id);",
-	"CREATE TABLE t2 (u int REFERENCES users (id), FOREIGN KEY (u) REFERENCES orders (id));",
-	`CREATE TABLE ${LONG_TABLE} (${LONG_COLUMN} int REFERENCES users);`,
-	`CREATE TABLE ${WIDE_TABLE} (${WIDE_COLUMN} int REFERENCES users);`,
-	"CREATE TABLE k (id int);",
-	"ALTER TABLE k ADD PRIMARY KEY (id);",
-	"CREATE TABLE kr (k_id int);",
-	"ALTER TABLE kr ADD COLUMN k2 int REFERENCES k, ADD CONSTRAINT kr_fk FOREIGN KEY (k_id) REFERENCES k NOT VALID;",
-	"CREATE TABLE kq (id int);",
-	"CREATE UNIQUE INDEX kq_k ON kq (id);",
-	"ALTER TABLE kq ADD PRIMARY KEY USING INDEX kq_k;",
-	"CREATE TABLE kp (q int REFERENCES kq);",
-	"CREATE TABLE kc (LIKE k INCLUDING ALL);",
-	"CREATE TABLE kcr (c int REFERENCES kc);",
-	"CREATE TABLE kn (CONSTRAINT kn_own PRIMARY KEY (id), LIKE k INCLUDING ALL EXCLUDING INDEXES);",
-	"CREATE TABLE knr (n int REFERENCES kn);",
-	"CREATE TABLE kl (CONSTRAINT kl_own PRIMARY KEY (id), LIKE k);",
-	"CREATE TABLE klr (l int REFERENCES kl);",
-	"CREATE SCHEMA s;",
-	"CREATE TABLE s.a (id int PRIMARY KEY);",
-	"CREATE TABLE s.b (a_id int REFERENCES s.a);",
-	"CREATE TABLE audit (n int);",
-	"ALTER TABLE audit ADD CONSTRAINT pos CHECK (n > 0) NOT VALID;",
-].join("\n")
+  "CREATE TABLE users (id int PRIMARY KEY, n int);",
+  "CREATE TABLE orders (id int PRIMARY KEY, user_id int CONSTRAINT o_fk REFERENCES users (id));",
+  "CREATE TABLE items (id int, order_id int REFERENCES orders);",
+  "CREATE TABLE ev (id int NOT NULL, at date NOT NULL, user_id int REFERENCES users (id)) PARTITION BY RANGE (at);",
+  "CREATE TABLE ev_old PARTITION OF ev FOR VALUES FROM ('2020-01-01') TO ('2021-01-01');",
+  "CREATE TABLE ev_mid PARTITION OF ev FOR VALUES FROM ('2021-01-01') TO ('2022-01-01') PARTITION BY LIST (id);",
+  "CREATE TABLE t2 (u int REFERENCES users (id), FOREIGN KEY (u) REFERENCES orders (id));",
+  `CREATE TABLE ${LONG_TABLE} (${LONG_COLUMN} int REFERENCES users);`,
+  `CREATE TABLE ${WIDE_TABLE} (${WIDE_COLUMN} int REFERENCES users);`,
+  "CREATE TABLE k (id int);",
+  "ALTER TABLE k ADD PRIMARY KEY (id);",
+  "CREATE TABLE kr (k_id int);",
+  "ALTER TABLE kr ADD COLUMN k2 int REFERENCES k, ADD CONSTRAINT kr_fk FOREIGN KEY (k_id) REFERENCES k NOT VALID;",
+  "CREATE TABLE kq (id int);",
+  "CREATE UNIQUE INDEX kq_k ON kq (id);",
+  "ALTER TABLE kq ADD PRIMARY KEY USING INDEX kq_k;",
+  "CREATE TABLE kp (q int REFERENCES kq);",
+  "CREATE TABLE kc (LIKE k INCLUDING ALL);",
+  "CREATE TABLE kcr (c int REFERENCES kc);",
+  "CREATE TABLE kn (CONSTRAINT kn_own PRIMARY KEY (id), LIKE k INCLUDING ALL EXCLUDING INDEXES);",
+  "CREATE TABLE knr (n int REFERENCES kn);",
+  "CREATE TABLE kl (CONSTRAINT kl_own PRIMARY KEY (id), LIKE k);",
+  "CREATE TABLE klr (l int REFERENCES kl);",
+  "CREATE SCHEMA s;",
+  "CREATE TABLE s.a (id int PRIMARY KEY);",
+  "CREATE TABLE s.b (a_id int REFERENCES s.a);",
+  "CREATE TABLE audit (n int);",
+  "ALTER TABLE audit ADD CONSTRAINT pos CHECK (n > 0) NOT VALID;",
+].join("\n");
 
-const VALIDATE = "ALTER TABLE audit VALIDATE CONSTRAINT pos;"
+const VALIDATE = "ALTER TABLE audit VALIDATE CONSTRAINT pos;";
 
 /** What database says the file holds when `first` runs before VALIDATE in it; "" when it warns of none */
 function holds(first: string): string {
-	const rated = classifyMigration(`${first}\n${VALIDATE}\n`, {
-		before: extractSchema(HISTORY, undefined, "postgres"),
-		dialect: "postgres",
-	})
-	const warning = rated.lockWarnings.find((each) => each.startsWith(`${VALIDATE.slice(0, -1)} (`))
-	return warning?.match(/while this file holds (.*); those locks last to the file's COMMIT/)?.[1] ?? ""
+  const rated = classifyMigration(`${first}\n${VALIDATE}\n`, {
+    before: extractSchema(HISTORY, undefined, "postgres"),
+    dialect: "postgres",
+  });
+
+  const warning = rated.lockWarnings.find((each) => each.startsWith(`${VALIDATE.slice(0, -1)} (`));
+
+  return warning?.match(/while this file holds (.*); those locks last to the file's COMMIT/)?.[1] ?? "";
 }
 
 /** What database says the file holds of `named`, and of a DROP … CASCADE of `object`, whose dependents no fact shows */
 const cascading = (named: string, object: string): string =>
-	`${named}, and this file's DROP … CASCADE locks what depends on ${object}, which only check on a postgres:// devUrl names`
+  `${named}, and this file's DROP … CASCADE locks what depends on ${object}, which only check on a postgres:// devUrl names`;
 
 /** What database says the file holds of `named`, and of a dropped table's sequences, which no fact names */
 const owning = (named: string, table: string): string =>
-	`${named}, and this file locks the sequences ${table} owns, which only check on a postgres:// devUrl names`
+  `${named}, and this file locks the sequences ${table} owns, which only check on a postgres:// devUrl names`;
 
-/* each statement before the VALIDATE, and what database says the file then holds */
+// each statement before the VALIDATE, and what database says the file then holds
 const HOLDS: Array<[string, string]> = [
-	/* the names Postgres chose: the longer of table and columns cut first to 63 bytes, a character never split, a taken name numbered */
-	[
-		`ALTER TABLE ${LONG_TABLE} DROP CONSTRAINT ${"l".repeat(29)}_${"c".repeat(28)}_fkey;`,
-		`${LONG_TABLE} and users locked against reads and writes`,
-	],
-	[
-		`ALTER TABLE ${WIDE_TABLE} DROP CONSTRAINT ${"ž".repeat(14)}_${"č".repeat(14)}_fkey;`,
-		`users and ${WIDE_TABLE} locked against reads and writes`,
-	],
-	["ALTER TABLE t2 DROP CONSTRAINT t2_u_fkey1;", "orders and t2 locked against reads and writes"],
-	/* keys an ALTER TABLE added, a primary key a REFERENCES without columns names among them */
-	["ALTER TABLE k ALTER COLUMN id TYPE bigint;", "k and kr locked against reads and writes"],
-	["ALTER TABLE kr DROP CONSTRAINT kr_k2_fkey;", "k and kr locked against reads and writes"],
-	["ALTER TABLE kr DROP CONSTRAINT kr_fk;", "k and kr locked against reads and writes"],
-	/* a primary key an index makes, named by it unless the constraint is */
-	[
-		"ALTER TABLE kq DROP CONSTRAINT kq_k CASCADE;",
-		cascading("kp and kq locked against reads and writes", "kq_k on kq"),
-	],
-	/* a primary key a LIKE copies with the indexes, named as a new one is, and none without them */
-	[
-		"ALTER TABLE kc DROP CONSTRAINT kc_pkey CASCADE;",
-		cascading("kc and kcr locked against reads and writes", "kc_pkey on kc"),
-	],
-	[
-		"ALTER TABLE kn DROP CONSTRAINT kn_own CASCADE;",
-		cascading("kn and knr locked against reads and writes", "kn_own on kn"),
-	],
-	[
-		"ALTER TABLE kl DROP CONSTRAINT kl_own CASCADE;",
-		cascading("kl and klr locked against reads and writes", "kl_own on kl"),
-	],
-	/* through a rename of the table, its column, its constraint, a column it references */
-	[
-		"ALTER TABLE users RENAME TO people;\nTRUNCATE people CASCADE;",
-		`ev, ev_mid, ev_old, items, ${LONG_TABLE}, orders, people, t2 and ${WIDE_TABLE} locked against reads and writes`,
-	],
-	[
-		"ALTER TABLE orders RENAME COLUMN user_id TO uid;\nALTER TABLE orders DROP COLUMN uid;",
-		"orders and users locked against reads and writes",
-	],
-	[
-		"ALTER TABLE users RENAME COLUMN id TO uid;\nALTER TABLE users ALTER COLUMN uid TYPE bigint;",
-		`ev, ev_mid, ev_old, ${LONG_TABLE}, orders, t2, users and ${WIDE_TABLE} locked against reads and writes`,
-	],
-	[
-		"ALTER TABLE orders RENAME CONSTRAINT orders_pkey TO opk;\nALTER TABLE orders DROP CONSTRAINT opk CASCADE;",
-		cascading("items, orders and t2 locked against reads and writes", "opk on orders"),
-	],
-	/* through a table's move to another schema, whose own lock the map leaves to the replay, and a schema's rename */
-	[
-		"ALTER TABLE orders SET SCHEMA s;\nALTER TABLE s.orders DROP CONSTRAINT o_fk;",
-		"s.orders and users locked against reads and writes",
-	],
-	["ALTER SCHEMA s RENAME TO s2;\nDROP TABLE s2.b;", owning("s2.a and s2.b locked against reads and writes", "s2.b")],
-	/* a key the file adds, and one a CREATE IF NOT EXISTS of a table the history holds leaves */
-	[
-		"ALTER TABLE audit ADD COLUMN u int REFERENCES users (id);\nALTER TABLE audit DROP COLUMN u;",
-		"audit and users locked against reads and writes",
-	],
-	[
-		"CREATE TABLE IF NOT EXISTS orders (id int);\nALTER TABLE orders DROP CONSTRAINT o_fk;",
-		"orders and users locked against reads and writes",
-	],
-	/* keys the file dropped, which a later change no longer reaches */
-	[
-		"ALTER TABLE orders DROP CONSTRAINT o_fk;\nALTER TABLE users ALTER COLUMN n TYPE bigint;",
-		"orders and users locked against reads and writes",
-	],
-	[
-		"DROP TABLE t2;\nTRUNCATE orders CASCADE;",
-		owning("items, orders, t2 and users locked against reads and writes", "t2"),
-	],
-	[
-		"ALTER TABLE orders DROP CONSTRAINT orders_pkey CASCADE;\nALTER TABLE orders ADD PRIMARY KEY (user_id);\nALTER TABLE orders ALTER COLUMN id TYPE bigint;",
-		cascading("items, orders and t2 locked against reads and writes", "orders_pkey on orders"),
-	],
-	/* what a change that drops no key reaches: none */
-	["ALTER TABLE users DROP COLUMN n CASCADE;", cascading("users locked against reads and writes", "users.n")],
-	[
-		"ALTER TABLE users DROP CONSTRAINT nope CASCADE;",
-		cascading("users locked against reads and writes", "nope on users"),
-	],
-	["ALTER TABLE users DROP COLUMN id;", "users locked against reads and writes"],
-	/* a partition under a parent's parent's keys */
-	[
-		"CREATE TABLE ev_mid1 PARTITION OF ev_mid FOR VALUES IN (1);",
-		"ev_mid locked against reads and writes, and users against writes",
-	],
-]
+  // the names Postgres chose: the longer of table and columns cut first to 63 bytes, a character never split, a taken name numbered
+  [
+    `ALTER TABLE ${LONG_TABLE} DROP CONSTRAINT ${"l".repeat(29)}_${"c".repeat(28)}_fkey;`,
+    `${LONG_TABLE} and users locked against reads and writes`,
+  ],
+  [
+    `ALTER TABLE ${WIDE_TABLE} DROP CONSTRAINT ${"ž".repeat(14)}_${"č".repeat(14)}_fkey;`,
+    `users and ${WIDE_TABLE} locked against reads and writes`,
+  ],
+  ["ALTER TABLE t2 DROP CONSTRAINT t2_u_fkey1;", "orders and t2 locked against reads and writes"],
+  // keys an ALTER TABLE added, a primary key a REFERENCES without columns names among them
+  ["ALTER TABLE k ALTER COLUMN id TYPE bigint;", "k and kr locked against reads and writes"],
+  ["ALTER TABLE kr DROP CONSTRAINT kr_k2_fkey;", "k and kr locked against reads and writes"],
+  ["ALTER TABLE kr DROP CONSTRAINT kr_fk;", "k and kr locked against reads and writes"],
+  // a primary key an index makes, named by it unless the constraint is
+  [
+    "ALTER TABLE kq DROP CONSTRAINT kq_k CASCADE;",
+    cascading("kp and kq locked against reads and writes", "kq_k on kq"),
+  ],
+  // a primary key a LIKE copies with the indexes, named as a new one is, and none without them
+  [
+    "ALTER TABLE kc DROP CONSTRAINT kc_pkey CASCADE;",
+    cascading("kc and kcr locked against reads and writes", "kc_pkey on kc"),
+  ],
+  [
+    "ALTER TABLE kn DROP CONSTRAINT kn_own CASCADE;",
+    cascading("kn and knr locked against reads and writes", "kn_own on kn"),
+  ],
+  [
+    "ALTER TABLE kl DROP CONSTRAINT kl_own CASCADE;",
+    cascading("kl and klr locked against reads and writes", "kl_own on kl"),
+  ],
+  // through a rename of the table, its column, its constraint, a column it references
+  [
+    "ALTER TABLE users RENAME TO people;\nTRUNCATE people CASCADE;",
+    `ev, ev_mid, ev_old, items, ${LONG_TABLE}, orders, people, t2 and ${WIDE_TABLE} locked against reads and writes`,
+  ],
+  [
+    "ALTER TABLE orders RENAME COLUMN user_id TO uid;\nALTER TABLE orders DROP COLUMN uid;",
+    "orders and users locked against reads and writes",
+  ],
+  [
+    "ALTER TABLE users RENAME COLUMN id TO uid;\nALTER TABLE users ALTER COLUMN uid TYPE bigint;",
+    `ev, ev_mid, ev_old, ${LONG_TABLE}, orders, t2, users and ${WIDE_TABLE} locked against reads and writes`,
+  ],
+  [
+    "ALTER TABLE orders RENAME CONSTRAINT orders_pkey TO opk;\nALTER TABLE orders DROP CONSTRAINT opk CASCADE;",
+    cascading("items, orders and t2 locked against reads and writes", "opk on orders"),
+  ],
+  // through a table's move to another schema, whose own lock the map leaves to the replay, and a schema's rename
+  [
+    "ALTER TABLE orders SET SCHEMA s;\nALTER TABLE s.orders DROP CONSTRAINT o_fk;",
+    "s.orders and users locked against reads and writes",
+  ],
+  ["ALTER SCHEMA s RENAME TO s2;\nDROP TABLE s2.b;", owning("s2.a and s2.b locked against reads and writes", "s2.b")],
+  // a key the file adds, and one a CREATE IF NOT EXISTS of a table the history holds leaves
+  [
+    "ALTER TABLE audit ADD COLUMN u int REFERENCES users (id);\nALTER TABLE audit DROP COLUMN u;",
+    "audit and users locked against reads and writes",
+  ],
+  [
+    "CREATE TABLE IF NOT EXISTS orders (id int);\nALTER TABLE orders DROP CONSTRAINT o_fk;",
+    "orders and users locked against reads and writes",
+  ],
+  // keys the file dropped, which a later change no longer reaches
+  [
+    "ALTER TABLE orders DROP CONSTRAINT o_fk;\nALTER TABLE users ALTER COLUMN n TYPE bigint;",
+    "orders and users locked against reads and writes",
+  ],
+  [
+    "DROP TABLE t2;\nTRUNCATE orders CASCADE;",
+    owning("items, orders, t2 and users locked against reads and writes", "t2"),
+  ],
+  [
+    "ALTER TABLE orders DROP CONSTRAINT orders_pkey CASCADE;\nALTER TABLE orders ADD PRIMARY KEY (user_id);\nALTER TABLE orders ALTER COLUMN id TYPE bigint;",
+    cascading("items, orders and t2 locked against reads and writes", "orders_pkey on orders"),
+  ],
+  // what a change that drops no key reaches: none
+  ["ALTER TABLE users DROP COLUMN n CASCADE;", cascading("users locked against reads and writes", "users.n")],
+  [
+    "ALTER TABLE users DROP CONSTRAINT nope CASCADE;",
+    cascading("users locked against reads and writes", "nope on users"),
+  ],
+  ["ALTER TABLE users DROP COLUMN id;", "users locked against reads and writes"],
+  // a partition under a parent's parent's keys
+  [
+    "CREATE TABLE ev_mid1 PARTITION OF ev_mid FOR VALUES IN (1);",
+    "ev_mid locked against reads and writes, and users against writes",
+  ],
+];
 
 describe("the foreign keys a history leaves, and what a statement reaches through them (gaps 1–4 of 0005)", () => {
-	it.each(HOLDS)("%s holds %s", (first, held) => {
-		expect(holds(first)).toBe(held)
-	})
+  it.each(HOLDS)("%s holds %s", (first, held) => {
+    expect(holds(first)).toBe(held);
+  });
 
-	it("reaches no key without columns to a table whose primary key the history does not hold", () => {
-		const rated = classifyMigration(`ALTER TABLE made ALTER COLUMN id TYPE bigint;\n${VALIDATE}\n`, {
-			before: extractSchema(
-				"CREATE TABLE refs (m int REFERENCES made);\nCREATE TABLE audit (n int);\nALTER TABLE audit ADD CONSTRAINT pos CHECK (n > 0) NOT VALID;",
-				undefined,
-				"postgres",
-			),
-			dialect: "postgres",
-		})
-		expect(rated.lockWarnings.find((each) => each.startsWith(`${VALIDATE.slice(0, -1)} (`))).toContain(
-			"while this file holds made locked against reads and writes;",
-		)
-	})
+  it("reaches no key without columns to a table whose primary key the history does not hold", () => {
+    const rated = classifyMigration(`ALTER TABLE made ALTER COLUMN id TYPE bigint;\n${VALIDATE}\n`, {
+      before: extractSchema(
+        "CREATE TABLE refs (m int REFERENCES made);\nCREATE TABLE audit (n int);\nALTER TABLE audit ADD CONSTRAINT pos CHECK (n > 0) NOT VALID;",
+        undefined,
+        "postgres",
+      ),
+      dialect: "postgres",
+    });
 
-	it("reaches nothing through a temporary table, which no other session sees", () => {
-		expect(holds("CREATE TEMP TABLE tt (id int);\nALTER TABLE pg_temp.tt DROP COLUMN id;")).toBe("")
-	})
-})
+    expect(rated.lockWarnings.find((each) => each.startsWith(`${VALIDATE.slice(0, -1)} (`))).toContain(
+      "while this file holds made locked against reads and writes;",
+    );
+  });
+
+  it("reaches nothing through a temporary table, which no other session sees", () => {
+    expect(holds("CREATE TEMP TABLE tt (id int);\nALTER TABLE pg_temp.tt DROP COLUMN id;")).toBe("");
+  });
+});
 
 /** The primary key a history leaves on the table its last line names */
 const primary = (sql: string) =>
-	historyFacts(extractSchema(sql, undefined, "postgres"), "public").primaryKeys.get(sql.match(/(\w+)$/)?.[1] ?? "")
+  historyFacts(extractSchema(sql, undefined, "postgres"), "public").primaryKeys.get(sql.match(/(\w+)$/)?.[1] ?? "");
 
-/* PA6 of r23: a primary key shares the name its index takes, numbered past a name taken (Postgres 17: p_pkey1, c_pkey1, t_pkey1) */
+// PA6 of r23: a primary key shares the name its index takes, numbered past a name taken (Postgres 17: p_pkey1, c_pkey1, t_pkey1)
 describe("the name a history gives a primary key", () => {
-	const CHECKED = "CREATE TABLE p (a int NOT NULL CONSTRAINT p_pkey CHECK (a > 0));\nALTER TABLE p ADD PRIMARY KEY (a);"
+  const CHECKED =
+    "CREATE TABLE p (a int NOT NULL CONSTRAINT p_pkey CHECK (a > 0));\nALTER TABLE p ADD PRIMARY KEY (a);";
 
-	it("numbers past a CHECK's, a sequence's and, for a LIKE's copy, a sequence's name, as its index does", () => {
-		expect(primary(`${CHECKED}\n-- p`)?.name).toBe("p_pkey1")
-		expect(primary("CREATE SEQUENCE t_pkey;\nCREATE TABLE t (id int PRIMARY KEY);\n-- t")?.name).toBe("t_pkey1")
-		expect(
-			primary(
-				"CREATE SEQUENCE c_pkey;\nCREATE TABLE k (id int PRIMARY KEY);\nCREATE TABLE c (LIKE k INCLUDING INDEXES);\n-- c",
-			)?.name,
-		).toBe("c_pkey1")
-	})
+  it("numbers past a CHECK's, a sequence's and, for a LIKE's copy, a sequence's name, as its index does", () => {
+    expect(primary(`${CHECKED}\n-- p`)?.name).toBe("p_pkey1");
+    expect(primary("CREATE SEQUENCE t_pkey;\nCREATE TABLE t (id int PRIMARY KEY);\n-- t")?.name).toBe("t_pkey1");
+    expect(
+      primary(
+        "CREATE SEQUENCE c_pkey;\nCREATE TABLE k (id int PRIMARY KEY);\nCREATE TABLE c (LIKE k INCLUDING INDEXES);\n-- c",
+      )?.name,
+    ).toBe("c_pkey1");
+  });
 
-	it("is gone once that name is dropped", () => {
-		expect(primary(`${CHECKED}\nALTER TABLE p DROP CONSTRAINT p_pkey1;\n-- p`)).toBeUndefined()
-	})
+  it("is gone once that name is dropped", () => {
+    expect(primary(`${CHECKED}\nALTER TABLE p DROP CONSTRAINT p_pkey1;\n-- p`)).toBeUndefined();
+  });
 
-	it("keeps its plain name where none is taken (sibling)", () => {
-		expect(primary("CREATE TABLE t (id int PRIMARY KEY);\n-- t")?.name).toBe("t_pkey")
-	})
-})
+  it("keeps its plain name where none is taken (sibling)", () => {
+    expect(primary("CREATE TABLE t (id int PRIMARY KEY);\n-- t")?.name).toBe("t_pkey");
+  });
+});
 
 /** The names of the foreign keys a history leaves */
 const foreignNames = (sql: string) =>
-	historyFacts(extractSchema(sql, undefined, "postgres"), "public").foreignKeys.map((key) => key.name)
+  historyFacts(extractSchema(sql, undefined, "postgres"), "public").foreignKeys.map((key) => key.name);
 
-/* PA14 of r23: Postgres numbers a foreign key's name past every constraint name its schema holds (Postgres 17: c_pid_fkey1) */
+// PA14 of r23: Postgres numbers a foreign key's name past every constraint name its schema holds (Postgres 17: c_pid_fkey1)
 describe("the name a history gives a foreign key", () => {
-	const ADD = "CREATE TABLE p (id int PRIMARY KEY);\n"
-	const FK = "\nALTER TABLE c ADD FOREIGN KEY (pid) REFERENCES p;"
-	const FN = "CREATE FUNCTION f() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RETURN NULL; END$$;\n"
+  const ADD = "CREATE TABLE p (id int PRIMARY KEY);\n";
+  const FK = "\nALTER TABLE c ADD FOREIGN KEY (pid) REFERENCES p;";
+  const FN = "CREATE FUNCTION f() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RETURN NULL; END$$;\n";
 
-	it.each([
-		["a UNIQUE constraint's", "CREATE TABLE c (pid int CONSTRAINT c_pid_fkey UNIQUE);"],
-		["a CHECK's", "CREATE TABLE c (pid int CONSTRAINT c_pid_fkey CHECK (pid > 0));"],
-		["a primary key's", "CREATE TABLE c (pid int CONSTRAINT c_pid_fkey PRIMARY KEY);"],
-		[
-			"another table's CHECK's",
-			"CREATE TABLE o (x int CONSTRAINT c_pid_fkey CHECK (x > 0));\nCREATE TABLE c (pid int);",
-		],
-		[
-			"a domain's constraint's",
-			"CREATE DOMAIN d AS int CONSTRAINT c_pid_fkey CHECK (VALUE > 0);\nCREATE TABLE c (pid int);",
-		],
-		[
-			"a constraint trigger's",
-			`${FN}CREATE TABLE c (pid int);\nCREATE CONSTRAINT TRIGGER c_pid_fkey AFTER INSERT ON c FOR EACH ROW EXECUTE FUNCTION f();`,
-		],
-	])("numbers past %s name", (_, history) => {
-		expect(foreignNames(`${ADD}${history}${FK}`)).toEqual(["c_pid_fkey1"])
-	})
+  it.each([
+    ["a UNIQUE constraint's", "CREATE TABLE c (pid int CONSTRAINT c_pid_fkey UNIQUE);"],
+    ["a CHECK's", "CREATE TABLE c (pid int CONSTRAINT c_pid_fkey CHECK (pid > 0));"],
+    ["a primary key's", "CREATE TABLE c (pid int CONSTRAINT c_pid_fkey PRIMARY KEY);"],
+    [
+      "another table's CHECK's",
+      "CREATE TABLE o (x int CONSTRAINT c_pid_fkey CHECK (x > 0));\nCREATE TABLE c (pid int);",
+    ],
+    [
+      "a domain's constraint's",
+      "CREATE DOMAIN d AS int CONSTRAINT c_pid_fkey CHECK (VALUE > 0);\nCREATE TABLE c (pid int);",
+    ],
+    [
+      "a constraint trigger's",
+      `${FN}CREATE TABLE c (pid int);\nCREATE CONSTRAINT TRIGGER c_pid_fkey AFTER INSERT ON c FOR EACH ROW EXECUTE FUNCTION f();`,
+    ],
+  ])("numbers past %s name", (_, history) => {
+    expect(foreignNames(`${ADD}${history}${FK}`)).toEqual(["c_pid_fkey1"]);
+  });
 
-	it.each([
-		["nothing takes it", "CREATE TABLE c (pid int);"],
-		[
-			"another schema's constraint takes it",
-			"CREATE SCHEMA s;\nCREATE TABLE s.o (x int CONSTRAINT c_pid_fkey CHECK (x > 0));\nCREATE TABLE c (pid int);",
-		],
-	])("keeps its plain name where %s (sibling)", (_, history) => {
-		expect(foreignNames(`${ADD}${history}${FK}`)).toEqual(["c_pid_fkey"])
-	})
-})
+  it.each([
+    ["nothing takes it", "CREATE TABLE c (pid int);"],
+    [
+      "another schema's constraint takes it",
+      "CREATE SCHEMA s;\nCREATE TABLE s.o (x int CONSTRAINT c_pid_fkey CHECK (x > 0));\nCREATE TABLE c (pid int);",
+    ],
+  ])("keeps its plain name where %s (sibling)", (_, history) => {
+    expect(foreignNames(`${ADD}${history}${FK}`)).toEqual(["c_pid_fkey"]);
+  });
+});

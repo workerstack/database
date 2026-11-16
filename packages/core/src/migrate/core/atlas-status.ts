@@ -1,36 +1,36 @@
+import { explainAtlasFailure } from "./atlas-failure.ts";
 /**
  * Atlas's migrate commands on a Postgres target, run on database's snapshot of the directory: each
  * through an Atlas config that keeps the URL in the environment, its output scrubbed, and its
  * status read through a template that never selects the URL.
  */
-import { appliedAs, type AtlasStatus } from "./atlas-history.ts"
-import { explainAtlasFailure } from "./atlas-failure.ts"
-import { type PgTarget, withAtlasEnv } from "./atlas-target.ts"
-import { scrubAtlasOutput } from "./atlas-secrets.ts"
-import { type MigrateRun, type RunResult, run } from "./process.ts"
+import { appliedAs, type AtlasStatus } from "./atlas-history.ts";
+import { scrubAtlasOutput } from "./atlas-secrets.ts";
+import { type PgTarget, withAtlasEnv } from "./atlas-target.ts";
+import { type MigrateRun, type RunResult, run } from "./process.ts";
 
 const STATUS_FORMAT =
-	'{"status":{{ json .Status }},"current":{{ json .Current }},"available":{{ json .Available }},"pending":{{ json .Pending }},' +
-	'"applied":[{{ range $i, $r := .Applied }}{{ if $i }},{{ end }}{"version":{{ json $r.Version }},"type":{{ json $r.Type }},' +
-	'"description":{{ json $r.Description }},"applied":{{ json $r.Applied }},"total":{{ json $r.Total }},"error":{{ json $r.Error }},"errorStmt":{{ json $r.ErrorStmt }},' +
-	'"hash":{{ json $r.Hash }}}{{ end }}],"error":{{ json .Error }}}'
+  '{"status":{{ json .Status }},"current":{{ json .Current }},"available":{{ json .Available }},"pending":{{ json .Pending }},' +
+  '"applied":[{{ range $i, $r := .Applied }}{{ if $i }},{{ end }}{"version":{{ json $r.Version }},"type":{{ json $r.Type }},' +
+  '"description":{{ json $r.Description }},"applied":{{ json $r.Applied }},"total":{{ json $r.Total }},"error":{{ json $r.Error }},"errorStmt":{{ json $r.ErrorStmt }},' +
+  '"hash":{{ json $r.Hash }}}{{ end }}],"error":{{ json .Error }}}';
 
 /** What every Atlas command on a Postgres database needs: the directory, the target, and where to report */
 type AtlasCommand = {
-	dir: string
-	/** The process runner; tests pass a fake. */
-	exec?: MigrateRun | undefined
-	print(line: string): void
-	/** a history other than the target's own, by its schema: 0.12's shared one, or another schema's own */
-	revisions?: string | undefined
-	target: PgTarget
-}
+  dir: string;
+  /** The process runner; tests pass a fake. */
+  exec?: MigrateRun | undefined;
+  print(line: string): void;
+  /** a history other than the target's own, by its schema: 0.12's shared one, or another schema's own */
+  revisions?: string | undefined;
+  target: PgTarget;
+};
 
 /**
  * What an Atlas call returned, as Atlas wrote it, for database's decisions; `said`, its stderr as database
  * prints it (explained, scrubbed, then trimmed to Atlas's words); `scrub`, for any other text database prints of it
  */
-type Ran = RunResult & { said: string; scrub(text: string): string }
+type Ran = RunResult & { said: string; scrub(text: string): string };
 
 /**
  * `atlas migrate <args>` on the snapshot `copy` against the target. Its stdout is JSON database parses
@@ -38,25 +38,26 @@ type Ran = RunResult & { said: string; scrub(text: string): string }
  * a word Atlas prints would change what database reads; a caller scrubs a value only where it prints it.
  */
 function atlas(options: AtlasCommand, copy: string, args: readonly string[]): Promise<Ran> {
-	return withAtlasEnv(options.target, { revisions: options.revisions, url: true }, async (env) => {
-		const ran = await (options.exec ?? run)("atlas", ["migrate", ...args, "--dir", `file://${copy}`, ...env.args], {
-			env: env.env,
-		})
-		return { ...ran, said: explainAtlasFailure(ran.stderr, env.scrub).trim(), scrub: env.scrub }
-	})
+  return withAtlasEnv(options.target, { revisions: options.revisions, url: true }, async (env) => {
+    const ran = await (options.exec ?? run)("atlas", ["migrate", ...args, "--dir", `file://${copy}`, ...env.args], {
+      env: env.env,
+    });
+
+    return { ...ran, said: explainAtlasFailure(ran.stderr, env.scrub).trim(), scrub: env.scrub };
+  });
 }
 
 /** `text` parsed as `command`'s JSON, or an error that does not echo what Atlas printed */
 function json<T>(text: string, command: string): T {
-	try {
-		return JSON.parse(text) as T
-	} catch {
-		// reason: unreadable output may hold anything Atlas printed, so it is not repeated
-		throw new Error(`unexpected output from atlas migrate ${command}`)
-	}
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    // reason: unreadable output may hold anything Atlas printed, so it is not repeated
+    throw new Error(`unexpected output from atlas migrate ${command}`);
+  }
 }
 
-const NO_HISTORY: AtlasStatus = { applied: [], available: [], current: "", error: "", pending: [], status: "PENDING" }
+const NO_HISTORY: AtlasStatus = { applied: [], available: [], current: "", error: "", pending: [], status: "PENDING" };
 
 /**
  * Atlas's status for the snapshot `copy`. With `notClean`, a database that has objects but no
@@ -64,29 +65,33 @@ const NO_HISTORY: AtlasStatus = { applied: [], available: [], current: "", error
  * empty history table, and that database is the one baseline and adoption are for.
  */
 async function atlasStatus(
-	options: AtlasCommand,
-	copy: string,
-	{ notClean = false }: { notClean?: boolean | undefined } = {},
+  options: AtlasCommand,
+  copy: string,
+  { notClean = false }: { notClean?: boolean | undefined } = {},
 ): Promise<AtlasStatus> {
-	const ran = await atlas(options, copy, ["status", "--format", STATUS_FORMAT])
-	if (ran.code !== 0 && notClean && /connected database is not clean/.test(ran.stderr)) return NO_HISTORY
-	if (ran.code !== 0)
-		throw new Error(`atlas migrate status: ${ran.said || `exit ${ran.code}: ${ran.scrub(ran.stdout).trim()}`}`)
-	/* as Atlas wrote it: what database prints of it is scrubbed where it prints it (checkHistory's `scrub`) */
-	return byName(json<AtlasStatus>(ran.stdout, "status"))
+  const ran = await atlas(options, copy, ["status", "--format", STATUS_FORMAT]);
+
+  if (ran.code !== 0 && notClean && /connected database is not clean/.test(ran.stderr)) return NO_HISTORY;
+
+  if (ran.code !== 0)
+    throw new Error(`atlas migrate status: ${ran.said || `exit ${ran.code}: ${ran.scrub(ran.stdout).trim()}`}`);
+
+  // as Atlas wrote it: what database prints of it is scrubbed where it prints it (checkHistory's `scrub`)
+  return byName(json<AtlasStatus>(ran.stdout, "status"));
 }
 
 /** `status` with its applied revisions in file-name order, as Atlas orders files; Atlas lists them in the database's collation */
 function byName(status: AtlasStatus): AtlasStatus {
-	const named = status.applied.map((revision) => ({ name: appliedAs(revision), revision }))
-	named.sort((a, b) => Number(a.name > b.name) - Number(a.name < b.name))
-	return { ...status, applied: named.map(({ revision }) => revision) }
+  const named = status.applied.map((revision) => ({ name: appliedAs(revision), revision }));
+  named.sort((a, b) => Number(a.name > b.name) - Number(a.name < b.name));
+
+  return { ...status, applied: named.map(({ revision }) => revision) };
 }
 
 /** The scrubber for text database prints of `target`'s Atlas calls, outside one */
 const scrubbing =
-	(target: PgTarget) =>
-	(text: string): string =>
-		scrubAtlasOutput(text, [target.url, target.devUrl])
+  (target: PgTarget) =>
+  (text: string): string =>
+    scrubAtlasOutput(text, [target.url, target.devUrl]);
 
-export { atlas, type AtlasCommand, atlasStatus, json, NO_HISTORY, type Ran, scrubbing }
+export { atlas, type AtlasCommand, atlasStatus, json, NO_HISTORY, type Ran, scrubbing };

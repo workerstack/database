@@ -1,31 +1,32 @@
 /**
  * SQL parsing utilities for migrations
  */
-import { createHash } from "node:crypto"
-import { strayDirective } from "./atlas-header.ts"
-import { classifyMigration, type ClassifyOptions, dropsOf, extractDropStatements, readings } from "./classify.ts"
-import { takenOptions } from "./classify-options.ts"
-import { classificationOf } from "./classify-verdict.ts"
-import type { Replayed } from "./classify-file.ts"
-import type { Placing } from "./pg-storage-types.ts"
-import { type FileRead, fileRead } from "./pg-split.ts"
-import { extractSchema, schemaOfRead } from "./schema.ts"
-import { hashedSql, splitSqlStatements } from "./sql-scan.ts"
-import type { ParsedMigration } from "../migration-types.ts"
+import { createHash } from "node:crypto";
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   SQL STATEMENT SPLITTING — see sql-scan.ts
-   ═══════════════════════════════════════════════════════════════════════════ */
+import type { ParsedMigration } from "../migration-types.ts";
+import { strayDirective } from "./atlas-header.ts";
+import type { Replayed } from "./classify-file.ts";
+import { takenOptions } from "./classify-options.ts";
+import { classificationOf } from "./classify-verdict.ts";
+import { classifyMigration, type ClassifyOptions, dropsOf, extractDropStatements, readings } from "./classify.ts";
+import { type FileRead, fileRead } from "./pg-split.ts";
+import type { Placing } from "./pg-storage-types.ts";
+import { extractSchema, schemaOfRead } from "./schema.ts";
+import { hashedSql, splitSqlStatements } from "./sql-scan.ts";
 
-export { splitSqlStatements }
+// ═══════════════════════════════════════════════════════════════════════════
+// SQL STATEMENT SPLITTING — see sql-scan.ts
+// ═══════════════════════════════════════════════════════════════════════════
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   MIGRATION HASH
-   ═══════════════════════════════════════════════════════════════════════════ */
+export { splitSqlStatements };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MIGRATION HASH
+// ═══════════════════════════════════════════════════════════════════════════
 
 /** The hash a migration is recorded under: its SQL with comments and layout normalized away */
 export function generateMigrationHash(sql: string): string {
-	return createHash("sha256").update(hashedSql(sql)).digest("hex")
+  return createHash("sha256").update(hashedSql(sql)).digest("hex");
 }
 
 /**
@@ -34,12 +35,13 @@ export function generateMigrationHash(sql: string): string {
  * a migration recorded under this hash is still applied.
  */
 export function legacyMigrationHash(sql: string): string {
-	const normalized = sql
-		.replace(/--[^\n]*\n/g, "\n")
-		.replace(/\/\*[\s\S]*?\*\//g, "")
-		.replace(/\s+/g, " ")
-		.trim()
-	return createHash("sha256").update(normalized).digest("hex")
+  const normalized = sql
+    .replaceAll(/--[^\n]*\n/g, "\n")
+    .replaceAll(/\/\*[\s\S]*?\*\//g, "")
+    .replaceAll(/\s+/g, " ")
+    .trim();
+
+  return createHash("sha256").update(normalized).digest("hex");
 }
 
 /**
@@ -47,23 +49,23 @@ export function legacyMigrationHash(sql: string): string {
  * reads as part of a name: an edit from `a b` to `a\u00a0b` kept it
  */
 export function foldedMigrationHash(sql: string): string {
-	return createHash("sha256").update(hashedSql(sql, true)).digest("hex")
+  return createHash("sha256").update(hashedSql(sql, true)).digest("hex");
 }
 
 /** When v0.5.0, which changed the hash, was tagged (2026-10-18T00:56:29Z, ms): a row recorded before it may hold the legacy hash */
-export const V0_5_0: number = 1792284989000
+export const V0_5_0: number = 1792284989000;
 
 /**
  * The value database from 0.21 writes in a history row's `hash_v`, beside the hash it records there: the
  * row holds the exact hash. A row without it was written by database 0.20 or earlier, or by drizzle
  */
-export const HASH_VERSION = 2
+export const HASH_VERSION = 2;
 
 /**
  * A hash a file's text may be recorded under: on a row recorded before `until`, and on a row
  * `hash_v` marks only when `marked`
  */
-export type AcceptedHash = { hash: string; marked: boolean; until: number }
+export type AcceptedHash = { hash: string; marked: boolean; until: number };
 
 /**
  * Every hash `sql` may be recorded under, current first: the current one on any row; the folded one
@@ -72,53 +74,59 @@ export type AcceptedHash = { hash: string; marked: boolean; until: number }
  * before V0_5_0
  */
 export function migrationHashes(sql: string): AcceptedHash[] {
-	const accepted: AcceptedHash[] = []
-	for (const [hash, marked, until] of [
-		[generateMigrationHash(sql), true, Infinity],
-		[foldedMigrationHash(sql), false, Infinity],
-		[legacyMigrationHash(sql), false, V0_5_0],
-	] as const)
-		if (!accepted.some((each) => each.hash === hash)) accepted.push({ hash, marked, until })
-	return accepted
+  const accepted: AcceptedHash[] = [];
+
+  for (const [hash, marked, until] of [
+    [generateMigrationHash(sql), true, Infinity],
+    [foldedMigrationHash(sql), false, Infinity],
+    [legacyMigrationHash(sql), false, V0_5_0],
+  ] as const)
+    if (!accepted.some((each) => each.hash === hash)) accepted.push({ hash, marked, until });
+
+  return accepted;
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   SCHEMA EXTRACTION — see schema.ts
-   ═══════════════════════════════════════════════════════════════════════════ */
+// ═══════════════════════════════════════════════════════════════════════════
+// SCHEMA EXTRACTION — see schema.ts
+// ═══════════════════════════════════════════════════════════════════════════
 
-export { extractSchema }
+export { extractSchema };
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   DROP STATEMENT EXTRACTION AND CLASSIFICATION — see classify.ts
-   ═══════════════════════════════════════════════════════════════════════════ */
+// ═══════════════════════════════════════════════════════════════════════════
+// DROP STATEMENT EXTRACTION AND CLASSIFICATION — see classify.ts
+// ═══════════════════════════════════════════════════════════════════════════
 
-export { classifyMigration, extractDropStatements }
+export { classifyMigration, extractDropStatements };
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   PARSE MIGRATION
-   ═══════════════════════════════════════════════════════════════════════════ */
+// ═══════════════════════════════════════════════════════════════════════════
+// PARSE MIGRATION
+// ═══════════════════════════════════════════════════════════════════════════
 
 /**
  * A migration file, read as `options.dialect`, classified against `options.before`, the schema the
  * earlier files leave; its statements are applied as written, as wrangler and Atlas apply them
  */
 export function parseMigration(sql: string, filename: string, options: ClassifyOptions = {}): ParsedMigration {
-	const taken = takenOptions("parseMigration", options)
-	return parseRead({ ...fileRead(sql, taken.dialect ?? "sqlite"), filename }, taken)
+  const taken = takenOptions("parseMigration", options);
+
+  return parseRead({ ...fileRead(sql, taken.dialect ?? "sqlite"), filename }, taken);
 }
 
 /** Refuses `sql`, the file `filename`, when Atlas reads a leading `atlas:` line of it as a comment, or the database a BOM */
 function refuseMisread(sql: string, filename: string): void {
-	/* Atlas strips no byte order mark, and neither Postgres nor SQLite reads it as space */
-	if (sql.startsWith("\uFEFF"))
-		throw new Error(
-			`${filename}: the file starts with a UTF-8 byte order mark (U+FEFF), which Atlas sends as the first character of its first statement, where the database reads it as a syntax error; save the file as UTF-8 without a BOM`,
-		)
-	const stray = strayDirective(sql)
-	if (stray === undefined) return
-	throw new Error(
-		`${filename} line ${stray.line}: Atlas reads ${JSON.stringify(stray.text)} as a comment, since no blank line closes the comments the file opens with, and runs the file in a transaction; add a blank line after the line, or remove it`,
-	)
+  // Atlas strips no byte order mark, and neither Postgres nor SQLite reads it as space
+  if (sql.startsWith("\uFEFF")) {
+    throw new Error(
+      `${filename}: the file starts with a UTF-8 byte order mark (U+FEFF), which Atlas sends as the first character of its first statement, where the database reads it as a syntax error; save the file as UTF-8 without a BOM`,
+    );
+  }
+
+  const stray = strayDirective(sql);
+
+  if (stray === undefined) return;
+  throw new Error(
+    `${filename} line ${stray.line}: Atlas reads ${JSON.stringify(stray.text)} as a comment, since no blank line closes the comments the file opens with, and runs the file in a transaction; add a blank line after the line, or remove it`,
+  );
 }
 
 /**
@@ -127,24 +135,26 @@ function refuseMisread(sql: string, filename: string): void {
  * `placing` says its relations are
  */
 export function parseRead(
-	file: FileRead & { filename: string },
-	{ before, kind, schema }: Omit<ClassifyOptions, "dialect">,
-	{ placing, replayed }: { placing?: Placing | undefined; replayed?: Replayed | undefined } = {},
+  file: FileRead & { filename: string },
+  { before, kind, schema }: Omit<ClassifyOptions, "dialect">,
+  { placing, replayed }: { placing?: Placing | undefined; replayed?: Replayed | undefined } = {},
 ): ParsedMigration {
-	const { dialect, filename, sql } = file
-	refuseMisread(sql, filename)
-	const reads = readings(
-		sql,
-		{ before, dialect, schema },
-		{ placing, read: dialect === "postgres" ? file.read : undefined, replayed },
-	)
-	return {
-		classification: classificationOf(reads, sql, { kind }),
-		drops: dropsOf(reads),
-		expected: schemaOfRead(file, schema),
-		filename,
-		hash: generateMigrationHash(sql),
-		sql,
-		statements: reads.map(({ stmt }) => stmt),
-	}
+  const { dialect, filename, sql } = file;
+  refuseMisread(sql, filename);
+
+  const reads = readings(
+    sql,
+    { before, dialect, schema },
+    { placing, read: dialect === "postgres" ? file.read : undefined, replayed },
+  );
+
+  return {
+    classification: classificationOf(reads, sql, { kind }),
+    drops: dropsOf(reads),
+    expected: schemaOfRead(file, schema),
+    filename,
+    hash: generateMigrationHash(sql),
+    sql,
+    statements: reads.map(({ stmt }) => stmt),
+  };
 }

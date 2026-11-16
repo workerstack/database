@@ -1,69 +1,76 @@
-import { describe, expect, it } from "vitest"
-import plugin from "./index.js"
-import { oxlintReports, reportsOf } from "./rule-harness.ts"
+import { describe, expect, it } from "vitest";
 
-const rule = plugin.rules["no-review-label"]
+import plugin from "./index.js";
+import { oxlintReports, reportsOf } from "./rule-harness.ts";
+
+const rule = plugin.rules["no-review-label"];
+
 const COMMENT = (label: string) =>
-	`a shipped comment cites the review label "${label}"; say the reason, and keep the label in the commit`
+  `a shipped comment cites the review label "${label}"; say the reason, and keep the label in the commit`;
+
 const STRING = (label: string) =>
-	`a shipped string cites the review label "${label}", which generated code or a message would carry`
+  `a shipped string cites the review label "${label}", which generated code or a message would carry`;
 
 describe("database/no-review-label", () => {
-	it("rejects a review label in a src comment, wrapped or bare", () => {
-		const fixture = {
-			"packages/core/src/a.ts": "/* the cap holds (KC2 of r22b) */\nexport const a = 1\n",
-			"packages/core/src/b.ts": "// QL2 of area B round 3: the order\nexport const b = 1\n",
-			"packages/core/src/c.ts": "/**\n * kept (KT7 of\n * r22b)\n */\nexport const c = 1\n",
-			"packages/core/src/d.mjs": "// refused (U22)\nexport const d = 1\n",
-			"packages/core/src/e.ts": "/* AB4-7 left it */\nexport const e = 1\n",
-		}
-		expect(reportsOf(rule, fixture)).toEqual(
-			[
-				["a.ts", "KC2 of r22b"],
-				["b.ts", "QL2 of area B round 3"],
-				["c.ts", "KT7 of r22b"],
-				["d.mjs", "U22"],
-				["e.ts", "AB4-7"],
-			].map(([name, label]) => ({ file: `packages/core/src/${name}`, message: COMMENT(label!) })),
-		)
-	})
+  it("rejects a review label in a src comment, wrapped or bare", () => {
+    const fixture = {
+      "packages/core/src/a.ts": "/* the cap holds (KC2 of r22b) */\nexport const a = 1\n",
+      "packages/core/src/b.ts": "// QL2 of area B round 3: the order\nexport const b = 1\n",
+      "packages/core/src/c.ts": "/**\n * kept (KT7 of\n * r22b)\n */\nexport const c = 1\n",
+      "packages/core/src/d.mjs": "// refused (U22)\nexport const d = 1\n",
+      "packages/core/src/e.ts": "/* AB4-7 left it */\nexport const e = 1\n",
+    };
 
-	it("rejects a review label in a src string or template, the JSDoc codegen emits", () => {
-		const fixture = {
-			"packages/core/src/a.ts": 'export const a = ["/** A cidr (F50, AA3) */"]\n',
-			"packages/core/src/b.ts": "export const b = (x: string) => `/** ${x} (C5 of r19) */`\n",
-		}
-		expect(reportsOf(rule, fixture)).toEqual([
-			{ file: "packages/core/src/a.ts", message: STRING("F50") },
-			{ file: "packages/core/src/b.ts", message: STRING("C5 of r19") },
-		])
-	})
+    expect(reportsOf(rule, fixture)).toEqual(
+      [
+        ["a.ts", "KC2 of r22b"],
+        ["b.ts", "QL2 of area B round 3"],
+        ["c.ts", "KT7 of r22b"],
+        ["d.mjs", "U22"],
+        ["e.ts", "AB4-7"],
+      ].map(([name, label]) => ({ file: `packages/core/src/${name}`, message: COMMENT(label!) })),
+    );
+  });
 
-	it("rejects a review label in a tagged template that has no cooked value, by its raw text", () => {
-		/* an invalid escape leaves a tagged template's cooked value null, and String.raw emits the raw text */
-		const fixture = { "packages/core/src/a.ts": "export const a = String.raw`\\u (KC2 of r22b)`\n" }
-		expect(reportsOf(rule, fixture)).toEqual([{ file: "packages/core/src/a.ts", message: STRING("KC2 of r22b") }])
-	})
+  it("rejects a review label in a src string or template, the JSDoc codegen emits", () => {
+    const fixture = {
+      "packages/core/src/a.ts": 'export const a = ["/** A cidr (F50, AA3) */"]\n',
+      "packages/core/src/b.ts": "export const b = (x: string) => `/** ${x} (C5 of r19) */`\n",
+    };
 
-	it("leaves real names, doc sections, tests, fixtures and files outside src alone", () => {
-		const fixture = {
-			"packages/core/src/a.ts":
-				"/* D1, FTS5, RE2, SHA256, ES2022, INT8 (P0001); see meta-contract §8.2 */\nexport const a = 'UTF8'\n",
-			"packages/core/src/zones.ts": "// the zone GMT0\nexport const zones = ['Etc/GMT0', `GMT0 UTC`]\n",
-			"packages/core/src/a.test.ts": "/* KC2 of r22b */\nexport const t = '(F50)'\n",
-			"packages/core/tests/b.ts": "/* KC2 of r22b */\nexport const b = 1\n",
-			"packages/core/src/cli/__fixtures__/c.ts": "/* KC2 of r22b */\nexport const c = 1\n",
-		}
-		expect(reportsOf(rule, fixture)).toEqual([])
-	})
+    expect(reportsOf(rule, fixture)).toEqual([
+      { file: "packages/core/src/a.ts", message: STRING("F50") },
+      { file: "packages/core/src/b.ts", message: STRING("C5 of r19") },
+    ]);
+  });
 
-	it("fails oxlint through the database plugin entry", () => {
-		const fixture = {
-			"packages/core/src/a.ts": "/* the cap (KC2 of r22b) */\nexport const a = 1\n",
-			"packages/core/src/b.ts": "export const b = 1\n",
-		}
-		expect(oxlintReports("no-review-label", fixture)).toEqual([
-			{ file: "packages/core/src/a.ts", message: COMMENT("KC2 of r22b") },
-		])
-	})
-})
+  it("rejects a review label in a tagged template that has no cooked value, by its raw text", () => {
+    // an invalid escape leaves a tagged template's cooked value null, and String.raw emits the raw text
+    const fixture = { "packages/core/src/a.ts": "export const a = String.raw`\\u (KC2 of r22b)`\n" };
+    expect(reportsOf(rule, fixture)).toEqual([{ file: "packages/core/src/a.ts", message: STRING("KC2 of r22b") }]);
+  });
+
+  it("leaves real names, doc sections, tests, fixtures and files outside src alone", () => {
+    const fixture = {
+      "packages/core/src/a.test.ts": "/* KC2 of r22b */\nexport const t = '(F50)'\n",
+      "packages/core/src/a.ts":
+        "/* D1, FTS5, RE2, SHA256, ES2022, INT8 (P0001); see meta-contract §8.2 */\nexport const a = 'UTF8'\n",
+      "packages/core/src/cli/__fixtures__/c.ts": "/* KC2 of r22b */\nexport const c = 1\n",
+      "packages/core/src/zones.ts": "// the zone GMT0\nexport const zones = ['Etc/GMT0', `GMT0 UTC`]\n",
+      "packages/core/tests/b.ts": "/* KC2 of r22b */\nexport const b = 1\n",
+    };
+
+    expect(reportsOf(rule, fixture)).toEqual([]);
+  });
+
+  it("fails oxlint through the database plugin entry", () => {
+    const fixture = {
+      "packages/core/src/a.ts": "/* the cap (KC2 of r22b) */\nexport const a = 1\n",
+      "packages/core/src/b.ts": "export const b = 1\n",
+    };
+
+    expect(oxlintReports("no-review-label", fixture)).toEqual([
+      { file: "packages/core/src/a.ts", message: COMMENT("KC2 of r22b") },
+    ]);
+  });
+});

@@ -4,7 +4,7 @@
 
 // lookup-table: the 183 two-letter language codes, one line per first letter, read by isIso639Alpha2
 const CODES: ReadonlySet<string> = /* @__PURE__ */ new Set(
-	/* @__PURE__ */ `aa ab ae af ak am an ar as av ay az
+  /* @__PURE__ */ `aa ab ae af ak am an ar as av ay az
 ba be bg bi bm bn bo br bs
 ca ce ch co cr cs cu cv cy
 da de dv dz
@@ -30,12 +30,12 @@ wa wo
 xh
 yi yo
 za zh zu`.split(/\s/u),
-)
+);
 
 /**
  * Whether `value` is an ISO 639-1 two-letter language code, exactly as written: lowercase, such as hr or en. The
  * codes are those of Debian iso-codes v4.20.1. Any string is taken; this never throws.
  */
 export function isIso639Alpha2(value: string): boolean {
-	return CODES.has(value)
+  return CODES.has(value);
 }

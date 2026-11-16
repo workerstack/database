@@ -3,59 +3,62 @@
  *
  * Generates TypeScript types using Drizzle's $inferSelect and $inferInsert
  */
-import path from "node:path"
-import { snakeToPascal } from "../utils/case.ts"
-import { writeGenFile } from "../utils/fs.ts"
-import type { GeneratorContext } from "./context-types.ts"
-import { specifierFor } from "../utils/paths.ts"
+import path from "node:path";
+
+import { snakeToPascal } from "../utils/case.ts";
+import { writeGenFile } from "../utils/fs.ts";
+import { specifierFor } from "../utils/paths.ts";
+import type { GeneratorContext } from "./context-types.ts";
 
 /** Where the rows generator writes each table's select and insert row types */
 export type RowsConfig = {
-	/** the file written, relative to the codegen working directory */
-	output: string
-}
+  /** the file written, relative to the codegen working directory */
+  output: string;
+};
 
 /**
  * Generate row types from analyzed tables
  */
 export function generateRows(ctx: GeneratorContext, config: RowsConfig): void {
-	const { tables } = ctx.analysis
-	const { cwd, tablesPath } = ctx
-	const outputPath = path.resolve(cwd, config.output)
+  const { tables } = ctx.analysis;
+  const { cwd, tablesPath } = ctx;
+  const outputPath = path.resolve(cwd, config.output);
 
-	if (tables.length === 0) {
-		ctx.warn("rows: no tables found — skipped")
-		return
-	}
+  if (tables.length === 0) {
+    ctx.warn("rows: no tables found — skipped");
 
-	const outputLines: string[] = []
+    return;
+  }
 
-	/* Generate import statement */
-	const outputDir = path.dirname(outputPath)
-	const relativePath = specifierFor(outputDir, tablesPath, ctx.importStyle)
+  const outputLines: string[] = [];
 
-	outputLines.push("import type {")
-	for (const table of tables) {
-		outputLines.push(`\t${table.varName},`)
-	}
-	outputLines.push(`} from "${relativePath}"`)
-	outputLines.push("")
+  // Generate import statement
+  const outputDir = path.dirname(outputPath);
+  const relativePath = specifierFor(outputDir, tablesPath, ctx.importStyle);
 
-	/* Generate row types - both Select and Insert */
-	for (const table of tables) {
-		const pascalName = snakeToPascal(table.varName)
-		outputLines.push(`export type ${pascalName}RowSelect = typeof ${table.varName}.$inferSelect`)
-		outputLines.push(`export type ${pascalName}RowInsert = typeof ${table.varName}.$inferInsert`)
-	}
-	outputLines.push("")
+  outputLines.push("import type {");
 
-	/* Generate table name union type */
-	const tableNameUnion = tables.map((t) => `"${t.varName}"`).join(" | ")
-	outputLines.push(`export type RowTableName = ${tableNameUnion}`)
-	outputLines.push("")
+  for (const table of tables) outputLines.push(`\t${table.varName},`);
 
-	writeGenFile(outputPath, outputLines.join("\n"), { generator: "database", staged: ctx.staged })
+  outputLines.push(`} from "${relativePath}"`);
+  outputLines.push("");
 
-	ctx.log(`Generated rows at: ${outputPath}`)
-	ctx.log(`Tables: ${tables.length}`)
+  // Generate row types - both Select and Insert
+  for (const table of tables) {
+    const pascalName = snakeToPascal(table.varName);
+    outputLines.push(`export type ${pascalName}RowSelect = typeof ${table.varName}.$inferSelect`);
+    outputLines.push(`export type ${pascalName}RowInsert = typeof ${table.varName}.$inferInsert`);
+  }
+
+  outputLines.push("");
+
+  // Generate table name union type
+  const tableNameUnion = tables.map((t) => `"${t.varName}"`).join(" | ");
+  outputLines.push(`export type RowTableName = ${tableNameUnion}`);
+  outputLines.push("");
+
+  writeGenFile(outputPath, outputLines.join("\n"), { generator: "database", staged: ctx.staged });
+
+  ctx.log(`Generated rows at: ${outputPath}`);
+  ctx.log(`Tables: ${tables.length}`);
 }

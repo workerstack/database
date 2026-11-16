@@ -1,252 +1,289 @@
+import { getTableColumns, sql } from "drizzle-orm";
+import type { DrizzleD1Database } from "drizzle-orm/d1";
+import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 /**
  * What a consumer's compiler sees from the list and retrieve query schemas. Checked by
  * `bun run typecheck`; nothing here runs.
  */
-import { expectTypeOf } from "vitest"
-import * as z from "zod"
-import { createListQuerySchema, createRetrieveQuerySchema } from "../../src/query/schema.ts"
-import type { ListQueryOutput } from "../../src/query/schema-types.ts"
-import type { FilterAST, ParsedFields, SortField } from "../../src/query/types.ts"
-import type { ListQueryInput, ListQuerySchema, RetrieveQuerySchema } from "../../src/query/index.ts"
+import { expectTypeOf } from "vitest";
+import * as z from "zod";
+
+import { SEALED } from "../../src/query/__fixtures__/cursor-secret.ts";
+import { queryHelpers } from "../../src/query/drizzle.ts";
+import type { ListQueryInput, ListQuerySchema, RetrieveQuerySchema } from "../../src/query/index.ts";
+import type { ListRow } from "../../src/query/index.ts";
+import type { paginateMerged } from "../../src/query/merged.ts";
+import type { ListQueryOutput } from "../../src/query/schema-types.ts";
+import { createListQuerySchema, createRetrieveQuerySchema } from "../../src/query/schema.ts";
 import {
-	applyListQuery,
-	buildDerivedListQuery,
-	buildListQuery,
-	type BuildDerivedListQueryOpts,
-	type ListExtras,
-} from "../../src/query/sqlite/build-list-query.ts"
-import { keysetSQL, type KeysetPosition } from "../../src/query/sqlite/index.ts"
-import { queryHelpers } from "../../src/query/drizzle.ts"
-import { paginateMerged } from "../../src/query/merged.ts"
-import type { ListRow } from "../../src/query/index.ts"
-import { getTableColumns, sql } from "drizzle-orm"
-import type { DrizzleD1Database } from "drizzle-orm/d1"
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core"
-import { SEALED } from "../../src/query/__fixtures__/cursor-secret.ts"
+  applyListQuery,
+  buildDerivedListQuery,
+  buildListQuery,
+  type BuildDerivedListQueryOpts,
+  type ListExtras,
+} from "../../src/query/sqlite/build-list-query.ts";
+import { keysetSQL, type KeysetPosition } from "../../src/query/sqlite/index.ts";
+import type { FilterAST, ParsedFields, SortField } from "../../src/query/types.ts";
 
 const listSchema = createListQuerySchema({
-	extend: { archived: z.enum(["yes", "no"]).optional() },
-	filter: { status: "enum" },
-	sort: ["created_at", "title"],
-})
-type ListOutput = z.output<typeof listSchema>
+  extend: { archived: z.enum(["yes", "no"]).optional() },
+  filter: { status: "enum" },
+  sort: ["created_at", "title"],
+});
 
-/* the parsed output carries the sort fields as a union, the extension typed by its schema */
-expectTypeOf<ListOutput["parsedSort"]>().toEqualTypeOf<Array<SortField<"created_at" | "title">>>()
-expectTypeOf<ListOutput["archived"]>().toEqualTypeOf<"yes" | "no" | undefined>()
-expectTypeOf<ListOutput["filterAst"]>().toEqualTypeOf<FilterAST | null>()
-expectTypeOf<ListOutput["parsedFields"]>().toEqualTypeOf<ParsedFields | null>()
-expectTypeOf<ListOutput["limit"]>().toEqualTypeOf<number>()
-expectTypeOf<ListOutput["cursor"]>().toEqualTypeOf<string | undefined>()
+type ListOutput = z.output<typeof listSchema>;
 
-/* the request view is what a client may send */
-expectTypeOf<z.input<typeof listSchema>>().toHaveProperty("order")
-expectTypeOf<z.input<typeof listSchema>>().toHaveProperty("cursor")
+// the parsed output carries the sort fields as a union, the extension typed by its schema
+expectTypeOf<ListOutput["parsedSort"]>().toEqualTypeOf<Array<SortField<"created_at" | "title">>>();
+
+expectTypeOf<ListOutput["archived"]>().toEqualTypeOf<"yes" | "no" | undefined>();
+
+expectTypeOf<ListOutput["filterAst"]>().toEqualTypeOf<FilterAST | null>();
+
+expectTypeOf<ListOutput["parsedFields"]>().toEqualTypeOf<ParsedFields | null>();
+
+expectTypeOf<ListOutput["limit"]>().toEqualTypeOf<number>();
+
+expectTypeOf<ListOutput["cursor"]>().toEqualTypeOf<string | undefined>();
+
+// the request view is what a client may send
+expectTypeOf<z.input<typeof listSchema>>().toHaveProperty("order");
+
+expectTypeOf<z.input<typeof listSchema>>().toHaveProperty("cursor");
 
 const retrieveSchema = createRetrieveQuerySchema({
-	extend: { expand: z.string().optional() },
-	fields: { scalars: ["id"] },
-})
-expectTypeOf<z.output<typeof retrieveSchema>["expand"]>().toEqualTypeOf<string | undefined>()
-expectTypeOf<z.output<typeof retrieveSchema>["parsedFields"]>().toEqualTypeOf<ParsedFields | null>()
+  extend: { expand: z.string().optional() },
+  fields: { scalars: ["id"] },
+});
 
-/* the parsed output feeds buildListQuery, and its extras a select, with no casts */
+expectTypeOf<z.output<typeof retrieveSchema>["expand"]>().toEqualTypeOf<string | undefined>();
+
+expectTypeOf<z.output<typeof retrieveSchema>["parsedFields"]>().toEqualTypeOf<ParsedFields | null>();
+
+// the parsed output feeds buildListQuery, and its extras a select, with no casts
 const post = sqliteTable("post", {
-	created_at: integer("created_at"),
-	id: text("id").primaryKey(),
-	title: text("title"),
-})
-declare const parsed: ListOutput
-const built = buildListQuery({ ...SEALED, parsed, table: post })
-expectTypeOf(built.extras).toEqualTypeOf<ListExtras>()
+  created_at: integer("created_at"),
+  id: text("id").primaryKey(),
+  title: text("title"),
+});
 
-/* an extension whose input and output differ (a coercion) would change between the request and
-   the parsed view; the config refuses it */
+declare const parsed: ListOutput;
+const built = buildListQuery({ ...SEALED, parsed, table: post });
+
+expectTypeOf(built.extras).toEqualTypeOf<ListExtras>();
+
+// an extension whose input and output differ (a coercion) would change between the request and
+// the parsed view; the config refuses it
 // @ts-expect-error extensions keep one type through parsing
-createListQuerySchema({ extend: { archived: z.coerce.boolean().optional() }, sort: ["created_at"] })
+createListQuerySchema({ extend: { archived: z.coerce.boolean().optional() }, sort: ["created_at"] });
 
-/* D2-6 of the area D round-two review: a reserved name is refused as an extension, set to a schema
-   or to undefined alike, as assertNotReserved refuses the key whatever it holds */
+// D2-6 of the area D round-two review: a reserved name is refused as an extension, set to a schema
+// or to undefined alike, as assertNotReserved refuses the key whatever it holds
 // @ts-expect-error limit is the list schema's own
-createListQuerySchema({ extend: { limit: z.string() }, sort: ["created_at"] })
+createListQuerySchema({ extend: { limit: z.string() }, sort: ["created_at"] });
+
 // @ts-expect-error limit is the list schema's own, set to undefined too
-createListQuerySchema({ extend: { limit: undefined }, sort: ["created_at"] })
+createListQuerySchema({ extend: { limit: undefined }, sort: ["created_at"] });
+
 // @ts-expect-error select is the retrieve schema's own
-createRetrieveQuerySchema({ extend: { select: z.string() } })
+createRetrieveQuerySchema({ extend: { select: z.string() } });
+
 // @ts-expect-error select is the retrieve schema's own, set to undefined too
-createRetrieveQuerySchema({ extend: { select: undefined } })
+createRetrieveQuerySchema({ extend: { select: undefined } });
 
-/* keysetSQL's one argument has a name a consumer can import from the subpath that exports keysetSQL */
-expectTypeOf(keysetSQL).parameter(0).toEqualTypeOf<KeysetPosition>()
+// keysetSQL's one argument has a name a consumer can import from the subpath that exports keysetSQL
+expectTypeOf(keysetSQL).parameter(0).toEqualTypeOf<KeysetPosition>();
 
-/* Q7: the parsed query hands on the cursor as the raw string the client sent, and nothing decoded
-   from it; only a verifying call (readCursor, listOptions, buildListQuery) reaches its values */
+// Q7: the parsed query hands on the cursor as the raw string the client sent, and nothing decoded
+// from it; only a verifying call (readCursor, listOptions, buildListQuery) reaches its values
 expectTypeOf<keyof ListQueryOutput<"created_at">>().toEqualTypeOf<
-	| "cursor"
-	| "filterAst"
-	| "lang"
-	| "limit"
-	| "limitBound"
-	| "page"
-	| "pageBound"
-	| "parsedFields"
-	| "parsedSort"
-	| "q"
-	| "sortOrderBy"
-	| "tiebreak"
-	| "validated"
->()
+  | "cursor"
+  | "filterAst"
+  | "lang"
+  | "limit"
+  | "limitBound"
+  | "page"
+  | "pageBound"
+  | "parsedFields"
+  | "parsedSort"
+  | "q"
+  | "sortOrderBy"
+  | "tiebreak"
+  | "validated"
+>();
+
 expectTypeOf<z.output<ReturnType<typeof createListQuerySchema<Record<string, never>, ["created_at"]>>>>().toMatchTypeOf<
-	ListQueryOutput<"created_at">
->()
+  ListQueryOutput<"created_at">
+>();
 
-/*
- * U29's type: a parsed object built by hand, as a handler that checks its own filter builds it,
- * compiles without `pageBound`, which absent means checked against the default maxPage
- */
+// U29's type: a parsed object built by hand, as a handler that checks its own filter builds it,
+// compiles without `pageBound`, which absent means checked against the default maxPage
 const handBuilt: ListQueryOutput = {
-	cursor: undefined,
-	filterAst: null,
-	lang: undefined,
-	limit: 20,
-	page: 1,
-	parsedFields: null,
-	parsedSort: [],
-	q: undefined,
-	sortOrderBy: {},
-	validated: true,
-}
-void handBuilt
+  cursor: undefined,
+  filterAst: null,
+  lang: undefined,
+  limit: 20,
+  page: 1,
+  parsedFields: null,
+  parsedSort: [],
+  q: undefined,
+  sortOrderBy: {},
+  validated: true,
+};
 
-/*
- * G2 of plan 14: the schema's own output agrees, so a ListQueryOutput passes where a handler takes
- * the schema's inferred output, as honey's generated handlers do
- */
-const handler = (input: ListOutput) => input.limit
-handler({ ...handBuilt, archived: undefined, parsedSort: [] })
-expectTypeOf<ListOutput["pageBound"]>().toEqualTypeOf<number | undefined>()
+void handBuilt;
 
-/* C12 of the 0.14.1 review, K9 of r17: applyListQuery builds drizzle's select as it is, or one made dynamic, over the extras */
-declare const d1: DrizzleD1Database
-const listed = sqliteTable("listed", { id: integer("id").primaryKey(), title: text("title") })
-const listedQuery = buildListQuery({ ...SEALED, parsed: listSchema.parse({}), table: listed })
+// G2 of plan 14: the schema's own output agrees, so a ListQueryOutput passes where a handler takes
+// the schema's inferred output, as honey's generated handlers do
+const handler = (input: ListOutput) => input.limit;
+
+handler({ ...handBuilt, archived: undefined, parsedSort: [] });
+
+expectTypeOf<ListOutput["pageBound"]>().toEqualTypeOf<number | undefined>();
+
+// C12 of the 0.14.1 review, K9 of r17: applyListQuery builds drizzle's select as it is, or one made dynamic, over the extras
+declare const d1: DrizzleD1Database;
+const listed = sqliteTable("listed", { id: integer("id").primaryKey(), title: text("title") });
+const listedQuery = buildListQuery({ ...SEALED, parsed: listSchema.parse({}), table: listed });
+
 type Listed = {
-	_cursorAnchorGone?: number
-	_cursorId?: unknown
-	_cursorKeyTexts?: string
-	_cursorKeyTypes?: string
-	_cursorTextKeys?: string
-	_total?: number
-	id: number
-	title: string | null
-}
-expectTypeOf(
-	applyListQuery((extras) => d1.select({ ...getTableColumns(listed), ...extras }).from(listed), listedQuery),
-).resolves.toEqualTypeOf<Listed[]>()
-expectTypeOf(
-	applyListQuery(
-		(extras) =>
-			d1
-				.select({ ...getTableColumns(listed), ...extras })
-				.from(listed)
-				.$dynamic(),
-		listedQuery,
-	),
-).resolves.toEqualTypeOf<Listed[]>()
+  _cursorAnchorGone?: number;
+  _cursorId?: unknown;
+  _cursorKeyTexts?: string;
+  _cursorKeyTypes?: string;
+  _cursorTextKeys?: string;
+  _total?: number;
+  id: number;
+  title: string | null;
+};
 
-/*
- * K6 and K10 of r17: every builder takes one exported ListQueryInput, its arrays read only, so the
- * schema's output and the README's hand-built `as const` query both pass, with no sortOrderBy
- */
+expectTypeOf(
+  applyListQuery((extras) => d1.select({ ...getTableColumns(listed), ...extras }).from(listed), listedQuery),
+).resolves.toEqualTypeOf<Listed[]>();
+
+expectTypeOf(
+  applyListQuery(
+    (extras) =>
+      d1
+        .select({ ...getTableColumns(listed), ...extras })
+        .from(listed)
+        .$dynamic(),
+    listedQuery,
+  ),
+).resolves.toEqualTypeOf<Listed[]>();
+
+// K6 and K10 of r17: every builder takes one exported ListQueryInput, its arrays read only, so the
+// schema's output and the README's hand-built `as const` query both pass, with no sortOrderBy
 const handParsed = {
-	limit: 20,
-	parsedSort: [{ direction: "desc", field: "created_at" }],
-	validated: true,
-} as const
-queryHelpers.listOptions(handParsed, SEALED)
-buildListQuery({ ...SEALED, parsed: handParsed, table: post })
-const schemaInput: ListQueryInput<"created_at" | "title"> = parsed
-const pageByHand = (input: ListQueryInput) => queryHelpers.listOptions(input, SEALED)
-pageByHand(schemaInput)
-expectTypeOf<ListQueryInput["parsedSort"]>().toEqualTypeOf<readonly SortField[]>()
+  limit: 20,
+  parsedSort: [{ direction: "desc", field: "created_at" }],
+  validated: true,
+} as const;
 
-/* K11 of r17: a module that exports a list or retrieve schema names its type, as declaration emit and isolatedDeclarations need */
+queryHelpers.listOptions(handParsed, SEALED);
+
+buildListQuery({ ...SEALED, parsed: handParsed, table: post });
+
+const schemaInput: ListQueryInput<"created_at" | "title"> = parsed;
+const pageByHand = (input: ListQueryInput) => queryHelpers.listOptions(input, SEALED);
+
+pageByHand(schemaInput);
+
+expectTypeOf<ListQueryInput["parsedSort"]>().toEqualTypeOf<readonly SortField[]>();
+
+// K11 of r17: a module that exports a list or retrieve schema names its type, as declaration emit and isolatedDeclarations need
 export const annotatedList: ListQuerySchema<Record<string, never>, "created_at"> = createListQuerySchema({
-	sort: ["created_at"],
-})
+  sort: ["created_at"],
+});
+
 export const annotatedRetrieve: RetrieveQuerySchema<Record<string, never>> = createRetrieveQuerySchema({
-	fields: { scalars: ["id"] },
-})
+  fields: { scalars: ["id"] },
+});
 
-/* a schema with no `extend` adds no keys: its output is ListQueryOutput itself, so a hand-built one (a test's, a
-   service's) is assignable. The default used to be Record<string, never>, an index signature of never that no
-   object could satisfy */
-const plainList = createListQuerySchema({ sort: ["created_at"] })
+// a schema with no `extend` adds no keys: its output is ListQueryOutput itself, so a hand-built one (a test's, a
+// service's) is assignable. The default used to be Record<string, never>, an index signature of never that no
+// object could satisfy
+const plainList = createListQuerySchema({ sort: ["created_at"] });
+
 const builtList: z.output<typeof plainList> = {
-	cursor: undefined,
-	filterAst: null,
-	lang: undefined,
-	limit: 20,
-	page: undefined,
-	parsedFields: null,
-	parsedSort: [],
-	q: undefined,
-	sortOrderBy: {},
-	validated: true,
-}
-expectTypeOf<ListQueryOutput<"created_at">>().toExtend<z.output<typeof plainList>>()
-expectTypeOf(builtList).toHaveProperty("validated")
-const plainRetrieve = createRetrieveQuerySchema({ fields: { scalars: ["id"] } })
-const builtRetrieve: z.output<typeof plainRetrieve> = { lang: undefined, parsedFields: null }
-expectTypeOf(builtRetrieve).toHaveProperty("parsedFields")
+  cursor: undefined,
+  filterAst: null,
+  lang: undefined,
+  limit: 20,
+  page: undefined,
+  parsedFields: null,
+  parsedSort: [],
+  q: undefined,
+  sortOrderBy: {},
+  validated: true,
+};
 
-/* r18 Q15: the paginators strip the extras the builder selected, so the rows they return are typed without them */
+expectTypeOf<ListQueryOutput<"created_at">>().toExtend<z.output<typeof plainList>>();
+
+expectTypeOf(builtList).toHaveProperty("validated");
+
+const plainRetrieve = createRetrieveQuerySchema({ fields: { scalars: ["id"] } });
+const builtRetrieve: z.output<typeof plainRetrieve> = { lang: undefined, parsedFields: null };
+
+expectTypeOf(builtRetrieve).toHaveProperty("parsedFields");
+
+// r18 Q15: the paginators strip the extras the builder selected, so the rows they return are typed without them
 declare const wiredRows: Array<{
-	_cursorAnchorGone?: number
-	_cursorId: unknown
-	_total?: number
-	id: number
-	title: string
-}>
+  _cursorAnchorGone?: number;
+  _cursorId: unknown;
+  _total?: number;
+  id: number;
+  title: string;
+}>;
+
 const paged = queryHelpers.paginate(
-	wiredRows,
-	buildListQuery({ ...SEALED, parsed: listSchema.parse({}), table: listed }),
-)
-expectTypeOf(paged[0][0]!).toEqualTypeOf<{ id: number; title: string }>()
+  wiredRows,
+  buildListQuery({ ...SEALED, parsed: listSchema.parse({}), table: listed }),
+);
 
-/* Q3 of r19: a union row type keeps each variant's own fields through both paginators, so narrowing reaches them */
-type OrgInvite = { _cursorId: string; created_at: number; organization_name: string; type: "org" }
+expectTypeOf(paged[0][0]!).toEqualTypeOf<{ id: number; title: string }>();
+
+// Q3 of r19: a union row type keeps each variant's own fields through both paginators, so narrowing reaches them
+type OrgInvite = { _cursorId: string; created_at: number; organization_name: string; type: "org" };
+
 type ProjectInvite = {
-	_cursorId: string
-	collaborator: number
-	created_at: number
-	project_name: string
-	type: "project"
-}
-type Invite = OrgInvite | ProjectInvite
-declare const onePage: ReturnType<typeof queryHelpers.paginate<Invite>>[0]
-declare const mergedPage: ReturnType<typeof paginateMerged<Invite>>[0]
-for (const invite of [...onePage, ...mergedPage]) {
-	if (invite.type === "project") expectTypeOf(invite.collaborator).toEqualTypeOf<number>()
-	else expectTypeOf(invite.organization_name).toEqualTypeOf<string>()
-	/* the extras are gone from every variant */
-	expectTypeOf(invite).not.toHaveProperty("_cursorId")
-}
-expectTypeOf<ListRow<Invite>>().toEqualTypeOf<Omit<OrgInvite, "_cursorId"> | Omit<ProjectInvite, "_cursorId">>()
+  _cursorId: string;
+  collaborator: number;
+  created_at: number;
+  project_name: string;
+  type: "project";
+};
 
-/* Q1 of r21: a derived list over a column needs no `dialect`; one over expressions names one of two databases */
-const derivedTable = sqliteTable("derived_items", { id: text("id").primaryKey(), created_at: integer("created_at") })
+type Invite = OrgInvite | ProjectInvite;
+
+declare const onePage: ReturnType<typeof queryHelpers.paginate<Invite>>[0];
+declare const mergedPage: ReturnType<typeof paginateMerged<Invite>>[0];
+
+for (const invite of [...onePage, ...mergedPage]) {
+  if (invite.type === "project") expectTypeOf(invite.collaborator).toEqualTypeOf<number>();
+  else expectTypeOf(invite.organization_name).toEqualTypeOf<string>();
+  // the extras are gone from every variant
+  expectTypeOf(invite).not.toHaveProperty("_cursorId");
+}
+
+expectTypeOf<ListRow<Invite>>().toEqualTypeOf<Omit<OrgInvite, "_cursorId"> | Omit<ProjectInvite, "_cursorId">>();
+
+// Q1 of r21: a derived list over a column needs no `dialect`; one over expressions names one of two databases
+const derivedTable = sqliteTable("derived_items", { created_at: integer("created_at"), id: text("id").primaryKey() });
+
 buildDerivedListQuery({
-	...SEALED,
-	idColumn: derivedTable.id,
-	parsed: { limit: 2, parsedSort: [{ direction: "desc", field: "created_at" }] },
-	sortColumns: { created_at: derivedTable.created_at },
-})
+  ...SEALED,
+  idColumn: derivedTable.id,
+  parsed: { limit: 2, parsedSort: [{ direction: "desc", field: "created_at" }] },
+  sortColumns: { created_at: derivedTable.created_at },
+});
+
 buildDerivedListQuery({
-	...SEALED,
-	dialect: "postgres",
-	idColumn: sql`inbox.uid`,
-	parsed: { limit: 2, parsedSort: [{ direction: "desc", field: "at" }] },
-	sortColumns: { at: sql`inbox.at` },
-})
-expectTypeOf<BuildDerivedListQueryOpts["dialect"]>().toEqualTypeOf<"postgres" | "sqlite" | undefined>()
+  ...SEALED,
+  dialect: "postgres",
+  idColumn: sql`inbox.uid`,
+  parsed: { limit: 2, parsedSort: [{ direction: "desc", field: "at" }] },
+  sortColumns: { at: sql`inbox.at` },
+});
+
+expectTypeOf<BuildDerivedListQueryOpts["dialect"]>().toEqualTypeOf<"postgres" | "sqlite" | undefined>();

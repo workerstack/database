@@ -1,278 +1,287 @@
-import { existsSync, readFileSync } from "node:fs"
-import { describe, expect, it } from "vitest"
-import { atlasUrls, pgUrlProblems, revisionsSchema, withAtlasEnv, type PgTarget } from "./atlas-target.ts"
-import { maskSecrets } from "./atlas-secrets.ts"
+import { existsSync, readFileSync } from "node:fs";
+
+import { describe, expect, it } from "vitest";
+
+import { maskSecrets } from "./atlas-secrets.ts";
+import { atlasUrls, pgUrlProblems, revisionsSchema, withAtlasEnv, type PgTarget } from "./atlas-target.ts";
 
 const target = (over: Partial<PgTarget> = {}): PgTarget => ({
-	devUrl: "docker://postgres/17/dev",
-	lockTimeout: "5s",
-	schema: "public",
-	url: "postgres://app:S3cret@db.example.com:5432/app?sslmode=verify-full",
-	...over,
-})
+  devUrl: "docker://postgres/17/dev",
+  lockTimeout: "5s",
+  schema: "public",
+  url: "postgres://app:S3cret@db.example.com:5432/app?sslmode=verify-full",
+  ...over,
+});
 
 describe("pgUrlProblems", () => {
-	it("finds nothing wrong with a direct, verified remote URL", () => {
-		expect(pgUrlProblems(target())).toEqual({ errors: [], warnings: [] })
-	})
+  it("finds nothing wrong with a direct, verified remote URL", () => {
+    expect(pgUrlProblems(target())).toEqual({ errors: [], warnings: [] });
+  });
 
-	it("names the field of a bad URL without its value", () => {
-		for (const url of ["postgres://app:ab#cd@db/app", "postgres://app:ab/cd@db/app", "mysql://db/app", "not a url"]) {
-			const { errors } = pgUrlProblems(target({ url }))
-			expect(errors).toEqual([
-				"url is not a postgres:// URL; percent-encode special characters (#, /, ?, @) in the password",
-			])
-			expect(errors.join()).not.toMatch(/ab|cd|mysql/)
-		}
-		expect(pgUrlProblems(target({ devUrl: "http://x" })).errors).toEqual([
-			"devUrl is not a postgres:// or docker:// URL; percent-encode special characters (#, /, ?, @) in the password",
-		])
-	})
+  it("names the field of a bad URL without its value", () => {
+    for (const url of ["postgres://app:ab#cd@db/app", "postgres://app:ab/cd@db/app", "mysql://db/app", "not a url"]) {
+      const { errors } = pgUrlProblems(target({ url }));
+      expect(errors).toEqual([
+        "url is not a postgres:// URL; percent-encode special characters (#, /, ?, @) in the password",
+      ]);
+      expect(errors.join()).not.toMatch(/ab|cd|mysql/);
+    }
 
-	it("refuses an empty URL, and a dev database that is the target", () => {
-		expect(pgUrlProblems(target({ url: "" })).errors).toEqual(["url is empty"])
-		expect(pgUrlProblems(target({ devUrl: " " })).errors).toEqual(["devUrl is empty"])
-		const same = "postgres://localhost/app?sslmode=disable"
-		expect(pgUrlProblems(target({ devUrl: same, url: same })).errors).toEqual([
-			"url and devUrl are the same database; Atlas empties the dev database, so give it its own",
-		])
-	})
+    expect(pgUrlProblems(target({ devUrl: "http://x" })).errors).toEqual([
+      "devUrl is not a postgres:// or docker:// URL; percent-encode special characters (#, /, ?, @) in the password",
+    ]);
+  });
 
-	it("refuses a schema that is not a plain name", () => {
-		expect(pgUrlProblems(target({ schema: "public;drop" })).errors).toEqual([
-			'schema must be a lowercase plain name such as "public"',
-		])
-	})
-})
+  it("refuses an empty URL, and a dev database that is the target", () => {
+    expect(pgUrlProblems(target({ url: "" })).errors).toEqual(["url is empty"]);
+    expect(pgUrlProblems(target({ devUrl: " " })).errors).toEqual(["devUrl is empty"]);
+    const same = "postgres://localhost/app?sslmode=disable";
+    expect(pgUrlProblems(target({ devUrl: same, url: same })).errors).toEqual([
+      "url and devUrl are the same database; Atlas empties the dev database, so give it its own",
+    ]);
+  });
+
+  it("refuses a schema that is not a plain name", () => {
+    expect(pgUrlProblems(target({ schema: "public;drop" })).errors).toEqual([
+      'schema must be a lowercase plain name such as "public"',
+    ]);
+  });
+});
 
 describe("pgUrlProblems: the lock timeout, TLS and poolers", () => {
-	it("refuses one Postgres does not take", () => {
-		for (const lockTimeout of ["soon", "5 sec", "-1s", "1e3ms", "5S"])
-			expect(pgUrlProblems(target({ lockTimeout })).errors, lockTimeout).toEqual([
-				"lockTimeout must be a Postgres duration: a number of milliseconds (250, 0 for none), or a number with us, ms, s, min, h or d (1500ms, 1.5s, 1min)",
-			])
-	})
+  it("refuses one Postgres does not take", () => {
+    for (const lockTimeout of ["soon", "5 sec", "-1s", "1e3ms", "5S"]) {
+      expect(pgUrlProblems(target({ lockTimeout })).errors, lockTimeout).toEqual([
+        "lockTimeout must be a Postgres duration: a number of milliseconds (250, 0 for none), or a number with us, ms, s, min, h or d (1500ms, 1.5s, 1min)",
+      ]);
+    }
+  });
 
-	/* P14 of the 0.15.0 review: Postgres takes each of these for lock_timeout, and psql set them */
-	it.each(["0", "250", "1500ms", "5s", "1.5s", "1500us", "1min", "1h", "1d", "5 s"])(
-		"takes the lock timeout %j, as Postgres does",
-		(lockTimeout) => {
-			expect(pgUrlProblems(target({ lockTimeout })).errors).toEqual([])
-		},
-	)
+  // P14 of the 0.15.0 review: Postgres takes each of these for lock_timeout, and psql set them
+  it.each(["0", "250", "1500ms", "5s", "1.5s", "1500us", "1min", "1h", "1d", "5 s"])(
+    "takes the lock timeout %j, as Postgres does",
+    (lockTimeout) => {
+      expect(pgUrlProblems(target({ lockTimeout })).errors).toEqual([]);
+    },
+  );
 
-	it("warns of a remote host that does not verify TLS, and of poolers", () => {
-		const host = "postgres://app:pw@db.example.com/app"
-		expect(pgUrlProblems(target({ url: `${host}?sslmode=disable` })).warnings).toEqual([
-			"url reaches db.example.com without sslmode=verify-full or require, so the password may cross the network unencrypted or to an unverified server",
-		])
-		expect(pgUrlProblems(target({ url: `${host}?sslmode=prefer` })).warnings).toHaveLength(1)
-		expect(pgUrlProblems(target({ url: `${host}?sslmode=require` })).warnings).toEqual([])
-		expect(pgUrlProblems(target({ url: "postgres://localhost/app" })).warnings).toEqual([])
-		expect(
-			pgUrlProblems(target({ url: "postgres://ep-x-pooler.eu.aws.neon.tech/app?sslmode=require" })).warnings,
-		).toEqual([
-			"url is a Neon pooled host; migrations need the direct one (drop -pooler), since a pooler drops the lock Atlas holds",
-		])
-		expect(
-			pgUrlProblems(target({ url: "postgres://aws-0.pooler.supabase.com:6543/postgres?sslmode=require" })).warnings,
-		).toEqual([
-			"url uses port 6543, Supabase's transaction pooler; migrations need the direct or session connection on 5432",
-		])
-	})
-})
+  it("warns of a remote host that does not verify TLS, and of poolers", () => {
+    const host = "postgres://app:pw@db.example.com/app";
+    expect(pgUrlProblems(target({ url: `${host}?sslmode=disable` })).warnings).toEqual([
+      "url reaches db.example.com without sslmode=verify-full or require, so the password may cross the network unencrypted or to an unverified server",
+    ]);
+    expect(pgUrlProblems(target({ url: `${host}?sslmode=prefer` })).warnings).toHaveLength(1);
+    expect(pgUrlProblems(target({ url: `${host}?sslmode=require` })).warnings).toEqual([]);
+    expect(pgUrlProblems(target({ url: "postgres://localhost/app" })).warnings).toEqual([]);
+    expect(
+      pgUrlProblems(target({ url: "postgres://ep-x-pooler.eu.aws.neon.tech/app?sslmode=require" })).warnings,
+    ).toEqual([
+      "url is a Neon pooled host; migrations need the direct one (drop -pooler), since a pooler drops the lock Atlas holds",
+    ]);
+    expect(
+      pgUrlProblems(target({ url: "postgres://aws-0.pooler.supabase.com:6543/postgres?sslmode=require" })).warnings,
+    ).toEqual([
+      "url uses port 6543, Supabase's transaction pooler; migrations need the direct or session connection on 5432",
+    ]);
+  });
+});
 
-/* r18 P6: one reading of lockTimeout, in milliseconds, inside Postgres's range, written with no space */
+// r18 P6: one reading of lockTimeout, in milliseconds, inside Postgres's range, written with no space
 describe("pgUrlProblems and atlasUrls: the lock timeout as Postgres reads it", () => {
-	it("refuses a lock timeout past Postgres's range for lock_timeout, naming it", () => {
-		for (const lockTimeout of ["2147483648", "2147484s", "25d"])
-			expect(pgUrlProblems(target({ lockTimeout })).errors, lockTimeout).toEqual([
-				`lockTimeout ${lockTimeout} is longer than Postgres's lock_timeout takes: at most 2147483647ms (about 24.8 days)`,
-			])
-		expect(pgUrlProblems(target({ lockTimeout: "2147483647" })).errors).toEqual([])
-	})
+  it("refuses a lock timeout past Postgres's range for lock_timeout, naming it", () => {
+    for (const lockTimeout of ["2147483648", "2147484s", "25d"]) {
+      expect(pgUrlProblems(target({ lockTimeout })).errors, lockTimeout).toEqual([
+        `lockTimeout ${lockTimeout} is longer than Postgres's lock_timeout takes: at most 2147483647ms (about 24.8 days)`,
+      ]);
+    }
 
-	/* Postgres rounds to the nearest millisecond, half to even, and 0 turns lock_timeout off */
-	it("refuses a lock timeout Postgres would round to 0, which turns the bound off", () => {
-		expect(pgUrlProblems(target({ lockTimeout: "500us" })).errors).toEqual([
-			"lockTimeout 500us rounds to 0ms, which turns lock_timeout off; give at least 1ms, or 0 for none",
-		])
-	})
+    expect(pgUrlProblems(target({ lockTimeout: "2147483647" })).errors).toEqual([]);
+  });
 
-	it.each([
-		["5 s", "5000ms"],
-		["1.5s", "1500ms"],
-		["1500us", "2ms"],
-		["2500us", "2ms"],
-		["1min", "60000ms"],
-		["250", "250ms"],
-		["1d", "86400000ms"],
-	])("writes the lock timeout %j into Atlas's options as %s", (lockTimeout, written) => {
-		const url = new URL(atlasUrls(target({ lockTimeout, url: "postgres://localhost/app" })).url)
-		expect(url.searchParams.get("options")).toBe(`-c lock_timeout=${written}`)
-	})
+  // Postgres rounds to the nearest millisecond, half to even, and 0 turns lock_timeout off
+  it("refuses a lock timeout Postgres would round to 0, which turns the bound off", () => {
+    expect(pgUrlProblems(target({ lockTimeout: "500us" })).errors).toEqual([
+      "lockTimeout 500us rounds to 0ms, which turns lock_timeout off; give at least 1ms, or 0 for none",
+    ]);
+  });
 
-	it("sets no lock timeout for one of 0 in any unit", () => {
-		const url = new URL(atlasUrls(target({ lockTimeout: "0s", url: "postgres://localhost/app" })).url)
-		expect(url.searchParams.get("options")).toBeNull()
-	})
-})
+  it.each([
+    ["5 s", "5000ms"],
+    ["1.5s", "1500ms"],
+    ["1500us", "2ms"],
+    ["2500us", "2ms"],
+    ["1min", "60000ms"],
+    ["250", "250ms"],
+    ["1d", "86400000ms"],
+  ])("writes the lock timeout %j into Atlas's options as %s", (lockTimeout, written) => {
+    const url = new URL(atlasUrls(target({ lockTimeout, url: "postgres://localhost/app" })).url);
+    expect(url.searchParams.get("options")).toBe(`-c lock_timeout=${written}`);
+  });
+
+  it("sets no lock timeout for one of 0 in any unit", () => {
+    const url = new URL(atlasUrls(target({ lockTimeout: "0s", url: "postgres://localhost/app" })).url);
+    expect(url.searchParams.get("options")).toBeNull();
+  });
+});
 
 /** What pgUrlProblems refuses in a target with `devUrl` and `url` */
-const refusals = (devUrl: string, url: string) => pgUrlProblems(target({ devUrl, url })).errors
+const refusals = (devUrl: string, url: string) => pgUrlProblems(target({ devUrl, url })).errors;
 
-/* N2 and N3 of plan 15's rerun: a refusal says where the URL went wrong, never naming its value */
+// N2 and N3 of plan 15's rerun: a refusal says where the URL went wrong, never naming its value
 describe("pgUrlProblems: where a URL's escape or socket goes wrong", () => {
-	it("names the query, or the host and database, when a bad percent-escape is there and not in the password", () => {
-		expect(
-			pgUrlProblems(target({ url: "postgres://app@db/app?sslmode=require&application_name=50%zz" })).errors,
-		).toEqual(["url is not a postgres:// URL; percent-encode a % in the query's values as %25"])
-		expect(pgUrlProblems(target({ url: "postgres://app@db/a%zzpp?sslmode=require" })).errors).toEqual([
-			"url is not a postgres:// URL; percent-encode a % in the host or database name as %25",
-		])
-		expect(pgUrlProblems(target({ url: "postgres://app:Zq%zz@db/app?sslmode=require" })).errors).toEqual([
-			"url is not a postgres:// URL; percent-encode special characters (#, /, ?, @) in the password",
-		])
-		/* 27.16 of plan 15: the user name is userinfo's other part */
-		expect(pgUrlProblems(target({ url: "postgres://a%zzpp:pw@db/app?sslmode=require" })).errors).toEqual([
-			"url is not a postgres:// URL; percent-encode a % in the user name as %25",
-		])
-	})
+  it("names the query, or the host and database, when a bad percent-escape is there and not in the password", () => {
+    expect(
+      pgUrlProblems(target({ url: "postgres://app@db/app?sslmode=require&application_name=50%zz" })).errors,
+    ).toEqual(["url is not a postgres:// URL; percent-encode a % in the query's values as %25"]);
+    expect(pgUrlProblems(target({ url: "postgres://app@db/a%zzpp?sslmode=require" })).errors).toEqual([
+      "url is not a postgres:// URL; percent-encode a % in the host or database name as %25",
+    ]);
+    expect(pgUrlProblems(target({ url: "postgres://app:Zq%zz@db/app?sslmode=require" })).errors).toEqual([
+      "url is not a postgres:// URL; percent-encode special characters (#, /, ?, @) in the password",
+    ]);
+    // 27.16 of plan 15: the user name is userinfo's other part
+    expect(pgUrlProblems(target({ url: "postgres://a%zzpp:pw@db/app?sslmode=require" })).errors).toEqual([
+      "url is not a postgres:// URL; percent-encode a % in the user name as %25",
+    ]);
+  });
 
-	it("refuses a socket spelled as a percent-encoded host, which Atlas refuses, pointing to ?host=", () => {
-		expect(pgUrlProblems(target({ url: "postgres://app:pw@%2Frun%2Fpostgresql/app" })).errors).toEqual([
-			"url names a Unix socket as a percent-encoded host, which Atlas refuses; give its directory as ?host=, as in postgres://app@/db?host=/run/postgresql",
-		])
-	})
-})
+  it("refuses a socket spelled as a percent-encoded host, which Atlas refuses, pointing to ?host=", () => {
+    expect(pgUrlProblems(target({ url: "postgres://app:pw@%2Frun%2Fpostgresql/app" })).errors).toEqual([
+      "url names a Unix socket as a percent-encoded host, which Atlas refuses; give its directory as ?host=, as in postgres://app@/db?host=/run/postgresql",
+    ]);
+  });
+});
 
-/* P14 and P19 of the 0.14.1 review: libpq and Atlas take a socket target with a password, and send it no password over a network */
-/* P5 of the 0.14.1 review: a password escape that decodes to no UTF-8 is one Atlas would echo a fragment of */
+// P14 and P19 of the 0.14.1 review: libpq and Atlas take a socket target with a password, and send it no password over a network
+// P5 of the 0.14.1 review: a password escape that decodes to no UTF-8 is one Atlas would echo a fragment of
 describe("pgUrlProblems: a password escape that is no UTF-8", () => {
-	it("refuses it with the encode hint, never naming it", () => {
-		for (const url of [
-			"postgres://app:Zq%zzX9@db/app?sslmode=require",
-			"postgres://app:Zq%A7X9@db/app?sslmode=require",
-		]) {
-			const { errors } = pgUrlProblems(target({ url }))
-			expect(errors, url).toEqual([
-				"url is not a postgres:// URL; percent-encode special characters (#, /, ?, @) in the password",
-			])
-		}
-	})
-})
+  it("refuses it with the encode hint, never naming it", () => {
+    for (const url of [
+      "postgres://app:Zq%zzX9@db/app?sslmode=require",
+      "postgres://app:Zq%A7X9@db/app?sslmode=require",
+    ]) {
+      const { errors } = pgUrlProblems(target({ url }));
+      expect(errors, url).toEqual([
+        "url is not a postgres:// URL; percent-encode special characters (#, /, ?, @) in the password",
+      ]);
+    }
+  });
+});
 
 describe("pgUrlProblems: a Unix socket target", () => {
-	it("takes a socket host with a user and password, and warns of no sslmode for it", () => {
-		for (const url of ["postgres://app:pw@/app?host=/run/postgresql", "postgres://app:pw@/app"])
-			expect(pgUrlProblems(target({ url })), url).toEqual({ errors: [], warnings: [] })
-	})
+  it("takes a socket host with a user and password, and warns of no sslmode for it", () => {
+    for (const url of ["postgres://app:pw@/app?host=/run/postgresql", "postgres://app:pw@/app"])
+      expect(pgUrlProblems(target({ url })), url).toEqual({ errors: [], warnings: [] });
+  });
 
-	it("scopes a socket target for Atlas, its host kept", () => {
-		const urls = atlasUrls(target({ url: "postgres://app:pw@/app?host=/run/postgresql" }))
-		expect(urls.url).toBe(
-			"postgres://app:pw@/app?host=/run/postgresql&search_path=public&options=-c%20lock_timeout%3D5000ms",
-		)
-	})
-})
+  it("scopes a socket target for Atlas, its host kept", () => {
+    const urls = atlasUrls(target({ url: "postgres://app:pw@/app?host=/run/postgresql" }));
+    expect(urls.url).toBe(
+      "postgres://app:pw@/app?host=/run/postgresql&search_path=public&options=-c%20lock_timeout%3D5000ms",
+    );
+  });
+});
 
 describe("pgUrlProblems: a dev database that is the target (M89)", () => {
-	const SAME = "url and devUrl are the same database; Atlas empties the dev database, so give it its own"
+  const SAME = "url and devUrl are the same database; Atlas empties the dev database, so give it its own";
 
-	it("compares host, port and database, localhost and its loopback addresses as one", () => {
-		const dev = "postgres://dev:pw@127.0.0.1:5432/app?sslmode=disable"
-		expect(pgUrlProblems(target({ devUrl: dev, url: "postgres://app@localhost/app" })).errors).toEqual([SAME])
-		expect(pgUrlProblems(target({ devUrl: dev, url: "postgres://app@localhost:5433/app" })).errors).toEqual([])
-		expect(pgUrlProblems(target({ devUrl: dev, url: "postgres://app@localhost/other" })).errors).toEqual([])
-		/* a URL that names no database reaches the one named after its user */
-		expect(pgUrlProblems(target({ devUrl: dev, url: "postgres://app@localhost" })).errors).toEqual([SAME])
-	})
+  it("compares host, port and database, localhost and its loopback addresses as one", () => {
+    const dev = "postgres://dev:pw@127.0.0.1:5432/app?sslmode=disable";
+    expect(pgUrlProblems(target({ devUrl: dev, url: "postgres://app@localhost/app" })).errors).toEqual([SAME]);
+    expect(pgUrlProblems(target({ devUrl: dev, url: "postgres://app@localhost:5433/app" })).errors).toEqual([]);
+    expect(pgUrlProblems(target({ devUrl: dev, url: "postgres://app@localhost/other" })).errors).toEqual([]);
+    // a URL that names no database reaches the one named after its user
+    expect(pgUrlProblems(target({ devUrl: dev, url: "postgres://app@localhost" })).errors).toEqual([SAME]);
+  });
 
-	/* two spellings of one database read as one: the guard errs toward refusing a config, never toward wiping a target */
-	it("reads the host without its case, and libpq's query parameters over the URI's parts", () => {
-		expect(refusals("postgres://app@DB.Example.com/app", "postgres://app@db.example.com/app")).toEqual([SAME])
-		expect(refusals("postgres://x/app?host=localhost", "postgres://localhost/app")).toEqual([SAME])
-		expect(refusals("postgres://localhost/dev?dbname=app", "postgres://localhost/app")).toEqual([SAME])
-		expect(refusals("postgres://localhost:5433/app?port=5432", "postgres://localhost/app")).toEqual([SAME])
-		expect(refusals("postgres://localhost?user=app", "postgres://localhost/app")).toEqual([SAME])
-		expect(refusals("postgres://localhost/app?port=5433", "postgres://localhost/app")).toEqual([])
-	})
+  // two spellings of one database read as one: the guard errs toward refusing a config, never toward wiping a target
+  it("reads the host without its case, and libpq's query parameters over the URI's parts", () => {
+    expect(refusals("postgres://app@DB.Example.com/app", "postgres://app@db.example.com/app")).toEqual([SAME]);
+    expect(refusals("postgres://x/app?host=localhost", "postgres://localhost/app")).toEqual([SAME]);
+    expect(refusals("postgres://localhost/dev?dbname=app", "postgres://localhost/app")).toEqual([SAME]);
+    expect(refusals("postgres://localhost:5433/app?port=5432", "postgres://localhost/app")).toEqual([SAME]);
+    expect(refusals("postgres://localhost?user=app", "postgres://localhost/app")).toEqual([SAME]);
+    expect(refusals("postgres://localhost/app?port=5433", "postgres://localhost/app")).toEqual([]);
+  });
 
-	it("reads a Unix socket, an empty host or a host that is a path, as localhost", () => {
-		expect(refusals("postgres:///app?host=/var/run/postgresql", "postgres://localhost/app")).toEqual([SAME])
-		expect(refusals("postgres:///app", "postgres://127.0.0.1/app")).toEqual([SAME])
-	})
+  it("reads a Unix socket, an empty host or a host that is a path, as localhost", () => {
+    expect(refusals("postgres:///app?host=/var/run/postgresql", "postgres://localhost/app")).toEqual([SAME]);
+    expect(refusals("postgres:///app", "postgres://127.0.0.1/app")).toEqual([SAME]);
+  });
 
-	it("runs whenever the url is configured, a call that does not reach the url (diff) included", () => {
-		const same = "postgres://localhost/app?sslmode=disable"
-		expect(pgUrlProblems(target({ devUrl: same, url: same }), { dev: true, url: false }).errors).toEqual([SAME])
-		expect(pgUrlProblems(target({ devUrl: same, url: "" }), { dev: true, url: false }).errors).toEqual([])
-	})
-})
+  it("runs whenever the url is configured, a call that does not reach the url (diff) included", () => {
+    const same = "postgres://localhost/app?sslmode=disable";
+    expect(pgUrlProblems(target({ devUrl: same, url: same }), { dev: true, url: false }).errors).toEqual([SAME]);
+    expect(pgUrlProblems(target({ devUrl: same, url: "" }), { dev: true, url: false }).errors).toEqual([]);
+  });
+});
 
 describe("pgUrlProblems: the schema's name (M87)", () => {
-	it("refuses a name Postgres folds where database writes it unquoted, naming what it folds to", () => {
-		expect(pgUrlProblems(target({ schema: "Tenant" })).errors).toEqual([
-			'schema must be a lowercase plain name such as "public": Postgres folds Tenant to tenant where it is unquoted',
-		])
-		expect(pgUrlProblems(target({ schema: "tenant_b$2" })).errors).toEqual([])
-	})
+  it("refuses a name Postgres folds where database writes it unquoted, naming what it folds to", () => {
+    expect(pgUrlProblems(target({ schema: "Tenant" })).errors).toEqual([
+      'schema must be a lowercase plain name such as "public": Postgres folds Tenant to tenant where it is unquoted',
+    ]);
+    expect(pgUrlProblems(target({ schema: "tenant_b$2" })).errors).toEqual([]);
+  });
 
-	it("refuses a name Postgres cuts to 63 bytes, and keeps one of 63", () => {
-		expect(pgUrlProblems(target({ schema: "t".repeat(64) })).errors).toEqual([
-			"schema must be at most 63 bytes: Postgres cuts a longer name to 63, which names another schema",
-		])
-		expect(pgUrlProblems(target({ schema: "t".repeat(63) })).errors).toEqual([])
-	})
+  it("refuses a name Postgres cuts to 63 bytes, and keeps one of 63", () => {
+    expect(pgUrlProblems(target({ schema: "t".repeat(64) })).errors).toEqual([
+      "schema must be at most 63 bytes: Postgres cuts a longer name to 63, which names another schema",
+    ]);
+    expect(pgUrlProblems(target({ schema: "t".repeat(63) })).errors).toEqual([]);
+  });
 
-	it("refuses a reserved word, which Postgres refuses or reads otherwise unquoted, and keeps a column-name keyword", () => {
-		for (const word of ["user", "order"])
-			expect(pgUrlProblems(target({ schema: word })).errors, word).toEqual([
-				`schema must not be ${word}, a word Postgres reserves: unquoted, it is refused or read as something else`,
-			])
-		expect(pgUrlProblems(target({ schema: "int" })).errors).toEqual([])
-	})
-})
+  it("refuses a reserved word, which Postgres refuses or reads otherwise unquoted, and keeps a column-name keyword", () => {
+    for (const word of ["user", "order"]) {
+      expect(pgUrlProblems(target({ schema: word })).errors, word).toEqual([
+        `schema must not be ${word}, a word Postgres reserves: unquoted, it is refused or read as something else`,
+      ]);
+    }
+
+    expect(pgUrlProblems(target({ schema: "int" })).errors).toEqual([]);
+  });
+});
 
 describe("atlasUrls", () => {
-	it("scopes both URLs to the schema and bounds the target's lock wait", () => {
-		const urls = atlasUrls(target({ url: "postgres://localhost/app?sslmode=disable" }))
-		expect(urls.url).toBe(
-			"postgres://localhost/app?sslmode=disable&search_path=public&options=-c%20lock_timeout%3D5000ms",
-		)
-		expect(urls.devUrl).toBe("docker://postgres/17/dev?search_path=public")
-	})
+  it("scopes both URLs to the schema and bounds the target's lock wait", () => {
+    const urls = atlasUrls(target({ url: "postgres://localhost/app?sslmode=disable" }));
+    expect(urls.url).toBe(
+      "postgres://localhost/app?sslmode=disable&search_path=public&options=-c%20lock_timeout%3D5000ms",
+    );
+    expect(urls.devUrl).toBe("docker://postgres/17/dev?search_path=public");
+  });
 
-	it("keeps a search_path, a lock_timeout and other options the user set, and sets none for 0", () => {
-		const set = atlasUrls(
-			target({ url: "postgres://localhost/app?search_path=app&options=-c%20statement_timeout%3D0" }),
-		)
-		expect(new URL(set.url).searchParams.get("search_path")).toBe("app")
-		expect(new URL(set.url).searchParams.get("options")).toBe("-c statement_timeout=0 -c lock_timeout=5000ms")
-		const own = atlasUrls(target({ url: "postgres://localhost/app?options=-c%20lock_timeout%3D1s" }))
-		expect(new URL(own.url).searchParams.get("options")).toBe("-c lock_timeout=1s")
-		const off = atlasUrls(target({ lockTimeout: "0", url: "postgres://localhost/app" }))
-		expect(new URL(off.url).searchParams.has("options")).toBe(false)
-	})
-})
+  it("keeps a search_path, a lock_timeout and other options the user set, and sets none for 0", () => {
+    const set = atlasUrls(
+      target({ url: "postgres://localhost/app?search_path=app&options=-c%20statement_timeout%3D0" }),
+    );
+
+    expect(new URL(set.url).searchParams.get("search_path")).toBe("app");
+    expect(new URL(set.url).searchParams.get("options")).toBe("-c statement_timeout=0 -c lock_timeout=5000ms");
+    const own = atlasUrls(target({ url: "postgres://localhost/app?options=-c%20lock_timeout%3D1s" }));
+    expect(new URL(own.url).searchParams.get("options")).toBe("-c lock_timeout=1s");
+    const off = atlasUrls(target({ lockTimeout: "0", url: "postgres://localhost/app" }));
+    expect(new URL(off.url).searchParams.has("options")).toBe(false);
+  });
+});
 
 describe("a secret holding a percent sign", () => {
-	const url = "postgres://app:50%25off@db.example.com/app?sslmode=require"
-	const percent: PgTarget = { devUrl: "postgres://localhost/dev", lockTimeout: "5s", schema: "public", url }
+  const url = "postgres://app:50%25off@db.example.com/app?sslmode=require";
+  const percent: PgTarget = { devUrl: "postgres://localhost/dev", lockTimeout: "5s", schema: "public", url };
 
-	it("runs Atlas with the URL in its environment", () => {
-		expect(withAtlasEnv(percent, { url: true }, (env) => env.env["DATABASE_ATLAS_URL"])).toContain("app:50%25off@")
-	})
-})
+  it("runs Atlas with the URL in its environment", () => {
+    expect(withAtlasEnv(percent, { url: true }, (env) => env.env["DATABASE_ATLAS_URL"])).toContain("app:50%25off@");
+  });
+});
 
 describe("withAtlasEnv", () => {
-	it("hands Atlas the URLs through env and a config that reads them, never through argv", () => {
-		const seen = withAtlasEnv(target(), { dev: true, dir: "/m/core", url: true }, (atlas) => {
-			const config = atlas.args[1] as string
-			expect(atlas.args).toEqual(["--config", config, "--env", "database"])
-			expect(atlas.args.join(" ")).not.toContain("S3cret")
-			const hcl = readFileSync(config.replace("file://", ""), "utf8")
-			expect(hcl).toBe(`env "database" {
+  it("hands Atlas the URLs through env and a config that reads them, never through argv", () => {
+    const seen = withAtlasEnv(target(), { dev: true, dir: "/m/core", url: true }, (atlas) => {
+      const config = atlas.args[1] as string;
+      expect(atlas.args).toEqual(["--config", config, "--env", "database"]);
+      expect(atlas.args.join(" ")).not.toContain("S3cret");
+      const hcl = readFileSync(config.replace("file://", ""), "utf8");
+      expect(hcl).toBe(`env "database" {
   url = getenv("DATABASE_ATLAS_URL")
   dev = getenv("DATABASE_ATLAS_DEV_URL")
   migration {
@@ -280,154 +289,161 @@ describe("withAtlasEnv", () => {
     revisions_schema = "atlas_schema_revisions"
   }
 }
-`)
-			expect(atlas.env.DATABASE_ATLAS_URL).toContain("search_path=public")
-			return atlas.dir
-		})
-		expect(existsSync(seen)).toBe(false)
-	})
+`);
+      expect(atlas.env.DATABASE_ATLAS_URL).toContain("search_path=public");
 
-	it("sets only what the call needs, and escapes a directory HCL would interpolate", () => {
-		withAtlasEnv(target(), { dir: '/m/${x}"q%{y}' }, (atlas) => {
-			const hcl = readFileSync(`${atlas.dir}/atlas.hcl`, "utf8")
-			expect(hcl).not.toMatch(/url =|dev =|src =/)
-			expect(hcl).toContain('dir = "file:///m/$${x}\\"q%%{y}"')
-			expect(Object.keys(atlas.env)).toEqual([])
-		})
-	})
+      return atlas.dir;
+    });
 
-	it("removes its directory when the body fails, sync or async", async () => {
-		let dir = ""
-		expect(() =>
-			withAtlasEnv(target(), { url: true }, (atlas) => {
-				dir = atlas.dir
-				throw new Error("boom")
-			}),
-		).toThrow("boom")
-		expect(existsSync(dir)).toBe(false)
-		await expect(
-			withAtlasEnv(target(), { url: true }, async (atlas) => {
-				dir = atlas.dir
-				throw new Error("later")
-			}),
-		).rejects.toThrow("later")
-		expect(existsSync(dir)).toBe(false)
-	})
+    expect(existsSync(seen)).toBe(false);
+  });
 
-	it("refuses a target with problems before Atlas runs, and scrubs with the target's URLs", () => {
-		expect(() => withAtlasEnv(target({ url: "" }), { url: true }, () => undefined)).toThrow("url is empty")
-		const scrubbed = withAtlasEnv(target(), { url: true }, (atlas) => atlas.scrub("auth failed for S3cret"))
-		expect(scrubbed).toBe("auth failed for ***")
-		/* M79: maskSecrets takes the given URLs' secrets only, not the generic rules */
-		expect(maskSecrets("auth failed for S3cret, api_key=x", [target().url])).toBe("auth failed for ***, api_key=x")
-	})
-})
+  it("sets only what the call needs, and escapes a directory HCL would interpolate", () => {
+    withAtlasEnv(target(), { dir: '/m/${x}"q%{y}' }, (atlas) => {
+      const hcl = readFileSync(`${atlas.dir}/atlas.hcl`, "utf8");
+      expect(hcl).not.toMatch(/url =|dev =|src =/);
+      expect(hcl).toContain('dir = "file:///m/$${x}\\"q%%{y}"');
+      expect(Object.keys(atlas.env)).toEqual([]);
+    });
+  });
 
-/* 16.3 (b) of plan 21: Atlas reads the database that database's replay left, never replaying the files on a postgres:// dev */
+  it("removes its directory when the body fails, sync or async", async () => {
+    let dir = "";
+    expect(() =>
+      withAtlasEnv(target(), { url: true }, (atlas) => {
+        dir = atlas.dir;
+        throw new Error("boom");
+      }),
+    ).toThrow("boom");
+    expect(existsSync(dir)).toBe(false);
+    await expect(
+      withAtlasEnv(target(), { url: true }, async (atlas) => {
+        dir = atlas.dir;
+        throw new Error("later");
+      }),
+    ).rejects.toThrow("later");
+    expect(existsSync(dir)).toBe(false);
+  });
+
+  it("refuses a target with problems before Atlas runs, and scrubs with the target's URLs", () => {
+    expect(() => withAtlasEnv(target({ url: "" }), { url: true }, () => {})).toThrow("url is empty");
+    const scrubbed = withAtlasEnv(target(), { url: true }, (atlas) => atlas.scrub("auth failed for S3cret"));
+    expect(scrubbed).toBe("auth failed for ***");
+    // M79: maskSecrets takes the given URLs' secrets only, not the generic rules
+    expect(maskSecrets("auth failed for S3cret, api_key=x", [target().url])).toBe("auth failed for ***, api_key=x");
+  });
+});
+
+// 16.3 (b) of plan 21: Atlas reads the database that database's replay left, never replaying the files on a postgres:// dev
 describe("withAtlasEnv's src", () => {
-	it("hands Atlas a database to compare with as src, through env, scoped and scrubbed as the target is", () => {
-		const src = "postgres://dev:S3cret@localhost/database_replay_1"
-		withAtlasEnv(target(), { src, url: true }, (atlas) => {
-			expect(readFileSync(`${atlas.dir}/atlas.hcl`, "utf8")).toContain('  src = getenv("DATABASE_ATLAS_SRC_URL")\n')
-			expect(atlas.env.DATABASE_ATLAS_SRC_URL).toBe(`${src}?search_path=public`)
-			expect(atlas.scrub(`at ${src}?search_path=public`)).not.toContain("S3cret")
-		})
-	})
-})
+  it("hands Atlas a database to compare with as src, through env, scoped and scrubbed as the target is", () => {
+    const src = "postgres://dev:S3cret@localhost/database_replay_1";
+    withAtlasEnv(target(), { src, url: true }, (atlas) => {
+      expect(readFileSync(`${atlas.dir}/atlas.hcl`, "utf8")).toContain('  src = getenv("DATABASE_ATLAS_SRC_URL")\n');
+      expect(atlas.env.DATABASE_ATLAS_SRC_URL).toBe(`${src}?search_path=public`);
+      expect(atlas.scrub(`at ${src}?search_path=public`)).not.toContain("S3cret");
+    });
+  });
+});
 
-/* M21 of the 0.12 round: two schemas of one database never share a history */
+// M21 of the 0.12 round: two schemas of one database never share a history
 describe("revisionsSchema", () => {
-	const base = "postgres://app@db.example.com/app"
-	it("keeps public's history where it always was, and gives any other schema its own", () => {
-		expect(revisionsSchema(target())).toBe("atlas_schema_revisions")
-		expect(revisionsSchema(target({ schema: "tenant_a" }))).toBe("atlas_schema_revisions_tenant_a")
-	})
+  const base = "postgres://app@db.example.com/app";
+  it("keeps public's history where it always was, and gives any other schema its own", () => {
+    expect(revisionsSchema(target())).toBe("atlas_schema_revisions");
+    expect(revisionsSchema(target({ schema: "tenant_a" }))).toBe("atlas_schema_revisions_tenant_a");
+  });
 
-	it("takes the configured schema, which a search_path in the url must name (M39)", () => {
-		expect(revisionsSchema(target({ schema: "tenant_b", url: `${base}?search_path=tenant_b` }))).toBe(
-			"atlas_schema_revisions_tenant_b",
-		)
-	})
+  it("takes the configured schema, which a search_path in the url must name (M39)", () => {
+    expect(revisionsSchema(target({ schema: "tenant_b", url: `${base}?search_path=tenant_b` }))).toBe(
+      "atlas_schema_revisions_tenant_b",
+    );
+  });
 
-	it("names a scope Postgres would cut or fold by its hash, so two never meet", () => {
-		const long = (tail: string) => revisionsSchema(target({ schema: `${"t".repeat(40)}${tail}` }))
-		expect(long("a")).toMatch(/^atlas_schema_revisions_[0-9a-f]{16}$/)
-		expect(long("a")).not.toBe(long("b"))
-		expect(revisionsSchema(target({ schema: "Tenant" }))).not.toBe(revisionsSchema(target({ schema: "tenant" })))
-	})
+  it("names a scope Postgres would cut or fold by its hash, so two never meet", () => {
+    const long = (tail: string) => revisionsSchema(target({ schema: `${"t".repeat(40)}${tail}` }));
+    expect(long("a")).toMatch(/^atlas_schema_revisions_[0-9a-f]{16}$/);
+    expect(long("a")).not.toBe(long("b"));
+    expect(revisionsSchema(target({ schema: "Tenant" }))).not.toBe(revisionsSchema(target({ schema: "tenant" })));
+  });
 
-	it("writes the target's history schema into the Atlas config", () => {
-		withAtlasEnv(target({ schema: "tenant_a" }), { url: true }, (atlas) => {
-			expect(readFileSync(`${atlas.dir}/atlas.hcl`, "utf8")).toContain(
-				'revisions_schema = "atlas_schema_revisions_tenant_a"',
-			)
-		})
-	})
-})
+  it("writes the target's history schema into the Atlas config", () => {
+    withAtlasEnv(target({ schema: "tenant_a" }), { url: true }, (atlas) => {
+      expect(readFileSync(`${atlas.dir}/atlas.hcl`, "utf8")).toContain(
+        'revisions_schema = "atlas_schema_revisions_tenant_a"',
+      );
+    });
+  });
+});
 
-/* M39 of the 0.13 review, PA7 of r22b: database migrates one schema, so a URL's own search_path must be that one */
+// M39 of the 0.13 review, PA7 of r22b: database migrates one schema, so a URL's own search_path must be that one
 describe("pgUrlProblems: a search_path in a url", () => {
-	const base = "postgres://app@db.example.com/app"
-	const dev = "postgres://app@db.example.com/dev"
-	const scopedTo = (field: "devUrl" | "url", path: string, schema: string) =>
-		target(
-			field === "url"
-				? { schema, url: `${base}?search_path=${encodeURIComponent(path)}` }
-				: { devUrl: `${dev}?search_path=${encodeURIComponent(path)}`, schema },
-		)
-	it.each(["url", "devUrl"] as const)(
-		"refuses the %s's search_path naming another schema or more than one, by field name",
-		(field) => {
-			const fix = `database migrates one: set schema to it, and drop search_path from the ${field}`
-			expect(pgUrlProblems(scopedTo(field, "public,extensions", "public")).errors).toEqual([
-				`the ${field}'s search_path names more than one schema (public,extensions); ${fix}`,
-			])
-			expect(pgUrlProblems(scopedTo(field, "tenant_b", "tenant_a")).errors).toEqual([
-				`the ${field}'s search_path names tenant_b, but schema is tenant_a; ${fix}`,
-			])
-		},
-	)
+  const base = "postgres://app@db.example.com/app";
+  const dev = "postgres://app@db.example.com/dev";
 
-	it.each(["url", "devUrl"] as const)("takes a %s search_path that names the configured schema", (field) => {
-		expect(pgUrlProblems(scopedTo(field, "tenant_a", "tenant_a")).errors).toEqual([])
-	})
+  const scopedTo = (field: "devUrl" | "url", path: string, schema: string) =>
+    target(
+      field === "url"
+        ? { schema, url: `${base}?search_path=${encodeURIComponent(path)}` }
+        : { devUrl: `${dev}?search_path=${encodeURIComponent(path)}`, schema },
+    );
 
-	it("checks the devUrl's search_path only when the call needs the dev database", () => {
-		expect(pgUrlProblems(scopedTo("devUrl", "public", "tenant_a"), { dev: false, url: true }).errors).toEqual([])
-	})
-})
+  it.each(["url", "devUrl"] as const)(
+    "refuses the %s's search_path naming another schema or more than one, by field name",
+    (field) => {
+      const fix = `database migrates one: set schema to it, and drop search_path from the ${field}`;
+      expect(pgUrlProblems(scopedTo(field, "public,extensions", "public")).errors).toEqual([
+        `the ${field}'s search_path names more than one schema (public,extensions); ${fix}`,
+      ]);
+      expect(pgUrlProblems(scopedTo(field, "tenant_b", "tenant_a")).errors).toEqual([
+        `the ${field}'s search_path names tenant_b, but schema is tenant_a; ${fix}`,
+      ]);
+    },
+  );
 
-/* r18 P18: the password crosses the network to the address database and Atlas connect to: hostaddr, when given */
+  it.each(["url", "devUrl"] as const)("takes a %s search_path that names the configured schema", (field) => {
+    expect(pgUrlProblems(scopedTo(field, "tenant_a", "tenant_a")).errors).toEqual([]);
+  });
+
+  it("checks the devUrl's search_path only when the call needs the dev database", () => {
+    expect(pgUrlProblems(scopedTo("devUrl", "public", "tenant_a"), { dev: false, url: true }).errors).toEqual([]);
+  });
+});
+
+// r18 P18: the password crosses the network to the address database and Atlas connect to: hostaddr, when given
 describe("pgUrlProblems: plaintext warning by the address connected to", () => {
-	it("warns of a remote hostaddr behind host=localhost, and not of a tunnel to 127.0.0.1", () => {
-		const remote = pgUrlProblems(
-			target({ url: "postgres://app:secret@localhost:5432/app?hostaddr=203.0.113.5&sslmode=disable" }),
-		)
-		expect(remote.warnings.join()).toContain("url reaches 203.0.113.5 without sslmode=verify-full or require")
-		const tunnel = pgUrlProblems(
-			target({ url: "postgres://app:secret@db.example.com:5432/app?hostaddr=127.0.0.1&sslmode=disable" }),
-		)
-		expect(tunnel.warnings).toEqual([])
-	})
-})
+  it("warns of a remote hostaddr behind host=localhost, and not of a tunnel to 127.0.0.1", () => {
+    const remote = pgUrlProblems(
+      target({ url: "postgres://app:secret@localhost:5432/app?hostaddr=203.0.113.5&sslmode=disable" }),
+    );
 
-/* r18 P20: a TLS option database cannot use is refused by the field that holds it, before anything connects */
+    expect(remote.warnings.join()).toContain("url reaches 203.0.113.5 without sslmode=verify-full or require");
+
+    const tunnel = pgUrlProblems(
+      target({ url: "postgres://app:secret@db.example.com:5432/app?hostaddr=127.0.0.1&sslmode=disable" }),
+    );
+
+    expect(tunnel.warnings).toEqual([]);
+  });
+});
+
+// r18 P20: a TLS option database cannot use is refused by the field that holds it, before anything connects
 describe("pgUrlProblems: TLS options, per field", () => {
-	it("refuses an sslmode libpq does not take, naming the field", () => {
-		expect(pgUrlProblems(target({ url: "postgres://localhost/app?sslmode=verify_full" })).errors).toEqual([
-			"url's sslmode verify_full is none libpq takes: disable, allow, prefer, require, verify-ca or verify-full",
-		])
-	})
+  it("refuses an sslmode libpq does not take, naming the field", () => {
+    expect(pgUrlProblems(target({ url: "postgres://localhost/app?sslmode=verify_full" })).errors).toEqual([
+      "url's sslmode verify_full is none libpq takes: disable, allow, prefer, require, verify-ca or verify-full",
+    ]);
+  });
 
-	it("refuses a TLS file that cannot be read, naming the field and the key", () => {
-		const dev = "postgres://localhost/dev?sslmode=verify-full&sslrootcert=/nonexistent/root.crt"
-		expect(pgUrlProblems(target({ devUrl: dev })).errors).toEqual([
-			"devUrl's sslrootcert /nonexistent/root.crt cannot be read",
-		])
-		const key = "postgres://localhost/app?sslmode=require&sslkey=/nonexistent/key&sslcert=/nonexistent/cert"
-		expect(pgUrlProblems(target({ url: key })).errors).toEqual([
-			"url's sslcert /nonexistent/cert cannot be read",
-			"url's sslkey /nonexistent/key cannot be read",
-		])
-	})
-})
+  it("refuses a TLS file that cannot be read, naming the field and the key", () => {
+    const dev = "postgres://localhost/dev?sslmode=verify-full&sslrootcert=/nonexistent/root.crt";
+    expect(pgUrlProblems(target({ devUrl: dev })).errors).toEqual([
+      "devUrl's sslrootcert /nonexistent/root.crt cannot be read",
+    ]);
+    const key = "postgres://localhost/app?sslmode=require&sslkey=/nonexistent/key&sslcert=/nonexistent/cert";
+    expect(pgUrlProblems(target({ url: key })).errors).toEqual([
+      "url's sslcert /nonexistent/cert cannot be read",
+      "url's sslkey /nonexistent/key cannot be read",
+    ]);
+  });
+});

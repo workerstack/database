@@ -18,72 +18,76 @@
  *
  * The parser is an optional peer, loaded once by `loadPostgresParser()` (pg-parser.ts).
  */
-import type { ExtractedSchema } from "../migration-types.ts"
-import type { Finding } from "./classify-alter.ts"
-import type { Fresh } from "./classify-write.ts"
-import { builtinFinding } from "./pg-builtins.ts"
-import { type Facts, followTree, keyOf, names, tableOf } from "./pg-history.ts"
-import { resolveTemps, type Temps } from "./pg-temps.ts"
-import { parsePostgres, postgresParser } from "./pg-parser.ts"
-import { constraintIndexWarnings, ddlFindings } from "./pg-ddl.ts"
-import { maintenanceFindings } from "./pg-maintenance.ts"
-import { followFresh } from "./pg-fresh.ts"
-import { type Held, holdStatement } from "./pg-held.ts"
-import { heldScans, hiddenScans } from "./pg-validate.ts"
-import { preview } from "./classify-file.ts"
-import { eventFindings, kindOf } from "./pg-events.ts"
-import { dynamicOf, executedNodes, executeFindings, firedBy, followPrepared, type Prepared } from "./pg-execute.ts"
-import { followParentage, reachFindings, useFinding } from "./pg-reach.ts"
-import { staysPut } from "./pg-storage.ts"
-import { flag } from "./pg-nodes.ts"
+import type { ExtractedSchema } from "../migration-types.ts";
+import type { Finding } from "./classify-alter.ts";
+import { preview } from "./classify-file.ts";
+import type { Fresh } from "./classify-write.ts";
+import { builtinFinding } from "./pg-builtins.ts";
+import { constraintIndexWarnings, ddlFindings } from "./pg-ddl.ts";
+import { eventFindings, kindOf } from "./pg-events.ts";
+import { dynamicOf, executedNodes, executeFindings, firedBy, followPrepared, type Prepared } from "./pg-execute.ts";
+import { followFresh } from "./pg-fresh.ts";
+import { type Held, holdStatement } from "./pg-held.ts";
+import { type Facts, followTree, keyOf, names, tableOf } from "./pg-history.ts";
+import { maintenanceFindings } from "./pg-maintenance.ts";
+import { flag } from "./pg-nodes.ts";
+import { parsePostgres, postgresParser } from "./pg-parser.ts";
+import { followParentage, reachFindings, useFinding } from "./pg-reach.ts";
+import { staysPut } from "./pg-storage.ts";
+import { resolveTemps, type Temps } from "./pg-temps.ts";
+import { heldScans, hiddenScans } from "./pg-validate.ts";
 
-type Node = Record<string, unknown>
+type Node = Record<string, unknown>;
 
-/* the statements whose rows writeFindings reads */
-const WRITES = /^(?:InsertStmt|UpdateStmt|DeleteStmt|MergeStmt)$/
+// the statements whose rows writeFindings reads
+const WRITES = /^(?:InsertStmt|UpdateStmt|DeleteStmt|MergeStmt)$/;
 
 /** What the walk reads a statement against: the history, what it and the file so far attached and defined, and what the file made fresh */
 type TreeContext = {
-	before?: ExtractedSchema | undefined
-	/**
-	 * whether the file so far set session_replication_role, which flips which triggers fire: from
-	 * then on every trigger counts as firing, whatever the history left its state
-	 */
-	everyTrigger?: boolean | undefined
-	/** what the history and the file so far attached to their tables (pg-history.ts) */
-	facts: Facts
-	fresh: Fresh
-	/** the locks the open transaction holds to its COMMIT, and what it made */
-	held: Held
-	/** the file's prepared statements so far, which an EXECUTE runs (pg-execute.ts) */
-	preparing: Prepared
-	/** the file's first statement so far that may PREPARE as it runs, named (pg-execute.ts) */
-	dynamic?: string | undefined
-	/** the temp relations the file made so far, which its later unqualified names resolve to (pg-temps.ts) */
-	temps: Temps
-}
+  before?: ExtractedSchema | undefined;
+  /**
+   * whether the file so far set session_replication_role, which flips which triggers fire: from
+   * then on every trigger counts as firing, whatever the history left its state
+   */
+  everyTrigger?: boolean | undefined;
+  /** what the history and the file so far attached to their tables (pg-history.ts) */
+  facts: Facts;
+  fresh: Fresh;
+  /** the locks the open transaction holds to its COMMIT, and what it made */
+  held: Held;
+  /** the file's prepared statements so far, which an EXECUTE runs (pg-execute.ts) */
+  preparing: Prepared;
+  /** the file's first statement so far that may PREPARE as it runs, named (pg-execute.ts) */
+  dynamic?: string | undefined;
+  /** the temp relations the file made so far, which its later unqualified names resolve to (pg-temps.ts) */
+  temps: Temps;
+};
 
 // lookup-table: the settings whose change decides what a later statement runs, and why
 const SETTINGS: Readonly<Record<string, string>> = {
-	search_path: "sets search_path, which decides the function or table every later unqualified name resolves to",
-	session_replication_role: "disables foreign key checks and ordinary triggers for the rest of the file",
-	role: 'sets the role, which changes the schemas "$user" puts on the search path and what later names resolve to',
-	session_authorization:
-		'sets the session user, which changes the schemas "$user" puts on the search path and what later names resolve to',
-}
+  role: 'sets the role, which changes the schemas "$user" puts on the search path and what later names resolve to',
+  search_path: "sets search_path, which decides the function or table every later unqualified name resolves to",
+  session_authorization:
+    'sets the session user, which changes the schemas "$user" puts on the search path and what later names resolve to',
+  session_replication_role: "disables foreign key checks and ordinary triggers for the rest of the file",
+};
+
 /** The columns a SET list assigns */
 const assigned = (targets: unknown): string[] =>
-	(targets as Array<{ ResTarget: { name: string } }>).map((target) => target.ResTarget.name)
+  (targets as Array<{ ResTarget: { name: string } }>).map((target) => target.ResTarget.name);
 
 /** An UPDATE's or upsert's rating: cautious when it backfills only what `fresh` holds, which it then takes out */
 function updateFinding(table: { key: string; name: string }, columns: string[], fresh: Fresh): Finding {
-	const added = fresh.columns.get(table.key)
-	const backfill =
-		fresh.tables.has(table.key) || (columns.length > 0 && columns.every((column) => added?.has(column) === true))
-	for (const column of columns) added?.delete(column)
-	return backfill
-		? { level: "cautious", note: `backfills ${table.key} (${columns.join(", ")}), new in this file` }
-		: { level: "unsafe", note: `updates existing rows of ${table.key} (${columns.join(", ")})` }
+  const added = fresh.columns.get(table.key);
+
+  const backfill =
+    fresh.tables.has(table.key) || (columns.length > 0 && columns.every((column) => added?.has(column) === true));
+
+  for (const column of columns) added?.delete(column);
+
+  return backfill
+    ? { level: "cautious", note: `backfills ${table.key} (${columns.join(", ")}), new in this file` }
+    : { level: "unsafe", note: `updates existing rows of ${table.key} (${columns.join(", ")})` };
 }
 
 /**
@@ -91,62 +95,80 @@ function updateFinding(table: { key: string; name: string }, columns: string[], 
  * names is that table's; undefined when a view reads no single table
  */
 function baseOf(key: string, facts: Facts): { column: (name: string) => string; key: string } | undefined {
-	let at = { column: (name: string) => name, key }
-	for (let view = facts.views.get(at.key); view !== undefined; view = facts.views.get(at.key)) {
-		const { base, columns } = view
-		if (base === undefined) return undefined
-		const outer = at.column
-		at = { column: (name) => (columns === "all" ? outer(name) : (columns.get(outer(name)) ?? outer(name))), key: base }
-	}
-	return at
+  let at = { column: (name: string) => name, key };
+
+  for (let view = facts.views.get(at.key); view !== undefined; view = facts.views.get(at.key)) {
+    const { base, columns } = view;
+
+    if (base === undefined) return undefined;
+    const outer = at.column;
+    at = { column: (name) => (columns === "all" ? outer(name) : (columns.get(outer(name)) ?? outer(name))), key: base };
+  }
+
+  return at;
 }
 
 /** A write node's findings: its own rating, and what it runs on every table it reaches */
 function writeFindings(type: string, node: Node, ctx: TreeContext): Finding[] {
-	const named = tableOf(node["relation"], ctx.facts.schema)
-	const base = baseOf(named.key, ctx.facts)
-	/* a view Postgres writes through only by a trigger or a rule database cannot follow to one table */
-	if (base === undefined)
-		return [
-			{ level: "unsafe", note: `writes through the view ${named.key}, which database cannot follow to one table` },
-		]
-	const table = { key: base.key, name: named.name }
-	/* a write without ONLY reaches the table's partitions and inheritance children */
-	const target = { inh: flag((node["relation"] as Node)["inh"]), key: named.key }
-	if (type === "DeleteStmt")
-		return [{ level: "unsafe", note: `deletes rows of ${table.key}` }, ...reachFindings(target, ["delete"], ctx)]
-	if (type === "UpdateStmt")
-		return [
-			updateFinding(table, assigned(node["targetList"]).map(base.column), ctx.fresh),
-			...reachFindings(target, ["update"], ctx),
-		]
-	if (type === "MergeStmt") {
-		const commands = (node["mergeWhenClauses"] as Array<{ MergeWhenClause: { commandType: string } }>).map(
-			(each) => each.MergeWhenClause.commandType,
-		)
-		const changes = commands.some((command) => command === "CMD_UPDATE" || command === "CMD_DELETE")
-		const events = commands.map((command) => command.replace("CMD_", "").toLowerCase())
-		return [
-			changes
-				? { level: "unsafe", note: `merges into ${table.key}, updating or deleting its rows` }
-				: { level: "cautious", note: `merges new rows into ${table.key}` },
-			...reachFindings(target, events, ctx),
-		]
-	}
-	const conflict = node["onConflictClause"] as Node | undefined
-	if (conflict?.["action"] === "ONCONFLICT_UPDATE")
-		return [
-			updateFinding(table, assigned(conflict["targetList"]).map(base.column), ctx.fresh),
-			...reachFindings(target, ["insert", "update"], ctx),
-		]
-	return reachFindings(target, ["insert"], ctx)
+  const named = tableOf(node["relation"], ctx.facts.schema);
+  const base = baseOf(named.key, ctx.facts);
+
+  // a view Postgres writes through only by a trigger or a rule database cannot follow to one table
+  if (base === undefined) {
+    return [
+      { level: "unsafe", note: `writes through the view ${named.key}, which database cannot follow to one table` },
+    ];
+  }
+
+  const table = { key: base.key, name: named.name };
+  // a write without ONLY reaches the table's partitions and inheritance children
+  const target = { inh: flag((node["relation"] as Node)["inh"]), key: named.key };
+
+  if (type === "DeleteStmt")
+    return [{ level: "unsafe", note: `deletes rows of ${table.key}` }, ...reachFindings(target, ["delete"], ctx)];
+
+  if (type === "UpdateStmt") {
+    return [
+      updateFinding(table, assigned(node["targetList"]).map(base.column), ctx.fresh),
+      ...reachFindings(target, ["update"], ctx),
+    ];
+  }
+
+  if (type === "MergeStmt") {
+    const commands = (node["mergeWhenClauses"] as Array<{ MergeWhenClause: { commandType: string } }>).map(
+      (each) => each.MergeWhenClause.commandType,
+    );
+
+    const changes = commands.some((command) => command === "CMD_UPDATE" || command === "CMD_DELETE");
+    const events = commands.map((command) => command.replace("CMD_", "").toLowerCase());
+
+    return [
+      changes
+        ? { level: "unsafe", note: `merges into ${table.key}, updating or deleting its rows` }
+        : { level: "cautious", note: `merges new rows into ${table.key}` },
+      ...reachFindings(target, events, ctx),
+    ];
+  }
+
+  const conflict = node["onConflictClause"] as Node | undefined;
+
+  if (conflict?.["action"] === "ONCONFLICT_UPDATE") {
+    return [
+      updateFinding(table, assigned(conflict["targetList"]).map(base.column), ctx.fresh),
+      ...reachFindings(target, ["insert", "update"], ctx),
+    ];
+  }
+
+  return reachFindings(target, ["insert"], ctx);
 }
 
 /** A SET, SET LOCAL or RESET of a setting that decides what later statements run: its finding */
 function settingFinding(node: Node): Finding | undefined {
-	if (node["kind"] === "VAR_RESET_ALL") return { level: "unsafe", note: "resets every setting, search_path among them" }
-	const note = SETTINGS[String(node["name"])]
-	return note === undefined ? undefined : { level: "unsafe", note }
+  if (node["kind"] === "VAR_RESET_ALL")
+    return { level: "unsafe", note: "resets every setting, search_path among them" };
+  const note = SETTINGS[String(node["name"])];
+
+  return note === undefined ? undefined : { level: "unsafe", note };
 }
 
 /**
@@ -154,87 +176,105 @@ function settingFinding(node: Node): Finding | undefined {
  * every later trigger counted as firing; undefined for any other call
  */
 function replicationFinding(node: Node, ctx: TreeContext): Finding | undefined {
-	if (names(node["funcname"]).at(-1) !== "set_config") return undefined
-	const first = ((node["args"] as Node[] | undefined) ?? [])[0]?.["A_Const"] as Node | undefined
-	const setting = (first?.["sval"] as { sval: string } | undefined)?.sval
-	if (setting !== undefined && setting !== "session_replication_role") return undefined
-	ctx.everyTrigger = true
-	return { level: "unsafe", note: SETTINGS["session_replication_role"] }
+  if (names(node["funcname"]).at(-1) !== "set_config") return undefined;
+  const first = ((node["args"] as Node[] | undefined) ?? [])[0]?.["A_Const"] as Node | undefined;
+  const setting = (first?.["sval"] as { sval: string } | undefined)?.sval;
+
+  if (setting !== undefined && setting !== "session_replication_role") return undefined;
+  ctx.everyTrigger = true;
+
+  return { level: "unsafe", note: SETTINGS["session_replication_role"] };
 }
 
 /** A function or procedure the file creates: its finding, its name kept as one a migration defined */
 function routineFinding(node: Node, ctx: TreeContext): Finding {
-	const kind = flag(node["is_procedure"]) ? "procedure" : "function"
-	const name = names(node["funcname"])
-	ctx.facts.defined.add(keyOf(name, ctx.facts.schema))
-	return { level: "unsafe", note: `creates ${kind} ${name.join(".")}, whose body database does not read` }
+  const kind = flag(node["is_procedure"]) ? "procedure" : "function";
+  const name = names(node["funcname"]);
+  ctx.facts.defined.add(keyOf(name, ctx.facts.schema));
+
+  return { level: "unsafe", note: `creates ${kind} ${name.join(".")}, whose body database does not read` };
 }
 
-/* the ALTER TABLE actions that turn off what keeps a table's rows whole, and why */
+// the ALTER TABLE actions that turn off what keeps a table's rows whole, and why
 // lookup-table: by the parser's AlterTableCmd subtype
 const UNGUARDING: Readonly<Record<string, (table: string) => string>> = {
-	AT_DisableTrigAll: (table) => `disables every trigger on ${table}, the ones that enforce its foreign keys among them`,
-	AT_SetUnLogged: (table) => `makes ${table} unlogged: an unlogged table is emptied after a crash and not replicated`,
-}
+  AT_DisableTrigAll: (table) => `disables every trigger on ${table}, the ones that enforce its foreign keys among them`,
+  AT_SetUnLogged: (table) => `makes ${table} unlogged: an unlogged table is emptied after a crash and not replicated`,
+};
 
 /**
  * An ALTER TABLE that turns off a table's foreign keys or durability: its finding; none
  * for a SET UNLOGGED of a table the history left unlogged, which Postgres skips
  */
 function unguardingFinding(node: Node, facts: Facts): Finding | undefined {
-	const table = tableOf(node["relation"], facts.schema).key
-	for (const each of node["cmds"] as Node[]) {
-		const cmd = each["AlterTableCmd"] as Node
-		const note = UNGUARDING[String(cmd["subtype"])]
-		if (note !== undefined && !staysPut(cmd, facts.storage.get(table))) return { level: "unsafe", note: note(table) }
-	}
-	return undefined
+  const table = tableOf(node["relation"], facts.schema).key;
+
+  for (const each of node["cmds"] as Node[]) {
+    const cmd = each["AlterTableCmd"] as Node;
+    const note = UNGUARDING[String(cmd["subtype"])];
+
+    if (note !== undefined && !staysPut(cmd, facts.storage.get(table))) return { level: "unsafe", note: note(table) };
+  }
+
+  return undefined;
 }
 
 /** A node that runs code database does not read, changes what later names resolve to, or shadows a table: its finding */
 function codeFinding(type: string, node: Node, ctx: TreeContext): Finding | undefined {
-	if (type === "AlterTableStmt") return unguardingFinding(node, ctx.facts)
-	if (type === "DoStmt") return { level: "unsafe", note: "runs a DO block, whose body database does not read" }
-	if (type === "CreateFunctionStmt") return routineFinding(node, ctx)
-	if (type === "CreateTrigStmt")
-		return {
-			level: "unsafe",
-			note: `creates trigger ${String(node["trigname"])}, which runs a function on later writes`,
-		}
-	if (type === "VariableSetStmt") {
-		if (node["name"] === "session_replication_role") ctx.everyTrigger = true
-		return settingFinding(node)
-	}
-	if (type === "FuncCall") return replicationFinding(node, ctx) ?? builtinFinding(names(node["funcname"]), ctx.facts)
-	/* a CALL holds its call as a plain field, not a typed node */
-	if (type === "CallStmt") return builtinFinding(names((node["funccall"] as Node)["funcname"]), ctx.facts)
-	return useFinding(type, node, ctx.facts) ?? shadowFinding(type, node, ctx)
+  if (type === "AlterTableStmt") return unguardingFinding(node, ctx.facts);
+
+  if (type === "DoStmt") return { level: "unsafe", note: "runs a DO block, whose body database does not read" };
+
+  if (type === "CreateFunctionStmt") return routineFinding(node, ctx);
+
+  if (type === "CreateTrigStmt") {
+    return {
+      level: "unsafe",
+      note: `creates trigger ${String(node["trigname"])}, which runs a function on later writes`,
+    };
+  }
+
+  if (type === "VariableSetStmt") {
+    if (node["name"] === "session_replication_role") ctx.everyTrigger = true;
+
+    return settingFinding(node);
+  }
+
+  if (type === "FuncCall") return replicationFinding(node, ctx) ?? builtinFinding(names(node["funcname"]), ctx.facts);
+
+  // a CALL holds its call as a plain field, not a typed node
+  if (type === "CallStmt") return builtinFinding(names((node["funccall"] as Node)["funcname"]), ctx.facts);
+
+  return useFinding(type, node, ctx.facts) ?? shadowFinding(type, node, ctx);
 }
 
 /** A temp table or view that takes an existing table's name: its finding */
 function shadowFinding(type: string, node: Node, ctx: TreeContext): Finding | undefined {
-	/* a CREATE TABLE AS holds its target as a plain field, as SELECT … INTO does, not a typed node */
-	const relation =
-		type === "CreateStmt"
-			? node["relation"]
-			: type === "ViewStmt"
-				? node["view"]
-				: type === "CreateTableAsStmt"
-					? (node["into"] as Node)["rel"]
-					: (node["intoClause"] as Node | undefined)?.["rel"]
-	const table = relation === undefined ? undefined : tableOf(relation, ctx.facts.schema)
-	if (table?.temp === true && ctx.before?.tables.has(table.name) === true)
-		return { level: "unsafe", note: `shadows ${table.name} for the rest of the file` }
-	return undefined
+  // a CREATE TABLE AS holds its target as a plain field, as SELECT … INTO does, not a typed node
+  const relation =
+    type === "CreateStmt"
+      ? node["relation"]
+      : type === "ViewStmt"
+        ? node["view"]
+        : type === "CreateTableAsStmt"
+          ? (node["into"] as Node)["rel"]
+          : (node["intoClause"] as Node | undefined)?.["rel"];
+
+  const table = relation === undefined ? undefined : tableOf(relation, ctx.facts.schema);
+
+  if (table?.temp === true && ctx.before?.tables.has(table.name) === true)
+    return { level: "unsafe", note: `shadows ${table.name} for the rest of the file` };
+
+  return undefined;
 }
 
 /** `rate()`; a refusal it throws names the statement `stmt` first, as check's other refusals do */
 function refusingAs<T>(stmt: string, rate: () => T): T {
-	try {
-		return rate()
-	} catch (error) {
-		throw new Error(`${preview(stmt)}: ${(error as Error).message}`, { cause: error })
-	}
+  try {
+    return rate();
+  } catch (error) {
+    throw new Error(`${preview(stmt)}: ${(error as Error).message}`, { cause: error });
+  }
 }
 
 /** One Postgres statement's findings, read from its parse tree: the one its file's read kept, else parsed here */
@@ -245,55 +285,67 @@ function refusingAs<T>(stmt: string, rate: () => T): T {
  * grammar's rating, so theirs is not one.
  */
 function pgTreeFindings(
-	stmt: string,
-	ctx: TreeContext,
-	kept?: unknown,
+  stmt: string,
+  ctx: TreeContext,
+  kept?: unknown,
 ): { findings: Finding[]; grammar: { kind?: string | undefined; treeRated: boolean } } {
-	/* the parser is loaded, or this throws before the statement is rated */
-	postgresParser()
-	let tree: { stmts?: unknown }
-	try {
-		tree = { stmts: resolveTemps(kept === undefined ? parsePostgres(stmt).stmts : kept, ctx.temps, ctx.facts.indexes) }
-	} catch (error) {
-		// reason: a statement Postgres cannot parse is the statement's finding, unsafe
-		const note = `database could not parse this as Postgres 17: ${(error as Error).message}`
-		return { findings: [{ level: "unsafe", note }], grammar: { treeRated: true } }
-	}
-	const raws = tree.stmts as Array<{ stmt: Node }>
-	const nodes = executedNodes(raws, ctx.preparing.queries)
-	const tops = raws.map((raw) => Object.entries(raw.stmt)[0] as [string, Node])
-	/* a DDL statement's event trigger runs before an EXECUTE under it looks its name up */
-	const dynamic = ctx.dynamic ?? firedBy(tops)
-	const findings = nodes.flatMap(([type, node]) => {
-		if (WRITES.test(type)) return writeFindings(type, node, ctx)
-		if (type === "ExecuteStmt")
-			return refusingAs(stmt, () => executeFindings(node, { dynamic, prepared: ctx.preparing }))
-		return [
-			...(refusingAs(stmt, () => ddlFindings(type, node, ctx.facts)) ?? []),
-			...(type === "AlterTableStmt" ? [...constraintIndexWarnings(node, ctx), ...heldScans(node, ctx)] : []),
-			codeFinding(type, node, ctx),
-		].filter((finding) => finding !== undefined)
-	})
-	ctx.dynamic ??= dynamicOf(tops, nodes)
-	/* the locks the statement takes last to its transaction's COMMIT, read before the history follows it */
-	for (const [type, node] of tops) {
-		holdStatement(type, node, ctx)
-		followPrepared(type, node, ctx.preparing)
-	}
-	/* what the statement made new, attached and reparented counts for the statements after it */
-	for (const [type, node] of nodes) {
-		followFresh(type, node, ctx)
-		if (type === "AlterTableStmt") followParentage(node, ctx.fresh, ctx.facts.schema)
-	}
-	/* the event triggers the history made run on this statement before what it makes counts */
-	findings.push(...eventFindings(tree.stmts, ctx), ...hiddenScans(ctx.held))
-	followTree(tree.stmts, ctx.facts)
-	const treeRated = tops.length > 0 && tops.every(([type, node]) => maintenanceFindings(type, node) !== undefined)
-	return {
-		findings,
-		/* a read statement is one parse tree's one statement (pg-split.ts) */
-		grammar: { kind: kindOf(...(tops[0] as [string, Node])), treeRated },
-	}
+  // the parser is loaded, or this throws before the statement is rated
+  postgresParser();
+  let tree: { stmts?: unknown };
+
+  try {
+    tree = { stmts: resolveTemps(kept === undefined ? parsePostgres(stmt).stmts : kept, ctx.temps, ctx.facts.indexes) };
+  } catch (error) {
+    // reason: a statement Postgres cannot parse is the statement's finding, unsafe
+    const note = `database could not parse this as Postgres 17: ${(error as Error).message}`;
+
+    return { findings: [{ level: "unsafe", note }], grammar: { treeRated: true } };
+  }
+
+  const raws = tree.stmts as Array<{ stmt: Node }>;
+  const nodes = executedNodes(raws, ctx.preparing.queries);
+  const tops = raws.map((raw) => Object.entries(raw.stmt)[0] as [string, Node]);
+  // a DDL statement's event trigger runs before an EXECUTE under it looks its name up
+  const dynamic = ctx.dynamic ?? firedBy(tops);
+
+  const findings = nodes.flatMap(([type, node]) => {
+    if (WRITES.test(type)) return writeFindings(type, node, ctx);
+
+    if (type === "ExecuteStmt")
+      return refusingAs(stmt, () => executeFindings(node, { dynamic, prepared: ctx.preparing }));
+
+    return [
+      ...(refusingAs(stmt, () => ddlFindings(type, node, ctx.facts)) ?? []),
+      ...(type === "AlterTableStmt" ? [...constraintIndexWarnings(node, ctx), ...heldScans(node, ctx)] : []),
+      codeFinding(type, node, ctx),
+    ].filter((finding) => finding !== undefined);
+  });
+
+  ctx.dynamic ??= dynamicOf(tops, nodes);
+
+  // the locks the statement takes last to its transaction's COMMIT, read before the history follows it
+  for (const [type, node] of tops) {
+    holdStatement(type, node, ctx);
+    followPrepared(type, node, ctx.preparing);
+  }
+
+  // what the statement made new, attached and reparented counts for the statements after it
+  for (const [type, node] of nodes) {
+    followFresh(type, node, ctx);
+
+    if (type === "AlterTableStmt") followParentage(node, ctx.fresh, ctx.facts.schema);
+  }
+
+  // the event triggers the history made run on this statement before what it makes counts
+  findings.push(...eventFindings(tree.stmts, ctx), ...hiddenScans(ctx.held));
+  followTree(tree.stmts, ctx.facts);
+  const treeRated = tops.length > 0 && tops.every(([type, node]) => maintenanceFindings(type, node) !== undefined);
+
+  return {
+    findings,
+    // a read statement is one parse tree's one statement (pg-split.ts)
+    grammar: { kind: kindOf(...(tops[0] as [string, Node])), treeRated },
+  };
 }
 
-export { pgTreeFindings, type TreeContext }
+export { pgTreeFindings };

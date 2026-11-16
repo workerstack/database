@@ -14,44 +14,45 @@
  * }
  * ```
  */
-import path from "node:path"
-import type { TableMeta } from "../analyzer-types.ts"
-import { stringLiteral } from "../utils/case.ts"
-import { writeGenFile } from "../utils/fs.ts"
-import type { GeneratorContext } from "./context-types.ts"
+import path from "node:path";
+
+import type { TableMeta } from "../analyzer-types.ts";
+import { stringLiteral } from "../utils/case.ts";
+import { writeGenFile } from "../utils/fs.ts";
+import type { GeneratorContext } from "./context-types.ts";
 
 /** Where the enum-checks generator writes */
 export type EnumChecksConfig = {
-	/** the file written, relative to the codegen working directory */
-	output: string
-}
+  /** the file written, relative to the codegen working directory */
+  output: string;
+};
 
 type EnumField = {
-	fieldName: string
-	values: string[]
-}
+  fieldName: string;
+  values: string[];
+};
 
 /** The name of the CHECK database writes for an enum column; the constraint map keys its entry by it */
 export const enumCheckName = (table: Pick<TableMeta, "sqlName">, fieldName: string): string =>
-	`${table.sqlName}_${fieldName}_enum`
+  `${table.sqlName}_${fieldName}_enum`;
 
 function getEnumFields(table: TableMeta): EnumField[] {
-	const result: EnumField[] = []
+  const result: EnumField[] = [];
 
-	for (const field of table.fields) {
-		if (field.enumValues && field.enumValues.length > 0) {
-			result.push({
-				fieldName: field.name,
-				values: field.enumValues,
-			})
-		}
-	}
+  for (const field of table.fields) {
+    if (field.enumValues && field.enumValues.length > 0) {
+      result.push({
+        fieldName: field.name,
+        values: field.enumValues,
+      });
+    }
+  }
 
-	return result
+  return result;
 }
 
 function toCamelCase(s: string): string {
-	return s.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase())
+  return s.replaceAll(/_([a-z])/g, (_, c: string) => c.toUpperCase());
 }
 
 /**
@@ -59,13 +60,13 @@ function toCamelCase(s: string): string {
  * doubled, then everything a template treats specially (backslash, backtick, `${`, line breaks).
  */
 function escapeValue(val: string): string {
-	return val
-		.replace(/'/g, "''")
-		.replace(/\\/g, "\\\\")
-		.replace(/`/g, "\\`")
-		.replace(/\$\{/g, "\\${")
-		.replace(/\n/g, "\\n")
-		.replace(/\r/g, "\\r")
+  return val
+    .replaceAll("'", "''")
+    .replaceAll("\\", "\\\\")
+    .replaceAll("`", "\\`")
+    .replaceAll("${", "\\${")
+    .replaceAll("\n", "\\n")
+    .replaceAll("\r", "\\r");
 }
 
 /**
@@ -74,58 +75,57 @@ function escapeValue(val: string): string {
  * nothing, and logs it, when no table has one
  */
 export function generateEnumChecks(ctx: GeneratorContext, config: EnumChecksConfig): void {
-	const { dbName, tables } = ctx.analysis
-	const { cwd } = ctx
-	const outputPath = path.resolve(cwd, config.output)
+  const { dbName, tables } = ctx.analysis;
+  const { cwd } = ctx;
+  const outputPath = path.resolve(cwd, config.output);
 
-	const tablesWithEnums: Array<{ enumFields: EnumField[]; table: TableMeta }> = []
+  const tablesWithEnums: Array<{ enumFields: EnumField[]; table: TableMeta }> = [];
 
-	for (const table of tables) {
-		const enumFields = getEnumFields(table)
-		if (enumFields.length > 0) {
-			tablesWithEnums.push({ enumFields, table })
-		}
-	}
+  for (const table of tables) {
+    const enumFields = getEnumFields(table);
 
-	if (tablesWithEnums.length === 0) {
-		ctx.log(`No enum fields found in ${dbName} — skipping enum-checks generation`)
-		return
-	}
+    if (enumFields.length > 0) tablesWithEnums.push({ enumFields, table });
+  }
 
-	const lines: string[] = []
-	/* the return type annotated, so a consumer's isolatedDeclarations compiles the file */
-	lines.push(
-		`import { check, type CheckBuilder } from "drizzle-orm/${ctx.dialect === "postgres" ? "pg" : "sqlite"}-core"`,
-	)
-	lines.push(`import { sql } from "drizzle-orm"`)
-	lines.push("")
+  if (tablesWithEnums.length === 0) {
+    ctx.log(`No enum fields found in ${dbName} — skipping enum-checks generation`);
 
-	for (const { enumFields, table } of tablesWithEnums) {
-		const fnName = `${toCamelCase(table.varName)}EnumChecks`
-		lines.push(`export function ${fnName}(table: Record<string, unknown>): CheckBuilder[] {`)
-		lines.push("\treturn [")
+    return;
+  }
 
-		for (const ef of enumFields) {
-			const inList = ef.values.map((v) => `'${escapeValue(v)}'`).join(", ")
-			const checkName = enumCheckName(table, ef.fieldName)
-			/* bracket access keeps the generated file valid under noPropertyAccessFromIndexSignature */
-			lines.push(
-				`\t\tcheck(${stringLiteral(checkName)}, sql\`\${table[${JSON.stringify(ef.fieldName)}]} IN (${inList})\`),`,
-			)
-		}
+  const lines: string[] = [];
+  // the return type annotated, so a consumer's isolatedDeclarations compiles the file
+  lines.push(
+    `import { check, type CheckBuilder } from "drizzle-orm/${ctx.dialect === "postgres" ? "pg" : "sqlite"}-core"`,
+  );
+  lines.push(`import { sql } from "drizzle-orm"`);
+  lines.push("");
 
-		lines.push("\t]")
-		lines.push("}")
-		lines.push("")
-	}
+  for (const { enumFields, table } of tablesWithEnums) {
+    const fnName = `${toCamelCase(table.varName)}EnumChecks`;
+    lines.push(`export function ${fnName}(table: Record<string, unknown>): CheckBuilder[] {`);
+    lines.push("\treturn [");
 
-	writeGenFile(outputPath, lines.join("\n"), { generator: "database", staged: ctx.staged })
+    for (const ef of enumFields) {
+      const inList = ef.values.map((v) => `'${escapeValue(v)}'`).join(", ");
+      const checkName = enumCheckName(table, ef.fieldName);
+      // bracket access keeps the generated file valid under noPropertyAccessFromIndexSignature
+      lines.push(
+        `\t\tcheck(${stringLiteral(checkName)}, sql\`\${table[${JSON.stringify(ef.fieldName)}]} IN (${inList})\`),`,
+      );
+    }
 
-	let totalEnums = 0
-	for (const { enumFields } of tablesWithEnums) {
-		totalEnums += enumFields.length
-	}
+    lines.push("\t]");
+    lines.push("}");
+    lines.push("");
+  }
 
-	ctx.log(`Generated enum checks for ${dbName} at: ${outputPath}`)
-	ctx.log(`Tables: ${tablesWithEnums.length}, Enum columns: ${totalEnums}`)
+  writeGenFile(outputPath, lines.join("\n"), { generator: "database", staged: ctx.staged });
+
+  let totalEnums = 0;
+
+  for (const { enumFields } of tablesWithEnums) totalEnums += enumFields.length;
+
+  ctx.log(`Generated enum checks for ${dbName} at: ${outputPath}`);
+  ctx.log(`Tables: ${tablesWithEnums.length}, Enum columns: ${totalEnums}`);
 }

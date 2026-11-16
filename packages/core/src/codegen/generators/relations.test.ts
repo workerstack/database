@@ -1,43 +1,47 @@
-import { fixtureRoot } from "../__fixtures__/temp.ts"
-import fs from "node:fs"
-import path from "node:path"
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { analyze } from "../analyzer.ts"
-import { generateRelations } from "./relations.ts"
-import { testContext } from "./__fixtures__/context.ts"
+import fs from "node:fs";
+import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { fixtureRoot } from "../__fixtures__/temp.ts";
+import { analyze } from "../analyzer.ts";
+import { testContext } from "./__fixtures__/context.ts";
+import { generateRelations } from "./relations.ts";
 
 const HEAD = `import { sqliteTable as createTable, text } from "drizzle-orm/sqlite-core"
 import { c } from "@workerstack/database/sqlite/columns"
 export const user = createTable("user", { id: c.id() })
-`
+`;
 
-let tmpDir: string
+let tmpDir: string;
 
 beforeEach(() => {
-	tmpDir = fs.mkdtempSync(path.join(fixtureRoot(), "database-gen-relations-"))
-})
+  tmpDir = fs.mkdtempSync(path.join(fixtureRoot(), "database-gen-relations-"));
+});
 
 afterEach(() => {
-	fs.rmSync(tmpDir, { force: true, recursive: true })
-})
+  fs.rmSync(tmpDir, { force: true, recursive: true });
+});
 
 /** Generate relations for tables declared after a `user` table; returns the file and the logged lines */
 async function generate(tables: string, file = "db.test.tables.ts"): Promise<{ content: string; logged: string[] }> {
-	const tablesPath = path.join(tmpDir, file)
-	fs.writeFileSync(tablesPath, `${HEAD}${tables}\n`)
-	const ctx = testContext(await analyze(tablesPath), { cwd: tmpDir, tablesPath })
-	const output = path.join(tmpDir, "relations.gen.ts")
-	generateRelations(ctx, { output })
-	return { content: fs.readFileSync(output, "utf-8"), logged: ctx.logged }
+  const tablesPath = path.join(tmpDir, file);
+  fs.writeFileSync(tablesPath, `${HEAD}${tables}\n`);
+  const ctx = testContext(await analyze(tablesPath), { cwd: tmpDir, tablesPath });
+  const output = path.join(tmpDir, "relations.gen.ts");
+  generateRelations(ctx, { output });
+
+  return { content: fs.readFileSync(output, "utf-8"), logged: ctx.logged };
 }
 
 describe("generateRelations", () => {
-	it("writes r.one on the FK's table and r.many on the referenced one, sorted by name", async () => {
-		const { content } = await generate(`export const post = createTable("post", {
+  it("writes r.one on the FK's table and r.many on the referenced one, sorted by name", async () => {
+    const { content } = await generate(`export const post = createTable("post", {
 	id: c.id(),
 	user_id: c.ref("user_id").references(() => user.id).notNull(),
-})`)
-		expect(content.slice(content.indexOf("\n") + 1)).toBe(`import { defineRelations } from "drizzle-orm"
+})`);
+
+    expect(content.slice(content.indexOf("\n") + 1)).toBe(`import { defineRelations } from "drizzle-orm"
 import * as schema from "./db.test.tables"
 
 export const relations = defineRelations(schema, (r) => ({
@@ -54,120 +58,126 @@ export const relations = defineRelations(schema, (r) => ({
 		}),
 	},
 }))
-`)
-	})
+`);
+  });
 
-	it("imports the tables file by its own name and logs what it counted", async () => {
-		const { content, logged } = await generate(
-			`export const post = createTable("post", { id: c.id(), user_id: c.ref("user_id").references(() => user.id) })
+  it("imports the tables file by its own name and logs what it counted", async () => {
+    const { content, logged } = await generate(
+      `export const post = createTable("post", { id: c.id(), user_id: c.ref("user_id").references(() => user.id) })
 export const tag = createTable("tag", { id: c.id() })`,
-			"db.test.tables.gen.ts",
-		)
-		expect(content).toContain(`import * as schema from "./db.test.tables.gen"`)
-		expect(content).not.toContain("tag: {")
-		expect(logged[0]).toMatch(/^Generated relations: .*relations\.gen\.ts$/)
-		expect(logged[1]).toBe("Tables: 3, r.one: 1, r.many: 1")
-	})
-})
+      "db.test.tables.gen.ts",
+    );
+
+    expect(content).toContain(`import * as schema from "./db.test.tables.gen"`);
+    expect(content).not.toContain("tag: {");
+    expect(logged[0]).toMatch(/^Generated relations: .*relations\.gen\.ts$/);
+    expect(logged[1]).toBe("Tables: 3, r.one: 1, r.many: 1");
+  });
+});
 
 describe("generateRelations — relation names", () => {
-	it("names r.one by the prefix before the referenced table", async () => {
-		const { content } = await generate(`export const invite = createTable("invite", {
+  it("names r.one by the prefix before the referenced table", async () => {
+    const { content } = await generate(`export const invite = createTable("invite", {
 	id: c.id(),
 	invited_by_user_id: c.ref("invited_by_user_id").references(() => user.id),
-})`)
-		expect(content).toContain("invitedBy: r.one.user")
-	})
+})`);
 
-	it("falls back to the column without _id when it does not name the table", async () => {
-		const { content } = await generate(`export const doc = createTable("doc", {
+    expect(content).toContain("invitedBy: r.one.user");
+  });
+
+  it("falls back to the column without _id when it does not name the table", async () => {
+    const { content } = await generate(`export const doc = createTable("doc", {
 	id: c.id(),
 	owner_id: c.ref("owner_id").references(() => user.id),
 	_user_id: c.ref("_user_id").references(() => user.id),
-})`)
-		expect(content).toContain("owner: r.one.user")
-		expect(content).toContain("User: r.one.user")
-	})
+})`);
 
-	it("disambiguates several r.many from one table by their columns", async () => {
-		const { content } = await generate(`export const transfer = createTable("transfer", {
+    expect(content).toContain("owner: r.one.user");
+    expect(content).toContain("User: r.one.user");
+  });
+
+  it("disambiguates several r.many from one table by their columns", async () => {
+    const { content } = await generate(`export const transfer = createTable("transfer", {
 	id: c.id(),
 	sender_user_id: c.ref("sender_user_id").references(() => user.id),
 	receiver_user_id: c.ref("receiver_user_id").references(() => user.id),
-})`)
-		/* the role each key's one side is named by (F23) */
-		expect(content).toContain("transfersByReceiver: r.many.transfer")
-		expect(content).toContain("transfersBySender: r.many.transfer")
-	})
-})
+})`);
+
+    // the role each key's one side is named by (F23)
+    expect(content).toContain("transfersByReceiver: r.many.transfer");
+    expect(content).toContain("transfersBySender: r.many.transfer");
+  });
+});
 
 describe("generateRelations without a relation (F10)", () => {
-	it("takes no r it would not use, which noUnusedParameters refuses", async () => {
-		const { content } = await generate("")
-		expect(content).toContain("export const relations = defineRelations(schema, () => ({}))")
-		expect(content).not.toContain("(r)")
-	})
-})
+  it("takes no r it would not use, which noUnusedParameters refuses", async () => {
+    const { content } = await generate("");
+    expect(content).toContain("export const relations = defineRelations(schema, () => ({}))");
+    expect(content).not.toContain("(r)");
+  });
+});
 
 describe("generateRelations — a key to a table outside the file", () => {
-	it("refuses it, naming the module that exports the table, as the relations import every table from the tables file", async () => {
-		fs.writeFileSync(
-			path.join(tmpDir, "elsewhere.ts"),
-			`${HEAD}export const account = createTable("account", { id: c.id() })\n`,
-		)
-		await expect(
-			generate(`import { account } from "./elsewhere.ts"
+  it("refuses it, naming the module that exports the table, as the relations import every table from the tables file", async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, "elsewhere.ts"),
+      `${HEAD}export const account = createTable("account", { id: c.id() })\n`,
+    );
+    await expect(
+      generate(`import { account } from "./elsewhere.ts"
 export const post = createTable("post", { id: c.id(), accountId: c.ref("account_id").references(() => account.id) })`),
-		).rejects.toThrow(
-			/post\.accountId references the table account \(account in .*elsewhere\.ts\), which the tables file does not export; export it there/,
-		)
-	})
-})
+    ).rejects.toThrow(
+      /post\.accountId references the table account \(account in .*elsewhere\.ts\), which the tables file does not export; export it there/,
+    );
+  });
+});
 
-/*
- * F46 of the 0.13.0 round: a composite foreign key joins on every column pair, so `with:` serves the
- * row the key references. Its way back is a one() only when the key's columns are unique on the
- * referencing table; otherwise a many().
- */
+// F46 of the 0.13.0 round: a composite foreign key joins on every column pair, so `with:` serves the
+// row the key references. Its way back is a one() only when the key's columns are unique on the
+// referencing table; otherwise a many().
 describe("generateRelations on a composite foreign key", () => {
-	const MEMBER = `import { foreignKey, primaryKey, unique } from "drizzle-orm/sqlite-core"
+  const MEMBER = `import { foreignKey, primaryKey, unique } from "drizzle-orm/sqlite-core"
 export const member = createTable("member", { orgId: c.text("org_id"), userId: c.text("user_id"), role: c.text("role") }, (t) => [primaryKey({ columns: [t.orgId, t.userId] })])
-`
+`;
 
-	it("joins on both columns, and gives the way back as many() when the key is not unique on its table", async () => {
-		const { content } = await generate(
-			`${MEMBER}export const grant = createTable("grant", { id: c.id(), orgId: c.text("org_id"), userId: c.text("user_id") }, (t) => [foreignKey({ columns: [t.orgId, t.userId], foreignColumns: [member.orgId, member.userId] })])`,
-		)
-		expect(content).toContain(
-			"member: r.one.member({\n\t\t\tfrom: [r.grant.orgId, r.grant.userId],\n\t\t\tto: [r.member.orgId, r.member.userId],",
-		)
-		expect(content).toContain(
-			"grants: r.many.grant({\n\t\t\tfrom: [r.member.orgId, r.member.userId],\n\t\t\tto: [r.grant.orgId, r.grant.userId],",
-		)
-		expect(content).not.toContain("r.one.grant(")
-		expect(content.match(/r\.one\.member\(/g)).toHaveLength(1)
-	})
+  it("joins on both columns, and gives the way back as many() when the key is not unique on its table", async () => {
+    const { content } = await generate(
+      `${MEMBER}export const grant = createTable("grant", { id: c.id(), orgId: c.text("org_id"), userId: c.text("user_id") }, (t) => [foreignKey({ columns: [t.orgId, t.userId], foreignColumns: [member.orgId, member.userId] })])`,
+    );
 
-	it("gives the way back as one() when the key's columns are unique on its table", async () => {
-		const { content } = await generate(
-			`${MEMBER}export const badge = createTable("badge", { id: c.id(), orgId: c.text("org_id"), userId: c.text("user_id") }, (t) => [unique("badge_member").on(t.orgId, t.userId), foreignKey({ columns: [t.orgId, t.userId], foreignColumns: [member.orgId, member.userId] })])`,
-		)
-		expect(content).toContain(
-			"badge: r.one.badge({\n\t\t\tfrom: [r.member.orgId, r.member.userId],\n\t\t\tto: [r.badge.orgId, r.badge.userId],",
-		)
-	})
+    expect(content).toContain(
+      "member: r.one.member({\n\t\t\tfrom: [r.grant.orgId, r.grant.userId],\n\t\t\tto: [r.member.orgId, r.member.userId],",
+    );
+    expect(content).toContain(
+      "grants: r.many.grant({\n\t\t\tfrom: [r.member.orgId, r.member.userId],\n\t\t\tto: [r.grant.orgId, r.grant.userId],",
+    );
+    expect(content).not.toContain("r.one.grant(");
+    expect(content.match(/r\.one\.member\(/g)).toHaveLength(1);
+  });
 
-	it("gives the way back as one() when the key's columns are its table's composite primary key", async () => {
-		const { content } = await generate(
-			`${MEMBER}export const seat = createTable("seat", { orgId: c.text("org_id"), userId: c.text("user_id") }, (t) => [primaryKey({ columns: [t.orgId, t.userId] }), foreignKey({ columns: [t.orgId, t.userId], foreignColumns: [member.orgId, member.userId] })])`,
-		)
-		expect(content).toContain("seat: r.one.seat({\n\t\t\tfrom: [r.member.orgId, r.member.userId],")
-	})
+  it("gives the way back as one() when the key's columns are unique on its table", async () => {
+    const { content } = await generate(
+      `${MEMBER}export const badge = createTable("badge", { id: c.id(), orgId: c.text("org_id"), userId: c.text("user_id") }, (t) => [unique("badge_member").on(t.orgId, t.userId), foreignKey({ columns: [t.orgId, t.userId], foreignColumns: [member.orgId, member.userId] })])`,
+    );
 
-	it("gives the way back as many() when only part of the key is unique on its table", async () => {
-		const { content } = await generate(
-			`${MEMBER}export const pass = createTable("pass", { id: c.id(), orgId: c.text("org_id"), userId: c.text("user_id") }, (t) => [unique("pass_org").on(t.orgId), foreignKey({ columns: [t.orgId, t.userId], foreignColumns: [member.orgId, member.userId] })])`,
-		)
-		expect(content).toContain("passes: r.many.pass({\n\t\t\tfrom: [r.member.orgId, r.member.userId],")
-	})
-})
+    expect(content).toContain(
+      "badge: r.one.badge({\n\t\t\tfrom: [r.member.orgId, r.member.userId],\n\t\t\tto: [r.badge.orgId, r.badge.userId],",
+    );
+  });
+
+  it("gives the way back as one() when the key's columns are its table's composite primary key", async () => {
+    const { content } = await generate(
+      `${MEMBER}export const seat = createTable("seat", { orgId: c.text("org_id"), userId: c.text("user_id") }, (t) => [primaryKey({ columns: [t.orgId, t.userId] }), foreignKey({ columns: [t.orgId, t.userId], foreignColumns: [member.orgId, member.userId] })])`,
+    );
+
+    expect(content).toContain("seat: r.one.seat({\n\t\t\tfrom: [r.member.orgId, r.member.userId],");
+  });
+
+  it("gives the way back as many() when only part of the key is unique on its table", async () => {
+    const { content } = await generate(
+      `${MEMBER}export const pass = createTable("pass", { id: c.id(), orgId: c.text("org_id"), userId: c.text("user_id") }, (t) => [unique("pass_org").on(t.orgId), foreignKey({ columns: [t.orgId, t.userId], foreignColumns: [member.orgId, member.userId] })])`,
+    );
+
+    expect(content).toContain("passes: r.many.pass({\n\t\t\tfrom: [r.member.orgId, r.member.userId],");
+  });
+});

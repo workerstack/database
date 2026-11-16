@@ -2,30 +2,33 @@
  * Whether a list's key reads its bound back from the anchor row, by the tables drizzle tells apart: the
  * rule a reference is minted and read by, and a key bound as read where it fails.
  */
-import { Column, is, SQL, type SQLWrapper, Table } from "drizzle-orm"
+import { Column, is, SQL, type SQLWrapper, Table } from "drizzle-orm";
 
-import { holdsText } from "./timestamp-column.ts"
+import { holdsText } from "./timestamp-column.ts";
 
 /** Every column `chunk` reads, through the SQL it nests */
 function columnsOf(chunk: unknown): Column[] {
-	if (is(chunk, Column)) return [chunk]
-	if (is(chunk, SQL)) return chunk.queryChunks.flatMap(columnsOf)
-	return Array.isArray(chunk) ? chunk.flatMap(columnsOf) : []
+  if (is(chunk, Column)) return [chunk];
+
+  if (is(chunk, SQL)) return chunk.queryChunks.flatMap(columnsOf);
+
+  return Array.isArray(chunk) ? chunk.flatMap(columnsOf) : [];
 }
 
-/* drizzle keeps the table a column is of on it, untyped */
-const tableOf = (column: Column): unknown => (column as unknown as { table: unknown }).table
+// drizzle keeps the table a column is of on it, untyped
+const tableOf = (column: Column): unknown => (column as unknown as { table: unknown }).table;
 
-/* the names drizzle tells one table from another by: an alias's own name over its table's, and its schema */
-const NAME = /* @__PURE__ */ Symbol.for("drizzle:Name")
-const ORIGINAL_NAME = /* @__PURE__ */ Symbol.for("drizzle:OriginalName")
-const SCHEMA = /* @__PURE__ */ Symbol.for("drizzle:Schema")
+// the names drizzle tells one table from another by: an alias's own name over its table's, and its schema
+const NAME = /* @__PURE__ */ Symbol.for("drizzle:Name");
+const ORIGINAL_NAME = /* @__PURE__ */ Symbol.for("drizzle:OriginalName");
+const SCHEMA = /* @__PURE__ */ Symbol.for("drizzle:Schema");
 
 /** A table's name, its original table's and its schema, as drizzle keys a table in a query */
 const tableKey = (table: Table): unknown[] => {
-	const named = table as unknown as Record<symbol, unknown>
-	return [named[NAME], named[ORIGINAL_NAME], named[SCHEMA]]
-}
+  const named = table as unknown as Record<symbol, unknown>;
+
+  return [named[NAME], named[ORIGINAL_NAME], named[SCHEMA]];
+};
 
 /**
  * Whether `a` and `b` are one table as a query reads it: one object, or two of drizzle's for the same
@@ -34,10 +37,12 @@ const tableKey = (table: Table): unknown[] => {
  * the same table has another name, and stays apart.
  */
 function sameTable(a: unknown, b: unknown): boolean {
-	if (a === b) return true
-	if (!is(a, Table) || !is(b, Table)) return false
-	const [x, y] = [tableKey(a), tableKey(b)]
-	return x.every((part, i) => part === y[i])
+  if (a === b) return true;
+
+  if (!is(a, Table) || !is(b, Table)) return false;
+  const [x, y] = [tableKey(a), tableKey(b)];
+
+  return x.every((part, i) => part === y[i]);
 }
 
 /**
@@ -52,10 +57,12 @@ function sameTable(a: unknown, b: unknown): boolean {
  * any other, so no relation column through `with`, nor an extras SQL, becomes a key.
  */
 function readsBack(column: SQLWrapper, table: object | undefined): boolean {
-	if (is(column, Column)) return table === undefined || sameTable(tableOf(column), table)
-	if (!is(column, SQL) || table === undefined) return false
-	const read = columnsOf(column)
-	return read.length > 0 && read.every((each) => sameTable(tableOf(each), table))
+  if (is(column, Column)) return table === undefined || sameTable(tableOf(column), table);
+
+  if (!is(column, SQL) || table === undefined) return false;
+  const read = columnsOf(column);
+
+  return read.length > 0 && read.every((each) => sameTable(tableOf(each), table));
 }
 
 /**
@@ -64,6 +71,6 @@ function readsBack(column: SQLWrapper, table: object | undefined): boolean {
  * no list mints a cursor it then refuses.
  */
 const refersBack = (column: SQLWrapper, table: object | undefined): boolean =>
-	readsBack(column, table) && (!is(column, Column) || column.dataType.startsWith("string") || holdsText(column))
+  readsBack(column, table) && (!is(column, Column) || column.dataType.startsWith("string") || holdsText(column));
 
-export { readsBack, refersBack }
+export { readsBack, refersBack };

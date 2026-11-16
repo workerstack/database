@@ -6,41 +6,43 @@
  * this one write asks no trust Atlas does not take already. A docker:// dev is Atlas's own
  * container, left alone: whether Atlas makes the schema there is unverified (p15-summary).
  */
-import { sqlIdentifier } from "../../codegen/utils/case.ts"
-import { type PgTarget, refuseUrlProblems } from "./atlas-target.ts"
-import { ReplayFailed } from "./replay-failed.ts"
-import { type Connect, failureOf, loadPostgres } from "./pg-live-objects.ts"
-import { postgresOptionsOf } from "./pg-url.ts"
+import { sqlIdentifier } from "../../codegen/utils/case.ts";
+import { type PgTarget, refuseUrlProblems } from "./atlas-target.ts";
+import { type Connect, failureOf, loadPostgres } from "./pg-live-objects.ts";
+import { postgresOptionsOf } from "./pg-url.ts";
+import { ReplayFailed } from "./replay-failed.ts";
 
 /** How a dev database gets the target schema: database's own, readyDevSchema, unless a test fakes it */
-type ReadyDev = (target: PgTarget) => Promise<void>
+type ReadyDev = (target: PgTarget) => Promise<void>;
 
-/* why database loads postgres.js here */
-const CREATES = "create a non-public schema on devUrl"
+// why database loads postgres.js here
+const CREATES = "create a non-public schema on devUrl";
 
 /**
  * Create `target`'s schema on its dev database, unless it is public or the dev is Atlas's docker
  * container; a devUrl database refuses is refused first, whatever the schema, so nothing reaches it
  */
 async function readyDevSchema(
-	target: PgTarget,
-	load: () => Promise<Connect> = () => loadPostgres(CREATES),
+  target: PgTarget,
+  load: () => Promise<Connect> = () => loadPostgres(CREATES),
 ): Promise<void> {
-	refuseUrlProblems(target, { dev: true })
-	if (target.schema === "public" || target.devUrl.startsWith("docker:")) return
-	const connect = await load()
-	let sql: ReturnType<Connect> | undefined
-	try {
-		sql = connect({ ...postgresOptionsOf(target.devUrl, "devUrl"), max: 1, onnotice: () => undefined })
-		await sql.unsafe(`CREATE SCHEMA IF NOT EXISTS ${sqlIdentifier(target.schema)}`, [])
-	} catch (error) {
-		throw new ReplayFailed(
-			`database could not create schema ${target.schema} on devUrl, where Atlas replays the migrations: ${failureOf(error, { field: "devUrl", url: target.devUrl, urls: [target.devUrl] })}`,
-			{ cause: error },
-		)
-	} finally {
-		await sql?.end()
-	}
+  refuseUrlProblems(target, { dev: true });
+
+  if (target.schema === "public" || target.devUrl.startsWith("docker:")) return;
+  const connect = await load();
+  let sql: ReturnType<Connect> | undefined;
+
+  try {
+    sql = connect({ ...postgresOptionsOf(target.devUrl, "devUrl"), max: 1, onnotice: () => {} });
+    await sql.unsafe(`CREATE SCHEMA IF NOT EXISTS ${sqlIdentifier(target.schema)}`, []);
+  } catch (error) {
+    throw new ReplayFailed(
+      `database could not create schema ${target.schema} on devUrl, where Atlas replays the migrations: ${failureOf(error, { field: "devUrl", url: target.devUrl, urls: [target.devUrl] })}`,
+      { cause: error },
+    );
+  } finally {
+    await sql?.end();
+  }
 }
 
-export { type ReadyDev, readyDevSchema }
+export { type ReadyDev, readyDevSchema };

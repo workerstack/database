@@ -12,33 +12,37 @@
  * SET and a SHOW run none. A DEALLOCATE removes the name it gives, DEALLOCATE ALL, DISCARD ALL and
  * DISCARD PLANS every name, so an EXECUTE after one fails as Postgres fails it; DISCARD TEMP keeps them.
  */
-import type { Finding } from "./classify-alter.ts"
-import { kindOf, tagOf } from "./pg-events.ts"
-import { names, type Node, nodesOf } from "./pg-nodes.ts"
+import type { Finding } from "./classify-alter.ts";
+import { kindOf, tagOf } from "./pg-events.ts";
+import { names, type Node, nodesOf } from "./pg-nodes.ts";
 
 /**
  * A file's prepared statements so far: the query each PREPARE holds, by the name Postgres keys it
  * under, which an EXECUTE runs, and each name a DEALLOCATE or DISCARD removed since, with that statement
  */
-type Prepared = { queries: Map<string, Node>; removed: Map<string, string> }
+type Prepared = { queries: Map<string, Node>; removed: Map<string, string> };
 
 // lookup-table: the DISCARD targets that remove every prepared statement, as their statement reads
-const DISCARDS: Readonly<Record<string, string>> = { DISCARD_ALL: "DISCARD ALL", DISCARD_PLANS: "DISCARD PLANS" }
+const DISCARDS: Readonly<Record<string, string>> = { DISCARD_ALL: "DISCARD ALL", DISCARD_PLANS: "DISCARD PLANS" };
 
 /** `prepared` after a top-level statement: a PREPARE adds its name, a DEALLOCATE or DISCARD removes */
 function followPrepared(type: string, node: Node, prepared: Prepared): void {
-	if (type === "PrepareStmt") {
-		prepared.queries.set(String(node["name"]), node["query"] as Node)
-		prepared.removed.delete(String(node["name"]))
-		return
-	}
-	const all = type === "DeallocateStmt" && node["name"] === undefined ? "DEALLOCATE ALL" : undefined
-	const by = all ?? (type === "DiscardStmt" ? DISCARDS[String(node["target"])] : undefined)
-	if (by !== undefined) {
-		for (const name of prepared.queries.keys()) prepared.removed.set(name, by)
-		prepared.queries.clear()
-	} else if (type === "DeallocateStmt" && prepared.queries.delete(String(node["name"])))
-		prepared.removed.set(String(node["name"]), `DEALLOCATE ${String(node["name"])}`)
+  if (type === "PrepareStmt") {
+    prepared.queries.set(String(node["name"]), node["query"] as Node);
+    prepared.removed.delete(String(node["name"]));
+
+    return;
+  }
+
+  const all = type === "DeallocateStmt" && node["name"] === undefined ? "DEALLOCATE ALL" : undefined;
+  const by = all ?? (type === "DiscardStmt" ? DISCARDS[String(node["target"])] : undefined);
+
+  if (by !== undefined) {
+    for (const name of prepared.queries.keys()) prepared.removed.set(name, by);
+    prepared.queries.clear();
+  } else if (type === "DeallocateStmt" && prepared.queries.delete(String(node["name"]))) {
+    prepared.removed.set(String(node["name"]), `DEALLOCATE ${String(node["name"])}`);
+  }
 }
 
 /**
@@ -47,13 +51,14 @@ function followPrepared(type: string, node: Node, prepared: Prepared): void {
  * A prepared query holds no PREPARE, so one level reads it whole
  */
 const executedNodes = (
-	stmts: ReadonlyArray<{ stmt: Node }>,
-	preparing: ReadonlyMap<string, Node>,
+  stmts: ReadonlyArray<{ stmt: Node }>,
+  preparing: ReadonlyMap<string, Node>,
 ): Array<[string, Node]> =>
-	nodesOf(stmts.map((raw) => ("PrepareStmt" in raw.stmt ? { stmt: { PrepareStmt: {} } } : raw))).flatMap((entry) => {
-		const query = entry[0] === "ExecuteStmt" ? preparing.get(String(entry[1]["name"])) : undefined
-		return query === undefined ? [entry] : [entry, ...nodesOf(query)]
-	})
+  nodesOf(stmts.map((raw) => ("PrepareStmt" in raw.stmt ? { stmt: { PrepareStmt: {} } } : raw))).flatMap((entry) => {
+    const query = entry[0] === "ExecuteStmt" ? preparing.get(String(entry[1]["name"])) : undefined;
+
+    return query === undefined ? [entry] : [entry, ...nodesOf(query)];
+  });
 
 /**
  * An ExecuteStmt `node`'s own findings: none when `prepared` holds its query, which executedNodes
@@ -61,34 +66,42 @@ const executedNodes = (
  * else a refusal, as Postgres fails the file
  */
 function executeFindings(
-	node: Node,
-	{ dynamic, prepared }: { dynamic?: string | undefined; prepared: Prepared },
+  node: Node,
+  { dynamic, prepared }: { dynamic?: string | undefined; prepared: Prepared },
 ): Finding[] {
-	const name = String(node["name"])
-	if (prepared.queries.has(name)) return []
-	const by = prepared.removed.get(name)
-	if (by !== undefined && dynamic === undefined)
-		throw new Error(
-			`${by} before it in its file removes the statement prepared as ${name}: Postgres fails the file with "prepared statement "${name}" does not exist"; PREPARE it again after the ${by}`,
-		)
-	if (dynamic === undefined)
-		throw new Error(
-			`no statement before it in its file prepares ${name}, and database applies each file in a session of its own, so an earlier file's PREPARE never reaches it: Postgres fails the file with "prepared statement "${name}" does not exist"; PREPARE it in this file`,
-		)
-	const note = `runs a prepared statement database cannot read, which ${dynamic} before it may prepare; approve it in the file`
-	return [{ level: "unsafe", note }]
+  const name = String(node["name"]);
+
+  if (prepared.queries.has(name)) return [];
+  const by = prepared.removed.get(name);
+
+  if (by !== undefined && dynamic === undefined) {
+    throw new Error(
+      `${by} before it in its file removes the statement prepared as ${name}: Postgres fails the file with "prepared statement "${name}" does not exist"; PREPARE it again after the ${by}`,
+    );
+  }
+
+  if (dynamic === undefined) {
+    throw new Error(
+      `no statement before it in its file prepares ${name}, and database applies each file in a session of its own, so an earlier file's PREPARE never reaches it: Postgres fails the file with "prepared statement "${name}" does not exist"; PREPARE it in this file`,
+    );
+  }
+
+  const note = `runs a prepared statement database cannot read, which ${dynamic} before it may prepare; approve it in the file`;
+
+  return [{ level: "unsafe", note }];
 }
 
 /** The top-level statements that run no user code: a PREPARE runs its query only when an EXECUTE does */
-const INERT = /^(?:Prepare|Deallocate|Discard|Transaction|VariableSet|VariableShow)Stmt$/
+const INERT = /^(?:Prepare|Deallocate|Discard|Transaction|VariableSet|VariableShow)Stmt$/;
 
 /** A command tag with its article: an INSERT, a CREATE TABLE */
-const an = (kind: string): string => `${/^[AEIOU]/.test(kind) ? "an" : "a"} ${kind}`
+const an = (kind: string): string => `${/^[AEIOU]/.test(kind) ? "an" : "a"} ${kind}`;
 
 /** The event trigger the first DDL statement of `tops`, a statement's, fires at ddl_command_start, named */
 function firedBy(tops: ReadonlyArray<[string, Node]>): string | undefined {
-	const ddl = tops.find(([type, node]) => tagOf(type, node) !== undefined)
-	return ddl === undefined ? undefined : `an event trigger ${an(kindOf(...ddl))} fires`
+  const ddl = tops.find(([type, node]) => tagOf(type, node) !== undefined);
+
+  return ddl === undefined ? undefined : `an event trigger ${an(kindOf(...ddl))} fires`;
 }
 
 /**
@@ -96,16 +109,22 @@ function firedBy(tops: ReadonlyArray<[string, Node]>): string | undefined {
  * block, a CALL or a function call; else what its first of `tops` that runs any is
  */
 function dynamicOf(tops: ReadonlyArray<[string, Node]>, nodes: ReadonlyArray<[string, Node]>): string | undefined {
-	const top = tops.find(([type]) => !INERT.test(type))
-	if (top === undefined) return undefined
-	for (const [type, node] of nodes) {
-		if (type === "DoStmt") return "a DO block"
-		/* a CALL holds its call as a plain field, not a typed node */
-		if (type === "CallStmt") return `a CALL of ${names((node["funccall"] as Node)["funcname"]).join(".")}`
-		if (type === "FuncCall") return `a call of ${names(node["funcname"]).join(".")}()`
-	}
-	if (top[0] === "ExecuteStmt") return `an EXECUTE of ${String(top[1]["name"])}`
-	return firedBy([top]) ?? `user code ${an(kindOf(...top))} runs`
+  const top = tops.find(([type]) => !INERT.test(type));
+
+  if (top === undefined) return undefined;
+
+  for (const [type, node] of nodes) {
+    if (type === "DoStmt") return "a DO block";
+
+    // a CALL holds its call as a plain field, not a typed node
+    if (type === "CallStmt") return `a CALL of ${names((node["funccall"] as Node)["funcname"]).join(".")}`;
+
+    if (type === "FuncCall") return `a call of ${names(node["funcname"]).join(".")}()`;
+  }
+
+  if (top[0] === "ExecuteStmt") return `an EXECUTE of ${String(top[1]["name"])}`;
+
+  return firedBy([top]) ?? `user code ${an(kindOf(...top))} runs`;
 }
 
-export { dynamicOf, executedNodes, executeFindings, firedBy, followPrepared, type Prepared }
+export { dynamicOf, executedNodes, executeFindings, firedBy, followPrepared, type Prepared };

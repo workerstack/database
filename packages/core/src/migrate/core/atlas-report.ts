@@ -2,39 +2,43 @@
  * Atlas's report of a `migrate apply`, a dry run's or an apply's, as `--format APPLY_FORMAT` writes
  * it: the files it ran, each with the statements it ran of them, and the error that stopped it.
  */
-import { readFileSync } from "node:fs"
-import { join } from "node:path"
-import { explainAtlasFailure, failedStatement } from "./atlas-failure.ts"
-import { json, type Ran } from "./atlas-status.ts"
-import { outsideTransaction } from "./atlas-header.ts"
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { explainAtlasFailure, failedStatement } from "./atlas-failure.ts";
+import { outsideTransaction } from "./atlas-header.ts";
+import { json, type Ran } from "./atlas-status.ts";
 
 /** Atlas runs files by name, as database orders them; its default, linear, also compares versions */
-const NON_LINEAR = ["--exec-order", "non-linear"] as const
+const NON_LINEAR = ["--exec-order", "non-linear"] as const;
 
-const APPLY_FORMAT = '{"target":{{ json .Target }},"applied":{{ json .Applied }},"error":{{ json .Error }}}'
+const APPLY_FORMAT = '{"target":{{ json .Target }},"applied":{{ json .Applied }},"error":{{ json .Error }}}';
 
 /**
  * A file Atlas ran: the statements it ran of it, the one that failed last, and those an earlier run
  * applied, which a resume skips; an error with no statement is one after them, writing Atlas's revision
  */
 type AppliedFile = {
-	Applied: string[]
-	Error?: { Stmt?: string | undefined; Text: string } | undefined
-	Name: string
-	Skipped?: number | undefined
-}
+  Applied: string[];
+  Error?: { Stmt?: string | undefined; Text: string } | undefined;
+  Name: string;
+  Skipped?: number | undefined;
+};
+
 /** Atlas writes `applied` as null when it ran no file, as when another apply ran them first */
-type ApplyReport = { applied: AppliedFile[] | null; error: string }
+type ApplyReport = { applied: AppliedFile[] | null; error: string };
 
 /** What stays of `file`, of the snapshot `copy`, which failed: a file outside a transaction keeps what it ran */
 function aftermath(copy: string, file: AppliedFile): string {
-	if (!outsideTransaction(readFileSync(join(copy, file.Name), "utf8")))
-		return "It was rolled back; the files before it stay applied"
-	/* Atlas lists the statement that failed last, and counts an earlier run's as Skipped */
-	const ran = (file.Skipped ?? 0) + file.Applied.length - (file.Error?.Stmt === undefined ? 0 : 1)
-	if (ran === 0)
-		return "It ran outside a transaction and failed at its first statement, so nothing of it stays applied; the files before it do"
-	return `It ran outside a transaction, so ${ran === 1 ? "the statement it ran before that stays" : `the ${ran} statements it ran before that stay`} applied, as do the files before it; while the file is unchanged, migrate apply resumes after them`
+  if (!outsideTransaction(readFileSync(join(copy, file.Name), "utf8")))
+    return "It was rolled back; the files before it stay applied";
+  // Atlas lists the statement that failed last, and counts an earlier run's as Skipped
+  const ran = (file.Skipped ?? 0) + file.Applied.length - (file.Error?.Stmt === undefined ? 0 : 1);
+
+  if (ran === 0)
+    return "It ran outside a transaction and failed at its first statement, so nothing of it stays applied; the files before it do";
+
+  return `It ran outside a transaction, so ${ran === 1 ? "the statement it ran before that stays" : `the ${ran} statements it ran before that stay`} applied, as do the files before it; while the file is unchanged, migrate apply resumes after them`;
 }
 
 /**
@@ -42,25 +46,32 @@ function aftermath(copy: string, file: AppliedFile): string {
  * that failed, or the error its report or else its stderr holds, thrown
  */
 function reported(ran: Ran, command: string, copy: string): string[] {
-	const out = ran.stdout.trim()
-	/* Atlas writes some refusals, such as a checksum error, as text, with its reason on stderr */
-	if (out === "" || (ran.code !== 0 && !out.startsWith("{"))) throw new Error(`atlas migrate ${command}: ${ran.said}`)
-	const report = json<ApplyReport>(out, command)
-	const files = report.applied ?? []
-	const failed = files.find((file) => file.Error !== undefined)
-	if (failed?.Error !== undefined) {
-		const { Stmt, Text } = failed.Error
-		const at =
-			Stmt === undefined
-				? "once its statements ran, as Atlas wrote its revision"
-				: `at ${failedStatement(ran.scrub(Stmt))}`
-		throw new Error(`${failed.Name} failed ${at}: ${ran.scrub(Text)}. ${aftermath(copy, failed)}`)
-	}
-	if (ran.code !== 0 || report.error !== "")
-		throw new Error(
-			`atlas migrate ${command}: ${report.error === "" ? ran.said : explainAtlasFailure(report.error, ran.scrub)}`,
-		)
-	return files.map((file) => file.Name)
+  const out = ran.stdout.trim();
+
+  // Atlas writes some refusals, such as a checksum error, as text, with its reason on stderr
+  if (out === "" || (ran.code !== 0 && !out.startsWith("{"))) throw new Error(`atlas migrate ${command}: ${ran.said}`);
+  const report = json<ApplyReport>(out, command);
+  const files = report.applied ?? [];
+  const failed = files.find((file) => file.Error !== undefined);
+
+  if (failed?.Error !== undefined) {
+    const { Stmt, Text } = failed.Error;
+
+    const at =
+      Stmt === undefined
+        ? "once its statements ran, as Atlas wrote its revision"
+        : `at ${failedStatement(ran.scrub(Stmt))}`;
+
+    throw new Error(`${failed.Name} failed ${at}: ${ran.scrub(Text)}. ${aftermath(copy, failed)}`);
+  }
+
+  if (ran.code !== 0 || report.error !== "") {
+    throw new Error(
+      `atlas migrate ${command}: ${report.error === "" ? ran.said : explainAtlasFailure(report.error, ran.scrub)}`,
+    );
+  }
+
+  return files.map((file) => file.Name);
 }
 
-export { APPLY_FORMAT, NON_LINEAR, reported }
+export { APPLY_FORMAT, NON_LINEAR, reported };

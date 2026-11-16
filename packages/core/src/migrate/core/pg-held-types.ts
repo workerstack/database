@@ -4,7 +4,7 @@
  */
 
 /** The tables whose column defaults, and the table whose identity column, call a sequence */
-type Calls = { defaults: readonly string[]; identity: string | undefined }
+type Calls = { defaults: readonly string[]; identity: string | undefined };
 
 /**
  * What Postgres held at a VALIDATE, read from pg_locks: each relation's lock, by key, with whether
@@ -13,9 +13,9 @@ type Calls = { defaults: readonly string[]; identity: string | undefined }
  * constraint of which that code validated, and the locks are those held as it ended
  */
 type Locked = {
-	calls: ReadonlyMap<string, Calls>
-	locks: ReadonlyMap<string, boolean>
-	validated?: readonly string[] | undefined
-}
+  calls: ReadonlyMap<string, Calls>;
+  locks: ReadonlyMap<string, boolean>;
+  validated?: readonly string[] | undefined;
+};
 
-export type { Calls, Locked }
+export type { Calls, Locked };

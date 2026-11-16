@@ -6,43 +6,46 @@
  * Every test gets its own sessions, and every table a test makes is TEMP, so tests never see
  * each other's tables and nothing outlives the session.
  */
-import pg from "pg"
-import postgres from "postgres"
-import { afterEach, beforeEach, onTestFinished, TestRunner } from "vitest"
-import { scratchName } from "./scratch-sweep.ts"
-import { pgUrl } from "../../support/pg-url.ts"
+import pg from "pg";
+import postgres from "postgres";
+import { afterEach, beforeEach, onTestFinished, TestRunner } from "vitest";
 
-/* the URL is runner-free, for bun:test's suites too; the Postgres suites take it here with the rest */
-export { PG_URL_VAR, pgUrl } from "../../support/pg-url.ts"
+import { pgUrl } from "../../support/pg-url.ts";
+import { scratchName } from "./scratch-sweep.ts";
+
+// the URL is runner-free, for bun:test's suites too; the Postgres suites take it here with the rest
+export { PG_URL_VAR, pgUrl } from "../../support/pg-url.ts";
 
 export type PgSessions = {
-	/** node-postgres, one connection */
-	pg(): pg.Client
-	/** postgres.js, one connection */
-	sql(): postgres.Sql
-}
+  /** node-postgres, one connection */
+  pg(): pg.Client;
+  /** postgres.js, one connection */
+  sql(): postgres.Sql;
+};
 
 function need<T>(value: T | undefined): T {
-	if (value === undefined) throw new Error("usePg sessions exist only inside a test")
-	return value
+  if (value === undefined) throw new Error("usePg sessions exist only inside a test");
+
+  return value;
 }
 
 /** Fresh node-postgres and postgres.js sessions per test, ended after it (TEMP tables go with them). */
 export function usePg(): PgSessions {
-	let client: pg.Client | undefined
-	let sql: postgres.Sql | undefined
-	beforeEach(async () => {
-		const url = pgUrl() as string
-		client = new pg.Client({ connectionString: url })
-		await client.connect()
-		sql = postgres(url, { max: 1, onnotice: () => undefined })
-	})
-	afterEach(async () => {
-		await Promise.all([client?.end(), sql?.end()])
-		client = undefined
-		sql = undefined
-	})
-	return { pg: () => need(client), sql: () => need(sql) }
+  let client: pg.Client | undefined;
+  let sql: postgres.Sql | undefined;
+  beforeEach(async () => {
+    const url = pgUrl();
+    client = new pg.Client({ connectionString: url });
+    await client.connect();
+    sql = postgres(url, { max: 1, onnotice: () => {} });
+  });
+  afterEach(async () => {
+    await Promise.all([client?.end(), sql?.end()]);
+    client = undefined;
+    sql = undefined;
+  });
+
+  return { pg: () => need(client), sql: () => need(sql) };
 }
 
 /**
@@ -54,30 +57,36 @@ export function usePg(): PgSessions {
  * follow CREATE DATABASE, such as a template and locale.
  */
 export async function withScratchDb<T>(run: (url: string) => Promise<T> | T, options?: string): Promise<T> {
-	const server = new URL(pgUrl() as string)
-	const name = scratchName()
-	const admin = new pg.Client({ connectionString: server.href })
-	let made = false
-	let released: Promise<void> | undefined
-	/* once, whichever comes first: `run` settling, or the test ending */
-	const drop = async () => {
-		if (made) await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`)
-	}
-	const release = () => (released ??= drop().finally(() => admin.end()))
-	if (TestRunner.getCurrentTest() !== undefined) onTestFinished(release)
-	try {
-		await admin.connect()
-		await admin.query(`CREATE DATABASE ${name}${options === undefined ? "" : ` ${options}`}`)
-		made = true
-	} catch (error) {
-		await release()
-		throw error
-	}
-	const url = new URL(server.href)
-	url.pathname = `/${name}`
-	try {
-		return await run(url.href)
-	} finally {
-		await release()
-	}
+  const server = new URL(pgUrl());
+  const name = scratchName();
+  const admin = new pg.Client({ connectionString: server.href });
+  let made = false;
+  let released: Promise<void> | undefined;
+
+  // once, whichever comes first: `run` settling, or the test ending
+  const drop = async () => {
+    if (made) await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+  };
+
+  const release = () => (released ??= drop().finally(() => admin.end()));
+
+  if (TestRunner.getCurrentTest() !== undefined) onTestFinished(release);
+
+  try {
+    await admin.connect();
+    await admin.query(`CREATE DATABASE ${name}${options === undefined ? "" : ` ${options}`}`);
+    made = true;
+  } catch (error) {
+    await release();
+    throw error;
+  }
+
+  const url = new URL(server.href);
+  url.pathname = `/${name}`;
+
+  try {
+    return await run(url.href);
+  } finally {
+    await release();
+  }
 }
