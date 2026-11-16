@@ -418,8 +418,8 @@ describe("the time zone every test run uses", () => {
     expect(configs.length).toBeGreaterThanOrEqual(3);
 
     for (const name of configs) expect(readFileSync(join(CORE, name), "utf8"), name).toContain(PIN);
-    const bunfig = readFileSync(join(CORE, "bunfig.toml"), "utf8");
-    const preload = /^preload = \["\.\/(.+?)"\]$/m.exec(bunfig)?.[1];
+    const config = readFileSync(join(CORE, "bun-test.toml"), "utf8");
+    const preload = /^preload = \["\.\/(.+?)"\]$/m.exec(config)?.[1];
     expect(preload).toBe("tests/bun/support/utc.ts");
     expect(readFileSync(join(CORE, preload as string), "utf8")).toContain(PIN);
   });

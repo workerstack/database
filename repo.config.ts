@@ -1,7 +1,7 @@
 import { defineConfig } from "@workerstack/repo";
 
 export default defineConfig({
-  link: { "@workerstack/repo": "../workerstack/repo" },
+  link: { paths: { "@workerstack/repo": "../workerstack/repo" } },
   workflow: "main",
   packs: ["agents", "standards", "docs", "benchmark"],
   agents: { hosts: ["claude", "codex", "antigravity", "grok", "cursor"] },
@@ -28,6 +28,10 @@ export default defineConfig({
       {
         file: "packages/core/tests/structure/support/write-*.ts",
         reason: "snapshot writers run by hand with bun, as their headers say",
+      },
+      {
+        file: "packages/core/tests/bun/support/utc.ts",
+        reason: "the preload of bun-test.toml, which test:bun passes with --config",
       },
       {
         file: "packages/core/tests/integration/support/apply-child.ts",

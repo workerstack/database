@@ -11,8 +11,6 @@ node_modules
 # testing
 **/coverage/
 **/test-results/
-# vitest 5's blob reports and attachments
-**/.vitest/
 # e2e scratch apps (tests/e2e/support/project.ts)
 packages/core/.e2e-*/
 
@@ -51,10 +49,12 @@ packages/core/types/
 # git worktrees
 .worktrees/
 
-# repo:ignore d5310730
+# repo:ignore 7d468bac
 .tmp/
 .worktrees/
 coverage/
+.vitest/
+repo.config.local.ts
 **/.repo/plans/
 **/.repo/plans-fast/
 **/.repo/roadmaps/
@@ -65,14 +65,14 @@ coverage/
 **/.repo/tmp/
 **/.repo/backlog.md
 node_modules/
-knip.jsonc
+/knip.jsonc
 knip.unignored-*.jsonc
-.oxfmtrc.jsonc
-.oxlintrc.jsonc
+/.oxfmtrc.jsonc
+/.oxlintrc.jsonc
 .oxlintrc.unskipped-*.jsonc
-.agents/
-.claude/
-.codex/
-.cursor/
-.grok/
+/.agents/
+/.claude/
+/.codex/
+/.cursor/
+/.grok/
 # /repo:ignore

@@ -69,4 +69,5 @@ to make a build pass. Shell-outs to wrangler, atlas and drizzle-kit go through
 
 `test:bun` is separate because `packages/core/tests/bun/` imports `bun:sqlite`
 and `bun:test`, which vitest can't load; it holds `migrate/drivers/bun-sqlite.ts`
-at 100% (`packages/core/bunfig.toml`).
+at 100% (`packages/core/bun-test.toml`, passed with `--config`, since repo sync
+owns `bunfig.toml`).

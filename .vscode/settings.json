@@ -69,6 +69,7 @@
     ".githooks/commit-msg": true,
     ".githooks/pre-commit": true,
     ".githooks/pre-push": true,
+    ".githooks/reference-transaction": true,
     ".github/workflows/bench.yml": true,
     ".grok/agents/implementer-deep.md": true,
     ".grok/agents/implementer-fast.md": true,
@@ -78,7 +79,6 @@
     ".grok/config.toml": true,
     ".grok/hooks/orchestrate-parent.json": true,
     ".grok/hooks/rtk.json": true,
-    ".grok/hooks/rulesync.json": true,
     ".grok/roles/scout.toml": true,
     ".oxfmtrc.jsonc": true,
     ".oxlintrc.jsonc": true,
@@ -87,6 +87,7 @@
     ".vscode/tasks.json": true,
     "bunfig.toml": true,
     "knip.jsonc": true,
-    "packages/core/README.md": true
+    "packages/core/README.md": true,
+    "packages/core/bunfig.toml": true
   }
 }

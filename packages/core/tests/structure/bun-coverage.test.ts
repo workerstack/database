@@ -1,43 +1,51 @@
 /**
  * HN2 of plan 21: `bun run test:bun` gates only drivers/bun-sqlite.ts at 100% and leaves every other
- * file to vitest (docs/testing.md), by listing it in bunfig's coveragePathIgnorePatterns. A bun suite
+ * file to vitest (docs/testing.md), by listing it in bun-test.toml's coveragePathIgnorePatterns. A bun suite
  * that comes to load one more src file failed test:bun with a bare percentage (e96f568^), so each
  * src file the patterns miss is named here, with the fix.
  */
-import { readdirSync, readFileSync } from "node:fs"
-import { join, matchesGlob, relative } from "node:path"
-import { describe, expect, it } from "vitest"
+import { readdirSync, readFileSync } from "node:fs";
+import { join, matchesGlob, relative } from "node:path";
 
-const CORE = join(import.meta.dirname, "../..")
+import { describe, expect, it } from "vitest";
 
-/* the one file test:bun measures: it imports bun:sqlite, which vitest cannot load */
-const MEASURED = "src/migrate/drivers/bun-sqlite.ts"
+const CORE = join(import.meta.dirname, "../..");
 
-/** The globs of bunfig's coveragePathIgnorePatterns */
-function ignorePatterns(bunfig: string): string[] {
-	const list = /^coveragePathIgnorePatterns = \[([\s\S]*?)^\]/m.exec(bunfig)?.[1] ?? ""
-	return [...list.matchAll(/^\s*"([^"]+)",?\s*$/gm)].map((match) => match[1] as string)
+// the one file test:bun measures: it imports bun:sqlite, which vitest cannot load
+const MEASURED = "src/migrate/drivers/bun-sqlite.ts";
+
+/** The globs of bun-test.toml's coveragePathIgnorePatterns */
+function ignorePatterns(config: string): string[] {
+  const list = /^coveragePathIgnorePatterns = \[([\s\S]*?)^\]/m.exec(config)?.[1] ?? "";
+
+  return [...list.matchAll(/^\s*"([^"]+)",?\s*$/gm)].map((match) => match[1] as string);
 }
 
 /** Every src file bun's coverage would count: the .ts files but tests, which coverageSkipTestFiles leaves out */
 const SOURCES = readdirSync(join(CORE, "src"), { recursive: true, withFileTypes: true })
-	.filter((entry) => entry.isFile() && entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts"))
-	.map((entry) => relative(CORE, join(entry.parentPath, entry.name)))
-	.toSorted()
+  .filter((entry) => entry.isFile() && entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts"))
+  .map((entry) => relative(CORE, join(entry.parentPath, entry.name)))
+  .toSorted();
 
-describe("bun's coverage, left to vitest but for bun-sqlite.ts (HN2; sibling: workflows' bunfig preload)", () => {
-	const patterns = ignorePatterns(readFileSync(join(CORE, "bunfig.toml"), "utf8"))
-	const ignored = (file: string): boolean => patterns.some((pattern) => matchesGlob(file, pattern))
+describe("bun's coverage, left to vitest but for bun-sqlite.ts (HN2; sibling: workflows' bun preload)", () => {
+  const patterns = ignorePatterns(readFileSync(join(CORE, "bun-test.toml"), "utf8"));
+  const ignored = (file: string): boolean => patterns.some((pattern) => matchesGlob(file, pattern));
 
-	it("ignores every src file but bun-sqlite.ts", () => {
-		const missed = SOURCES.filter((file) => file !== MEASURED && !ignored(file)).map(
-			(file) => `${file}: add it to bunfig's coveragePathIgnorePatterns; vitest measures it`,
-		)
-		expect(missed).toEqual([])
-	})
+  it("ignores every src file but bun-sqlite.ts", () => {
+    const missed = SOURCES.filter((file) => file !== MEASURED && !ignored(file)).map(
+      (file) => `${file}: add it to bun-test.toml's coveragePathIgnorePatterns; vitest measures it`,
+    );
 
-	it("measures bun-sqlite.ts", () => {
-		expect(SOURCES).toContain(MEASURED)
-		expect(ignored(MEASURED)).toBe(false)
-	})
-})
+    expect(missed).toEqual([]);
+  });
+
+  it("measures bun-sqlite.ts", () => {
+    expect(SOURCES).toContain(MEASURED);
+    expect(ignored(MEASURED)).toBe(false);
+  });
+
+  // repo sync owns bunfig.toml, so bun reads these settings only when test:bun names the file
+  it("is the config test:bun runs with", () => {
+    expect(readFileSync(join(CORE, "package.json"), "utf8")).toMatch(/"test:bun": "bun test --config=bun-test\.toml /);
+  });
+});

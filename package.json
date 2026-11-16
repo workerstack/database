@@ -54,7 +54,7 @@
     "typecheck:strict": "bun run --filter @workerstack/database type:check:strict"
   },
   "devDependencies": {
-    "@workerstack/repo": "0.2.0-rc.1",
+    "@workerstack/repo": "0.2.7",
     "vitest": "catalog:"
   },
   "packageManager": "bun@1.4.4"
