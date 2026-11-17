@@ -116,7 +116,7 @@ function valueOf(seeding: Seeding, column: Column, at: Attempt): unknown {
 /** Row `row` of a table: each column's value, a key's columns from a parent row, or nothing where a default fills it */
 function rowOf(db: LocalDb, seeding: Seeding, at: Attempt): Map<string, unknown> | undefined {
   const { row } = at;
-  const values = new Map<string>();
+  const values = new Map<string, unknown>();
 
   for (const column of seeding.columns.filter((each) => each.insertable)) {
     if (at.defaults && column.hasDefault) continue;

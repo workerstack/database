@@ -95,29 +95,6 @@ export default defineConfig({
     skip: [
       {
         files: [
-          "packages/core/src/codegen/utils/pattern-class.ts",
-          "packages/core/src/migrate/core/fts-migration.ts",
-          "packages/core/src/query/translation.ts",
-          "packages/core/src/query/drizzle.text-keys.test.ts",
-          "packages/core/tests/differential/support/proof-cases.ts",
-          "packages/core/tests/integration/d1/list-query-long-key.test.ts",
-          "packages/core/tests/integration/postgres/bytea-keys.test.ts",
-          "packages/core/tests/integration/postgres/double-keys.test.ts",
-          "packages/core/tests/integration/postgres/keyset-infinity-date.test.ts",
-          "packages/core/tests/integration/postgres/keyset-long-key.test.ts",
-          "packages/core/tests/integration/postgres/keyset-nonfinite.test.ts",
-          "packages/core/tests/integration/postgres/keyset.test.ts",
-          "packages/core/tests/integration/postgres/numeric-keys.test.ts",
-          "packages/core/tests/integration/sqlite/list-query-long-key.test.ts",
-          "packages/core/tests/integration/sqlite/list-query-seconds.test.ts",
-        ],
-        rules: ["typescript/no-unnecessary-type-assertion"],
-        reason:
-          "each cast sets a type tsc infers from it (a ?? b with no annotation, a generic findMany argument), " +
-          "which the rule reads as a receiver that takes anything, so its fix breaks the typecheck",
-      },
-      {
-        files: [
           "packages/core/src/codegen/utils/paths.ts",
           "packages/core/src/pg/columns.ts",
           "packages/core/src/query/filter-validate.ts",
@@ -128,16 +105,20 @@ export default defineConfig({
           "packages/core/src/query/sqlite/list-finish.ts",
           "packages/core/src/sqlite/d1/sharding/types.ts",
         ],
-        rules: [
-          "repo/consistent-type-definitions",
-          "typescript/no-duplicate-type-constituents",
-          "typescript/no-unnecessary-type-arguments",
-        ],
+        rules: ["repo/consistent-type-definitions", "typescript/no-duplicate-type-constituents"],
         reason:
           "these files spell declarations v0.26.0 shipped, which upgrade-exports.test.ts holds byte for byte " +
           "until the next release's upgrade section lists what changed, and the fix respells them " +
-          "(a default type argument dropped, | undefined off an optional parameter, " +
+          "(| undefined off an optional parameter, " +
           "the ShardRouterConfig interface, which a consumer can merge into, made a type)",
+      },
+      {
+        files: ["packages/core/src/**"],
+        rules: ["typescript/no-unnecessary-type-arguments"],
+        reason:
+          "database ships src as TypeScript, and every tsconfig here loads ts-reset, " +
+          "whose Map defaults to <unknown, unknown>; a consumer has no ts-reset, " +
+          "so the fix's new Map<string>() fails its tsc with TS2743",
       },
       {
         files: ["packages/core/src/query/sqlite/search.ts"],

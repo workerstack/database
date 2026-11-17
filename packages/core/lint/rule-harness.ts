@@ -154,10 +154,10 @@ export function oxlintJson(
   }
 }
 
-/** One finding of a run under the repo's config: the fixture path, its line, and the message with the help a rule's config gives it. */
+/** One finding of a run under the repo's config: the fixture path, its line and the rule's message. */
 export type LineReport = { file: string; line: number; message: string };
 
-type Diagnostic = { filename: string; help?: string; labels: Array<{ span: { line: number } }>; message: string };
+type Diagnostic = { filename: string; labels: Array<{ span: { line: number } }>; message: string };
 
 // the fixture written to a temp folder outside any checkout, oxlint run there under `config` over every file of it
 function lintInTemp(fixture: Fixture, config: object): { diagnostics: Diagnostic[]; dir: string } {
@@ -229,7 +229,7 @@ export function repoReports(fixture: Fixture): LineReport[] {
     .map((d) => ({
       file: d.filename.slice(dir.length + 1),
       line: Math.min(...d.labels.map((label) => label.span.line)),
-      message: d.help === undefined ? d.message : `${d.message} ${d.help}`,
+      message: d.message,
     }))
     .sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.message.localeCompare(b.message));
 }

@@ -459,22 +459,37 @@ describe("loadConfig validates what the file exports, however it exports it (M12
 });
 
 describe("loadConfig on a config whose import of database resolves nowhere (KC2 of r23)", () => {
-  // KC2 of r23: a Bun-compiled app embeds database, so a config's import of it resolves nowhere
-  it("names the type-only form when the config's import of database resolves nowhere", async () => {
+  // KC2 of r23: a Bun-compiled app embeds database; the config throws the runtime's message, as under vitest an import of it loads
+  it.each([
+    ["node and bun", "@workerstack/database"],
+    ["vitest", "@workerstack/database/migrate"],
+  ])("names the type-only form when the config's import fails as %s words it", async (_runtime, specifier) => {
+    const dir = project();
+    const path = join(dir, "a.config.ts");
+
+    try {
+      const message = `Cannot find package '${specifier}' imported from ${path}`;
+      writeFileSync(path, `throw new Error(${JSON.stringify(message)})\n`);
+      const thrown = (await loadConfig("a.config.ts", dir).catch((error: unknown) => error)) as Error;
+      expect(thrown.message).toContain(`${path} failed to load: `);
+      expect(thrown.message).toContain(message);
+      expect(thrown.message).toMatch(
+        /a config that imports only database's type loads where database does not resolve, as in a compiled executable: import type \{ MigrateConfig \} from "@workerstack\/database\/migrate", and end the object with satisfies MigrateConfig$/,
+      );
+    } finally {
+      rmSync(dir, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("loadConfig on a config whose import of another package resolves nowhere", () => {
+  it("names no type-only form when the config imports another package that resolves nowhere", async () => {
     const dir = project();
 
     try {
-      writeFileSync(
-        join(dir, "a.config.ts"),
-        'import { defineConfig } from "@workerstack/database/migrate"\nexport default defineConfig({ databases: {} })\n',
-      );
-      const thrown = (await loadConfig("a.config.ts", dir).catch((error: unknown) => error)) as Error;
-      expect(thrown.message).toContain(`${join(dir, "a.config.ts")} failed to load: `);
-      expect(thrown.message).toContain(
-        'a config that imports only database\'s type loads where database does not resolve, as in a compiled executable: import type { MigrateConfig } from "@workerstack/database/migrate", and end the object with satisfies MigrateConfig',
-      );
       writeFileSync(join(dir, "b.config.ts"), 'import { x } from "left-pad-not-installed"\nexport default x\n');
       const other = (await loadConfig("b.config.ts", dir).catch((error: unknown) => error)) as Error;
+      expect(other.message).toContain(`${join(dir, "b.config.ts")} failed to load: `);
       expect(other.message).not.toContain("import type");
     } finally {
       rmSync(dir, { force: true, recursive: true });

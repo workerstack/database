@@ -332,7 +332,7 @@
     "repo(as-needs-reason)": 6,
     "repo(magic-regex)": 1,
     "repo(magic-string)": 1,
-    "repo(max-line-width)": 3,
+    "repo(max-line-width)": 2,
     "repo(no-known-value-widening)": 1,
     "repo(no-module-side-effects)": 3,
     "repo(no-object-parameters)": 1,
@@ -1006,7 +1006,6 @@
   "packages/core/src/codegen/generators/dtos/field-schema.float.test.ts": {
     "eslint(func-style)": 4,
     "repo(as-needs-reason)": 4,
-    "repo(duplicate-code)": 1,
     "repo(max-line-width)": 1,
     "repo(naming-convention)": 1,
     "typescript(no-implied-eval)": 1,
@@ -1042,7 +1041,6 @@
   },
   "packages/core/src/codegen/generators/dtos/field-schema.states.test.ts": {
     "eslint(func-style)": 3,
-    "repo(duplicate-code)": 1,
     "repo(naming-convention)": 1
   },
   "packages/core/src/codegen/generators/dtos/field-schema.test.ts": {
@@ -1130,7 +1128,6 @@
     "eslint(func-style)": 1,
     "eslint(max-lines-per-function)": 2,
     "repo(as-needs-reason)": 2,
-    "repo(duplicate-code)": 1,
     "repo(no-unsafe-dictionary-type)": 1,
     "typescript(no-implied-eval)": 1,
     "typescript(no-unsafe-call)": 1,
@@ -1177,7 +1174,6 @@
     "eslint(max-lines)": 1,
     "eslint(max-lines-per-function)": 2,
     "repo(as-needs-reason)": 12,
-    "repo(duplicate-code)": 1,
     "repo(max-line-width)": 4,
     "repo(naming-convention)": 2,
     "repo(no-unsafe-dictionary-type)": 1,
@@ -1337,7 +1333,7 @@
   "packages/core/src/codegen/generators/enum-checks.test.ts": {
     "eslint(func-style)": 1,
     "eslint(max-lines-per-function)": 2,
-    "repo(duplicate-code)": 7,
+    "repo(duplicate-code)": 5,
     "repo(no-known-value-widening)": 1,
     "vitest(prefer-strict-equal)": 1
   },
@@ -1351,7 +1347,7 @@
     "eslint(func-style)": 3,
     "eslint(max-lines-per-function)": 3,
     "repo(as-needs-reason)": 3,
-    "repo(duplicate-code)": 7,
+    "repo(duplicate-code)": 6,
     "vitest(prefer-strict-equal)": 1
   },
   "packages/core/src/codegen/generators/field-names.ts": {
@@ -1378,7 +1374,7 @@
   "packages/core/src/codegen/generators/fts.test.ts": {
     "eslint(max-lines)": 1,
     "eslint(max-lines-per-function)": 6,
-    "repo(duplicate-code)": 6,
+    "repo(duplicate-code)": 5,
     "unicorn(no-array-sort)": 1,
     "vitest(prefer-strict-equal)": 3
   },
@@ -1448,19 +1444,18 @@
   "packages/core/src/codegen/generators/relations.columns.test.ts": {
     "eslint(func-style)": 1,
     "eslint(max-lines-per-function)": 2,
-    "repo(duplicate-code)": 3,
+    "repo(duplicate-code)": 1,
     "repo(max-line-width)": 12,
     "repo(naming-convention)": 2
   },
   "packages/core/src/codegen/generators/relations.names.test.ts": {
     "eslint(func-style)": 1,
     "eslint(max-lines-per-function)": 1,
-    "repo(duplicate-code)": 2,
+    "repo(duplicate-code)": 1,
     "repo(max-line-width)": 6
   },
   "packages/core/src/codegen/generators/relations.test.ts": {
     "eslint(max-lines-per-function)": 2,
-    "repo(duplicate-code)": 1,
     "repo(max-line-width)": 10,
     "repo(naming-convention)": 1
   },
@@ -1647,7 +1642,7 @@
     "repo(no-chained-type-assertions)": 1,
     "repo(no-runtime-typeof)": 3,
     "repo(no-unknown-parameters)": 5,
-    "repo(no-unsafe-dictionary-type)": 2,
+    "repo(no-unsafe-dictionary-type)": 1,
     "typescript(strict-boolean-expressions)": 4,
     "unicorn(no-array-sort)": 2
   },
@@ -1861,7 +1856,6 @@
   "packages/core/src/codegen/utils/validate.machines.test.ts": {
     "eslint(func-style)": 1,
     "eslint(max-lines-per-function)": 1,
-    "repo(duplicate-code)": 2,
     "repo(max-line-width)": 8,
     "vitest(prefer-strict-equal)": 8
   },
@@ -1869,7 +1863,6 @@
     "eslint(func-style)": 1,
     "eslint(max-lines-per-function)": 1,
     "eslint(no-await-in-loop)": 1,
-    "repo(duplicate-code)": 1,
     "repo(max-line-width)": 5,
     "unicorn(no-await-expression-member)": 3,
     "vitest(prefer-strict-equal)": 6
@@ -1878,7 +1871,6 @@
     "eslint(func-style)": 1,
     "eslint(max-lines)": 1,
     "eslint(max-lines-per-function)": 3,
-    "repo(duplicate-code)": 1,
     "vitest(prefer-strict-equal)": 8
   },
   "packages/core/src/codegen/utils/validate.ts": {
@@ -2256,7 +2248,7 @@
   "packages/core/src/migrate/core/atlas-apply.order.test.ts": {
     "eslint(require-await)": 1,
     "repo(as-needs-reason)": 1,
-    "repo(duplicate-code)": 2,
+    "repo(duplicate-code)": 1,
     "vitest(prefer-strict-equal)": 2
   },
   "packages/core/src/migrate/core/atlas-apply.reads.test.ts": {
@@ -2305,7 +2297,7 @@
   "packages/core/src/migrate/core/atlas-apply.unresumable.test.ts": {
     "eslint(func-style)": 1,
     "eslint(require-await)": 1,
-    "repo(duplicate-code)": 3,
+    "repo(duplicate-code)": 2,
     "repo(max-line-width)": 1,
     "vitest(prefer-strict-equal)": 2
   },
@@ -3168,7 +3160,6 @@
     "eslint(no-await-in-loop)": 2,
     "eslint(require-await)": 8,
     "repo(as-needs-reason)": 1,
-    "repo(duplicate-code)": 1,
     "repo(max-line-width)": 15,
     "repo(naming-convention)": 4,
     "typescript(consistent-return)": 1,
@@ -3218,7 +3209,6 @@
     "repo(no-boolean-param)": 1
   },
   "packages/core/src/migrate/core/peer-version.test.ts": {
-    "repo(duplicate-code)": 1,
     "vitest(prefer-strict-equal)": 1
   },
   "packages/core/src/migrate/core/peer-version.ts": {
@@ -3360,7 +3350,6 @@
     "eslint(func-style)": 1,
     "eslint(max-lines-per-function)": 3,
     "repo(as-needs-reason)": 3,
-    "repo(duplicate-code)": 1,
     "repo(max-line-width)": 2,
     "repo(naming-convention)": 1,
     "vitest(prefer-strict-equal)": 43
@@ -3410,7 +3399,7 @@
   "packages/core/src/migrate/core/pg-domain.test.ts": {
     "eslint(max-lines-per-function)": 1,
     "repo(as-needs-reason)": 3,
-    "repo(duplicate-code)": 2,
+    "repo(duplicate-code)": 1,
     "repo(max-line-width)": 1,
     "vitest(prefer-strict-equal)": 6
   },
@@ -3771,7 +3760,7 @@
     "eslint(func-style)": 1,
     "eslint(max-lines-per-function)": 2,
     "repo(as-needs-reason)": 3,
-    "repo(duplicate-code)": 2,
+    "repo(duplicate-code)": 1,
     "repo(max-line-width)": 4,
     "repo(naming-convention)": 3,
     "vitest(prefer-strict-equal)": 5
@@ -3823,7 +3812,7 @@
     "repo(no-known-value-widening)": 1,
     "repo(no-runtime-typeof)": 2,
     "repo(no-unknown-parameters)": 8,
-    "repo(no-unsafe-dictionary-type)": 2
+    "repo(no-unsafe-dictionary-type)": 1
   },
   "packages/core/src/migrate/core/pg-objects.test.ts": {
     "eslint(func-style)": 2,
@@ -4033,7 +4022,7 @@
     "eslint(func-style)": 2,
     "repo(as-needs-reason)": 2,
     "repo(magic-string)": 5,
-    "repo(no-unsafe-dictionary-type)": 2
+    "repo(no-unsafe-dictionary-type)": 1
   },
   "packages/core/src/migrate/core/pg-replay-held.test.ts": {
     "eslint(func-style)": 1,
@@ -4107,7 +4096,7 @@
     "repo(naming-convention)": 2,
     "repo(no-known-value-widening)": 4,
     "repo(no-unknown-parameters)": 2,
-    "repo(no-unsafe-dictionary-type)": 4,
+    "repo(no-unsafe-dictionary-type)": 1,
     "unicorn(no-await-expression-member)": 1
   },
   "packages/core/src/migrate/core/pg-replay-roles.test.ts": {
@@ -4382,7 +4371,6 @@
   "packages/core/src/migrate/core/pg-table-commands.test.ts": {
     "eslint(func-style)": 1,
     "repo(as-needs-reason)": 3,
-    "repo(duplicate-code)": 1,
     "repo(naming-convention)": 1,
     "vitest(prefer-strict-equal)": 6
   },
@@ -5978,7 +5966,7 @@
     "eslint(max-lines)": 1,
     "eslint(max-lines-per-function)": 3,
     "repo(as-needs-reason)": 5,
-    "repo(duplicate-code)": 5,
+    "repo(duplicate-code)": 4,
     "repo(max-line-width)": 3,
     "repo(no-chained-type-assertions)": 1,
     "repo(no-unknown-parameters)": 1,
@@ -5991,7 +5979,6 @@
     "eslint(max-lines-per-function)": 4,
     "eslint(no-underscore-dangle)": 6,
     "repo(as-needs-reason)": 1,
-    "repo(duplicate-code)": 1,
     "repo(no-chained-type-assertions)": 1,
     "repo(no-unsafe-dictionary-type)": 1,
     "typescript(no-unsafe-assignment)": 1,
@@ -6497,7 +6484,7 @@
     "eslint(no-await-in-loop)": 1,
     "eslint(require-await)": 8,
     "repo(as-needs-reason)": 4,
-    "repo(duplicate-code)": 3,
+    "repo(duplicate-code)": 2,
     "repo(no-chained-type-assertions)": 1,
     "repo(no-reflect-get)": 1,
     "repo(no-runtime-typeof)": 1,
@@ -6515,7 +6502,7 @@
     "eslint(no-await-in-loop)": 3,
     "eslint(require-await)": 8,
     "repo(as-needs-reason)": 6,
-    "repo(duplicate-code)": 6,
+    "repo(duplicate-code)": 5,
     "repo(max-line-width)": 2,
     "repo(naming-convention)": 1,
     "repo(no-chained-type-assertions)": 4,
@@ -7021,7 +7008,7 @@
     "repo(no-module-side-effects)": 1,
     "repo(no-object-parameters)": 3,
     "repo(no-unknown-parameters)": 1,
-    "repo(no-unsafe-dictionary-type)": 3,
+    "repo(no-unsafe-dictionary-type)": 1,
     "typescript(consistent-return)": 1,
     "typescript(no-base-to-string)": 1,
     "typescript(no-explicit-any)": 16,
@@ -7296,7 +7283,6 @@
     "eslint(func-style)": 1,
     "eslint(max-lines-per-function)": 1,
     "repo(as-needs-reason)": 4,
-    "repo(duplicate-code)": 1,
     "repo(max-line-width)": 2,
     "typescript(no-unsafe-assignment)": 2,
     "typescript(no-unsafe-return)": 1,
@@ -7349,7 +7335,6 @@
     "eslint(max-lines-per-function)": 1,
     "eslint(sort-keys)": 1,
     "repo(as-needs-reason)": 2,
-    "repo(duplicate-code)": 1,
     "repo(max-line-width)": 1,
     "repo(no-known-value-widening)": 2,
     "typescript(no-implied-eval)": 1,
@@ -7514,7 +7499,6 @@
     "eslint(func-style)": 1,
     "eslint(no-await-in-loop)": 3,
     "eslint(no-underscore-dangle)": 1,
-    "repo(duplicate-code)": 1,
     "repo(no-shape-in-symbol-names)": 2,
     "repo(no-unknown-parameters)": 1,
     "typescript(no-non-null-assertion)": 1,
@@ -7734,7 +7718,7 @@
     "vitest(prefer-strict-equal)": 1
   },
   "packages/core/tests/integration/libsql/migrate-adjacent-names.test.ts": {
-    "repo(duplicate-code)": 4,
+    "repo(duplicate-code)": 2,
     "unicorn(no-await-expression-member)": 1,
     "vitest(prefer-strict-equal)": 1
   },
@@ -7760,13 +7744,13 @@
   },
   "packages/core/tests/integration/libsql/migrate-file-order.test.ts": {
     "eslint(func-style)": 1,
-    "repo(duplicate-code)": 2,
+    "repo(duplicate-code)": 1,
     "unicorn(no-await-expression-member)": 5,
     "vitest(prefer-strict-equal)": 2
   },
   "packages/core/tests/integration/libsql/migrate-partial.test.ts": {
     "repo(as-needs-reason)": 1,
-    "repo(duplicate-code)": 2,
+    "repo(duplicate-code)": 1,
     "repo(no-unsafe-dictionary-type)": 1,
     "unicorn(no-await-expression-member)": 1,
     "vitest(prefer-strict-equal)": 2
@@ -7920,7 +7904,7 @@
     "eslint(func-style)": 2,
     "eslint(max-lines-per-function)": 2,
     "eslint(max-nested-callbacks)": 1,
-    "repo(duplicate-code)": 2,
+    "repo(duplicate-code)": 1,
     "repo(max-line-width)": 1,
     "vitest(prefer-strict-equal)": 2
   },
@@ -7972,7 +7956,7 @@
     "eslint(max-lines-per-function)": 5,
     "import(no-named-as-default-member)": 2,
     "repo(as-needs-reason)": 1,
-    "repo(duplicate-code)": 6,
+    "repo(duplicate-code)": 3,
     "repo(max-line-width)": 16,
     "repo(naming-convention)": 4,
     "unicorn(no-await-expression-member)": 3,
@@ -7999,14 +7983,14 @@
     "eslint(max-lines-per-function)": 2,
     "import(no-named-as-default-member)": 1,
     "repo(as-needs-reason)": 1,
-    "repo(duplicate-code)": 2,
+    "repo(duplicate-code)": 1,
     "repo(max-line-width)": 1,
     "repo(naming-convention)": 1
   },
   "packages/core/tests/integration/postgres/bytea-keys.test.ts": {
     "eslint(no-await-in-loop)": 4,
     "repo(as-needs-reason)": 5,
-    "repo(duplicate-code)": 10,
+    "repo(duplicate-code)": 9,
     "repo(max-line-width)": 1,
     "repo(no-shape-in-symbol-names)": 5,
     "repo(no-unsafe-dictionary-type)": 2,
@@ -8068,7 +8052,6 @@
     "eslint(no-await-in-loop)": 1,
     "import(no-named-as-default-member)": 1,
     "repo(as-needs-reason)": 1,
-    "repo(duplicate-code)": 1,
     "repo(max-line-width)": 6,
     "repo(naming-convention)": 1,
     "vitest(prefer-strict-equal)": 2
@@ -8078,7 +8061,7 @@
     "eslint(max-lines-per-function)": 2,
     "eslint(no-await-in-loop)": 6,
     "repo(as-needs-reason)": 3,
-    "repo(duplicate-code)": 7,
+    "repo(duplicate-code)": 6,
     "repo(max-line-width)": 8,
     "repo(naming-convention)": 2,
     "typescript(no-unsafe-return)": 1,
@@ -8089,7 +8072,7 @@
     "eslint(no-await-in-loop)": 6,
     "eslint(no-nested-ternary)": 2,
     "repo(as-needs-reason)": 3,
-    "repo(duplicate-code)": 9,
+    "repo(duplicate-code)": 8,
     "repo(max-line-width)": 3,
     "repo(no-chained-type-assertions)": 2,
     "typescript(no-explicit-any)": 2,
@@ -8099,7 +8082,7 @@
     "eslint(no-await-in-loop)": 6,
     "eslint(no-nested-ternary)": 2,
     "repo(as-needs-reason)": 3,
-    "repo(duplicate-code)": 5,
+    "repo(duplicate-code)": 4,
     "repo(max-line-width)": 3,
     "repo(no-chained-type-assertions)": 2,
     "typescript(no-explicit-any)": 2,
@@ -8140,7 +8123,7 @@
     "eslint(no-await-in-loop)": 4,
     "eslint(no-nested-ternary)": 1,
     "repo(as-needs-reason)": 5,
-    "repo(duplicate-code)": 8,
+    "repo(duplicate-code)": 6,
     "repo(max-line-width)": 2,
     "repo(no-unsafe-dictionary-type)": 2,
     "typescript(no-unsafe-assignment)": 1,
@@ -8183,7 +8166,7 @@
   "packages/core/tests/integration/postgres/json-keys.test.ts": {
     "eslint(no-await-in-loop)": 2,
     "repo(as-needs-reason)": 3,
-    "repo(duplicate-code)": 3,
+    "repo(duplicate-code)": 2,
     "repo(max-line-width)": 2,
     "vitest(prefer-strict-equal)": 1
   },
@@ -8254,7 +8237,7 @@
     "eslint(max-nested-callbacks)": 1,
     "eslint(no-await-in-loop)": 3,
     "import(no-named-as-default-member)": 1,
-    "repo(duplicate-code)": 2,
+    "repo(duplicate-code)": 1,
     "repo(max-line-width)": 1,
     "typescript(no-unsafe-return)": 1,
     "unicorn(no-await-expression-member)": 1,
@@ -8303,7 +8286,7 @@
     "eslint(max-nested-callbacks)": 3,
     "eslint(no-await-in-loop)": 2,
     "import(no-named-as-default-member)": 1,
-    "repo(duplicate-code)": 5,
+    "repo(duplicate-code)": 4,
     "repo(max-line-width)": 3,
     "repo(no-known-value-widening)": 1,
     "vitest(prefer-strict-equal)": 2
@@ -8315,7 +8298,7 @@
     "eslint(max-nested-callbacks)": 12,
     "import(no-named-as-default-member)": 1,
     "repo(as-needs-reason)": 1,
-    "repo(duplicate-code)": 15,
+    "repo(duplicate-code)": 10,
     "repo(max-line-width)": 9,
     "unicorn(no-await-expression-member)": 5,
     "vitest(prefer-strict-equal)": 35,
@@ -8329,7 +8312,7 @@
     "eslint(no-await-in-loop)": 1,
     "import(no-named-as-default-member)": 3,
     "repo(as-needs-reason)": 1,
-    "repo(duplicate-code)": 10,
+    "repo(duplicate-code)": 8,
     "repo(max-line-width)": 12,
     "unicorn(no-await-expression-member)": 3,
     "vitest(prefer-strict-equal)": 36
@@ -8348,7 +8331,7 @@
     "eslint(max-nested-callbacks)": 3,
     "eslint(no-await-in-loop)": 1,
     "import(no-named-as-default-member)": 1,
-    "repo(duplicate-code)": 4,
+    "repo(duplicate-code)": 2,
     "repo(max-line-width)": 3,
     "vitest(prefer-strict-equal)": 2
   },
@@ -8360,7 +8343,7 @@
     "eslint(no-await-in-loop)": 2,
     "import(no-named-as-default-member)": 2,
     "repo(as-needs-reason)": 10,
-    "repo(duplicate-code)": 2,
+    "repo(duplicate-code)": 1,
     "repo(max-line-width)": 12,
     "repo(naming-convention)": 3,
     "repo(skip-on-platform)": 1,
@@ -8379,7 +8362,7 @@
     "eslint(max-lines-per-function)": 1,
     "import(no-named-as-default-member)": 1,
     "repo(as-needs-reason)": 1,
-    "repo(duplicate-code)": 10,
+    "repo(duplicate-code)": 6,
     "repo(max-line-width)": 2,
     "unicorn(no-await-expression-member)": 3,
     "vitest(prefer-strict-equal)": 5
@@ -8392,7 +8375,7 @@
     "eslint(sort-keys)": 1,
     "import(no-named-as-default-member)": 1,
     "repo(as-needs-reason)": 1,
-    "repo(duplicate-code)": 8,
+    "repo(duplicate-code)": 7,
     "repo(max-line-width)": 1,
     "unicorn(no-await-expression-member)": 3,
     "vitest(prefer-strict-equal)": 6
@@ -8414,7 +8397,7 @@
     "eslint(max-nested-callbacks)": 1,
     "import(no-named-as-default-member)": 1,
     "repo(as-needs-reason)": 1,
-    "repo(duplicate-code)": 7,
+    "repo(duplicate-code)": 5,
     "repo(max-line-width)": 3,
     "unicorn(no-await-expression-member)": 3,
     "vitest(prefer-strict-equal)": 9
@@ -8425,7 +8408,7 @@
     "eslint(max-nested-callbacks)": 3,
     "import(no-named-as-default-member)": 1,
     "repo(as-needs-reason)": 1,
-    "repo(duplicate-code)": 7,
+    "repo(duplicate-code)": 5,
     "repo(max-line-width)": 2,
     "repo(no-boolean-param)": 1,
     "unicorn(no-await-expression-member)": 3,
@@ -8435,7 +8418,7 @@
     "eslint(no-await-in-loop)": 3,
     "eslint(no-nested-ternary)": 1,
     "repo(as-needs-reason)": 4,
-    "repo(duplicate-code)": 5,
+    "repo(duplicate-code)": 4,
     "repo(max-line-width)": 2,
     "repo(no-unsafe-dictionary-type)": 2,
     "vitest(prefer-strict-equal)": 1
@@ -8498,7 +8481,7 @@
     "eslint(max-nested-callbacks)": 13,
     "eslint(no-await-in-loop)": 5,
     "repo(as-needs-reason)": 2,
-    "repo(duplicate-code)": 2,
+    "repo(duplicate-code)": 1,
     "repo(max-line-width)": 18,
     "repo(no-unknown-returns)": 1,
     "unicorn(no-array-for-each)": 1,
@@ -8511,7 +8494,7 @@
     "eslint(max-lines-per-function)": 2,
     "eslint(max-nested-callbacks)": 3,
     "import(no-named-as-default-member)": 1,
-    "repo(duplicate-code)": 3,
+    "repo(duplicate-code)": 2,
     "unicorn(no-array-for-each)": 1,
     "vitest(prefer-strict-equal)": 1
   },
@@ -8529,7 +8512,6 @@
   "packages/core/tests/integration/postgres/replay-locale.test.ts": {
     "eslint(func-style)": 2,
     "repo(as-needs-reason)": 1,
-    "repo(duplicate-code)": 6,
     "repo(max-line-width)": 3,
     "repo(no-boolean-param)": 1,
     "repo(no-unknown-returns)": 1
@@ -8539,7 +8521,7 @@
     "eslint(max-lines-per-function)": 1,
     "eslint(max-nested-callbacks)": 4,
     "repo(as-needs-reason)": 1,
-    "repo(duplicate-code)": 5,
+    "repo(duplicate-code)": 3,
     "repo(max-line-width)": 5,
     "repo(no-boolean-param)": 1,
     "repo(no-unknown-returns)": 1,
@@ -8555,7 +8537,7 @@
     "eslint(require-await)": 1,
     "import(no-named-as-default-member)": 3,
     "repo(as-needs-reason)": 4,
-    "repo(duplicate-code)": 6,
+    "repo(duplicate-code)": 4,
     "repo(max-line-width)": 8,
     "typescript(no-unsafe-member-access)": 2,
     "typescript(unbound-method)": 2,
@@ -8630,7 +8612,7 @@
     "eslint(require-await)": 1,
     "eslint(sort-keys)": 1,
     "repo(as-needs-reason)": 2,
-    "repo(duplicate-code)": 4,
+    "repo(duplicate-code)": 1,
     "repo(max-line-width)": 10,
     "repo(no-boolean-param)": 2,
     "repo(no-known-value-widening)": 1,
@@ -8644,7 +8626,7 @@
     "eslint(max-lines-per-function)": 1,
     "eslint(max-nested-callbacks)": 4,
     "import(no-named-as-default-member)": 1,
-    "repo(duplicate-code)": 6,
+    "repo(duplicate-code)": 3,
     "repo(max-line-width)": 1,
     "repo(no-boolean-param)": 1,
     "repo(no-unknown-returns)": 1,
@@ -8674,7 +8656,7 @@
     "eslint(func-style)": 2,
     "eslint(max-lines-per-function)": 1,
     "eslint(max-nested-callbacks)": 4,
-    "repo(duplicate-code)": 4,
+    "repo(duplicate-code)": 2,
     "repo(max-line-width)": 2,
     "repo(naming-convention)": 2,
     "repo(no-boolean-param)": 1,
@@ -8686,7 +8668,7 @@
     "eslint(max-nested-callbacks)": 1,
     "import(no-named-as-default-member)": 1,
     "repo(as-needs-reason)": 1,
-    "repo(duplicate-code)": 2,
+    "repo(duplicate-code)": 1,
     "repo(max-line-width)": 1,
     "typescript(consistent-return)": 1
   },
@@ -8705,7 +8687,7 @@
   },
   "packages/core/tests/integration/sqlite/atlas-classify.test.ts": {
     "eslint(max-nested-callbacks)": 2,
-    "repo(duplicate-code)": 2,
+    "repo(duplicate-code)": 1,
     "vitest(prefer-strict-equal)": 2
   },
   "packages/core/tests/integration/sqlite/atlas-fts.test.ts": {
@@ -8746,7 +8728,7 @@
     "eslint(max-lines-per-function)": 1,
     "eslint(no-await-in-loop)": 4,
     "repo(as-needs-reason)": 2,
-    "repo(duplicate-code)": 3,
+    "repo(duplicate-code)": 2,
     "repo(max-line-width)": 1,
     "repo(no-object-parameters)": 1,
     "repo(no-unsafe-dictionary-type)": 1,
@@ -8787,7 +8769,7 @@
     "eslint(max-lines-per-function)": 1,
     "eslint(no-await-in-loop)": 4,
     "repo(as-needs-reason)": 3,
-    "repo(duplicate-code)": 5,
+    "repo(duplicate-code)": 4,
     "repo(max-line-width)": 2,
     "repo(no-object-parameters)": 1,
     "repo(no-unsafe-dictionary-type)": 1,
@@ -8871,7 +8853,7 @@
     "eslint(max-lines-per-function)": 4,
     "eslint(no-await-in-loop)": 3,
     "repo(as-needs-reason)": 1,
-    "repo(duplicate-code)": 7,
+    "repo(duplicate-code)": 5,
     "repo(max-line-width)": 4,
     "typescript(strict-boolean-expressions)": 2,
     "vitest(prefer-strict-equal)": 3
@@ -8881,7 +8863,6 @@
     "eslint(max-lines)": 1,
     "eslint(require-await)": 3,
     "repo(as-needs-reason)": 3,
-    "repo(duplicate-code)": 1,
     "repo(max-line-width)": 2,
     "repo(naming-convention)": 2,
     "repo(no-known-value-widening)": 1,
@@ -8897,7 +8878,7 @@
     "eslint(max-nested-callbacks)": 1,
     "eslint(no-await-in-loop)": 7,
     "repo(as-needs-reason)": 8,
-    "repo(duplicate-code)": 6,
+    "repo(duplicate-code)": 4,
     "repo(max-line-width)": 4,
     "repo(no-boolean-param)": 1,
     "typescript(no-unsafe-assignment)": 5,
@@ -8953,13 +8934,11 @@
   },
   "packages/core/tests/integration/sqlite/merged-driver-modes.test.ts": {
     "eslint(no-await-in-loop)": 1,
-    "repo(duplicate-code)": 2,
     "unicorn(no-await-expression-member)": 1,
     "vitest(prefer-strict-equal)": 1
   },
   "packages/core/tests/integration/sqlite/merged-seconds.test.ts": {
     "eslint(no-await-in-loop)": 3,
-    "repo(duplicate-code)": 1,
     "repo(max-line-width)": 1,
     "vitest(prefer-strict-equal)": 1
   },
@@ -8967,7 +8946,6 @@
     "eslint(func-style)": 1,
     "eslint(no-await-in-loop)": 2,
     "repo(as-needs-reason)": 1,
-    "repo(duplicate-code)": 1,
     "repo(max-line-width)": 1,
     "typescript(no-unsafe-assignment)": 4,
     "vitest(prefer-strict-equal)": 4
@@ -8981,7 +8959,7 @@
     "eslint(func-style)": 1,
     "eslint(no-await-in-loop)": 4,
     "repo(as-needs-reason)": 2,
-    "repo(duplicate-code)": 4,
+    "repo(duplicate-code)": 1,
     "repo(max-line-width)": 1,
     "vitest(prefer-strict-equal)": 1
   },
@@ -9014,7 +8992,6 @@
     "eslint(func-style)": 2,
     "eslint(max-lines-per-function)": 2,
     "repo(as-needs-reason)": 2,
-    "repo(duplicate-code)": 1,
     "repo(max-line-width)": 1,
     "repo(no-object-parameters)": 1,
     "typescript(no-base-to-string)": 1,
@@ -9094,7 +9071,7 @@
     "eslint(no-await-in-loop)": 4,
     "eslint(no-nested-ternary)": 1,
     "repo(as-needs-reason)": 3,
-    "repo(duplicate-code)": 7,
+    "repo(duplicate-code)": 5,
     "repo(magic-number)": 3,
     "repo(max-line-width)": 1,
     "repo(no-chained-type-assertions)": 1,
@@ -9217,7 +9194,7 @@
     "eslint(func-style)": 2,
     "eslint(no-await-in-loop)": 2,
     "repo(as-needs-reason)": 1,
-    "repo(duplicate-code)": 3,
+    "repo(duplicate-code)": 2,
     "repo(magic-number)": 1,
     "repo(max-line-width)": 1,
     "repo(no-module-side-effects)": 2,
@@ -9249,7 +9226,6 @@
     "eslint(func-style)": 7,
     "eslint(max-lines-per-function)": 1,
     "repo(as-needs-reason)": 1,
-    "repo(duplicate-code)": 1,
     "repo(max-line-width)": 1,
     "repo(no-boolean-param)": 1
   },
@@ -9428,7 +9404,6 @@
     "eslint(no-await-in-loop)": 3,
     "eslint(no-nested-ternary)": 1,
     "repo(as-needs-reason)": 13,
-    "repo(duplicate-code)": 1,
     "repo(magic-number)": 6,
     "repo(magic-string)": 1,
     "repo(max-line-width)": 5,
@@ -9439,7 +9414,7 @@
     "repo(no-object-parameters)": 3,
     "repo(no-runtime-typeof)": 1,
     "repo(no-unknown-parameters)": 2,
-    "repo(no-unsafe-dictionary-type)": 2,
+    "repo(no-unsafe-dictionary-type)": 1,
     "typescript(no-base-to-string)": 1,
     "typescript(no-explicit-any)": 2
   },
@@ -10081,13 +10056,11 @@
     "repo(no-module-side-effects)": 10
   },
   "packages/core/tests/types/column-parity.typetest.ts": {
-    "repo(duplicate-code)": 1,
     "repo(magic-number)": 6,
     "repo(no-module-side-effects)": 24,
     "repo(no-unknown-returns)": 1
   },
   "packages/core/tests/types/columns.typetest.ts": {
-    "repo(duplicate-code)": 1,
     "repo(magic-number)": 1,
     "repo(no-module-side-effects)": 16
   },
